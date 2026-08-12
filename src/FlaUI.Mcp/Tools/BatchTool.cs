@@ -14,12 +14,14 @@ public class BatchTool : ToolBase
     private readonly SessionManager _sessionManager;
     private readonly ElementRegistry _elementRegistry;
     private readonly SnapshotBuilder _snapshotBuilder;
+    private readonly PendingInvokeTracker _invokeTracker;
 
-    public BatchTool(SessionManager sessionManager, ElementRegistry elementRegistry)
+    public BatchTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
     {
         _sessionManager = sessionManager;
         _elementRegistry = elementRegistry;
         _snapshotBuilder = new SnapshotBuilder(elementRegistry);
+        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
     }
 
     public override string Name => "windows_batch";
@@ -146,26 +148,55 @@ public class BatchTool : ToolBase
             return $"Element not found: {refId}";
         }
 
+        // Fail fast if this app's UIA provider is blocked by a pending pattern call
+        var processId = _elementRegistry.GetProcessIdForRef(refId);
+        if (_invokeTracker.TryGetPending(processId, out var pending))
+        {
+            return PendingInvokeTracker.DescribeBlocked(pending);
+        }
+
         var elementName = element.Properties.Name.ValueOrDefault ?? refId;
 
         // Try Invoke pattern first
         if (element.Patterns.Invoke.IsSupported)
         {
-            element.Patterns.Invoke.Pattern.Invoke();
-            return $"Invoked {elementName}";
+            var invokePattern = element.Patterns.Invoke.Pattern;
+            var result = ModalAwareInvoker.Execute(
+                processId,
+                $"Invoke on '{elementName}'",
+                () => invokePattern.Invoke(),
+                _invokeTracker);
+            return DescribePatternResult(result, $"Invoked {elementName}");
         }
 
         // Try Toggle pattern
         if (element.Patterns.Toggle.IsSupported)
         {
-            element.Patterns.Toggle.Pattern.Toggle();
-            return $"Toggled {elementName}";
+            var togglePattern = element.Patterns.Toggle.Pattern;
+            var result = ModalAwareInvoker.Execute(
+                processId,
+                $"Toggle on '{elementName}'",
+                () => togglePattern.Toggle(),
+                _invokeTracker);
+            return DescribePatternResult(result, $"Toggled {elementName}");
         }
 
         // Fall back to mouse click
         var clickPoint = element.GetClickablePoint();
         Mouse.Click(clickPoint);
         return $"Clicked {elementName}";
+    }
+
+    private static string DescribePatternResult(PatternCallResult result, string completedMessage)
+    {
+        return result.Outcome switch
+        {
+            PatternCallOutcome.Completed => completedMessage,
+            PatternCallOutcome.ModalDetected =>
+                $"{completedMessage} — a modal dialog \"{result.ModalTitle}\" opened and is waiting for input. " +
+                "Remaining batch actions that use UIA on this app may fail until the dialog is dismissed.",
+            _ => $"{completedMessage} — the app's handler is still running in the background.",
+        };
     }
 
     private string ExecuteType(JsonElement action)
@@ -183,6 +214,10 @@ public class BatchTool : ToolBase
             if (element == null)
             {
                 return $"Element not found: {refId}";
+            }
+            if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
+            {
+                return PendingInvokeTracker.DescribeBlocked(pending);
             }
             element.Focus();
             Thread.Sleep(30);
@@ -206,6 +241,11 @@ public class BatchTool : ToolBase
         if (element == null)
         {
             return $"Element not found: {refId}";
+        }
+
+        if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pendingFill))
+        {
+            return PendingInvokeTracker.DescribeBlocked(pendingFill);
         }
 
         if (element.Patterns.Value.IsSupported)
@@ -237,6 +277,11 @@ public class BatchTool : ToolBase
         Window? window = null;
         if (!string.IsNullOrEmpty(handle))
         {
+            if (_invokeTracker.TryGetPending(_sessionManager.GetWindowProcessId(handle), out var pendingSnapshot))
+            {
+                return PendingInvokeTracker.DescribeBlocked(pendingSnapshot);
+            }
+
             window = _sessionManager.GetWindow(handle);
             if (window == null)
             {

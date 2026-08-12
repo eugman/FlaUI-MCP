@@ -12,12 +12,14 @@ public class SnapshotTool : ToolBase
     private readonly SessionManager _sessionManager;
     private readonly ElementRegistry _elementRegistry;
     private readonly SnapshotBuilder _snapshotBuilder;
+    private readonly PendingInvokeTracker _invokeTracker;
 
-    public SnapshotTool(SessionManager sessionManager, ElementRegistry elementRegistry)
+    public SnapshotTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
     {
         _sessionManager = sessionManager;
         _elementRegistry = elementRegistry;
         _snapshotBuilder = new SnapshotBuilder(elementRegistry);
+        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
     }
 
     public override string Name => "windows_snapshot";
@@ -50,6 +52,15 @@ public class SnapshotTool : ToolBase
 
             if (!string.IsNullOrEmpty(handle))
             {
+                // Fail fast when this app's UIA provider is blocked by a pending
+                // pattern call (e.g. a click that opened a modal dialog) —
+                // walking the UIA tree would hang until the global timeout.
+                var processId = _sessionManager.GetWindowProcessId(handle);
+                if (_invokeTracker.TryGetPending(processId, out var pending))
+                {
+                    return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
+                }
+
                 window = _sessionManager.GetWindow(handle);
                 if (window == null)
                 {

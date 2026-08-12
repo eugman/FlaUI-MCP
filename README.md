@@ -215,6 +215,18 @@ This comes from **Windows UI Automation** - the same API screen readers use. Eac
 
 FlaUI-MCP uses accessibility because it's what screen readers use - it's designed for programmatic UI interaction.
 
+### Modal Dialogs
+
+UI Automation pattern calls (Invoke, Toggle, Select) are synchronous cross-process calls. When a click handler opens a **modal dialog** (`ShowDialog()` in WinForms/WPF), the handler — and therefore the pattern call and the app's entire UIA provider — stays blocked until the dialog closes.
+
+FlaUI-MCP handles this instead of hanging:
+
+- `windows_click` runs the pattern call on a background thread and watches the app's top-level windows via non-blocking Win32 APIs. If a modal appears, the tool returns immediately with the dialog's title.
+- While the call is pending, UIA-based tools targeting that app (`windows_snapshot`, `windows_get_text`, ref-based typing/clicking) **fail fast** with guidance instead of timing out.
+- Tools that don't need UIA keep working throughout: `windows_screenshot`, `windows_send_keys` / `windows_type` *without a ref* (pure keyboard input), `windows_list_windows`, `windows_focus`, and `windows_close`.
+
+Typical flow: click a button → "modal dialog opened" → screenshot to see it → send keys (e.g. `Enter` or `Tab`+`Enter`) to dismiss it → snapshot works again.
+
 ## Building from Source
 
 ```powershell
