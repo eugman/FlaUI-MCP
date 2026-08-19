@@ -85,8 +85,9 @@ public class PendingInvokeTracker
 			: "";
 		var elapsed = (int)(DateTime.UtcNow - info.StartedUtc).TotalSeconds;
 		return $"UI Automation for this app is blocked by a pending '{info.Description}' call " +
-			   $"started {elapsed}s ago{modalPart}. UIA-based tools will hang until it completes. " +
-			   "Interact with the dialog using windows_screenshot (fullScreen: true) to see it, " +
+			   $"started {elapsed}s ago{modalPart}. Ref-based tools on this app will fail until it completes. " +
+			   "To interact with the dialog: find its window handle via windows_list_windows (it is a separate " +
+			   "window of the same process), see it with windows_screenshot using that handle, use " +
 			   "windows_send_keys (without ref) for keyboard input, or dismiss it; then retry.";
 	}
 }

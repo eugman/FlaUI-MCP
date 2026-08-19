@@ -12,12 +12,14 @@ public class ScreenshotTool : ToolBase
     private readonly SessionManager _sessionManager;
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
+    private readonly ProcessPolicy _processPolicy;
 
-    public ScreenshotTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
+    public ScreenshotTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null, ProcessPolicy? processPolicy = null)
     {
         _sessionManager = sessionManager;
         _elementRegistry = elementRegistry;
         _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
+        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
     }
 
     public override string Name => "windows_screenshot";
@@ -88,6 +90,14 @@ public class ScreenshotTool : ToolBase
 
             if (fullScreen)
             {
+                // A full-screen capture would include windows of apps outside
+                // the allowlist, so it is disabled while one is active.
+                if (_processPolicy.IsRestricted)
+                {
+                    return Task.FromResult(ErrorResult(
+                        "fullScreen capture is disabled while the app allowlist " +
+                        $"({ProcessPolicy.EnvironmentVariable}) is active. Capture an allowed window by handle instead."));
+                }
                 capture = Capture.Screen();
             }
             else if (!string.IsNullOrEmpty(refId))
@@ -99,12 +109,14 @@ public class ScreenshotTool : ToolBase
                 }
 
                 // Element capture needs the UIA bounding rectangle, which hangs while
-                // the app's provider is blocked; suggest fullScreen capture instead.
+                // the app's provider is blocked; suggest window-handle capture instead
+                // (its Win32 fallback works while blocked, and fullScreen may be
+                // unavailable when an app allowlist is active).
                 if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pendingRef))
                 {
                     return Task.FromResult(ErrorResult(
                         PendingInvokeTracker.DescribeBlocked(pendingRef) +
-                        " For screenshots, use fullScreen: true or a window handle instead of a ref."));
+                        " For screenshots, use a window handle instead of a ref."));
                 }
 
                 capture = Capture.Element(element);
@@ -122,7 +134,8 @@ public class ScreenshotTool : ToolBase
                     {
                         return Task.FromResult(ErrorResult(
                             "This app's UI Automation provider is blocked and its window bounds are unknown. " +
-                            "Use fullScreen: true instead."));
+                            "Use windows_list_windows to find the window (or the open dialog) and capture it " +
+                            "by that handle instead."));
                     }
                     capture = Capture.Rectangle(bounds.Value);
                 }
@@ -144,6 +157,19 @@ public class ScreenshotTool : ToolBase
             }
             else
             {
+                // Capturing the foreground window: verify it belongs to an
+                // allowed app before touching it.
+                if (_processPolicy.IsRestricted)
+                {
+                    var foregroundPid = Win32Desktop.GetForegroundWindowProcessId();
+                    if (!_processPolicy.IsProcessAllowed(foregroundPid))
+                    {
+                        var name = ProcessPolicy.TryGetProcessName(foregroundPid) ?? "unknown";
+                        return Task.FromResult(ErrorResult(
+                            _processPolicy.DescribeDenied($"The foreground window's process '{name}'")));
+                    }
+                }
+
                 // Capture foreground window
                 var focusedElement = _sessionManager.Automation.FocusedElement();
                 if (focusedElement == null)

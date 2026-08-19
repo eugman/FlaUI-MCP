@@ -16,17 +16,24 @@ public class SessionManager : IDisposable
     private readonly Dictionary<string, nint> _windowHwnds = new();
     private readonly Dictionary<string, int> _windowPids = new();
     private readonly Dictionary<nint, string> _hwndToHandle = new();
+    private readonly ProcessPolicy _processPolicy;
     private int _windowCounter = 0;
 
-    public SessionManager()
+    public SessionManager(ProcessPolicy? processPolicy = null)
     {
         _automation = new UIA3Automation();
+        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
     }
 
     public UIA3Automation Automation => _automation;
 
     public (string handle, Window window) LaunchApp(string appPath, string[]? args = null)
     {
+        if (!_processPolicy.IsExecutableAllowed(appPath))
+        {
+            throw new Exception(_processPolicy.DescribeDenied($"'{appPath}'"));
+        }
+
         // Use Process.Start for more reliable launching
         var psi = new System.Diagnostics.ProcessStartInfo
         {
@@ -130,6 +137,8 @@ public class SessionManager : IDisposable
         }
         catch { /* best effort */ }
 
+        EnsureProcessAllowed(pid);
+
         if (hwnd != 0 && _hwndToHandle.TryGetValue(hwnd, out var existing))
         {
             _windows[existing] = window;
@@ -156,6 +165,8 @@ public class SessionManager : IDisposable
     /// </summary>
     public string RegisterNativeWindow(nint hwnd, int processId)
     {
+        EnsureProcessAllowed(processId);
+
         if (_hwndToHandle.TryGetValue(hwnd, out var existing))
         {
             _windowPids[existing] = processId;
@@ -223,15 +234,16 @@ public class SessionManager : IDisposable
                 continue;
             }
 
-            var handle = RegisterNativeWindow(info.Hwnd, info.ProcessId);
+            var processName = ProcessPolicy.TryGetProcessName(info.ProcessId);
 
-            string? processName = null;
-            try
+            // When an allowlist is active, windows of other apps are not listed
+            // at all - no handle is registered, so they stay unreachable.
+            if (!_processPolicy.IsNameAllowed(processName))
             {
-                processName = System.Diagnostics.Process.GetProcessById(info.ProcessId).ProcessName;
+                continue;
             }
-            catch { }
 
+            var handle = RegisterNativeWindow(info.Hwnd, info.ProcessId);
             result.Add((handle, info.Title, processName));
         }
         return result;
@@ -279,6 +291,32 @@ public class SessionManager : IDisposable
             _windowHwnds.Remove(handle);
         }
         _windowPids.Remove(handle);
+    }
+
+    /// <summary>
+    /// Throw when an app allowlist is active and the process is not on it (or
+    /// cannot be identified). Every window-handle registration funnels through
+    /// this, so refs and handles can only ever point at allowed apps.
+    /// </summary>
+    private void EnsureProcessAllowed(int processId)
+    {
+        if (!_processPolicy.IsRestricted)
+        {
+            return;
+        }
+
+        if (processId == 0)
+        {
+            throw new Exception(
+                "Cannot verify this window's owning process against the app allowlist " +
+                $"({ProcessPolicy.EnvironmentVariable}), so it is not controllable.");
+        }
+
+        if (!_processPolicy.IsProcessAllowed(processId))
+        {
+            var name = ProcessPolicy.TryGetProcessName(processId) ?? $"pid {processId}";
+            throw new Exception(_processPolicy.DescribeDenied($"Process '{name}'"));
+        }
     }
 
     public void Dispose()

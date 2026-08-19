@@ -143,6 +143,54 @@ sleep). A domain group policy that enforces a hard machine inactivity limit
 and is not suppressed by availability requests — no application can override
 that policy.
 
+### Restricting Which Apps Can Be Automated
+
+By default, FlaUI-MCP can automate **any** application on the desktop — including
+File Explorer, browsers, and terminals. If the agent driving it is ever misled
+(for example by prompt injection), that is a large attack surface. Set the
+`FLAUI_MCP_ALLOWED_APPS` environment variable to restrict automation to specific
+apps:
+
+```json
+{
+  "mcpServers": {
+    "windows": {
+      "type": "local",
+      "command": "C:\\path\\to\\FlaUI.Mcp.exe",
+      "env": {
+        "FLAUI_MCP_ALLOWED_APPS": "TabularEditor3"
+      }
+    }
+  }
+}
+```
+
+The value is a semicolon- or comma-separated list of process names, matched
+case-insensitively, with or without `.exe` (full paths are reduced to their
+file name). When the variable is unset or empty, everything is allowed.
+
+While the allowlist is active:
+
+- `windows_launch` refuses to start non-allowed executables.
+- Window handles are only ever issued for allowed processes, so every ref-based
+  tool (snapshot, click, type, fill, get_text, screenshot by handle/ref) is
+  automatically scoped to allowed apps. `windows_list_windows` lists only
+  allowed apps' windows.
+- Ref-less keyboard input (`windows_send_keys` / `windows_type` without a ref)
+  verifies the **foreground window** belongs to an allowed process first, and
+  the Windows key is rejected outright (it opens system UI like the Start menu
+  and Win+R outside any allowlist).
+- `windows_screenshot` refuses `fullScreen` capture and foreground-window
+  capture of non-allowed apps, so other windows' content is not disclosed.
+
+Scope honestly stated: matching is by process name, so this is a guard against
+a misdirected or prompt-injected agent driving unintended apps *through this
+server* — not a sandbox against a local attacker, and it does not restrict
+anything the agent can do through other tools (like a shell). Dialogs owned by
+the allowed process (including common file dialogs, which run in-process) keep
+working; apps it launches as separate processes (e.g. a browser for OAuth) are
+blocked unless also listed.
+
 ### Tool Examples
 
 Send a keyboard chord to a target element:

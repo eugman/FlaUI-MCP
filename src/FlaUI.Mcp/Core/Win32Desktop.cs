@@ -70,6 +70,9 @@ public static class Win32Desktop
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(nint hWnd, out RECT lpRect);
 
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+
     [DllImport("dwmapi.dll")]
     private static extern int DwmGetWindowAttribute(nint hWnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
@@ -138,6 +141,21 @@ public static class Win32Desktop
     public static void CloseWindow(nint hwnd)
     {
         PostMessage(hwnd, WM_CLOSE, 0, 0);
+    }
+
+    /// <summary>
+    /// Get the process id owning the current foreground window, or 0 if there
+    /// is no foreground window.
+    /// </summary>
+    public static int GetForegroundWindowProcessId()
+    {
+        var hwnd = GetForegroundWindow();
+        if (hwnd == 0)
+        {
+            return 0;
+        }
+        GetWindowThreadProcessId(hwnd, out var pid);
+        return (int)pid;
     }
 
     /// <summary>

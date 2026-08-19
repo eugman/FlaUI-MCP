@@ -158,9 +158,10 @@ public class ClickTool : ToolBase
             PatternCallOutcome.Completed => TextResult(completedMessage),
             PatternCallOutcome.ModalDetected => TextResult(
                 $"{completedMessage} — a modal dialog \"{result.ModalTitle}\" opened and is waiting for input. " +
-                "Note: UIA-based tools (windows_snapshot, windows_get_text) on this app will block until the " +
-                "dialog closes. Use windows_screenshot to see the dialog and windows_send_keys (without ref) " +
-                "or coordinate clicks to interact with it."),
+                "Note: UIA-based tools (windows_snapshot, windows_get_text) on this app will fail until the " +
+                "dialog closes. Give the dialog a moment to appear and take focus, find its window handle via " +
+                "windows_list_windows, see it with windows_screenshot using that handle, and interact via " +
+                "windows_send_keys (without ref) or coordinate clicks."),
             _ => TextResult(
                 $"{completedMessage} — the app's handler is still running in the background. " +
                 "Take a windows_screenshot to check the app's state; UIA-based tools may block until it completes."),
