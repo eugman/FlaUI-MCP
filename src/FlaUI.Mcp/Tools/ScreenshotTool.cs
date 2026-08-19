@@ -109,12 +109,14 @@ public class ScreenshotTool : ToolBase
                 }
 
                 // Element capture needs the UIA bounding rectangle, which hangs while
-                // the app's provider is blocked; suggest fullScreen capture instead.
+                // the app's provider is blocked; suggest window-handle capture instead
+                // (its Win32 fallback works while blocked, and fullScreen may be
+                // unavailable when an app allowlist is active).
                 if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pendingRef))
                 {
                     return Task.FromResult(ErrorResult(
                         PendingInvokeTracker.DescribeBlocked(pendingRef) +
-                        " For screenshots, use fullScreen: true or a window handle instead of a ref."));
+                        " For screenshots, use a window handle instead of a ref."));
                 }
 
                 capture = Capture.Element(element);
@@ -132,7 +134,8 @@ public class ScreenshotTool : ToolBase
                     {
                         return Task.FromResult(ErrorResult(
                             "This app's UI Automation provider is blocked and its window bounds are unknown. " +
-                            "Use fullScreen: true instead."));
+                            "Use windows_list_windows to find the window (or the open dialog) and capture it " +
+                            "by that handle instead."));
                     }
                     capture = Capture.Rectangle(bounds.Value);
                 }
