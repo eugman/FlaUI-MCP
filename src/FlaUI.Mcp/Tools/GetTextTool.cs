@@ -9,10 +9,12 @@ namespace PlaywrightWindows.Mcp.Tools;
 public class GetTextTool : ToolBase
 {
     private readonly ElementRegistry _elementRegistry;
+    private readonly PendingInvokeTracker _invokeTracker;
 
-    public GetTextTool(ElementRegistry elementRegistry)
+    public GetTextTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
     {
         _elementRegistry = elementRegistry;
+        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
     }
 
     public override string Name => "windows_get_text";
@@ -47,6 +49,12 @@ public class GetTextTool : ToolBase
         if (element == null)
         {
             return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
+        }
+
+        // Fail fast if this app's UIA provider is blocked by a pending pattern call
+        if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
+        {
+            return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
         }
 
         try

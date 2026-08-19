@@ -11,10 +11,12 @@ namespace PlaywrightWindows.Mcp.Tools;
 public class TypeTool : ToolBase
 {
     private readonly ElementRegistry _elementRegistry;
+    private readonly PendingInvokeTracker _invokeTracker;
 
-    public TypeTool(ElementRegistry elementRegistry)
+    public TypeTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
     {
         _elementRegistry = elementRegistry;
+        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
     }
 
     public override string Name => "windows_type";
@@ -69,6 +71,14 @@ public class TypeTool : ToolBase
                     return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
                 }
 
+                // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
+                // Tip: calling windows_type without a ref types into the focused element
+                // using pure keyboard input, which works even while the provider is blocked.
+                if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
+                {
+                    return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
+                }
+
                 element.Focus();
                 Thread.Sleep(50); // Small delay to ensure focus
             }
@@ -98,10 +108,12 @@ public class TypeTool : ToolBase
 public class FillTool : ToolBase
 {
     private readonly ElementRegistry _elementRegistry;
+    private readonly PendingInvokeTracker _invokeTracker;
 
-    public FillTool(ElementRegistry elementRegistry)
+    public FillTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
     {
         _elementRegistry = elementRegistry;
+        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
     }
 
     public override string Name => "windows_fill";
@@ -146,6 +158,12 @@ public class FillTool : ToolBase
         if (element == null)
         {
             return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
+        }
+
+        // Fail fast if this app's UIA provider is blocked by a pending pattern call
+        if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
+        {
+            return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
         }
 
         try

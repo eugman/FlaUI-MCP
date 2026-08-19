@@ -34,6 +34,19 @@ public class ToolRegistryTimeoutTests
         Assert.Equal("ok", result.Content[0].Text);
     }
 
+    [Fact]
+    public async Task ExecuteToolAsync_InvokesActivityCallbackForKnownToolsOnly()
+    {
+        var activity = 0;
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(1), onToolActivity: () => activity++);
+        registry.RegisterTool(new SuccessfulTool());
+
+        await registry.ExecuteToolAsync("successful", arguments: null);
+        await registry.ExecuteToolAsync("unknown", arguments: null);
+
+        Assert.Equal(1, activity);
+    }
+
     private sealed class BlockingTool : ITool
     {
         private readonly TimeSpan _delay;

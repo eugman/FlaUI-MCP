@@ -11,11 +11,13 @@ public class ScreenshotTool : ToolBase
 {
     private readonly SessionManager _sessionManager;
     private readonly ElementRegistry _elementRegistry;
+    private readonly PendingInvokeTracker _invokeTracker;
 
-    public ScreenshotTool(SessionManager sessionManager, ElementRegistry elementRegistry)
+    public ScreenshotTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
     {
         _sessionManager = sessionManager;
         _elementRegistry = elementRegistry;
+        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
     }
 
     public override string Name => "windows_screenshot";
@@ -95,22 +97,50 @@ public class ScreenshotTool : ToolBase
                 {
                     return Task.FromResult(ErrorResult($"Element not found: {refId}"));
                 }
+
+                // Element capture needs the UIA bounding rectangle, which hangs while
+                // the app's provider is blocked; suggest fullScreen capture instead.
+                if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pendingRef))
+                {
+                    return Task.FromResult(ErrorResult(
+                        PendingInvokeTracker.DescribeBlocked(pendingRef) +
+                        " For screenshots, use fullScreen: true or a window handle instead of a ref."));
+                }
+
                 capture = Capture.Element(element);
             }
             else if (!string.IsNullOrEmpty(handle))
             {
-                var window = _sessionManager.GetWindow(handle);
-                if (window == null)
+                // While the app's UIA provider is blocked (pending pattern call, e.g. an
+                // open modal dialog), fall back to a pure Win32 capture of the window
+                // bounds so screenshots keep working.
+                if (_invokeTracker.TryGetPending(_sessionManager.GetWindowProcessId(handle), out _))
                 {
-                    return Task.FromResult(ErrorResult($"Window not found: {handle}"));
+                    var hwnd = _sessionManager.GetWindowHwnd(handle);
+                    var bounds = hwnd != 0 ? Win32Desktop.GetWindowBounds(hwnd) : null;
+                    if (bounds == null)
+                    {
+                        return Task.FromResult(ErrorResult(
+                            "This app's UI Automation provider is blocked and its window bounds are unknown. " +
+                            "Use fullScreen: true instead."));
+                    }
+                    capture = Capture.Rectangle(bounds.Value);
                 }
-
-                if (background && NativeWindowCapture.TryCaptureWindow(window, out var backgroundImage, out _))
+                else
                 {
-                    return Task.FromResult(BuildScreenshotResult(backgroundImage, normalizedSavePath, overwrite));
-                }
+                    var window = _sessionManager.GetWindow(handle);
+                    if (window == null)
+                    {
+                        return Task.FromResult(ErrorResult($"Window not found: {handle}"));
+                    }
 
-                capture = Capture.Element(window);
+                    if (background && NativeWindowCapture.TryCaptureWindow(window, out var backgroundImage, out _))
+                    {
+                        return Task.FromResult(BuildScreenshotResult(backgroundImage, normalizedSavePath, overwrite));
+                    }
+
+                    capture = Capture.Element(window);
+                }
             }
             else
             {

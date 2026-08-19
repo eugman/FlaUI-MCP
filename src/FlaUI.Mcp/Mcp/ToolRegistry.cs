@@ -9,14 +9,16 @@ public class ToolRegistry
 {
     private readonly Dictionary<string, ITool> _tools = new();
     private readonly TimeSpan _toolTimeout;
+    private readonly Action? _onToolActivity;
 
-    public ToolRegistry(TimeSpan? toolTimeout = null)
+    public ToolRegistry(TimeSpan? toolTimeout = null, Action? onToolActivity = null)
     {
         _toolTimeout = toolTimeout ?? TimeSpan.FromSeconds(30);
         if (_toolTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(toolTimeout), "Tool timeout must be greater than zero.");
         }
+        _onToolActivity = onToolActivity;
     }
 
     public void RegisterTool(ITool tool)
@@ -45,6 +47,8 @@ public class ToolRegistry
 
         try
         {
+            _onToolActivity?.Invoke();
+
             var toolTask = Task.Run(() => tool.ExecuteAsync(arguments));
             var timeoutTask = Task.Delay(_toolTimeout);
 

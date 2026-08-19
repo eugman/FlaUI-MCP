@@ -23,6 +23,21 @@ public class SnapshotBuilder
         // Clear previous elements for this window
         _elementRegistry.ClearWindow(windowHandle);
 
+        // Remember the owning process so tools can later detect a blocked
+        // UIA provider for this window's refs without touching UIA.
+        try
+        {
+            var processId = root.Properties.ProcessId.ValueOrDefault;
+            if (processId != 0)
+            {
+                _elementRegistry.SetWindowProcessId(windowHandle, processId);
+            }
+        }
+        catch
+        {
+            // Process id is best-effort; snapshot still works without it
+        }
+
         var sb = new StringBuilder();
         BuildElementSnapshot(sb, windowHandle, root, 0);
         return sb.ToString();

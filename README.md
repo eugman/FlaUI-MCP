@@ -122,6 +122,27 @@ It can also save screenshots with `savePath`, which must be an absolute local
 Tool calls have a 30-second timeout so a blocked UI Automation provider or modal
 dialog returns an actionable error instead of hanging the MCP server forever.
 
+### Keeping the Screen Awake
+
+Long automation runs generate no keyboard or mouse input, so Windows would
+normally turn off the display and show the lock screen mid-run — which breaks
+screenshots and can freeze rendering. While tools are actively being called,
+FlaUI-MCP holds a Windows *power availability request* (the same signal video
+players and conferencing apps send) that keeps the display on and suppresses
+the idle lock. The request appears in `powercfg /requests` (run as admin) with
+the reason "FlaUI-MCP is driving Windows UI automation".
+
+The request is released after **5 minutes** without a tool call, so an idle MCP
+server does not keep your screen on. Configure via the
+`FLAUI_MCP_KEEP_AWAKE_SECONDS` environment variable: a positive value changes
+the idle period, `0` disables keep-awake entirely.
+
+Note: this covers the common idle-lock paths (display timeout, screensaver,
+sleep). A domain group policy that enforces a hard machine inactivity limit
+("Interactive logon: Machine inactivity limit") locks based on input idle time
+and is not suppressed by availability requests — no application can override
+that policy.
+
 ### Tool Examples
 
 Send a keyboard chord to a target element:
@@ -214,6 +235,18 @@ This comes from **Windows UI Automation** - the same API screen readers use. Eac
 | **Screenshot + Vision** | Works with any app | Slow, expensive, imprecise, resolution-dependent |
 
 FlaUI-MCP uses accessibility because it's what screen readers use - it's designed for programmatic UI interaction.
+
+### Modal Dialogs
+
+UI Automation pattern calls (Invoke, Toggle, Select) are synchronous cross-process calls. When a click handler opens a **modal dialog** (`ShowDialog()` in WinForms/WPF), the handler — and therefore the pattern call and the app's entire UIA provider — stays blocked until the dialog closes.
+
+FlaUI-MCP handles this instead of hanging:
+
+- `windows_click` runs the pattern call on a background thread and watches the app's top-level windows via non-blocking Win32 APIs. If a modal appears, the tool returns immediately with the dialog's title.
+- While the call is pending, UIA-based tools targeting that app (`windows_snapshot`, `windows_get_text`, ref-based typing/clicking) **fail fast** with guidance instead of timing out.
+- Tools that don't need UIA keep working throughout: `windows_screenshot`, `windows_send_keys` / `windows_type` *without a ref* (pure keyboard input), `windows_list_windows`, `windows_focus`, and `windows_close`.
+
+Typical flow: click a button → "modal dialog opened" → screenshot to see it → send keys (e.g. `Enter` or `Tab`+`Enter`) to dismiss it → snapshot works again.
 
 ## Building from Source
 

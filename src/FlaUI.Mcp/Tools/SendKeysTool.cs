@@ -115,14 +115,17 @@ public class SendKeysTool : ToolBase
     };
 
     private readonly ElementRegistry _elementRegistry;
+    private readonly PendingInvokeTracker _invokeTracker;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SendKeysTool"/> class.
     /// </summary>
     /// <param name="elementRegistry">Registry used to resolve element references for focus targeting.</param>
-    public SendKeysTool(ElementRegistry elementRegistry)
+    /// <param name="invokeTracker">Tracker used to fail fast when the target app's UIA provider is blocked.</param>
+    public SendKeysTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
     {
         _elementRegistry = elementRegistry;
+        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
     }
 
     /// <summary>
@@ -198,6 +201,14 @@ public class SendKeysTool : ToolBase
                 if (element == null)
                 {
                     return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
+                }
+
+                // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
+                // Tip: calling windows_send_keys without a ref sends pure keyboard input to the
+                // focused element, which works even while the provider is blocked.
+                if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
+                {
+                    return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
                 }
 
                 element.Focus();
