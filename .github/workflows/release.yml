@@ -180,7 +180,7 @@ jobs:
           }
           ```
           
-          See [README](https://github.com/shanselman/FlaUI-MCP#readme) for full documentation.
+          See [README](https://github.com/TabularEditor/FlaUI-MCP#readme) for full documentation.
         files: artifacts/*.zip
         draft: ${{ steps.release.outputs.draft }}
         prerelease: ${{ steps.release.outputs.prerelease }}
