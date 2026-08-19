@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Optional app allowlist via the `FLAUI_MCP_ALLOWED_APPS` environment variable (semicolon- or comma-separated process names). When set, the server refuses to launch, list, snapshot, screenshot or send input to any other application: window handles are only issued for allowed processes (scoping every ref-based tool), ref-less keyboard input requires an allowed foreground window and rejects the Windows key, and `fullScreen` screenshots are disabled. Unset means everything is allowed, as before.
 - The server now keeps the display awake while tools are actively being called, so Windows does not turn off the screen or show the lock screen in the middle of a long automation run. Implemented with a Windows power availability request (`PowerCreateRequest`/`PowerSetRequest` with `PowerRequestDisplayRequired` + `PowerRequestSystemRequired`) — the same mechanism video players and conferencing apps use, visible in `powercfg /requests`. The request is released after 5 minutes without a tool call; configure the idle period (or disable with `0`) via the `FLAUI_MCP_KEEP_AWAKE_SECONDS` environment variable.
 
 ### Fixed

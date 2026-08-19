@@ -12,11 +12,13 @@ public class TypeTool : ToolBase
 {
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
+    private readonly ProcessPolicy _processPolicy;
 
-    public TypeTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
+    public TypeTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null, ProcessPolicy? processPolicy = null)
     {
         _elementRegistry = elementRegistry;
         _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
+        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
     }
 
     public override string Name => "windows_type";
@@ -81,6 +83,16 @@ public class TypeTool : ToolBase
 
                 element.Focus();
                 Thread.Sleep(50); // Small delay to ensure focus
+            }
+            else
+            {
+                // Ref-less input goes to whatever has keyboard focus, so verify
+                // the foreground window belongs to an allowed app.
+                var denied = _processPolicy.CheckForegroundWindowAllowed();
+                if (denied != null)
+                {
+                    return Task.FromResult(ErrorResult(denied));
+                }
             }
 
             // Type the text

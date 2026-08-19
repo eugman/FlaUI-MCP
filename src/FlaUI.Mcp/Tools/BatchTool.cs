@@ -15,13 +15,15 @@ public class BatchTool : ToolBase
     private readonly ElementRegistry _elementRegistry;
     private readonly SnapshotBuilder _snapshotBuilder;
     private readonly PendingInvokeTracker _invokeTracker;
+    private readonly ProcessPolicy _processPolicy;
 
-    public BatchTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
+    public BatchTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null, ProcessPolicy? processPolicy = null)
     {
         _sessionManager = sessionManager;
         _elementRegistry = elementRegistry;
         _snapshotBuilder = new SnapshotBuilder(elementRegistry);
         _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
+        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
     }
 
     public override string Name => "windows_batch";
@@ -221,6 +223,16 @@ public class BatchTool : ToolBase
             }
             element.Focus();
             Thread.Sleep(30);
+        }
+        else
+        {
+            // Ref-less input goes to whatever has keyboard focus, so verify
+            // the foreground window belongs to an allowed app.
+            var denied = _processPolicy.CheckForegroundWindowAllowed();
+            if (denied != null)
+            {
+                return denied;
+            }
         }
 
         Keyboard.Type(text);

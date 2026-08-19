@@ -116,16 +116,19 @@ public class SendKeysTool : ToolBase
 
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
+    private readonly ProcessPolicy _processPolicy;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SendKeysTool"/> class.
     /// </summary>
     /// <param name="elementRegistry">Registry used to resolve element references for focus targeting.</param>
     /// <param name="invokeTracker">Tracker used to fail fast when the target app's UIA provider is blocked.</param>
-    public SendKeysTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
+    /// <param name="processPolicy">Optional allowlist restricting which apps may receive input.</param>
+    public SendKeysTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null, ProcessPolicy? processPolicy = null)
     {
         _elementRegistry = elementRegistry;
         _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
+        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
     }
 
     /// <summary>
@@ -214,6 +217,16 @@ public class SendKeysTool : ToolBase
                 element.Focus();
                 Thread.Sleep(50);
             }
+            else
+            {
+                // Ref-less input goes to whatever has keyboard focus, so verify
+                // the foreground window belongs to an allowed app.
+                var denied = _processPolicy.CheckForegroundWindowAllowed();
+                if (denied != null)
+                {
+                    return Task.FromResult(ErrorResult(denied));
+                }
+            }
 
             if (hasChord)
             {
@@ -227,6 +240,12 @@ public class SendKeysTool : ToolBase
                 if (chordError != null)
                 {
                     return Task.FromResult(ErrorResult(chordError));
+                }
+
+                var chordDenied = CheckKeysAllowed(chordKeys);
+                if (chordDenied != null)
+                {
+                    return Task.FromResult(ErrorResult(chordDenied));
                 }
 
                 PressKeys(chordKeys);
@@ -251,6 +270,12 @@ public class SendKeysTool : ToolBase
                     return Task.FromResult(ErrorResult(stepError));
                 }
 
+                var stepDenied = CheckKeysAllowed(stepKeys);
+                if (stepDenied != null)
+                {
+                    return Task.FromResult(ErrorResult(stepDenied));
+                }
+
                 PressKeys(stepKeys);
                 actions.Add(string.Join("+", stepTokens));
                 Thread.Sleep(30);
@@ -263,6 +288,22 @@ public class SendKeysTool : ToolBase
         {
             return Task.FromResult(ErrorResult($"Failed to send keys: {ex.Message}"));
         }
+    }
+
+    /// <summary>
+    /// The Windows key opens UI (Start menu, Win+R, Win+E, ...) that always
+    /// belongs to processes outside any allowlist, so it is rejected while an
+    /// allowlist is active.
+    /// </summary>
+    private string? CheckKeysAllowed(List<VirtualKeyShort> keys)
+    {
+        if (_processPolicy.IsRestricted &&
+            keys.Any(k => k is VirtualKeyShort.LWIN or VirtualKeyShort.RWIN))
+        {
+            return "The Windows key is disabled while the app allowlist is active, " +
+                   "because it opens system UI outside the allowed apps.";
+        }
+        return null;
     }
 
     private static List<VirtualKeyShort> TryResolveKeys(List<string> tokens, out string? error)

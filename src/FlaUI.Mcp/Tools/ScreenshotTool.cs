@@ -12,12 +12,14 @@ public class ScreenshotTool : ToolBase
     private readonly SessionManager _sessionManager;
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
+    private readonly ProcessPolicy _processPolicy;
 
-    public ScreenshotTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null)
+    public ScreenshotTool(SessionManager sessionManager, ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null, ProcessPolicy? processPolicy = null)
     {
         _sessionManager = sessionManager;
         _elementRegistry = elementRegistry;
         _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
+        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
     }
 
     public override string Name => "windows_screenshot";
@@ -88,6 +90,14 @@ public class ScreenshotTool : ToolBase
 
             if (fullScreen)
             {
+                // A full-screen capture would include windows of apps outside
+                // the allowlist, so it is disabled while one is active.
+                if (_processPolicy.IsRestricted)
+                {
+                    return Task.FromResult(ErrorResult(
+                        "fullScreen capture is disabled while the app allowlist " +
+                        $"({ProcessPolicy.EnvironmentVariable}) is active. Capture an allowed window by handle instead."));
+                }
                 capture = Capture.Screen();
             }
             else if (!string.IsNullOrEmpty(refId))
@@ -144,6 +154,19 @@ public class ScreenshotTool : ToolBase
             }
             else
             {
+                // Capturing the foreground window: verify it belongs to an
+                // allowed app before touching it.
+                if (_processPolicy.IsRestricted)
+                {
+                    var foregroundPid = Win32Desktop.GetForegroundWindowProcessId();
+                    if (!_processPolicy.IsProcessAllowed(foregroundPid))
+                    {
+                        var name = ProcessPolicy.TryGetProcessName(foregroundPid) ?? "unknown";
+                        return Task.FromResult(ErrorResult(
+                            _processPolicy.DescribeDenied($"The foreground window's process '{name}'")));
+                    }
+                }
+
                 // Capture foreground window
                 var focusedElement = _sessionManager.Automation.FocusedElement();
                 if (focusedElement == null)
