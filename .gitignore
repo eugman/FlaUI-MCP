@@ -53,5 +53,5 @@ TestFlaUI/
 !automation/*.csx
 !automation/replica-inputs/*.csx
 .playwright-mcp/
-/gallery-review.png
+__pycache__/
 /automation/local.config.json

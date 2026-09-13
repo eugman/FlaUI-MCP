@@ -89,45 +89,6 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     }
     public async Task SearchPreferences(string text)
         => await Fill(new(new(AutomationId: "searchPreferences", ControlType: "Edit"), PreferencesTarget().Selector, true), text);
-    // Diagnostic only: preserve each transition before trying the normal recovery.
-    public async Task ProbePreferencesSearch(Func<string, Task> observe)
-    {
-        await SearchPreferences("Code Actions");
-        await observe("01-filtered");
-        var row = new Target(new(ControlType: "TreeItem", Value: "Code Actions", Visible: true),
-            new(AutomationId: "treePreferences"), true);
-        await Click(row);
-        await observe("02-selected-filtered");
-        await SearchPreferences("");
-        await observe("03-cleared");
-        await Task.Delay(1000);
-        await observe("04-cleared-settled");
-        await SearchPreferences("Code Actions");
-        await SelectPreferencesSection("Code Actions");
-        await observe("05-reselected");
-        await AssertAgentCodeActions();
-        // Isolate the keyboard arm: refiltering an already selected row can
-        // itself blank the pane, invalidating a before/after clear comparison.
-        await CancelPreferences();
-        await OpenPreferences();
-        await SizePreferences(1155, 714);
-        await SearchPreferences("Code Actions");
-        await Click(row);
-        await Expect(new(new(Name: "Variable prefix", ControlType: "ComboBox", Visible: true),
-            new(AutomationId: "DAX Editor.Code Actions"), true), "_");
-        await observe("06-before-keyboard-clear");
-        var search = new Target(new(AutomationId: "searchPreferences", ControlType: "Edit"),
-            PreferencesTarget().Selector, true);
-        await Keys("Ctrl+A", search);
-        await Keys("Backspace", search);
-        await observe("07-keyboard-cleared");
-        await Task.Delay(1000);
-        await observe("08-keyboard-cleared-settled");
-        await SearchPreferences("Code Actions");
-        await SelectPreferencesSection("Code Actions");
-        await observe("09-recovered");
-        await AssertAgentCodeActions();
-    }
     public async Task SizePreferences(int width, int height)
     {
         var reference = await Reference(PreferencesTarget());

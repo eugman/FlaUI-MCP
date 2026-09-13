@@ -1,9 +1,0 @@
-Use the cheapest adequate observation. Prefer compact text/state queries for
-finding controls and screenshots for visual inspection. Start scoped, then widen
-when the evidence is insufficient. Keep selectors exact and request only a few
-results. A truncated or unreadable search is not proof of absence. Reobserve
-after a timeout; do not blindly replay an action whose result is unknown.
-Use fresh refs after observations that invalidate earlier ones. Presence alone
-does not prove selection. Save screenshots artifact-only when possible; load
-the saved image when you need to check visual quality. Do not load broad maps
-or unrelated documentation for a narrow task.

@@ -10,8 +10,6 @@ public static class RecipeCatalog
     public static IReadOnlyList<Recipe> All { get; } =
     [
         new("model-open", DaxPage, false, ModelOpen),
-        new("ablation-code-actions", "automation/ABLATION.md", false, AblationCodeActions),
-        new("preferences-search-diagnostic", "automation/ablation/SUSPECTED-BUGS.md", false, PreferencesSearchDiagnostic),
         new("preferences-map", "content/references/preferences.md", false, PreferencesMap),
         new("preferences-language-choices", "content/references/application-language.md", false, LanguageChoices),
         new("preferences-auto-formatting", "content/references/preferences.md", false, AutoFormatting),
@@ -55,18 +53,6 @@ public static class RecipeCatalog
         await c.Query("EVALUATE { [UI Revenue] }", 61);
     }
     private static async Task ModelOpen(RecipeContext c) { await Open(c); await c.Capture("model-open"); }
-    private static async Task AblationCodeActions(RecipeContext c)
-    {
-        await c.Unchanged(async () =>
-        {
-            await Open(c);
-            await c.Capture("agent-start");
-            await c.WaitForAgent();
-            await c.Page.AssertAgentCodeActions();
-            await c.Capture("grader-code-actions", Te3Page.PreferencesTarget());
-            await c.Page.CancelPreferences();
-        });
-    }
     private static async Task PreferencesMap(RecipeContext c)
     {
         await c.Unchanged(async () =>
@@ -74,21 +60,6 @@ public static class RecipeCatalog
             await c.Page.OpenPreferences();
             await c.MapControls("preferences-tree", new(AutomationId: "treePreferences"));
             await c.Capture("preferences", Te3Page.PreferencesTarget());
-            await c.Page.CancelPreferences();
-        });
-    }
-    private static async Task PreferencesSearchDiagnostic(RecipeContext c)
-    {
-        await c.Unchanged(async () =>
-        {
-            await c.Page.OpenPreferences();
-            await c.Page.SizePreferences(1155, 714);
-            await c.Page.ProbePreferencesSearch(async stage =>
-            {
-                await c.Capture(stage + "-screen", Te3Page.PreferencesTarget(), screenPixels: true);
-                await c.Capture(stage, Te3Page.PreferencesTarget());
-                await c.MapControls(stage, Te3Page.PreferencesTarget().Selector);
-            });
             await c.Page.CancelPreferences();
         });
     }

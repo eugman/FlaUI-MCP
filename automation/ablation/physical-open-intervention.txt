@@ -1,6 +1,0 @@
-For this TE3 build, open the Preferences... popup button with windows_click
-using physical:true and its fresh ref. Its default UIA Invoke can remain blocked
-until the modal closes, preventing subsequent UIA queries. The typed runner uses
-guarded physical clicking for this transition. After opening it, find the actual
-Preferences window and search control afresh. Do not repeat a timed-out action
-without checking what happened.

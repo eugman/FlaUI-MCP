@@ -5,7 +5,6 @@
 | model-open | Loaded model and Sales | No |
 | model-calculation-group-menu | Model menu, Add Calculation Group highlighted; Escape without executing | No |
 | preferences-map | Open Preferences, map visible controls, capture, Cancel (discovery only) | No |
-| preferences-search-diagnostic | Filter/select/clear/recover checkpoints and UI maps; Value-pattern versus keyboard clear with separate dialogs. Diagnostic only; excluded from default batch | No |
 | preferences-language-choices | Verified User Interface pane and open six-language list; English unchanged; Escape/Cancel. Excluded from default batch | No |
 | preferences-save-to-folder | Default/mode map, temporary customizable settings, original checked tree and selected Data Sources; Cancel. Larger than the original to avoid clipping | No |
 | preferences-auto-formatting | Original checkbox/numeric/casing states, unfiltered selected section, 1155x714 | No |

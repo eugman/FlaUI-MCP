@@ -80,9 +80,8 @@ Clearing search hides the selected row outside the accessible viewport. ScrollIt
 was not usable. Reobserve visible rows and send PageDown to the exact tree, bounded
 to eight pages, then physically click a fresh target and verify SelectionItem.IsSelected.
 Clearing can also blank the content, even with a selected row reported by UIA.
-Verify the expected pane's visible controls, not just selection. The diagnostic
-recipe `preferences-search-diagnostic` preserves filtered/cleared/recovered PNGs
-and UI maps; it is not a screenshot-replica recipe or part of the default batch.
+Verify the expected pane's visible controls, not just selection. See
+[KNOWN-ISSUES.md](KNOWN-ISSUES.md) for manual reproduction and recovery.
 Auto Formatting uses a 1155x714 dialog; await resize idle, verify native bounds and
 monitor containment, and enforce dimensions again on the captured PNG. Its 14
 checkboxes and four numeric/casing values are read-only assertions; never click

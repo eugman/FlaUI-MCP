@@ -19,20 +19,6 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
         manifest.Screenshots.Add(checkpoint, path);
         save();
     }
-    public async Task WaitForAgent()
-    {
-        if (manifest.Database.Length != 0) throw new InvalidOperationException("Agent trials must be offline");
-        manifest.CurrentStep = "Agent handoff: waiting for operator release";
-        save();
-        var ready = Path.Combine(manifest.Output, "agent-ready.json");
-        var release = Path.Combine(manifest.Output, "agent-release.txt");
-        if (File.Exists(ready) || File.Exists(release)) throw new IOException("Handoff files already exist");
-        File.WriteAllText(ready, JsonSerializer.Serialize(new { manifest.RunId, manifest.ProcessId,
-            screenshot = Path.Combine(manifest.Output, "agent-code-actions.png"),
-            expiresUtc = DateTime.UtcNow.AddMinutes(10) }, RunConfig.Json));
-        Console.WriteLine("Agent handoff ready: " + ready);
-        await AgentHandoff.Wait(() => File.Exists(release) ? File.ReadAllText(release).Trim() : null, TimeSpan.FromMinutes(10));
-    }
     public Task MapSerializationModes() => Page.SaveSerializationModes(Path.Combine(manifest.Output, "serialization-modes.uia.json"));
     public async Task CaptureLanguageChoices()
     {

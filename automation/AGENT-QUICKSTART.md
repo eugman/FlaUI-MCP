@@ -52,7 +52,7 @@ Preferences pitfall: open the `Preferences...` popup button with `physical:true`
 Clearing search can blank the content and move the chosen row offscreen. Re-find
 the row in the tree (bounded PageDown if necessary), physically click its fresh
 ref, and verify visible controls in the expected pane. A selected row alone is
-not proof that its settings are displayed. See [diagnostic evidence](ablation/SUSPECTED-BUGS.md).
+not proof that its settings are displayed. See [known issue and manual reproduction](KNOWN-ISSUES.md).
 
 After a crash, check process ownership and the latest manifest. If settings were
 not restored, use `recover MANIFEST` before another run. Initial needsRecovery=false
