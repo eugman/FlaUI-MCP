@@ -7,6 +7,29 @@ namespace FlaUI.Mcp.Tests;
 
 public sealed class WindowPlacementTests
 {
+    [Fact]
+    public async Task HandlePlacementWithoutSessionsReturnsClearError()
+    {
+        var tool = new WindowPlacementTool(new ElementRegistry(), new PendingInvokeTracker());
+        var result = await tool.ExecuteAsync(System.Text.Json.JsonSerializer.SerializeToElement(new
+        {
+            handle = "w1", placement = new WindowPlacement(0, 0, 700, 400)
+        }));
+        Assert.True(result.IsError);
+        Assert.Contains("requires a session manager", result.Content[0].Text);
+    }
+
+    [Fact]
+    public async Task MissingTargetIsRejectedBeforeWindowAccess()
+    {
+        var tool = new WindowPlacementTool(new ElementRegistry(), new PendingInvokeTracker());
+        var result = await tool.ExecuteAsync(System.Text.Json.JsonSerializer.SerializeToElement(new
+        {
+            placement = new WindowPlacement(0, 0, 700, 400)
+        }));
+        Assert.True(result.IsError);
+        Assert.Contains("ref or handle required", result.Content[0].Text);
+    }
     [Fact] public void MissingCoordinatesCannotImplicitlyMoveWindowToOrigin()
         => Assert.Throws<System.Text.Json.JsonException>(() =>
             System.Text.Json.JsonSerializer.Deserialize<WindowPlacement>("{\"width\":700,\"height\":400}"));

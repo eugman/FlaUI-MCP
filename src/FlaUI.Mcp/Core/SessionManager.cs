@@ -179,7 +179,13 @@ public class SessionManager : IDisposable
 
     public Window? GetWindow(string handle)
     {
-        if (_identities.ContainsKey(handle)) GetInputTarget(handle);
+        if (_identities.ContainsKey(handle))
+        {
+            try { GetInputTarget(handle); }
+            catch (ArgumentException) { return null; }
+            catch (InvalidOperationException) { return null; }
+            catch (System.ComponentModel.Win32Exception) { return null; }
+        }
         if (_windows.TryGetValue(handle, out var window))
         {
             return window;
@@ -247,6 +253,14 @@ public class SessionManager : IDisposable
                 result.Add((handle, info.Title, processName));
             }
             catch (OperationCanceledException) { throw; }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // Inaccessible processes are not controllable; continue listing others.
+            }
+            catch (ArgumentException)
+            {
+                // Process.GetProcessById can race process exit.
+            }
             catch (Exception) when (Win32Desktop.GetProcessId(info.Hwnd) != info.ProcessId)
             {
                 // Window closed or changed owner between enumeration and registration.
