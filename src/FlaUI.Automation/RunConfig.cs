@@ -24,7 +24,8 @@ public sealed record RunConfig
         string Resolve(string value) => Path.GetFullPath(Environment.ExpandEnvironmentVariables(value), Path.GetDirectoryName(Path.GetFullPath(path))!);
         if (config.Repeat is < 1 or > 100 || config.FixtureMode is not ("auto" or "fixed" or "offline"))
             throw new ArgumentException("repeat must be 1..100; fixtureMode must be auto, fixed or offline");
-        if (!FixtureSlots.Allowed.Contains(config.FixedSlot)) throw new ArgumentException("Unknown fixed fixture slot");
+        if (!config.FixedSlot.StartsWith("fla_", StringComparison.Ordinal) || config.FixedSlot.Any(char.IsControl))
+            throw new ArgumentException("Existing engine database must use the fla_ prefix");
         if (config.ExpectedDpi is <= 0 or > 768) throw new ArgumentException("expectedDpi must be 1..768");
         if (string.IsNullOrWhiteSpace(config.Te3) || string.IsNullOrWhiteSpace(config.Te)) throw new ArgumentException("te3 and te executable paths are required");
         return config with { Te3 = Resolve(config.Te3), Te = Resolve(config.Te), FixtureScript = Resolve(config.FixtureScript),

@@ -18,7 +18,7 @@ public static class RecoveryCoordinator
             if (currentSettings != null) restore = currentSettings.Restore;
             else if (manifest.SettingsBackup != null) restore = () => SettingsLease.RestoreBackup(manifest.SettingsBackup);
         }
-        return Complete(manifest, Close, () => ResetResource(manifest), restore, save);
+        return Complete(manifest, Close, () => Task.CompletedTask, restore, save);
     }
 
     // Side-effect seams keep lifecycle ordering testable without UI or a database.
@@ -46,7 +46,7 @@ public static class RecoveryCoordinator
         finally
         {
             manifest.RecoveryErrors.AddRange(errors);
-            manifest.NeedsRecovery = !safe || errors.Count > 0 || !manifest.SettingsRestored || manifest.ResourceNeedsRecovery;
+            manifest.NeedsRecovery = !safe || errors.Count > 0 || !manifest.SettingsRestored;
             if (manifest.NeedsRecovery)
             {
                 manifest.Passed = false;
@@ -58,21 +58,4 @@ public static class RecoveryCoordinator
         return new(manifest.NeedsRecovery, errors.ToArray());
     }
 
-    private static async Task ResetResource(RunManifest manifest)
-    {
-        if (manifest.Slot is not { } slot)
-        {
-            return;
-        }
-        if (manifest.SlotReset) return;
-        var registry = manifest.SlotRegistry ?? throw new InvalidOperationException("Missing fixed-slot registry");
-        var slots = new FixtureSlots(registry, new CalculatedFixtureBackend(manifest.Te, new CliRunner()));
-        var registered = slots.Status().SingleOrDefault(s => s.Database == slot.Database);
-        // An old run must never overwrite a newer run's fixture registration.
-        if (registered == null || registered with { Dirty = true, PendingOperation = null } != slot with { Dirty = true, PendingOperation = null })
-            throw new InvalidOperationException("Slot registration changed; use fixture-reset for the current registration");
-        await slots.Reset(slot);
-        manifest.SlotReset = true;
-        manifest.CleanupOutcome = "ResetToBaseline";
-    }
 }

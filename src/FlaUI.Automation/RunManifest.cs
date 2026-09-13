@@ -17,11 +17,7 @@ public class RunManifest
     public string? Te3Version { get; set; }
     public string? SettingsBackup { get; set; }
     public bool SettingsRestored { get; set; } = true;
-    public SlotRegistration? Slot { get; set; }
-    public string? SlotRegistry { get; set; }
-    public bool SlotReset { get; set; }
     public bool NeedsRecovery { get; set; }
-    public bool ResourceNeedsRecovery => Slot != null && !SlotReset;
     public string? CleanupOutcome { get; set; }
     public string? CleanupError { get; set; }
     public List<string> RecoveryErrors { get; set; } = [];

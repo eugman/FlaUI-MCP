@@ -23,7 +23,7 @@ environment variables. Repeat defaults to one. Auto fixture mode uses offline
 BIM copies where possible and the existing fixed database for engine recipes.
 
 For a no-server handoff, use `offline.config.json`. It selects fifteen offline
-recipes, forbids engine recipes and fixture reset/remove, and has no promotion
+recipes, forbids engine recipes, and has no promotion
 destination. It still launches TE3 and temporarily normalizes/restores preferences,
 so desktop permission is required. `validate ... --no-focus` only checks local inputs.
 
@@ -60,19 +60,18 @@ row-position checks. These annotations are explicit additions, not raw UI pixels
 
 Commands: `run CONFIG [--scenario ID] [--repeat N]`, `list CONFIG`,
 `validate CONFIG`, `compose MANIFEST SPEC OUT`,
-`promote RUN_DIR CHECKPOINT DEST [--overwrite]`, `recover MANIFEST`,
-and `fixture-status|fixture-reset|fixture-remove CONFIG`.
+`promote RUN_DIR CHECKPOINT DEST [--overwrite]`, and `recover MANIFEST`.
 
 ## Safety
 
-- Reuse fla_te3_small; no per-run databases. Check retained registration and
-  ownership annotations before resetting/removing. An explicit reset can update
-  the baseline. The calculated-fixture adapter cannot reset processed/source-backed models.
+- Engine recipes use the existing database named by `fixedSlot` (must begin with
+  `fla_`). The runner never creates, resets or deletes databases. Recipe edits can
+  persist there; prepare suitable metadata yourself and use offline mode by default.
 - Settings backups live under LocalAppData/FlaUI-MCP/settings-backups. Restore
   only after TE3 closes; if shutdown fails retain backup and use explicit recovery.
 - CLI timeouts require confirmed child exit before reset. An unconfirmed process
   blocks subsequent CLI operations; do not delete pending-cli.json to bypass it.
-- Recovery/fixture commands have effects and need appropriate permission.
+- Recovery has effects and needs appropriate permission.
 - Promotion copies only into the configured docs-copy root. Existing files require
   explicit overwrite and a clean tracked destination. Approval is a human workflow,
   not a generated receipt.

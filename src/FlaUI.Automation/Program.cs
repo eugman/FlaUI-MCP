@@ -11,8 +11,7 @@ public static class RunnerCommands
         FlaUI.Automation compose MANIFEST SPEC OUT.png
         FlaUI.Automation promote RUN_DIR CHECKPOINT DEST.png [--overwrite]
         FlaUI.Automation recover MANIFEST
-        FlaUI.Automation fixture-status|fixture-reset|fixture-remove CONFIG
-        --no-focus rejects run, recover and fixture mutations.
+        --no-focus rejects run and recover.
         """;
     public static async Task<int> Execute(string[] args)
     {
@@ -21,7 +20,7 @@ public static class RunnerCommands
             var noFocus = args.Contains("--no-focus"); args = args.Where(a => a != "--no-focus").ToArray();
             if (args.Length < 2) throw new ArgumentException(Usage);
             var command = args[0];
-            if (noFocus && command is "run" or "recover" or "fixture-reset" or "fixture-remove")
+            if (noFocus && command is "run" or "recover")
                 throw new ArgumentException("Mutating/desktop command rejected by --no-focus");
             if (command == "compose")
             {
@@ -41,10 +40,9 @@ public static class RunnerCommands
                 var result = await RecoveryCoordinator.Recover(manifest, true, () => AtomicJournal.Write(args[1], manifest, RunConfig.Json));
                 return result.NeedsRecovery ? 1 : 0;
             }
-            if (command is not ("run" or "list" or "validate" or "fixture-status" or "fixture-reset" or "fixture-remove"))
+            if (command is not ("run" or "list" or "validate"))
                 throw new ArgumentException(Usage);
             var config = RunConfig.Read(args[1]);
-            RequireCommandMode(command, config.FixtureMode);
             string? selector = null; int? repeat = null;
             for (var i = 2; i < args.Length; i += 2)
             {
@@ -58,35 +56,11 @@ public static class RunnerCommands
                 foreach (var recipe in RecipeCatalog.All) Console.WriteLine($"{recipe.Id}  {(recipe.RequiresServer ? "engine" : "offline")}  {recipe.DocsPage}");
                 return 0;
             }
-            if (command == "fixture-status") { Console.WriteLine(JsonSerializer.Serialize(RunExecutor.Slots(config).Status(), RunConfig.Json)); return 0; }
-            if (command != "fixture-remove") config.ValidateFiles();
-            else if (!File.Exists(config.Te)) throw new FileNotFoundException("TE CLI executable missing", config.Te);
-            var recipes = command.StartsWith("fixture-") ? [] : RecipeCatalog.Select(selector == null ? config.Scenarios : [selector]);
+            config.ValidateFiles();
+            var recipes = RecipeCatalog.Select(selector == null ? config.Scenarios : [selector]);
             if (recipes.Any(r => r.RequiresServer && !config.UseServer(r))) throw new ArgumentException("Selected recipes require fixed/auto fixture mode");
             if (command == "validate") { Console.WriteLine("Valid: " + string.Join(", ", recipes.Select(r => r.Id))); return 0; }
             using var runnerGate = Lock();
-            if (command.StartsWith("fixture-"))
-            {
-                RunSafety.RequireExclusiveTe3();
-                var slots = RunExecutor.Slots(config);
-                if (command == "fixture-remove") { await slots.Remove(config.FixedSlot); return 0; }
-                var current = slots.Status().SingleOrDefault(s => s.Database == config.FixedSlot);
-                if (current != null && current.Server != config.Server) throw new ArgumentException("Cannot rebind an owned fixture to a different server");
-                var temp = Path.Combine(Path.GetDirectoryName(RunExecutor.SlotRegistry)!, "baselines", "prepare-" + Guid.NewGuid().ToString("N"));
-                Directory.CreateDirectory(temp);
-                try
-                {
-                    var model = await RunExecutor.CreateModel(config, temp, config.FixedSlot);
-                    await slots.Reset(RunExecutor.Registration(config, model, current), replaceBaseline: true);
-                }
-                finally
-                {
-                    CliRunner.RequireIdle(); // Retain inputs if an unconfirmed CLI may still be reading them.
-                    var owned = ArtifactFiles.ContainedPath(temp, Path.Combine(Path.GetDirectoryName(RunExecutor.SlotRegistry)!, "baselines"));
-                    Directory.Delete(owned, true);
-                }
-                return 0;
-            }
             DpiUtility.EnablePerMonitorV2();
             foreach (var recipe in recipes)
                 for (var n = 0; n < (repeat ?? config.Repeat); n++)
@@ -100,11 +74,5 @@ public static class RunnerCommands
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or TimeoutException)
         { Console.Error.WriteLine(ex.GetType().Name + ": " + ex.Message); return 2; }
     }
-    internal static void RequireCommandMode(string command, string mode)
-    {
-        if (mode == "offline" && command is "fixture-reset" or "fixture-remove")
-            throw new ArgumentException("Offline configuration forbids server fixture mutations");
-    }
-
     private static FileStream Lock() => new(Path.Combine(Path.GetTempPath(), "fla_te3_automation.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 }

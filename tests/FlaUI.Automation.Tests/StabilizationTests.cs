@@ -22,10 +22,9 @@ public sealed class StabilizationTests
     [Theory]
     [InlineData("fixture-reset")]
     [InlineData("fixture-remove")]
-    public void OfflineConfigRejectsFixtureMutationBeforeOpeningExecutables(string command)
+    public async Task RemovedFixtureCommandsAreRejectedBeforeReadingConfig(string command)
     {
-        var error = Assert.Throws<ArgumentException>(() => RunnerCommands.RequireCommandMode(command, "offline"));
-        Assert.Contains("forbids server fixture mutations", error.Message);
+        Assert.Equal(2, await RunnerCommands.Execute([command, "missing-config.json"]));
     }
 
     [Fact]

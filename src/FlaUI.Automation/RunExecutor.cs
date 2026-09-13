@@ -7,9 +7,6 @@ public sealed record RunExecutionResult(string ManifestPath, RunManifest Manifes
 
 public static class RunExecutor
 {
-    public static string SlotRegistry => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlaUI-MCP", "fixture-slots.json");
-    public static FixtureSlots Slots(RunConfig config) => new(SlotRegistry, new CalculatedFixtureBackend(config.Te, new CliRunner()));
-
     public static async Task<string> CreateModel(RunConfig config, string directory, string name)
     {
         var path = Path.Combine(directory, name + ".bim");
@@ -22,15 +19,7 @@ public static class RunExecutor
             await cli.Run(config.Te, ["init", path, "--serialization", "bim", "--name", name, "--compatibility-mode", "AnalysisServices"]);
             await cli.Run(config.Te, ["script", path, "--script", script, "--save"]);
         }
-        _ = ModelStateVerification.Hash(File.ReadAllText(path));
         return path;
-    }
-    public static string RecipeHash(RunConfig config) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(config.OfflineBaseline ?? config.FixtureScript)));
-    public static SlotRegistration Registration(RunConfig config, string model, SlotRegistration? existing)
-    {
-        var retained = FixtureBaseline.Retain(model, Path.Combine(Path.GetDirectoryName(SlotRegistry)!, "baselines"));
-        return new(config.Server, config.FixedSlot, existing?.Owner ?? Guid.NewGuid().ToString("N"), retained,
-            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(retained))), RecipeHash: RecipeHash(config));
     }
     public static async Task<RunExecutionResult> Execute(RunConfig config, Recipe recipe)
     {
@@ -48,25 +37,12 @@ public static class RunExecutor
         var timer = Stopwatch.StartNew();
         try
         {
-            var slots = Slots(config);
-            var existing = manifest.Database.Length > 0 ? slots.Status().SingleOrDefault(s => s.Database == config.FixedSlot) : null;
-            string model;
-            if (existing != null)
+            var model = manifest.Database.Length == 0 ? await CreateModel(config, output, id) : "";
+            if (manifest.Database.Length == 0)
             {
-                if (existing.Server != config.Server || existing.RecipeHash != RecipeHash(config))
-                    throw new InvalidOperationException("Fixture source/server changed; use fixture-reset explicitly");
-                FixtureSlots.Validate(existing);
-                model = Path.Combine(output, id + ".bim"); File.Copy(existing.BaselinePath, model, false);
+                manifest.SourceHashes["fixture.bim"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(model)));
+                OfflineModelOptions.Create(model, output, Environment.UserName);
             }
-            else model = await CreateModel(config, output, id);
-            manifest.SourceHashes["fixture.bim"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(model)));
-            if (manifest.Database.Length > 0)
-            {
-                manifest.Slot = (existing ?? Registration(config, model, null)) with { Dirty = true, PendingOperation = null };
-                manifest.SlotRegistry = SlotRegistry; Save();
-                await slots.Reset(manifest.Slot); slots.MarkDirty(config.FixedSlot);
-            }
-            else OfflineModelOptions.Create(model, output, Environment.UserName);
             RunSafety.RequireExclusiveTe3();
             settings = AcquireSettings(manifest, Save); settings.Normalize(config.MaximizeWindow);
             host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]));
