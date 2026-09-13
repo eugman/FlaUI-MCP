@@ -17,7 +17,9 @@ public class ElementRegistry
 
     public void SetWindowIdentity(string handle, int pid, nint hwnd, long? generation = null)
     {
-        var identity = InputTarget.Capture(hwnd, pid);
+        // UIA content and its hosting HWND can belong to different processes.
+        // Keep the UIA PID for pending-provider guards; input owns the native host.
+        var identity = InputTarget.Capture(hwnd, Win32Desktop.GetProcessId(hwnd));
         lock (_gate)
         {
             CheckGeneration(handle, generation);
@@ -52,11 +54,12 @@ public class ElementRegistry
             var native = current.Properties.NativeWindowHandle.ValueOrDefault;
             if (native == 0) continue;
             var root = Win32Desktop.GetAncestor(native, 2);
-            if (Win32Desktop.GetProcessId(root) != owner.ProcessId)
-                throw new InvalidOperationException($"Element native root {root} pid={Win32Desktop.GetProcessId(root)} owner={Win32Desktop.GetAncestor(root, 3)} is outside selected root {owner.Hwnd} pid={owner.ProcessId} owner={Win32Desktop.GetAncestor(owner.Hwnd, 3)}.");
-            return owner with { Hwnd = root };
+            if (Win32Desktop.GetProcessId(root) == owner.ProcessId)
+                return owner with { Hwnd = root };
+            // A cross-process frame is not a popup owned by this input target.
+            break;
         }
-        throw new InvalidOperationException("Element has no verified native root.");
+        return owner;
     }
 
     /// <summary>

@@ -120,10 +120,4 @@ public sealed class SearchAndCancellationTests
         finally { OperationContext.Current.Value = null; }
     }
 
-    [Fact] public void PhysicalInputStillRequiresExactTargetIdentity()
-    {
-        GuardedInput.Validate(new(1, 10, 100), 1, 10, 100, true);
-        Assert.Throws<InvalidOperationException>(() => GuardedInput.Validate(new(1, 10, 100), 2, 10, 100, true));
-        Assert.Throws<InvalidOperationException>(() => GuardedInput.Validate(new(1, 10, 100), 1, 10, 101, true));
-    }
 }

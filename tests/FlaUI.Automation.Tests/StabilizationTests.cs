@@ -62,16 +62,6 @@ public sealed class StabilizationTests
     }
 
     [Fact]
-    public void FocusRejectionReportsExpectedAndObservedIdentity()
-    {
-        var error = Assert.Throws<InvalidOperationException>(() =>
-            GuardedInput.Validate(new InputTarget(10, 20, 30), 11, 20, 30, false));
-        Assert.Contains("Expected HWND=10", error.Message);
-        Assert.Contains("foreground HWND=11", error.Message);
-        Assert.Contains("enabled=False", error.Message);
-    }
-
-    [Fact]
     public void BlankExceptionRetainsTypeAndFailingStep()
     {
         var manifest = new RunManifest { CurrentStep = "Wait for output to close" };

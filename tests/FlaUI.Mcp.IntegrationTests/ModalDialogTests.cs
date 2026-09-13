@@ -66,6 +66,13 @@ public class ModalDialogTests
             Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), $"Snapshot fail-fast took too long: {sw.Elapsed}");
             Assert.Contains("blocked", snapshotResult, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("windows_send_keys", snapshotResult);
+            var modal = Win32Desktop.GetTopLevelWindows(processId).Single(w => w.Title == "Test Modal Dialog");
+            Assert.Equal(modal.Hwnd, Win32Desktop.GetForegroundWindow());
+            using (var input = new GuardedInput(_fixture.Session.GetInputTarget(_fixture.WinFormsHandle)))
+            {
+                input.Verify();
+                Assert.Equal(modal.Hwnd, Win32Desktop.GetForegroundWindow());
+            }
         }
         finally
         {

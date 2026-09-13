@@ -33,8 +33,9 @@ public sealed class GuardedInput : IDisposable
         lease = AcquireLease();
         try
         {
-            CheckIdentity();
-            Win32Desktop.FocusWindow(target.Hwnd);
+            target.EnsureAlive();
+            if (Win32Desktop.GetForegroundWindowProcessId() != target.ProcessId)
+                Win32Desktop.FocusWindow(target.Hwnd);
             if (element != null) { element.Focus(); }
             Verify();
         }
@@ -60,30 +61,18 @@ public sealed class GuardedInput : IDisposable
         return InputTarget.Capture(hwnd, Win32Desktop.GetProcessId(hwnd));
     }
 
-    public static void Validate(InputTarget expected, nint foreground, int actualPid, long actualStart, bool enabled)
-    {
-        if (expected.Hwnd != foreground || expected.ProcessId != actualPid || expected.StartedTicks != actualStart || !enabled)
-            throw new InvalidOperationException($"Input target/focus changed or is disabled; no further input sent. " +
-                $"Expected HWND={expected.Hwnd}, PID={expected.ProcessId}, start={expected.StartedTicks}; " +
-                $"foreground HWND={foreground}, target PID={actualPid}, start={actualStart}, enabled={enabled}.");
-    }
-    private long CheckIdentity()
-    {
-        using var process = Process.GetProcessById(target.ProcessId);
-        var ticks = process.StartTime.ToUniversalTime().Ticks;
-        if (ticks != target.StartedTicks || Win32Desktop.GetProcessId(target.Hwnd) != target.ProcessId)
-            throw new InvalidOperationException("Stale process/window identity.");
-        return ticks;
-    }
     public void Verify()
     {
         OperationContext.Check();
-        Validate(target, Win32Desktop.GetForegroundWindow(), Win32Desktop.GetProcessId(target.Hwnd), CheckIdentity(), Win32Desktop.IsWindowEnabled(target.Hwnd));
+        var foreground = Win32Desktop.GetForegroundWindow();
+        if (Win32Desktop.GetProcessId(target.Hwnd) != target.ProcessId ||
+            Win32Desktop.GetProcessId(foreground) != target.ProcessId || !Win32Desktop.IsWindowEnabled(foreground))
+            throw new InvalidOperationException("Input target/focus changed or is disabled; no further input sent.");
     }
     public void Send(Action input) { Verify(); input(); }
     public void Type(string text)
     {
-        // Bounded chunks avoid per-character process queries while limiting drift exposure.
+        // Recheck foreground between chunks, without repeated process-start queries.
         var chunk = new System.Text.StringBuilder(64);
         foreach (var rune in text.EnumerateRunes())
         {
