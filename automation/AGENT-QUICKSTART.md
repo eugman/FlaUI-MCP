@@ -55,5 +55,5 @@ ref, and verify visible controls in the expected pane. A selected row alone is
 not proof that its settings are displayed. See [known issue and manual reproduction](KNOWN-ISSUES.md).
 
 After a crash, check process ownership and the latest manifest. If settings were
-not restored, use `recover MANIFEST` before another run. Initial needsRecovery=false
+not restored, retain the reported backup and resolve restoration before another run. Initial needsRecovery=false
 does not prove cleanup happened. Successful automation is not docs-image approval.

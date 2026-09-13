@@ -60,18 +60,19 @@ row-position checks. These annotations are explicit additions, not raw UI pixels
 
 Commands: `run CONFIG [--scenario ID] [--repeat N]`, `list CONFIG`,
 `validate CONFIG`, `compose MANIFEST SPEC OUT`,
-`promote RUN_DIR CHECKPOINT DEST [--overwrite]`, and `recover MANIFEST`.
+and `promote RUN_DIR CHECKPOINT DEST [--overwrite]`.
 
 ## Safety
 
 - Engine recipes use the existing database named by `fixedSlot` (must begin with
   `fla_`). The runner never creates, resets or deletes databases. Recipe edits can
   persist there; prepare suitable metadata yourself and use offline mode by default.
-- Settings backups live under LocalAppData/FlaUI-MCP/settings-backups. Restore
-  only after TE3 closes; if shutdown fails retain backup and use explicit recovery.
-- CLI timeouts require confirmed child exit before reset. An unconfirmed process
-  blocks subsequent CLI operations; do not delete pending-cli.json to bypass it.
-- Recovery has effects and needs appropriate permission.
+- Settings backups live under LocalAppData/FlaUI-MCP/settings-backups. The run's
+  finally block restores them after TE3 closes. If shutdown/restoration fails,
+  retain the reported backup and resolve it manually before another run.
+- CLI timeout handling attempts to terminate the launched process tree and confirm
+  exit. If confirmation fails, inspect the reported PID before retrying; no PID
+  journal or automatic replay is used.
 - Promotion copies only into the configured docs-copy root. Existing files require
   explicit overwrite and a clean tracked destination. Approval is a human workflow,
   not a generated receipt.

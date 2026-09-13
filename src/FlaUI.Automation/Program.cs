@@ -10,8 +10,7 @@ public static class RunnerCommands
         FlaUI.Automation list|validate CONFIG
         FlaUI.Automation compose MANIFEST SPEC OUT.png
         FlaUI.Automation promote RUN_DIR CHECKPOINT DEST.png [--overwrite]
-        FlaUI.Automation recover MANIFEST
-        --no-focus rejects run and recover.
+        --no-focus rejects run.
         """;
     public static async Task<int> Execute(string[] args)
     {
@@ -20,7 +19,7 @@ public static class RunnerCommands
             var noFocus = args.Contains("--no-focus"); args = args.Where(a => a != "--no-focus").ToArray();
             if (args.Length < 2) throw new ArgumentException(Usage);
             var command = args[0];
-            if (noFocus && command is "run" or "recover")
+            if (noFocus && command == "run")
                 throw new ArgumentException("Mutating/desktop command rejected by --no-focus");
             if (command == "compose")
             {
@@ -31,14 +30,6 @@ public static class RunnerCommands
             {
                 if (args.Length is not (4 or 5) || args.Length == 5 && args[4] != "--overwrite") throw new ArgumentException(Usage);
                 await ArtifactFiles.Promote(args[1], args[2], args[3], args.Length == 5); return 0;
-            }
-            if (command == "recover")
-            {
-                if (args.Length != 2) throw new ArgumentException(Usage);
-                using var gate = Lock();
-                var manifest = ArtifactFiles.ReadManifest(args[1]);
-                var result = await RecoveryCoordinator.Recover(manifest, true, () => AtomicJournal.Write(args[1], manifest, RunConfig.Json));
-                return result.NeedsRecovery ? 1 : 0;
             }
             if (command is not ("run" or "list" or "validate"))
                 throw new ArgumentException(Usage);

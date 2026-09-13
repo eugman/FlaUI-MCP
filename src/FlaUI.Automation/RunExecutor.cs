@@ -91,9 +91,35 @@ public static class RunExecutor
         }
         finally
         {
-            try { await RecoveryCoordinator.Recover(manifest, true, Save, settings); }
-            finally { app?.Dispose(); host?.Dispose(); }
-            ArtifactFiles.WriteIndex(manifest);
+            var cleanupErrors = new List<string>();
+            var closed = false;
+            try
+            {
+                await RunSafety.CloseOwned(manifest.ProcessId, manifest.ProcessStartedTicks, manifest.Te3Path);
+                RunSafety.RequireExclusiveTe3();
+                closed = true;
+            }
+            catch (Exception error) { cleanupErrors.Add("TE3 shutdown: " + error.Message); }
+            if (closed && settings != null)
+            {
+                try { settings.Restore(); manifest.SettingsRestored = true; }
+                catch (Exception error) { cleanupErrors.Add("Preferences: " + error.Message); }
+            }
+            try { app?.Dispose(); host?.Dispose(); }
+            catch (Exception error) { cleanupErrors.Add("Disposal: " + error.Message); }
+            manifest.NeedsRecovery = !closed || !manifest.SettingsRestored || cleanupErrors.Count > 0;
+            if (manifest.NeedsRecovery)
+            {
+                manifest.Passed = false;
+                manifest.CleanupError = string.Join("; ", cleanupErrors) + $". Retained settings backup: {manifest.SettingsBackup}";
+            }
+            try { Save(); ArtifactFiles.WriteIndex(manifest); }
+            catch (Exception error)
+            {
+                manifest.Passed = false;
+                manifest.CleanupError = (manifest.CleanupError ?? "") + "; Writing results: " + error.Message;
+                Console.Error.WriteLine(manifest.CleanupError);
+            }
         }
         return new(manifestPath, manifest);
 
