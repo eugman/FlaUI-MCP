@@ -11,6 +11,23 @@ permissions:
   contents: read
 
 jobs:
+  no-focus-tests:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: MCP unit tests (no desktop)
+      run: dotnet test tests/FlaUI.Mcp.Tests/FlaUI.Mcp.Tests.csproj --configuration Foundation
+    - name: Runner unit tests (no desktop)
+      run: dotnet test tests/FlaUI.Automation.Tests/FlaUI.Automation.Tests.csproj --configuration Foundation
+    - name: Token accounting tests
+      run: python -B -m unittest discover -s automation -p test_usage_report.py
+
   build:
     runs-on: windows-latest
     

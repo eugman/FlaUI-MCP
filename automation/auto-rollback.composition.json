@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "recipe": "csharp-auto-rollback-source",
+  "checkpoint": "auto-rollback-source-crop",
+  "cropOnly": true,
+  "outline": { "x": 835, "y": 28, "width": 142, "height": 40 },
+  "panels": [{
+    "checkpoint": "auto-rollback-source-context",
+    "label": "Original-sized Auto-rollback source view",
+    "expectedWidth": 1938,
+    "expectedHeight": 1158,
+    "x": 8,
+    "y": 35,
+    "width": 1063,
+    "height": 537
+  }]
+}

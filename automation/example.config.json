@@ -1,0 +1,13 @@
+{
+  "te3": "%ProgramFiles%/Tabular Editor 3/TabularEditor3.exe",
+  "te": "%LOCALAPPDATA%/Programs/te/te.exe",
+  "fixtureScript": "fixture.csx",
+  "fixtureMode": "auto",
+  "server": "localhost",
+  "fixedSlot": "fla_te3_small",
+  "output": "../artifacts/te3",
+  "docsRoot": "../../TabularEditorDocsAutomation",
+  "repeat": 1,
+  "maximizeWindow": true,
+  "scenarios": ["model-open", "measure-edit", "dax-query", "expression-recovery", "qualified-navigation", "bpa-correction", "properties", "csharp-preview"]
+}

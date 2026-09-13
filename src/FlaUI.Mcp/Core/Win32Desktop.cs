@@ -44,10 +44,25 @@ public static class Win32Desktop
     private static extern bool IsWindowVisible(nint hWnd);
 
     [DllImport("user32.dll")]
-    private static extern bool IsWindowEnabled(nint hWnd);
+    public static extern bool IsWindowEnabled(nint hWnd);
 
     [DllImport("user32.dll")]
     private static extern bool IsIconic(nint hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsZoomed(nint hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int width, int height, uint flags);
+
+    public static bool IsNormalWindow(nint hwnd) => IsWindowVisible(hwnd) && !IsIconic(hwnd) && !IsZoomed(hwnd);
+
+    public static void PlaceWindow(nint hwnd, System.Drawing.Rectangle bounds)
+    {
+        // SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER. Synchronous, one attempt.
+        if (!SetWindowPos(hwnd, 0, bounds.X, bounds.Y, bounds.Width, bounds.Height, 0x0004 | 0x0010 | 0x0200))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Window placement failed; mutation not replayed");
+    }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(nint hWnd, StringBuilder lpString, int nMaxCount);
@@ -71,7 +86,21 @@ public static class Win32Desktop
     private static extern bool GetWindowRect(nint hWnd, out RECT lpRect);
 
     [DllImport("user32.dll")]
-    private static extern nint GetForegroundWindow();
+    public static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern nint GetAncestor(nint hwnd, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern nint WindowFromPoint(System.Drawing.Point point);
+
+    public static int GetProcessId(nint hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out var pid);
+        return (int)pid;
+    }
+
+    public static nint WindowAt(System.Drawing.Point point) => GetAncestor(WindowFromPoint(point), 2);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmGetWindowAttribute(nint hWnd, int dwAttribute, out int pvAttribute, int cbAttribute);
@@ -128,11 +157,13 @@ public static class Win32Desktop
     /// </summary>
     public static void FocusWindow(nint hwnd)
     {
+        if (GetForegroundWindow() == hwnd) return;
         if (IsIconic(hwnd))
         {
             ShowWindow(hwnd, SW_RESTORE);
         }
         SetForegroundWindow(hwnd);
+        for (var i = 0; i < 10 && GetForegroundWindow() != hwnd; i++) Thread.Sleep(25);
     }
 
     /// <summary>

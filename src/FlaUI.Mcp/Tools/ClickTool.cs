@@ -32,6 +32,7 @@ public class ClickTool : ToolBase
         type = "object",
         properties = new
         {
+            physical = new { type = "boolean", description = "Use guarded physical selection, including exact native hit-testing." },
             @ref = new
             {
                 type = "string",
@@ -62,6 +63,7 @@ public class ClickTool : ToolBase
 
         var button = GetStringArgument(arguments, "button") ?? "left";
         var doubleClick = GetBoolArgument(arguments, "doubleClick", false);
+        var physical = GetBoolArgument(arguments, "physical", false);
 
         var element = _elementRegistry.GetElement(refId);
         if (element == null)
@@ -73,56 +75,60 @@ public class ClickTool : ToolBase
         var processId = _elementRegistry.GetProcessIdForRef(refId);
         if (_invokeTracker.TryGetPending(processId, out var pending))
         {
-            return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
+                    return Task.FromResult(BlockedResult(pending));
         }
 
         try
         {
+            OperationContext.Check();
+            void Validate() => _elementRegistry.ValidateReference(refId, GetStringArgument(arguments, "handle"));
+            Validate();
+            OperationContext.Check();
             var elementName = element.Properties.Name.ValueOrDefault ?? refId;
 
             // Try Invoke pattern first (most reliable for buttons)
-            if (button == "left" && !doubleClick && element.Patterns.Invoke.IsSupported)
+            if (!physical && button == "left" && !doubleClick && element.Patterns.Invoke.IsSupported)
             {
                 var invokePattern = element.Patterns.Invoke.Pattern;
                 var result = ModalAwareInvoker.Execute(
                     processId,
                     $"Invoke on '{elementName}'",
-                    () => invokePattern.Invoke(),
+                    () => MutationGuard.Execute(Validate, () => invokePattern.Invoke()),
                     _invokeTracker);
                 return Task.FromResult(PatternResult(result, $"Invoked {elementName}"));
             }
 
             // Try Toggle pattern for checkboxes
-            if (button == "left" && !doubleClick && element.Patterns.Toggle.IsSupported)
+            if (!physical && button == "left" && !doubleClick && element.Patterns.Toggle.IsSupported)
             {
                 var togglePattern = element.Patterns.Toggle.Pattern;
                 ToggleState? newState = null;
                 var result = ModalAwareInvoker.Execute(
                     processId,
                     $"Toggle on '{elementName}'",
-                    () =>
+                    () => MutationGuard.Execute(Validate, () =>
                     {
                         togglePattern.Toggle();
                         newState = togglePattern.ToggleState.ValueOrDefault;
-                    },
+                    }),
                     _invokeTracker);
                 return Task.FromResult(PatternResult(result, $"Toggled {elementName} to {newState}"));
             }
 
             // Try SelectionItem pattern for list items
-            if (button == "left" && !doubleClick && element.Patterns.SelectionItem.IsSupported)
+            if (!physical && button == "left" && !doubleClick && element.Patterns.SelectionItem.IsSupported)
             {
                 var selectionPattern = element.Patterns.SelectionItem.Pattern;
                 var result = ModalAwareInvoker.Execute(
                     processId,
                     $"Select on '{elementName}'",
-                    () => selectionPattern.Select(),
+                    () => MutationGuard.Execute(Validate, () => selectionPattern.Select()),
                     _invokeTracker);
                 return Task.FromResult(PatternResult(result, $"Selected {elementName}"));
             }
 
             // Fall back to mouse click
-            var clickPoint = element.GetClickablePoint();
+            using var input = new GuardedInput(_elementRegistry.InputForRef(refId));
 
             var mouseButton = button switch
             {
@@ -133,12 +139,12 @@ public class ClickTool : ToolBase
 
             if (doubleClick)
             {
-                Mouse.DoubleClick(clickPoint, mouseButton);
+                input.Click(element, mouseButton, true);
                 return Task.FromResult(TextResult($"Double-clicked {elementName}"));
             }
             else
             {
-                Mouse.Click(clickPoint, mouseButton);
+                input.Click(element, mouseButton);
                 return Task.FromResult(TextResult($"Clicked {elementName}"));
             }
         }
@@ -153,7 +159,7 @@ public class ClickTool : ToolBase
     /// </summary>
     private static McpToolResult PatternResult(PatternCallResult result, string completedMessage)
     {
-        return result.Outcome switch
+        var response = result.Outcome switch
         {
             PatternCallOutcome.Completed => TextResult(completedMessage),
             PatternCallOutcome.ModalDetected => TextResult(
@@ -161,10 +167,11 @@ public class ClickTool : ToolBase
                 "Note: UIA-based tools (windows_snapshot, windows_get_text) on this app will fail until the " +
                 "dialog closes. Give the dialog a moment to appear and take focus, find its window handle via " +
                 "windows_list_windows, see it with windows_screenshot using that handle, and interact via " +
-                "windows_send_keys (without ref) or coordinate clicks."),
+                "windows_send_keys with that explicit dialog handle (without ref)."),
             _ => TextResult(
                 $"{completedMessage} — the app's handler is still running in the background. " +
                 "Take a windows_screenshot to check the app's state; UIA-based tools may block until it completes."),
         };
+        return response with { Outcome = ToolOutcome.FromPattern(result) };
     }
 }

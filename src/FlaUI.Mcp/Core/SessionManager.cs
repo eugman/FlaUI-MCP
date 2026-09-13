@@ -18,6 +18,18 @@ public class SessionManager : IDisposable
     private readonly Dictionary<nint, string> _hwndToHandle = new();
     private readonly ProcessPolicy _processPolicy;
     private int _windowCounter = 0;
+    private readonly Dictionary<string, InputTarget> _identities = new();
+    public InputTarget GetInputTarget(string handle)
+    {
+        var target = _identities.TryGetValue(handle, out var value) ? value : throw new ArgumentException("Unknown input target.");
+        target.EnsureAlive(); return target;
+    }
+    public int ResolveProcess(System.Text.Json.JsonElement? args, ElementRegistry refs)
+        => ResolveTarget(args, refs)?.ProcessId ?? 0;
+
+    public ProcessIdentity? ResolveTarget(System.Text.Json.JsonElement? args, ElementRegistry refs)
+        => new TargetValidator(h => { if (_identities.TryGetValue(h, out var t)) { t.EnsureAlive(); return new(t.ProcessId, t.StartedTicks); } return new(GetWindowProcessId(h), 0); },
+            r => { if (!refs.HasElement(r)) throw new ArgumentException("Unknown element ref."); return refs.WindowForRef(r); }).Resolve(args);
 
     public SessionManager(ProcessPolicy? processPolicy = null)
     {
@@ -35,14 +47,10 @@ public class SessionManager : IDisposable
         }
 
         // Use Process.Start for more reliable launching
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = appPath,
-            Arguments = args != null ? string.Join(" ", args) : "",
-            UseShellExecute = true
-        };
+        var psi = LaunchStartInfo(appPath, args);
 
-        var process = System.Diagnostics.Process.Start(psi);
+        OperationContext.Check();
+        using var process = System.Diagnostics.Process.Start(psi);
         if (process == null)
         {
             throw new Exception($"Failed to start process: {appPath}");
@@ -56,57 +64,37 @@ public class SessionManager : IDisposable
         catch { /* Some processes don't support this */ }
 
         Thread.Sleep(1000); // Extra wait for window to appear
-
-        // Find window by process ID from desktop
-        var desktop = _automation.GetDesktop();
         Window? window = null;
-
-        // Try to find by process ID first
-        var element = desktop.FindFirstDescendant(cf => cf.ByProcessId(process.Id));
-        if (element != null)
+        // A title or an unregistered window is not proof of launch ownership.
+        // Brokered/single-instance launches must be attached explicitly by the caller.
+        for (var attempt = 0; attempt < 10 && window == null; attempt++)
         {
-            window = element.AsWindow();
-        }
-
-        // If not found, the app might have spawned a different process (common for UWP)
-        // Search by waiting for a new window
-        if (window == null)
-        {
-            // Get window count before
-            var existingTitles = new HashSet<string>(
-                _windows.Values.Select(w => w.Title).Where(t => !string.IsNullOrEmpty(t))
-            );
-
-            // Wait and look for new windows
-            for (int i = 0; i < 10 && window == null; i++)
+            OperationContext.Check();
+            if (process.HasExited) break;
+            var candidates = Win32Desktop.GetTopLevelWindows(process.Id)
+                .Where(w => !w.IsToolWindow && !w.IsCloaked).ToArray();
+            if (candidates.Length == 1)
             {
-                Thread.Sleep(500);
-                var windows = desktop.FindAllChildren(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Window));
-                foreach (var w in windows)
-                {
-                    var win = w.AsWindow();
-                    if (win != null && !string.IsNullOrEmpty(win.Title))
-                    {
-                        // Check if this looks like our app
-                        var title = win.Title.ToLowerInvariant();
-                        var appName = Path.GetFileNameWithoutExtension(appPath).ToLowerInvariant();
-                        if (title.Contains(appName) || !existingTitles.Contains(win.Title))
-                        {
-                            window = win;
-                            break;
-                        }
-                    }
-                }
+                window = _automation.FromHandle(candidates[0].Hwnd)?.AsWindow();
+                OperationContext.Check();
             }
+            if (window == null) Thread.Sleep(500);
         }
 
         if (window == null)
         {
-            throw new Exception($"Could not find window for {appPath}. Try using windows_list_windows and windows_focus instead.");
+            throw new Exception($"Launch was requested for {appPath} (PID {process.Id}), but no unique owned window was found. Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window.");
         }
 
         var windowHandle = RegisterWindow(window);
         return (windowHandle, window);
+    }
+
+    internal static System.Diagnostics.ProcessStartInfo LaunchStartInfo(string appPath, string[]? args)
+    {
+        var info = new System.Diagnostics.ProcessStartInfo(appPath) { UseShellExecute = true };
+        foreach (var argument in args ?? []) info.ArgumentList.Add(argument);
+        return info;
     }
 
     public (string handle, Window window) AttachToWindow(string title)
@@ -137,16 +125,22 @@ public class SessionManager : IDisposable
         }
         catch { /* best effort */ }
 
+        if (hwnd != 0 && pid == 0) pid = Win32Desktop.GetProcessId(hwnd);
         EnsureProcessAllowed(pid);
 
-        if (hwnd != 0 && _hwndToHandle.TryGetValue(hwnd, out var existing))
+        // Capture before publishing even when re-registering an existing HWND.
+        var identity = hwnd != 0 ? InputTarget.Capture(hwnd, pid) : null;
+        if (hwnd != 0 && _hwndToHandle.TryGetValue(hwnd, out var existing) &&
+            _identities.TryGetValue(existing, out var oldIdentity) && oldIdentity == identity)
         {
             _windows[existing] = window;
             return existing;
         }
 
+        // Capture can fail if the window closes; publish no partial registration.
         var handle = $"w{++_windowCounter}";
         _windows[handle] = window;
+        if (identity != null) _identities[handle] = identity;
         if (hwnd != 0)
         {
             _windowHwnds[handle] = hwnd;
@@ -167,7 +161,9 @@ public class SessionManager : IDisposable
     {
         EnsureProcessAllowed(processId);
 
-        if (_hwndToHandle.TryGetValue(hwnd, out var existing))
+        var identity = InputTarget.Capture(hwnd, processId);
+        if (_hwndToHandle.TryGetValue(hwnd, out var existing) &&
+            _identities.TryGetValue(existing, out var oldIdentity) && oldIdentity == identity)
         {
             _windowPids[existing] = processId;
             return existing;
@@ -175,6 +171,7 @@ public class SessionManager : IDisposable
 
         var handle = $"w{++_windowCounter}";
         _windowHwnds[handle] = hwnd;
+        _identities[handle] = identity;
         _hwndToHandle[hwnd] = handle;
         _windowPids[handle] = processId;
         return handle;
@@ -182,6 +179,7 @@ public class SessionManager : IDisposable
 
     public Window? GetWindow(string handle)
     {
+        if (_identities.ContainsKey(handle)) GetInputTarget(handle);
         if (_windows.TryGetValue(handle, out var window))
         {
             return window;
@@ -243,18 +241,29 @@ public class SessionManager : IDisposable
                 continue;
             }
 
-            var handle = RegisterNativeWindow(info.Hwnd, info.ProcessId);
-            result.Add((handle, info.Title, processName));
+            try
+            {
+                var handle = RegisterNativeWindow(info.Hwnd, info.ProcessId);
+                result.Add((handle, info.Title, processName));
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception) when (Win32Desktop.GetProcessId(info.Hwnd) != info.ProcessId)
+            {
+                // Window closed or changed owner between enumeration and registration.
+                // Keep other windows in the result; do not suppress unrelated failures.
+            }
         }
         return result;
     }
 
     public void FocusWindow(string handle)
     {
+        OperationContext.Check();
         // Prefer Win32 focus (never blocks); fall back to UIA for windows
         // registered before a native handle was captured.
         if (_windowHwnds.TryGetValue(handle, out var hwnd))
         {
+            GetInputTarget(handle);
             Win32Desktop.FocusWindow(hwnd);
             return;
         }
@@ -264,15 +273,22 @@ public class SessionManager : IDisposable
         {
             throw new Exception($"Window not found: {handle}");
         }
+        EnsureProcessAllowed(window.Properties.ProcessId.Value);
+        OperationContext.Check();
         window.Focus();
     }
 
     public void CloseWindow(string handle)
     {
+        OperationContext.Check();
         // Prefer a Win32 WM_CLOSE (never blocks); fall back to UIA.
         if (_windowHwnds.TryGetValue(handle, out var hwnd))
         {
+            GetInputTarget(handle);
             Win32Desktop.CloseWindow(hwnd);
+            // WM_CLOSE is asynchronous and may open a save prompt. Retain the
+            // handle while the native window still exists so recovery can use it.
+            if (Win32Desktop.GetProcessId(hwnd) != 0) return;
         }
         else
         {
@@ -281,10 +297,15 @@ public class SessionManager : IDisposable
             {
                 throw new Exception($"Window not found: {handle}");
             }
+            EnsureProcessAllowed(window.Properties.ProcessId.Value);
+            OperationContext.Check();
             window.Close();
+            // UIA Close is also a request, not proof of disappearance.
+            return;
         }
 
         _windows.Remove(handle);
+        _identities.Remove(handle);
         if (_windowHwnds.TryGetValue(handle, out var removedHwnd))
         {
             _hwndToHandle.Remove(removedHwnd);
@@ -327,6 +348,7 @@ public class SessionManager : IDisposable
         }
         _applications.Clear();
         _windows.Clear();
+        _identities.Clear();
         _windowHwnds.Clear();
         _windowPids.Clear();
         _hwndToHandle.Clear();

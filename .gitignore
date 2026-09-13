@@ -50,3 +50,8 @@ Desktop.ini
 # Session files
 TestFlaUI/
 *.csx
+!automation/*.csx
+!automation/replica-inputs/*.csx
+.playwright-mcp/
+/gallery-review.png
+/automation/local.config.json

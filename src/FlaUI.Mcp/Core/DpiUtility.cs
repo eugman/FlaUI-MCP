@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace PlaywrightWindows.Mcp.Core;
 
-internal static class DpiUtility
+public static class DpiUtility
 {
     // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
     private static readonly IntPtr PerMonitorV2 = new IntPtr(-4);

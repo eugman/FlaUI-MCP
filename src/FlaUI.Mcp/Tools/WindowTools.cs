@@ -80,7 +80,7 @@ public class FocusWindowTool : ToolBase
             title = new
             {
                 type = "string",
-                description = "Window title (alternative to handle). Finds first window containing this text."
+                description = "Exact window title (alternative to handle)."
             }
         }
     };
@@ -95,13 +95,13 @@ public class FocusWindowTool : ToolBase
             if (!string.IsNullOrEmpty(handle))
             {
                 _sessionManager.FocusWindow(handle);
-                return Task.FromResult(TextResult($"Focused window {handle}"));
+                return Task.FromResult(FocusResult(handle, _sessionManager.GetWindowHwnd(handle)));
             }
             else if (!string.IsNullOrEmpty(title))
             {
                 var (windowHandle, window) = _sessionManager.AttachToWindow(title);
-                window.Focus();
-                return Task.FromResult(TextResult($"Focused window \"{window.Title}\" (handle: {windowHandle})"));
+                _sessionManager.FocusWindow(windowHandle);
+                return Task.FromResult(FocusResult(windowHandle, _sessionManager.GetWindowHwnd(windowHandle)));
             }
             else
             {
@@ -113,6 +113,11 @@ public class FocusWindowTool : ToolBase
             return Task.FromResult(ErrorResult($"Failed to focus window: {ex.Message}"));
         }
     }
+
+    private static McpToolResult FocusResult(string handle, nint hwnd)
+        => TextResult(hwnd != 0 && Win32Desktop.GetForegroundWindow() == hwnd
+            ? $"Focused window {handle}"
+            : $"Focus requested for {handle}, but foreground activation was not observed. Do not send input until the target is active.");
 }
 
 /// <summary>
@@ -157,7 +162,7 @@ public class CloseWindowTool : ToolBase
         try
         {
             _sessionManager.CloseWindow(handle);
-            return Task.FromResult(TextResult($"Closed window {handle}"));
+            return Task.FromResult(TextResult($"Close requested for window {handle}. A save prompt may keep it open; use windows_list_windows to verify before continuing."));
         }
         catch (Exception ex)
         {

@@ -18,62 +18,84 @@ public class SnapshotBuilder
         _maxDepth = maxDepth;
     }
 
-    public string BuildSnapshot(string windowHandle, AutomationElement root)
+    public string BuildSnapshot(string windowHandle, AutomationElement root, int maxNodes = 3000, int maxCharacters = 120000)
     {
+        var budget = new SnapshotBudget(maxNodes, maxCharacters);
         // Clear previous elements for this window
-        _elementRegistry.ClearWindow(windowHandle);
+        var generation = _elementRegistry.BeginSnapshot(windowHandle);
 
         // Remember the owning process so tools can later detect a blocked
         // UIA provider for this window's refs without touching UIA.
         try
         {
-            var processId = root.Properties.ProcessId.ValueOrDefault;
+            var processId = Read(() => root.Properties.ProcessId.ValueOrDefault);
             if (processId != 0)
             {
-                _elementRegistry.SetWindowProcessId(windowHandle, processId);
+                _elementRegistry.SetWindowIdentity(windowHandle, processId, Read(() => root.Properties.NativeWindowHandle.ValueOrDefault), generation);
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch
         {
             // Process id is best-effort; snapshot still works without it
         }
 
         var sb = new StringBuilder();
-        BuildElementSnapshot(sb, windowHandle, root, 0);
+        BuildElementSnapshot(sb, windowHandle, root, 0, generation, budget);
+        _elementRegistry.CheckGeneration(windowHandle, generation);
+        if (budget.Partial) sb.AppendLine("[partial snapshot: traversal/output limit or unreadable children; use scoped windows_find. Missing controls are not proven absent.]");
         return sb.ToString();
     }
 
-    private void BuildElementSnapshot(StringBuilder sb, string windowHandle, AutomationElement element, int depth)
+    private void BuildElementSnapshot(StringBuilder sb, string windowHandle, AutomationElement element, int depth, long generation, SnapshotBudget budget)
     {
-        if (depth > _maxDepth) return;
+        _elementRegistry.CheckGeneration(windowHandle, generation);
+        if (depth > _maxDepth) { budget.Partial = true; return; }
+        if (!budget.Visit()) return;
 
         // Skip elements with no meaningful content
         var name = GetElementName(element);
         var role = GetElementRole(element);
-        
+
         // Skip some noise elements, but keep elements with names or important roles
-        if (ShouldSkipElement(element, name, role)) return;
+        if (ShouldSkipElement(element, name, role))
+        {
+            // A decorative node may still contain accessible controls.
+            try
+            {
+                foreach (var child in Read(element.FindAllChildren))
+                {
+                    if (budget.Exhausted) break;
+                    BuildElementSnapshot(sb, windowHandle, child, depth + 1, generation, budget);
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { budget.Partial = true; }
+            return;
+        }
 
         // Register element and get ref
-        var refId = _elementRegistry.Register(windowHandle, element);
+        var refId = _elementRegistry.Register(windowHandle, element, generation);
 
         // Build the line
         var indent = new string(' ', depth * 2);
         var line = BuildElementLine(element, refId, name, role);
-        sb.AppendLine($"{indent}- {line}");
+        if (!budget.Append(sb, $"{indent}- {line}")) return;
 
         // Process children
         try
         {
-            var children = element.FindAllChildren();
+            var children = Read(element.FindAllChildren);
             foreach (var child in children)
             {
-                BuildElementSnapshot(sb, windowHandle, child, depth + 1);
+                if (budget.Exhausted) break;
+                BuildElementSnapshot(sb, windowHandle, child, depth + 1, generation, budget);
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch
         {
-            // Some elements throw when accessing children
+            budget.Partial = true;
         }
     }
 
@@ -107,7 +129,7 @@ public class SnapshotBuilder
     {
         try
         {
-            var controlType = element.Properties.ControlType.ValueOrDefault;
+            var controlType = Read(() => element.Properties.ControlType.ValueOrDefault);
             return controlType switch
             {
                 ControlType.Button => "button",
@@ -150,6 +172,7 @@ public class SnapshotBuilder
                 _ => "element"
             };
         }
+        catch (OperationCanceledException) { throw; }
         catch
         {
             return "element";
@@ -160,11 +183,11 @@ public class SnapshotBuilder
     {
         try
         {
-            var name = element.Properties.Name.ValueOrDefault;
+            var name = Read(() => element.Properties.Name.ValueOrDefault);
             if (!string.IsNullOrWhiteSpace(name)) return name;
 
             // Try automation ID as fallback for identification
-            var automationId = element.Properties.AutomationId.ValueOrDefault;
+            var automationId = Read(() => element.Properties.AutomationId.ValueOrDefault);
             if (!string.IsNullOrWhiteSpace(automationId) && automationId.Length < 50)
             {
                 return $"[{automationId}]";
@@ -172,6 +195,7 @@ public class SnapshotBuilder
 
             return null;
         }
+        catch (OperationCanceledException) { throw; }
         catch
         {
             return null;
@@ -184,24 +208,24 @@ public class SnapshotBuilder
 
         try
         {
-            if (!element.Properties.IsEnabled.ValueOrDefault)
+            if (!Read(() => element.Properties.IsEnabled.ValueOrDefault))
                 states.Add("disabled");
 
-            if (element.Properties.IsOffscreen.ValueOrDefault)
+            if (Read(() => element.Properties.IsOffscreen.ValueOrDefault))
                 states.Add("offscreen");
 
             // Check for readonly (ValuePattern)
-            if (element.Patterns.Value.IsSupported)
+            if (Read(() => element.Patterns.Value.IsSupported))
             {
-                var valuePattern = element.Patterns.Value.Pattern;
-                if (valuePattern.IsReadOnly.ValueOrDefault)
+                var valuePattern = Read(() => element.Patterns.Value.Pattern);
+                if (Read(() => valuePattern.IsReadOnly.ValueOrDefault))
                     states.Add("readonly");
             }
 
             // Check toggle state
-            if (element.Patterns.Toggle.IsSupported)
+            if (Read(() => element.Patterns.Toggle.IsSupported))
             {
-                var toggleState = element.Patterns.Toggle.Pattern.ToggleState.ValueOrDefault;
+                var toggleState = Read(() => element.Patterns.Toggle.Pattern.ToggleState.ValueOrDefault);
                 if (toggleState == ToggleState.On)
                     states.Add("checked");
                 else if (toggleState == ToggleState.Indeterminate)
@@ -209,22 +233,23 @@ public class SnapshotBuilder
             }
 
             // Check selection state
-            if (element.Patterns.SelectionItem.IsSupported)
+            if (Read(() => element.Patterns.SelectionItem.IsSupported))
             {
-                if (element.Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault)
+                if (Read(() => element.Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault))
                     states.Add("selected");
             }
 
             // Check expanded state
-            if (element.Patterns.ExpandCollapse.IsSupported)
+            if (Read(() => element.Patterns.ExpandCollapse.IsSupported))
             {
-                var expandState = element.Patterns.ExpandCollapse.Pattern.ExpandCollapseState.ValueOrDefault;
+                var expandState = Read(() => element.Patterns.ExpandCollapse.Pattern.ExpandCollapseState.ValueOrDefault);
                 if (expandState == ExpandCollapseState.Expanded)
                     states.Add("expanded");
                 else if (expandState == ExpandCollapseState.Collapsed)
                     states.Add("collapsed");
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch
         {
             // Ignore state query errors
@@ -239,14 +264,14 @@ public class SnapshotBuilder
         if (!string.IsNullOrEmpty(name)) return false;
 
         // Always include actionable element types
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "combobox" 
+        if (role is "button" or "textbox" or "checkbox" or "radio" or "combobox"
             or "listitem" or "menuitem" or "tab" or "treeitem" or "link" or "slider")
         {
             return false;
         }
 
         // Include structural elements that might contain others
-        if (role is "window" or "group" or "list" or "tree" or "tablist" 
+        if (role is "window" or "group" or "list" or "tree" or "tablist"
             or "menu" or "menubar" or "toolbar" or "grid" or "table")
         {
             return false;
@@ -259,6 +284,14 @@ public class SnapshotBuilder
         }
 
         return false;
+    }
+
+    internal static T Read<T>(Func<T> provider)
+    {
+        OperationContext.Check();
+        var value = provider(); // Native calls cannot be interrupted safely.
+        OperationContext.Check();
+        return value;
     }
 
     private string EscapeName(string name)

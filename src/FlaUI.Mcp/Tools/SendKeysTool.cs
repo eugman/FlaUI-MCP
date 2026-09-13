@@ -117,6 +117,7 @@ public class SendKeysTool : ToolBase
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
     private readonly ProcessPolicy _processPolicy;
+    private readonly SessionManager? _sessions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SendKeysTool"/> class.
@@ -124,11 +125,12 @@ public class SendKeysTool : ToolBase
     /// <param name="elementRegistry">Registry used to resolve element references for focus targeting.</param>
     /// <param name="invokeTracker">Tracker used to fail fast when the target app's UIA provider is blocked.</param>
     /// <param name="processPolicy">Optional allowlist restricting which apps may receive input.</param>
-    public SendKeysTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null, ProcessPolicy? processPolicy = null)
+    public SendKeysTool(ElementRegistry elementRegistry, PendingInvokeTracker? invokeTracker = null, ProcessPolicy? processPolicy = null, SessionManager? sessions = null)
     {
         _elementRegistry = elementRegistry;
         _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
         _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
+        _sessions = sessions;
     }
 
     /// <summary>
@@ -151,6 +153,7 @@ public class SendKeysTool : ToolBase
         type = "object",
         properties = new
         {
+            handle = new { type = "string", description = "Optional explicit window handle; otherwise uses the focused element." },
             @ref = new
             {
                 type = "string",
@@ -196,8 +199,16 @@ public class SendKeysTool : ToolBase
             return Task.FromResult(ErrorResult("Provide either chord or keys, not both."));
         }
 
+        var completed = 0;
+        var inputAttempted = false;
         try
         {
+            OperationContext.Check();
+            // Validate every chord before resolving or focusing any target. A malformed
+            // later step must not allow an earlier shortcut (such as Save) to run.
+            var prepared = PrepareSequence(hasChord ? new[] { chord! } : keyList!);
+            var handle = GetStringArgument(arguments, "handle");
+            if (refId != null && handle != null && _elementRegistry.WindowForRef(refId) != handle) throw new ArgumentException("Handle/ref mismatch.");
             if (!string.IsNullOrWhiteSpace(refId))
             {
                 var element = _elementRegistry.GetElement(refId);
@@ -211,83 +222,56 @@ public class SendKeysTool : ToolBase
                 // focused element, which works even while the provider is blocked.
                 if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
                 {
-                    return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
+                    return Task.FromResult(BlockedResult(pending));
                 }
 
-                element.Focus();
-                Thread.Sleep(50);
             }
-            else
+            else if (handle != null)
             {
-                // Ref-less input goes to whatever has keyboard focus, so verify
-                // the foreground window belongs to an allowed app.
-                var denied = _processPolicy.CheckForegroundWindowAllowed();
-                if (denied != null)
+                // Validate the explicit target, then GuardedInput focuses and
+                // verifies that exact window before sending any input.
+                if (!_processPolicy.IsProcessAllowed(_sessions!.GetInputTarget(handle!).ProcessId))
                 {
-                    return Task.FromResult(ErrorResult(denied));
+                    return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Target process")));
                 }
             }
 
-            if (hasChord)
+            using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId));
+            foreach (var step in prepared)
             {
-                var chordTokens = SplitChord(chord).ToList();
-                if (chordTokens.Count == 0)
-                {
-                    return Task.FromResult(ErrorResult("No keys were parsed from chord."));
-                }
-
-                var chordKeys = TryResolveKeys(chordTokens, out var chordError);
-                if (chordError != null)
-                {
-                    return Task.FromResult(ErrorResult(chordError));
-                }
-
-                var chordDenied = CheckKeysAllowed(chordKeys);
-                if (chordDenied != null)
-                {
-                    return Task.FromResult(ErrorResult(chordDenied));
-                }
-
-                PressKeys(chordKeys);
-
-                var targetForChord = string.IsNullOrWhiteSpace(refId) ? "focused element" : refId;
-                var chordText = string.Join("+", chordTokens);
-                return Task.FromResult(TextResult($"Sent keys {chordText} to {targetForChord}"));
-            }
-
-            var actions = new List<string>();
-            foreach (var item in keyList!)
-            {
-                var stepTokens = SplitChord(item).ToList();
-                if (stepTokens.Count == 0)
-                {
-                    return Task.FromResult(ErrorResult("No keys were parsed from keys sequence."));
-                }
-
-                var stepKeys = TryResolveKeys(stepTokens, out var stepError);
-                if (stepError != null)
-                {
-                    return Task.FromResult(ErrorResult(stepError));
-                }
-
-                var stepDenied = CheckKeysAllowed(stepKeys);
-                if (stepDenied != null)
-                {
-                    return Task.FromResult(ErrorResult(stepDenied));
-                }
-
-                PressKeys(stepKeys);
-                actions.Add(string.Join("+", stepTokens));
-                Thread.Sleep(30);
+                inputAttempted = true;
+                input.Send(() => PressKeys(step.Keys));
+                completed++;
+                if (!hasChord) Thread.Sleep(30);
             }
 
             var targetName = string.IsNullOrWhiteSpace(refId) ? "focused element" : refId;
-            return Task.FromResult(TextResult($"Sent key sequence [{string.Join(", ", actions)}] to {targetName}"));
+            return Task.FromResult(TextResult(hasChord
+                ? $"Sent keys {prepared[0].Text} to {targetName}"
+                : $"Sent key sequence [{string.Join(", ", prepared.Select(step => step.Text))}] to {targetName}"));
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ErrorResult($"Failed to send keys: {ex.Message}"));
+            return Task.FromResult(ErrorResult($"Failed to send keys: {ex.Message} Completed {completed} chord(s). " +
+                (inputAttempted ? "A failing chord may have partially executed; inspect state before replaying input."
+                    : "No keyboard input was dispatched.")));
         }
+    }
+
+    internal List<(string Text, List<VirtualKeyShort> Keys)> PrepareSequence(IEnumerable<string> sequence)
+    {
+        var prepared = new List<(string, List<VirtualKeyShort>)>();
+        foreach (var item in sequence)
+        {
+            var tokens = SplitChord(item).ToList();
+            if (tokens.Count == 0) throw new ArgumentException("No keys were parsed from chord.");
+            var keys = TryResolveKeys(tokens, out var error);
+            if (error != null) throw new ArgumentException(error);
+            var denied = CheckKeysAllowed(keys);
+            if (denied != null) throw new ArgumentException(denied);
+            prepared.Add((string.Join("+", tokens), keys));
+        }
+        return prepared;
     }
 
     /// <summary>

@@ -9,7 +9,7 @@ using FlaUI.UIA3;
 using PlaywrightWindows.Mcp.Core;
 using Xunit;
 
-namespace FlaUI.Mcp.Tests;
+namespace FlaUI.Mcp.IntegrationTests;
 
 /// <summary>
 /// Validates that screenshot capture works correctly when DPI awareness is enabled.

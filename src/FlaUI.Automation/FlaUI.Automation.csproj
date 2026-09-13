@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../FlaUI.Mcp/FlaUI.Mcp.csproj" /></ItemGroup>
+  <ItemGroup>
+    <Content Include="../../automation/replica-inputs/Columns to Measures.csx"
+             Link="replica-inputs/Columns to Measures.csx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

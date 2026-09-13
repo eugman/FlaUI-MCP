@@ -1,0 +1,15 @@
+TE3 3.26.3 locator notes (selectors, not reusable refs):
+- Main menu: MenuBar named "Main menu"; Tools is a MenuItem beneath it.
+- Tools popup: Button named "Preferences...", in an owned native popup.
+- Preferences root: Window named "Preferences"; include owned windows.
+- Preferences search: Edit with automationId "searchPreferences".
+- Navigation tree: automationId "treePreferences". Its TreeItem Value is the
+  section label ("Code Actions"); Name may not contain that label.
+- Filter for Code Actions, select its row, then clear the search. Reobserve
+  and verify the row is selected: clearing search may move the viewport.
+- Content pane: automationId "DAX Editor.Code Actions".
+- The preferred-prefix settings are ComboBoxes in that pane. Inspect their
+  labels and values; do not infer values from this map.
+- A background screenshot of the Preferences Window ref captures that dialog.
+  A dropdown outside a dialog is a separate native window, not part of such a
+  background capture. No dropdown is needed for this task.

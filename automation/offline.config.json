@@ -1,0 +1,26 @@
+{
+  "te3": "%ProgramFiles%/Tabular Editor 3/TabularEditor3.exe",
+  "te": "%LOCALAPPDATA%/Programs/te/te.exe",
+  "fixtureScript": "fixture.csx",
+  "fixtureMode": "offline",
+  "output": "../artifacts/te3",
+  "repeat": 1,
+  "maximizeWindow": true,
+  "scenarios": [
+    "model-open",
+    "model-calculation-group-menu",
+    "preferences-auto-formatting",
+    "preferences-code-actions",
+    "preferences-dax-general",
+    "preferences-file-formats",
+    "preferences-save-to-folder",
+    "qualified-navigation",
+    "file-load-three-cycles",
+    "csharp-auto-rollback-source",
+    "csharp-preview-page",
+    "csharp-output-scalar",
+    "csharp-scalar-scene",
+    "csharp-output-object",
+    "csharp-output-values"
+  ]
+}

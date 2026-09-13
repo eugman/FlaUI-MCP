@@ -22,7 +22,7 @@ public enum PatternCallOutcome
 /// </summary>
 /// <param name="Outcome">What happened within the grace period.</param>
 /// <param name="ModalTitle">Title of the detected modal window, if any.</param>
-public sealed record PatternCallResult(PatternCallOutcome Outcome, string? ModalTitle = null);
+public sealed record PatternCallResult(PatternCallOutcome Outcome, string? ModalTitle = null, string? PendingPatternId = null);
 
 /// <summary>
 /// Executes UI Automation pattern calls (Invoke, Toggle, Select, ...) so that a
@@ -63,6 +63,7 @@ public static class ModalAwareInvoker
         TimeSpan? gracePeriod = null,
         Func<int, IReadOnlyList<Win32WindowInfo>>? windowEnumerator = null)
     {
+        OperationContext.Check();
         var grace = gracePeriod ?? DefaultGracePeriod;
         windowEnumerator ??= pid => Win32Desktop.GetTopLevelWindows(pid);
 
@@ -71,7 +72,7 @@ public static class ModalAwareInvoker
             : new Dictionary<nint, Win32WindowInfo>();
 
         var info = tracker.Begin(processId, description);
-        var task = Task.Run(patternCall);
+        var task = Task.Run(() => { OperationContext.Check(); patternCall(); });
 
         // Ensure the tracker is cleared whenever the call eventually returns,
         // even if we stop waiting for it below. Also observe any exception so
@@ -89,6 +90,8 @@ public static class ModalAwareInvoker
             // letting us rethrow the original exception un-wrapped below
             if (Task.WaitAny(new[] { task }, PollInterval) == 0)
             {
+                OperationContext.Check();
+                if (task.IsCanceled) throw new OperationCanceledException();
                 if (task.IsFaulted && task.Exception != null)
                 {
                     var inner = task.Exception.InnerException ?? task.Exception;
@@ -100,16 +103,16 @@ public static class ModalAwareInvoker
             if (processId != 0)
             {
                 var modalTitle = DetectModal(windowsBefore, windowEnumerator(processId));
-                if (modalTitle != null)
+                if (modalTitle != null && (!modalTitle.StartsWith("(") || DateTime.UtcNow >= deadline))
                 {
                     info.ModalTitle = modalTitle;
-                    return new PatternCallResult(PatternCallOutcome.ModalDetected, modalTitle);
+                    return new PatternCallResult(PatternCallOutcome.ModalDetected, modalTitle, info.OperationId);
                 }
             }
 
             if (DateTime.UtcNow >= deadline)
             {
-                return new PatternCallResult(PatternCallOutcome.StillPending);
+                return new PatternCallResult(PatternCallOutcome.StillPending, PendingPatternId: info.OperationId);
             }
         }
     }

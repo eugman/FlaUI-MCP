@@ -28,7 +28,7 @@ public class ModalDialogTests
         var tracker = new PendingInvokeTracker();
         var clickTool = new ClickTool(_fixture.Elements, tracker);
         var snapshotTool = new SnapshotTool(_fixture.Session, _fixture.Elements, tracker);
-        var sendKeysTool = new SendKeysTool(_fixture.Elements, tracker);
+        var sendKeysTool = new SendKeysTool(_fixture.Elements, tracker, sessions: _fixture.Session);
 
         // Capture the pid while the provider is responsive; querying it later,
         // while the modal blocks the provider, would itself hang
@@ -71,7 +71,10 @@ public class ModalDialogTests
         {
             // 3. Dismiss the dialog with pure keyboard input (works while blocked):
             //    the OK button is the dialog's accept button
-            await _fixture.CallTool(sendKeysTool, new { chord = "Enter" });
+            var dialog = Win32Desktop.GetTopLevelWindows(processId).Single(w => w.Title == "Test Modal Dialog");
+            var handle = _fixture.Session.RegisterNativeWindow(dialog.Hwnd, processId);
+            var dismissed = await _fixture.CallTool(sendKeysTool, new { handle, chord = "Enter" });
+            Assert.Contains("Sent keys", dismissed);
         }
 
         // 4. Once the dialog closes, the pending invoke completes and tools recover
@@ -92,7 +95,7 @@ public class ModalDialogTests
     {
         var tracker = new PendingInvokeTracker();
         var clickTool = new ClickTool(_fixture.Elements, tracker);
-        var sendKeysTool = new SendKeysTool(_fixture.Elements, tracker);
+        var sendKeysTool = new SendKeysTool(_fixture.Elements, tracker, sessions: _fixture.Session);
 
         var processId = GetWinFormsProcessId();
         Assert.NotEqual(0, processId);
@@ -126,7 +129,10 @@ public class ModalDialogTests
         finally
         {
             // Close the modeless dialog (it has focus; Alt+F4 closes it)
-            await _fixture.CallTool(sendKeysTool, new { chord = "Alt+F4" });
+            var dialog = Win32Desktop.GetTopLevelWindows(processId).Single(w => w.Title == "Test Modeless Dialog");
+            var handle = _fixture.Session.RegisterNativeWindow(dialog.Hwnd, processId);
+            var dismissed = await _fixture.CallTool(sendKeysTool, new { handle, chord = "Alt+F4" });
+            Assert.Contains("Sent keys", dismissed);
             await Task.Delay(250);
         }
     }

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "recipe": "preferences-file-formats",
+  "checkpoint": "file-formats-annotated",
+  "cropOnly": true,
+  "arrows": [
+    { "tailX": 210, "tipX": 125, "y": 718 },
+    { "tailX": 210, "tipX": 165, "y": 742 }
+  ],
+  "panels": [{
+    "checkpoint": "preferences-file-formats",
+    "label": "File Formats with explicit post-capture arrows",
+    "expectedWidth": 1389,
+    "expectedHeight": 855,
+    "x": 0, "y": 0, "width": 1389, "height": 855
+  }]
+}

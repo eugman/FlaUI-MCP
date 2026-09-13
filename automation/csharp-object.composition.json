@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "recipe": "csharp-output-object",
+  "checkpoint": "script-output-object",
+  "panels": [
+    {
+      "checkpoint": "csharp-output-object-dialog",
+      "label": "Single table Output — detail of the Basic properties",
+      "expectedWidth": 719, "expectedHeight": 591,
+      "x": 0, "y": 0, "width": 719, "height": 150
+    }
+  ]
+}

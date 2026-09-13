@@ -7,8 +7,12 @@
 /// </summary>
 public sealed class PendingInvokeInfo
 {
-	internal PendingInvokeInfo(int processId, string description)
+    public string OperationId { get; } = Guid.NewGuid().ToString("N");
+    public string? ParentOperationId { get; } = OperationContext.Current.Value?.Id;
+    public long ProcessStartedTicks { get; }
+	internal PendingInvokeInfo(int processId, string description, long startedTicks)
 	{
+		ProcessStartedTicks = startedTicks;
 		ProcessId = processId;
 		Description = description;
 		StartedUtc = DateTime.UtcNow;
@@ -34,6 +38,27 @@ public sealed class PendingInvokeInfo
 /// </summary>
 public class PendingInvokeTracker
 {
+    private readonly Func<int, long?> _processStart;
+    public PendingInvokeTracker() : this(ReadProcessStart) { }
+    internal PendingInvokeTracker(Func<int, long?> processStart) => _processStart = processStart;
+
+    // null means exited/missing; zero means identity could not be inspected.
+    private static long? ReadProcessStart(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            return process.HasExited ? null : process.StartTime.ToUniversalTime().Ticks;
+        }
+        catch (ArgumentException) { return null; }
+        catch (InvalidOperationException) { return null; }
+        catch (System.ComponentModel.Win32Exception) { return 0; }
+    }
+    public object Status() { lock (_lock) return _pending.Select(p => new { operationId = p.OperationId, parentOperationId = p.ParentOperationId, p.ProcessId, p.ProcessStartedTicks, p.Description, p.StartedUtc, p.ModalTitle, status = "pending" }).ToArray(); }
+    public string[] ForOperation(string operationId)
+    {
+        lock (_lock) return _pending.Where(p => p.ParentOperationId == operationId).Select(p => p.OperationId).ToArray();
+    }
 	private readonly object _lock = new();
 	private readonly List<PendingInvokeInfo> _pending = new();
 
@@ -42,7 +67,7 @@ public class PendingInvokeTracker
 	/// </summary>
 	public PendingInvokeInfo Begin(int processId, string description)
 	{
-		var info = new PendingInvokeInfo(processId, description);
+		var info = new PendingInvokeInfo(processId, description, _processStart(processId) ?? 0);
 		lock (_lock)
 		{
 			_pending.Add(info);
@@ -67,8 +92,12 @@ public class PendingInvokeTracker
 	/// </summary>
 	public bool TryGetPending(int processId, out PendingInvokeInfo info)
 	{
+        // Process inspection must not hold the shared pending-list lock.
+        var started = processId == 0 ? 0 : _processStart(processId);
 		lock (_lock)
 		{
+            _pending.RemoveAll(p => p.ProcessId == processId && p.ProcessStartedTicks != 0 &&
+                (started == null || started > 0 && started != p.ProcessStartedTicks));
 			var match = processId != 0 ? _pending.FirstOrDefault(p => p.ProcessId == processId) : null;
 			info = match!;
 			return match != null;
@@ -84,10 +113,10 @@ public class PendingInvokeTracker
 			? $" — it opened a modal dialog \"{info.ModalTitle}\" that is waiting for input"
 			: "";
 		var elapsed = (int)(DateTime.UtcNow - info.StartedUtc).TotalSeconds;
-		return $"UI Automation for this app is blocked by a pending '{info.Description}' call " +
+        return $"UI Automation for this app is blocked by pending operation {info.OperationId}, '{info.Description}' call " +
 			   $"started {elapsed}s ago{modalPart}. Ref-based tools on this app will fail until it completes. " +
 			   "To interact with the dialog: find its window handle via windows_list_windows (it is a separate " +
 			   "window of the same process), see it with windows_screenshot using that handle, use " +
-			   "windows_send_keys (without ref) for keyboard input, or dismiss it; then retry.";
+			   "windows_send_keys with that explicit dialog handle (without ref) for keyboard input; then check operation status before continuing.";
 	}
 }

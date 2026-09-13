@@ -1,0 +1,105 @@
+using System.Reflection;
+using System.Text.Json;
+using PlaywrightWindows.Mcp.Core;
+using PlaywrightWindows.Mcp.Tools;
+
+namespace FlaUI.Mcp.IntegrationTests;
+
+[Collection("TestApps")]
+public class ElementQueryTests(TestAppFixture fixture)
+{
+    private ElementQuery Query => new(fixture.Session, fixture.Elements, new PendingInvokeTracker());
+
+    [Fact]
+    public void ScopedDiscoveryFindsExpandedWinFormsBranch()
+    {
+        var query = Query;
+        var tab = query.Resolve(fixture.WinFormsHandle, new(AutomationId: "TreesTab"));
+        tab.Patterns.SelectionItem.Pattern.Select();
+        var tree = query.Resolve(fixture.WinFormsHandle, new(AutomationId: "TestTreeView"));
+        var fruits = query.Resolve(fixture.WinFormsHandle, new(Name: "Fruits", ControlType: "TreeItem"), new(AutomationId: "TestTreeView"));
+        fruits.Patterns.ExpandCollapse.Pattern.Collapse();
+        Assert.Equal(FlaUI.Core.Definitions.ExpandCollapseState.Collapsed, fruits.Patterns.ExpandCollapse.Pattern.ExpandCollapseState.Value);
+        fruits.Patterns.ExpandCollapse.Pattern.Expand();
+        Assert.Equal(FlaUI.Core.Definitions.ExpandCollapseState.Expanded, fruits.Patterns.ExpandCollapse.Pattern.ExpandCollapseState.Value);
+        Assert.True(query.IsPresent(fixture.WinFormsHandle, new(Name: "Apple", ControlType: "TreeItem", Visible: true), new(AutomationId: "TestTreeView")));
+    }
+
+    [Fact]
+    public void RootOnlyChecksRootsWithoutMatchingDescendants()
+    {
+        Assert.True(Query.IsPresent(fixture.WinFormsHandle, new(AutomationId: "MainForm", RootOnly: true)));
+        Assert.False(Query.IsPresent(fixture.WinFormsHandle, new(AutomationId: "MainTabs", RootOnly: true)));
+        var raw = Query.Find(fixture.WinFormsHandle, new(RootOnly: true));
+        Assert.Single(raw.Elements); Assert.False(raw.Truncated); Assert.Equal(0, raw.Unreadable);
+    }
+
+    [Fact]
+    public void ExactPresenceChecksRootMissingAndFullSelector()
+    {
+        Assert.True(Query.IsPresent(fixture.WinFormsHandle, new(AutomationId: "MainForm")));
+        Assert.False(Query.IsPresent(fixture.WinFormsHandle, new(AutomationId: "fla_missing_control")));
+        Assert.False(Query.IsPresent(fixture.WinFormsHandle, new(AutomationId: "MainForm", ControlType: "Button")));
+        Assert.True(Query.IsPresent(fixture.WinFormsHandle, new(AutomationId: "MainTabs"), new(AutomationId: "MainForm")));
+    }
+
+    [Fact]
+    public void ExhaustedExactPresenceSearchIsNotAbsence()
+        => Assert.Throws<InvalidOperationException>(() => Query.IsPresent(fixture.WinFormsHandle,
+            new(AutomationId: "fla_missing_control"), budget: new SearchBudget(1, TimeSpan.Zero)));
+
+    [Fact]
+    public void ExactIdResolutionIncludesRootAndHonorsAdditionalSelectors()
+    {
+        var root = Query.Resolve(fixture.WinFormsHandle, new(AutomationId:"MainForm", ControlType:"Window"));
+        Assert.Equal("MainForm", root.Properties.AutomationId.Value);
+        Assert.Throws<InvalidOperationException>(() => Query.Resolve(fixture.WinFormsHandle,
+            new(AutomationId:"MainForm", ControlType:"Button")));
+        var tabs = Query.Resolve(fixture.WinFormsHandle, new(AutomationId:"MainTabs"), new(AutomationId:"MainForm"));
+        Assert.Equal("MainTabs", tabs.Properties.AutomationId.Value);
+    }
+
+    [Fact]
+    public void FindByAutomationIdDoesNotInvalidateSnapshotRefs()
+    {
+        var tab = fixture.GetWpfWindow()!.FindFirstDescendant(c => c.ByAutomationId("ButtonsTab"));
+        Assert.NotNull(tab);
+        tab.Patterns.SelectionItem.Pattern.Select();
+        var snapshot = fixture.TakeSnapshot(fixture.WpfHandle);
+        var oldRef = TestAppFixture.FindRefInSnapshot(snapshot,"Click Me")!;
+        var result = Query.Find(fixture.WpfHandle, new(AutomationId:"ClickMeButton"));
+        Assert.False(result.Truncated);
+        Assert.Equal(0,result.Unreadable);
+        var button = Assert.Single(result.Elements);
+        Assert.Equal("Button",button.ControlType);
+        Assert.Contains("Invoke",button.Patterns);
+        Assert.True(fixture.Elements.HasElement(oldRef));
+    }
+
+    [Fact]
+    public void AmbiguousSelectionFailsInsteadOfChoosingFirst()
+        => Assert.Throws<AmbiguousMatchException>(() => Query.Resolve(fixture.WpfHandle,new(ControlType:"TabItem")));
+
+    [Fact]
+    public void DepthLimitIsReportedAsTruncated()
+    {
+        var result = Query.Find(fixture.WpfHandle,new(),maxDepth:0);
+        Assert.True(result.Truncated);
+        Assert.Single(result.Elements);
+    }
+
+    [Fact]
+    public async Task ArtifactOnlyScreenshotOmitsImagePayload()
+    {
+        var path = Path.Combine(Path.GetTempPath(),"fla_capture_" + Guid.NewGuid().ToString("N") + ".png");
+        try
+        {
+            var tool = new ScreenshotTool(fixture.Session,fixture.Elements);
+            var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { handle = fixture.WpfHandle, background = true, savePath = path, includeImage = false }));
+            Assert.False(result.IsError == true);
+            Assert.DoesNotContain(result.Content,c => c.Type == "image");
+            Assert.True(new FileInfo(path).Length > 0);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+}

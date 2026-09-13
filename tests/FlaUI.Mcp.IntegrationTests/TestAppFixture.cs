@@ -104,6 +104,10 @@ public class TestAppFixture : IAsyncLifetime
 
         var searchPaths = new[]
         {
+            Path.Combine(dir.FullName, "tests", "TestApps", appName, "bin",
+                typeof(TestAppFixture).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
+                    .Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration,
+                "net8.0-windows", $"{appName}.exe"),
             Path.Combine(dir.FullName, "tests", "TestApps", appName, "bin", "Debug", "net8.0-windows", $"{appName}.exe"),
             Path.Combine(dir.FullName, "tests", "TestApps", appName, "bin", "Release", "net8.0-windows", $"{appName}.exe"),
         };

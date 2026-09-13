@@ -37,13 +37,17 @@ public class SnapshotTool : ToolBase
             handle = new
             {
                 type = "string",
-                description = "Window handle from windows_launch or windows_list_windows. If omitted, uses the most recently launched window."
-            }
+                description = "Window handle from windows_launch or windows_list_windows. If omitted, uses the focused window."
+            },
+            maxNodes = new { type = "integer", minimum = 1, maximum = 100000, description = "Client-side node budget (default 3000); cannot interrupt a blocking provider call." },
+            maxCharacters = new { type = "integer", minimum = 256, maximum = 1000000, description = "Output character budget including partial-result notice (default 120000)." }
         }
     };
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
+        if (arguments is { } args && args.TryGetProperty("ref", out _))
+            return Task.FromResult(ErrorResult("Snapshot does not support ref; use handle or omit both for the focused window"));
         var handle = GetStringArgument(arguments, "handle");
 
         try
@@ -58,7 +62,7 @@ public class SnapshotTool : ToolBase
                 var processId = _sessionManager.GetWindowProcessId(handle);
                 if (_invokeTracker.TryGetPending(processId, out var pending))
                 {
-                    return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
+                    return Task.FromResult(BlockedResult(pending));
                 }
 
                 window = _sessionManager.GetWindow(handle);
@@ -97,7 +101,9 @@ public class SnapshotTool : ToolBase
                 handle = _sessionManager.RegisterWindow(window);
             }
 
-            var snapshot = _snapshotBuilder.BuildSnapshot(handle!, window);
+            var snapshot = _snapshotBuilder.BuildSnapshot(handle!, window,
+                GetArgument<int?>(arguments, "maxNodes") ?? 3000,
+                GetArgument<int?>(arguments, "maxCharacters") ?? 120000);
             return Task.FromResult(TextResult(snapshot));
         }
         catch (Exception ex)

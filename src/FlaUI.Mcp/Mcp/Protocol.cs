@@ -123,6 +123,10 @@ public record McpToolCallParams
 
 public record McpToolResult
 {
+    [JsonPropertyName("structuredContent")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Core.ToolOutcome? Outcome { get; init; }
+
     [JsonPropertyName("content")]
     public List<McpContent> Content { get; init; } = new();
     

@@ -8,37 +8,108 @@ namespace PlaywrightWindows.Mcp.Core;
 /// </summary>
 public class ElementRegistry
 {
+    private readonly object _gate = new();
+    private readonly Dictionary<string, long> _generations = new();
     private readonly Dictionary<string, AutomationElement> _elements = new();
     private readonly Dictionary<string, int> _windowCounters = new();
     private readonly Dictionary<string, int> _windowProcessIds = new();
+    private readonly Dictionary<string, InputTarget> _identities = new();
+
+    public void SetWindowIdentity(string handle, int pid, nint hwnd, long? generation = null)
+    {
+        var identity = InputTarget.Capture(hwnd, pid);
+        lock (_gate)
+        {
+            CheckGeneration(handle, generation);
+            _windowProcessIds[handle] = pid;
+            _identities[handle] = identity;
+        }
+    }
+    public string WindowForRef(string reference)
+    {
+        var separator = reference.LastIndexOf('e');
+        if (separator <= 0 || !HasElement(reference)) throw new ArgumentException("Unknown element ref.");
+        return reference[..separator];
+    }
+    public void ValidateReference(string reference, string? handle = null)
+    {
+        if (handle != null && WindowForRef(reference) != handle) throw new ArgumentException("Handle/ref ownership mismatch.");
+        var owner = WindowForRef(reference);
+        InputTarget? identity;
+        lock (_gate) identity = _identities.GetValueOrDefault(owner);
+        identity?.EnsureAlive();
+    }
+    public InputTarget InputForRef(string reference)
+    {
+        InputTarget owner;
+        lock (_gate) owner = _identities.TryGetValue(WindowForRef(reference), out var identity) ? identity : throw new InvalidOperationException("Refresh snapshot/find to establish input ownership.");
+        owner.EnsureAlive();
+        // Owned popups can be registered under a main-window ref namespace. Resolve the actual native root.
+        var element = GetElement(reference) ?? throw new InvalidOperationException("Stale element reference.");
+        for (var current = element; current != null; current = current.Parent)
+        {
+            if (current.Properties.ControlType.ValueOrDefault != FlaUI.Core.Definitions.ControlType.Window) continue;
+            var native = current.Properties.NativeWindowHandle.ValueOrDefault;
+            if (native == 0) continue;
+            var root = Win32Desktop.GetAncestor(native, 2);
+            if (Win32Desktop.GetProcessId(root) != owner.ProcessId)
+                throw new InvalidOperationException($"Element native root {root} pid={Win32Desktop.GetProcessId(root)} owner={Win32Desktop.GetAncestor(root, 3)} is outside selected root {owner.Hwnd} pid={owner.ProcessId} owner={Win32Desktop.GetAncestor(owner.Hwnd, 3)}.");
+            return owner with { Hwnd = root };
+        }
+        throw new InvalidOperationException("Element has no verified native root.");
+    }
 
     /// <summary>
     /// Clear all elements for a window (called before new snapshot)
     /// </summary>
     public void ClearWindow(string windowHandle)
+        => BeginSnapshot(windowHandle);
+
+    public long BeginSnapshot(string windowHandle)
     {
-        var prefix = windowHandle + "e";
-        var keysToRemove = _elements.Keys.Where(k => k.StartsWith(prefix)).ToList();
-        foreach (var key in keysToRemove)
+        lock (_gate)
         {
-            _elements.Remove(key);
+            OperationContext.Check();
+            var generation = _generations.GetValueOrDefault(windowHandle) + 1;
+            _generations[windowHandle] = generation;
+            var prefix = windowHandle + "e";
+            var keysToRemove = _elements.Keys.Where(k => k.StartsWith(prefix)).ToList();
+            foreach (var key in keysToRemove)
+            {
+                _elements.Remove(key);
+            }
+            // Never recycle refs: an old snapshot must not silently target a new control.
+            return generation;
         }
-        _windowCounters[windowHandle] = 0;
+    }
+
+    public void CheckGeneration(string windowHandle, long? generation)
+    {
+        lock (_gate)
+        {
+            OperationContext.Check();
+            if (generation != null && _generations.GetValueOrDefault(windowHandle) != generation)
+                throw new OperationCanceledException("Snapshot superseded by a newer observation; refresh refs.");
+        }
     }
 
     /// <summary>
     /// Register an element and return its ref
     /// </summary>
-    public string Register(string windowHandle, AutomationElement element)
+    public string Register(string windowHandle, AutomationElement element, long? generation = null)
     {
-        if (!_windowCounters.ContainsKey(windowHandle))
+        lock (_gate)
         {
-            _windowCounters[windowHandle] = 0;
-        }
+            CheckGeneration(windowHandle, generation);
+            if (!_windowCounters.ContainsKey(windowHandle))
+            {
+                _windowCounters[windowHandle] = 0;
+            }
 
-        var refId = $"{windowHandle}e{++_windowCounters[windowHandle]}";
-        _elements[refId] = element;
-        return refId;
+            var refId = $"{windowHandle}e{++_windowCounters[windowHandle]}";
+            _elements[refId] = element;
+            return refId;
+        }
     }
 
     /// <summary>
@@ -46,7 +117,7 @@ public class ElementRegistry
     /// </summary>
     public AutomationElement? GetElement(string refId)
     {
-        return _elements.TryGetValue(refId, out var element) ? element : null;
+        lock (_gate) return _elements.TryGetValue(refId, out var element) ? element : null;
     }
 
     /// <summary>
@@ -54,7 +125,7 @@ public class ElementRegistry
     /// </summary>
     public bool HasElement(string refId)
     {
-        return _elements.ContainsKey(refId);
+        lock (_gate) return _elements.ContainsKey(refId);
     }
 
     /// <summary>
@@ -64,7 +135,11 @@ public class ElementRegistry
     /// </summary>
     public void SetWindowProcessId(string windowHandle, int processId)
     {
-        _windowProcessIds[windowHandle] = processId;
+        lock (_gate)
+        {
+            OperationContext.Check();
+            _windowProcessIds[windowHandle] = processId;
+        }
     }
 
     /// <summary>
@@ -76,6 +151,6 @@ public class ElementRegistry
         var separator = refId.LastIndexOf('e');
         if (separator <= 0) return 0;
         var windowHandle = refId[..separator];
-        return _windowProcessIds.TryGetValue(windowHandle, out var pid) ? pid : 0;
+        lock (_gate) return _windowProcessIds.TryGetValue(windowHandle, out var pid) ? pid : 0;
     }
 }

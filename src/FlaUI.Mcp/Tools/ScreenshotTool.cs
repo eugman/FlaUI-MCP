@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Capturing;
 using PlaywrightWindows.Mcp.Core;
 
@@ -25,13 +26,20 @@ public class ScreenshotTool : ToolBase
     public override string Name => "windows_screenshot";
 
     public override string Description => 
-        "Take a screenshot of a window or specific element. Returns the image as base64-encoded PNG.";
+        "Capture a window or element as PNG. Use savePath with includeImage=false to save an artifact without returning image tokens.";
 
     public override object InputSchema => new
     {
         type = "object",
         properties = new
         {
+            frame = new { type = "object", description = "Optional exact source-size assertion and pixel crop; no rescaling.", properties = new
+            {
+                sourceWidth = new { type = "integer", minimum = 1, maximum = 8192 },
+                sourceHeight = new { type = "integer", minimum = 1, maximum = 8192 },
+                x = new { type = "integer", minimum = 0 }, y = new { type = "integer", minimum = 0 },
+                width = new { type = "integer", minimum = 1 }, height = new { type = "integer", minimum = 1 }
+            }, required = new[] { "x", "y", "width", "height" } },
             handle = new
             {
                 type = "string",
@@ -50,7 +58,12 @@ public class ScreenshotTool : ToolBase
             background = new
             {
                 type = "boolean",
-                description = "Use native background window capture for a window handle, falling back to normal capture if unavailable (default: false)"
+                description = "Use native whole-window capture. Window handles retain normal-capture fallback; Window refs require native capture to succeed (no element-crop fallback). Cannot combine with fullScreen."
+            },
+            strictNative = new
+            {
+                type = "boolean",
+                description = "Require native window capture without screen-pixel fallback. Implies background=true. Always required under an app allowlist; use an explicit window handle or Window ref."
             },
             savePath = new
             {
@@ -61,6 +74,11 @@ public class ScreenshotTool : ToolBase
             {
                 type = "boolean",
                 description = "Allow savePath to replace an existing file (default: false)"
+            },
+            includeImage = new
+            {
+                type = "boolean",
+                description = "Return image payload (default true). Set false with savePath for compact artifact-only output."
             }
         }
     };
@@ -71,8 +89,16 @@ public class ScreenshotTool : ToolBase
         var refId = GetStringArgument(arguments, "ref");
         var fullScreen = GetBoolArgument(arguments, "fullScreen", false);
         var background = GetBoolArgument(arguments, "background", false);
+        var strictNative = GetBoolArgument(arguments, "strictNative", false) || _processPolicy.IsRestricted;
+        background |= strictNative;
         var savePath = GetStringArgument(arguments, "savePath");
         var overwrite = GetBoolArgument(arguments, "overwrite", false);
+        var includeImage = GetBoolArgument(arguments, "includeImage", true);
+        var frame = arguments is { } a && a.TryGetProperty("frame", out var f) && f.ValueKind != JsonValueKind.Null
+            ? f.Deserialize<CaptureFrame>() : null;
+        frame?.Validate();
+        if (!includeImage && string.IsNullOrWhiteSpace(savePath))
+            return Task.FromResult(ErrorResult("includeImage=false requires savePath"));
 
         if (!TryNormalizeSavePath(savePath, overwrite, out var normalizedSavePath, out var pathError))
         {
@@ -81,11 +107,12 @@ public class ScreenshotTool : ToolBase
 
         try
         {
+            OperationContext.Check();
             CaptureImage capture;
 
-            if (background && (fullScreen || !string.IsNullOrEmpty(refId) || string.IsNullOrEmpty(handle)))
+            if (background && (fullScreen || (string.IsNullOrEmpty(refId) && string.IsNullOrEmpty(handle))))
             {
-                return Task.FromResult(ErrorResult("background capture requires a window handle and cannot be combined with ref or fullScreen"));
+                return Task.FromResult(ErrorResult("background capture requires a window handle or Window ref and cannot be combined with fullScreen"));
             }
 
             if (fullScreen)
@@ -102,6 +129,8 @@ public class ScreenshotTool : ToolBase
             }
             else if (!string.IsNullOrEmpty(refId))
             {
+                if (!_processPolicy.IsProcessAllowed(_elementRegistry.GetProcessIdForRef(refId)))
+                    return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Screenshot target")));
                 var element = _elementRegistry.GetElement(refId);
                 if (element == null)
                 {
@@ -119,15 +148,27 @@ public class ScreenshotTool : ToolBase
                         " For screenshots, use a window handle instead of a ref."));
                 }
 
+                if (background)
+                {
+                    if (element.ControlType != FlaUI.Core.Definitions.ControlType.Window)
+                        return Task.FromResult(ErrorResult("background ref capture requires a Window element"));
+                    if (!NativeWindowCapture.TryCaptureWindow(element.AsWindow(), out var image, out var reason))
+                        return Task.FromResult(ErrorResult($"Native Window ref capture failed: {reason}"));
+                    return Task.FromResult(BuildScreenshotResult(image, normalizedSavePath, overwrite, includeImage, frame));
+                }
                 capture = Capture.Element(element);
             }
             else if (!string.IsNullOrEmpty(handle))
             {
+                if (!_processPolicy.IsProcessAllowed(_sessionManager.GetWindowProcessId(handle)))
+                    return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Screenshot target")));
                 // While the app's UIA provider is blocked (pending pattern call, e.g. an
                 // open modal dialog), fall back to a pure Win32 capture of the window
                 // bounds so screenshots keep working.
                 if (_invokeTracker.TryGetPending(_sessionManager.GetWindowProcessId(handle), out _))
                 {
+                    if (strictNative)
+                        return Task.FromResult(ErrorResult("Native capture is unavailable while this provider is blocked. Screen-pixel fallback is disabled; no screenshot was taken."));
                     var hwnd = _sessionManager.GetWindowHwnd(handle);
                     var bounds = hwnd != 0 ? Win32Desktop.GetWindowBounds(hwnd) : null;
                     if (bounds == null)
@@ -147,9 +188,12 @@ public class ScreenshotTool : ToolBase
                         return Task.FromResult(ErrorResult($"Window not found: {handle}"));
                     }
 
-                    if (background && NativeWindowCapture.TryCaptureWindow(window, out var backgroundImage, out _))
+                    if (background)
                     {
-                        return Task.FromResult(BuildScreenshotResult(backgroundImage, normalizedSavePath, overwrite));
+                        if (NativeWindowCapture.TryCaptureWindow(window, out var backgroundImage, out var reason))
+                            return Task.FromResult(BuildScreenshotResult(backgroundImage, normalizedSavePath, overwrite, includeImage, frame));
+                        if (strictNative)
+                            return Task.FromResult(ErrorResult($"Native capture failed: {reason}. Screen-pixel fallback is disabled; no screenshot was taken."));
                     }
 
                     capture = Capture.Element(window);
@@ -200,7 +244,7 @@ public class ScreenshotTool : ToolBase
                 imageData = stream.ToArray();
             }
 
-            return Task.FromResult(BuildScreenshotResult(imageData, normalizedSavePath, overwrite));
+            return Task.FromResult(BuildScreenshotResult(imageData, normalizedSavePath, overwrite, includeImage, frame));
         }
         catch (Exception ex)
         {
@@ -257,8 +301,11 @@ public class ScreenshotTool : ToolBase
         return true;
     }
 
-    private static McpToolResult BuildScreenshotResult(byte[] imageData, string? savePath, bool overwrite)
+    internal static McpToolResult BuildScreenshotResult(byte[] imageData, string? savePath, bool overwrite, bool includeImage, CaptureFrame? frame = null)
     {
+        OperationContext.Check();
+        if (frame != null) imageData = frame.Apply(imageData);
+        OperationContext.Check();
         if (string.IsNullOrEmpty(savePath))
         {
             return ImageResult(imageData, "image/png");
@@ -275,7 +322,9 @@ public class ScreenshotTool : ToolBase
             var tempPath = Path.Combine(directory ?? Directory.GetCurrentDirectory(), $"{Path.GetFileName(savePath)}.{Guid.NewGuid():N}.tmp");
             try
             {
+                OperationContext.Check();
                 File.WriteAllBytes(tempPath, imageData);
+                OperationContext.Check();
                 File.Move(tempPath, savePath, overwrite);
             }
             finally
@@ -291,6 +340,9 @@ public class ScreenshotTool : ToolBase
             return ErrorResult($"Failed to save screenshot to {savePath}: {ex.Message}");
         }
 
+        if (!includeImage) return frame == null
+            ? TextResult(JsonSerializer.Serialize(new { path = savePath, bytes = imageData.Length }))
+            : TextResult(JsonSerializer.Serialize(new { path = savePath, bytes = imageData.Length, frame }));
         return new McpToolResult
         {
             Content = new List<McpContent>

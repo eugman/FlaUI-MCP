@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "recipe": "csharp-preview-page",
+  "checkpoint": "script-preview-expanded-diff",
+  "panels": [
+    {
+      "checkpoint": "csharp-preview-toolbar-context",
+      "label": "1. Run with preview — the magnifier/play button above the script",
+      "expectedWidth": 1938, "expectedHeight": 1158,
+      "x": 8, "y": 64, "width": 1010, "height": 104
+    },
+    {
+      "checkpoint": "csharp-preview-diff-component",
+      "label": "2. Inspect the changes, then choose OK or Revert",
+      "expectedWidth": 1010, "expectedHeight": 743,
+      "x": 0, "y": 0, "width": 1010, "height": 743
+    }
+  ]
+}

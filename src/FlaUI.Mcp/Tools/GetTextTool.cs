@@ -54,7 +54,7 @@ public class GetTextTool : ToolBase
         // Fail fast if this app's UIA provider is blocked by a pending pattern call
         if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
         {
-            return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)));
+                    return Task.FromResult(BlockedResult(pending));
         }
 
         try

@@ -113,14 +113,22 @@ Or using `dotnet run`:
 | `windows_close` | Close a window |
 | `windows_batch` | Execute multiple actions in one call |
 
-`windows_screenshot` supports an optional `background: true` argument when a
-window `handle` is provided. This uses native background capture when available
-and falls back to the normal screenshot path if Windows returns a blank frame.
+`windows_screenshot` supports `background: true` with a window `handle` or Window
+`ref`. Unrestricted handle captures retain screen-pixel fallback. Window refs and
+`strictNative: true` require native capture to succeed. An app allowlist always
+requires strict native capture and an explicit window target, preventing screen
+captures from including another app covering the target.
 It can also save screenshots with `savePath`, which must be an absolute local
 `.png` path. Existing files are not replaced unless `overwrite: true` is set.
 
 Tool calls have a 30-second timeout so a blocked UI Automation provider or modal
 dialog returns an actionable error instead of hanging the MCP server forever.
+
+`windows_snapshot` accepts `maxNodes` (default 3000) and `maxCharacters`
+(default 120000). Depth, traversal/output limits and unreadable child collections
+produce a partial-snapshot notice. Missing controls in partial observations are
+not proven absent; use a scoped `windows_find` query. These client-side budgets
+do not interrupt native provider calls already in progress.
 
 ### Keeping the Screen Awake
 
@@ -243,9 +251,13 @@ Replace an existing screenshot file explicitly:
 - Keyboard input is focus-dependent. When you use `windows_send_keys`, the tool
   focuses the supplied `ref` first when possible, but Windows still sends keys to
   the active keyboard focus.
-- `windows_screenshot` `background: true` is only valid with a window `handle`.
-  If native background capture returns a blank frame, FlaUI-MCP falls back to the
-  normal capture path.
+- `windows_screenshot` native capture does not prove that an application painted
+  meaningful content. Inspect images before treating them as documentation-ready.
+- `windows_launch` preserves individual arguments and only automatically attaches
+  to a unique window in the launched process. Brokered/single-instance launches
+  may require explicit attachment; inspect open windows rather than relaunching.
+- `windows_focus` reports whether foreground activation was observed. `windows_close`
+  reports a close request; save prompts may keep the window open and registered.
 - `savePath` accepts absolute local `.png` paths only. UNC paths, device paths,
   non-PNG extensions, and existing files without `overwrite: true` are rejected.
 - Desktop integration tests require an interactive Windows session because they
@@ -292,9 +304,29 @@ FlaUI-MCP handles this instead of hanging:
 
 - `windows_click` runs the pattern call on a background thread and watches the app's top-level windows via non-blocking Win32 APIs. If a modal appears, the tool returns immediately with the dialog's title.
 - While the call is pending, UIA-based tools targeting that app (`windows_snapshot`, `windows_get_text`, ref-based typing/clicking) **fail fast** with guidance instead of timing out.
-- Tools that don't need UIA keep working throughout: `windows_screenshot`, `windows_send_keys` / `windows_type` *without a ref* (pure keyboard input), `windows_list_windows`, `windows_focus`, and `windows_close`.
+- Native-handle keyboard input, window listing, focus and close remain available.
+  Screenshot fallback while a provider is blocked is available only without strict
+  native mode or an app allowlist; otherwise capture fails rather than exposing
+  unrelated screen pixels.
 
 Typical flow: click a button → "modal dialog opened" → screenshot to see it → send keys (e.g. `Enter` or `Tab`+`Enter`) to dismiss it → snapshot works again.
+
+### Batch outcome handling
+
+`windows_batch` retains numbered text and its legacy top-level error behavior.
+Its additive `structuredContent.steps` reports each attempted step's error and
+provider outcome. A pending provider action always stops the batch, including
+with `stopOnError:false`; inspect its operation ID and application state before
+sending any dependent input. Do not replay the pending action. Ordinary errors
+still follow `stopOnError`, and aggregate `structuredContent.dispatch` reports
+`failed` when any attempted step failed.
+
+## Tabular Editor 3 automation
+
+The separate [TE3 screenshot runner](automation/README.md) uses typed C# recipes.
+Generic MCP clients use `windows_find`, input and capture tools directly; the
+server has no TE3 profile interpreter. See the [locator map](automation/UI-MAP.md)
+and current verification status. Live tests require a desktop handoff.
 
 ## Building from Source
 

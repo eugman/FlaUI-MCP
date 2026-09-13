@@ -5,14 +5,9 @@ using PlaywrightWindows.Mcp.Tools;
 DpiUtility.EnablePerMonitorV2();
 
 // Optional app allowlist: when FLAUI_MCP_ALLOWED_APPS is set (semicolon- or
-// comma-separated process names, e.g. "TabularEditor3;notepad"), only those
+// comma-separated process names, e.g. "notepad;calc"), only those
 // apps can be launched, listed, snapshotted, screenshotted or receive input.
 var processPolicy = ProcessPolicy.FromEnvironment();
-
-// Create shared services
-var sessionManager = new SessionManager(processPolicy);
-var elementRegistry = new ElementRegistry();
-var invokeTracker = new PendingInvokeTracker();
 
 // While tools are actively being called, hold a Windows power availability
 // request (display required) so the screen does not turn off and the lock
@@ -30,20 +25,13 @@ using var keepAwake = keepAwakeSeconds > 0
         "FlaUI-MCP is driving Windows UI automation")
     : null;
 
-// Register all tools
-var toolRegistry = new ToolRegistry(onToolActivity: keepAwake != null ? keepAwake.Poke : null);
-toolRegistry.RegisterTool(new LaunchTool(sessionManager));
-toolRegistry.RegisterTool(new SnapshotTool(sessionManager, elementRegistry, invokeTracker));
-toolRegistry.RegisterTool(new ClickTool(elementRegistry, invokeTracker));
-toolRegistry.RegisterTool(new TypeTool(elementRegistry, invokeTracker, processPolicy));
-toolRegistry.RegisterTool(new FillTool(elementRegistry, invokeTracker));
-toolRegistry.RegisterTool(new GetTextTool(elementRegistry, invokeTracker));
-toolRegistry.RegisterTool(new SendKeysTool(elementRegistry, invokeTracker, processPolicy));
-toolRegistry.RegisterTool(new ScreenshotTool(sessionManager, elementRegistry, invokeTracker, processPolicy));
-toolRegistry.RegisterTool(new ListWindowsTool(sessionManager));
-toolRegistry.RegisterTool(new FocusWindowTool(sessionManager));
-toolRegistry.RegisterTool(new CloseWindowTool(sessionManager));
-toolRegistry.RegisterTool(new BatchTool(sessionManager, elementRegistry, invokeTracker, processPolicy));
+// MCP exposes the shared runner tools plus explicit window-management extensions.
+if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FLAUI_MCP_PROFILE")))
+    Console.Error.WriteLine("FLAUI_MCP_PROFILE is no longer supported. Use generic MCP tools or the separate typed automation runner.");
+using var host = new AutomationHost(processPolicy,
+    includeDesktopTools: true, onToolActivity: keepAwake != null ? keepAwake.Poke : null);
+var sessionManager = host.Sessions;
+var toolRegistry = host.Tools;
 
 // Create and run MCP server
 var server = new McpServer(toolRegistry);
@@ -55,11 +43,4 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-try
-{
-    await server.RunAsync(cts.Token);
-}
-finally
-{
-    sessionManager.Dispose();
-}
+await server.RunAsync(cts.Token);
