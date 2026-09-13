@@ -8,6 +8,26 @@ namespace FlaUI.Mcp.Tests;
 
 public sealed class SearchAndCancellationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DepthLimitIsTruncatedOnlyWhenChildrenAreOmitted(bool hasChildren)
+    {
+        var result = BoundedSearch.Find(new[] { 1 }, _ => hasChildren ? new[] { 2 } : [],
+            _ => true, _ => null, new SearchBudget(10, TimeSpan.FromSeconds(1)), 0, 10);
+        Assert.Single(result.Matches);
+        Assert.Equal(hasChildren, result.Truncated);
+    }
+
+    [Fact]
+    public void ReadingExpirationHasNoCancellationSideEffect()
+    {
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        operation.Stop.Cancel();
+        try { Assert.False(new SearchBudget(10, TimeSpan.FromSeconds(1), () => TimeSpan.Zero).Expired); }
+        finally { OperationContext.Current.Value = null; }
+    }
     [Fact] public async Task RegistryTimeoutPreventsLateMutationAfterProviderReturns()
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

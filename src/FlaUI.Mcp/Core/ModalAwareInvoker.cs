@@ -103,7 +103,7 @@ public static class ModalAwareInvoker
             if (processId != 0)
             {
                 var modalTitle = DetectModal(windowsBefore, windowEnumerator(processId));
-                if (modalTitle != null && (!modalTitle.StartsWith("(") || DateTime.UtcNow >= deadline))
+                if (modalTitle != null)
                 {
                     info.ModalTitle = modalTitle;
                     return new PatternCallResult(PatternCallOutcome.ModalDetected, modalTitle, info.OperationId);

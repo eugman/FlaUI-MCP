@@ -7,7 +7,7 @@ public sealed class SearchBudget(int maxNodes, TimeSpan duration, Func<TimeSpan>
     private readonly Stopwatch watch = Stopwatch.StartNew();
     public int Visited { get; private set; }
     public int Remaining => Math.Max(0, maxNodes - Visited);
-    public bool Expired { get { OperationContext.Check(); return (elapsed?.Invoke() ?? watch.Elapsed) >= duration; } }
+    public bool Expired => (elapsed?.Invoke() ?? watch.Elapsed) >= duration;
     public bool Available => Remaining > 0 && !Expired;
     public void Visit() => Visited++;
 }
@@ -27,11 +27,13 @@ public static class BoundedSearch
         var unreadable = 0;
         foreach (var root in roots)
         {
+            OperationContext.Check();
             if (!budget.Available || queue.Count >= budget.Remaining) { truncated = true; break; }
             queue.Enqueue((root, 0));
         }
         while (queue.Count > 0)
         {
+            OperationContext.Check();
             if (!budget.Available) { truncated = true; break; }
             var item = queue.Dequeue();
             budget.Visit();
@@ -44,11 +46,13 @@ public static class BoundedSearch
                     result.Add(item);
                     if (result.Count >= resultLimit) { truncated = true; break; }
                 }
-                // Do not enter an uninterruptible provider call outside the requested depth.
-                if (item.Depth >= depthLimit) { truncated = true; continue; }
+                // A leaf at the depth limit is complete. Probe for a child without
+                // descending so truncation represents genuinely omitted content.
+                OperationContext.Check();
                 using var iterator = children(item.Node).GetEnumerator();
                 while (true)
                 {
+                    OperationContext.Check();
                     if (!budget.Available) { truncated = true; break; }
                     if (!iterator.MoveNext()) break;
                     if (item.Depth >= depthLimit || queue.Count >= budget.Remaining) { truncated = true; break; }

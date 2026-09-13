@@ -103,12 +103,14 @@ public class ModalAwareInvokerTests
 
         try
         {
+            var elapsed = Stopwatch.StartNew();
             var result = ModalAwareInvoker.Execute(
                 TestProcessId, "Invoke on 'Open Modal'", () => release.Wait(), tracker,
                 gracePeriod: TimeSpan.FromSeconds(10),
                 windowEnumerator: Enumerate);
 
             Assert.Equal(PatternCallOutcome.ModalDetected, result.Outcome);
+            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(5), "Disabled-owner detection waited for the grace period");
         }
         finally
         {

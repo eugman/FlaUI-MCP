@@ -32,6 +32,7 @@ public class ClickTool : ToolBase
         type = "object",
         properties = new
         {
+            handle = new { type = "string", description = "Optional window handle; when supplied, the ref must belong to this window." },
             physical = new { type = "boolean", description = "Use guarded physical selection, including exact native hit-testing." },
             @ref = new
             {
