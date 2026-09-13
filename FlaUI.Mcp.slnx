@@ -2,7 +2,6 @@
   <Configurations>
     <BuildType Name="Debug" />
     <BuildType Name="Release" />
-    <BuildType Name="Foundation" />
   </Configurations>
   <Folder Name="/src/">
     <Project Path="src/FlaUI.Mcp/FlaUI.Mcp.csproj" />

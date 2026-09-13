@@ -28,8 +28,8 @@ destination. It still launches TE3 and temporarily normalizes/restores preferenc
 so desktop permission is required. `validate ... --no-focus` only checks local inputs.
 
 ```powershell
-dotnet build src/FlaUI.Automation/FlaUI.Automation.csproj -c Foundation
-$runner = "./src/FlaUI.Automation/bin/Foundation/net8.0-windows/FlaUI.Automation.exe"
+dotnet build src/FlaUI.Automation/FlaUI.Automation.csproj -c Debug
+$runner = "./src/FlaUI.Automation/bin/Debug/net8.0-windows/FlaUI.Automation.exe"
 & $runner list automation/local.config.json
 & $runner validate automation/local.config.json
 ```
@@ -82,9 +82,9 @@ and `fixture-status|fixture-reset|fixture-remove CONFIG`.
 ## Test and migration
 
 ```powershell
-dotnet test tests/FlaUI.Mcp.Tests/FlaUI.Mcp.Tests.csproj -c Foundation
-dotnet test tests/FlaUI.Automation.Tests/FlaUI.Automation.Tests.csproj -c Foundation
-dotnet build tests/FlaUI.Mcp.IntegrationTests/FlaUI.Mcp.IntegrationTests.csproj -c Foundation
+dotnet test tests/FlaUI.Mcp.Tests/FlaUI.Mcp.Tests.csproj -c Debug
+dotnet test tests/FlaUI.Automation.Tests/FlaUI.Automation.Tests.csproj -c Debug
+dotnet build tests/FlaUI.Mcp.IntegrationTests/FlaUI.Mcp.IntegrationTests.csproj -c Debug
 ```
 
 The first two suites are no-focus. The integration suite launches apps: build

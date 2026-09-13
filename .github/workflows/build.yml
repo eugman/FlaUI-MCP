@@ -19,9 +19,9 @@ jobs:
       with:
         dotnet-version: 8.0.x
     - name: MCP unit tests (no desktop)
-      run: dotnet test tests/FlaUI.Mcp.Tests/FlaUI.Mcp.Tests.csproj --configuration Foundation
+      run: dotnet test tests/FlaUI.Mcp.Tests/FlaUI.Mcp.Tests.csproj --configuration Debug
     - name: Runner unit tests (no desktop)
-      run: dotnet test tests/FlaUI.Automation.Tests/FlaUI.Automation.Tests.csproj --configuration Foundation
+      run: dotnet test tests/FlaUI.Automation.Tests/FlaUI.Automation.Tests.csproj --configuration Debug
 
   build:
     runs-on: windows-latest

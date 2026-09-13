@@ -36,7 +36,7 @@ Auto-rollback has an original-sized, outlined candidate; it is not approved/prom
 To reproduce the language-choice candidate (not approved for replacement):
 
 ```powershell
-./src/FlaUI.Automation/bin/Foundation/net8.0-windows/FlaUI.Automation.exe run automation/offline.config.json --scenario preferences-language-choices
+./src/FlaUI.Automation/bin/Debug/net8.0-windows/FlaUI.Automation.exe run automation/offline.config.json --scenario preferences-language-choices
 ```
 
 Targets `content/assets/images/user-interface/chaning-language-preferences.png`
@@ -66,7 +66,7 @@ the server-backed recipes and new infrastructure remain deferred.
 To repeat the checked-tree recipe:
 
 ```powershell
-./src/FlaUI.Automation/bin/Foundation/net8.0-windows/FlaUI.Automation.exe run automation/offline.config.json --scenario preferences-save-to-folder --repeat 2
+./src/FlaUI.Automation/bin/Debug/net8.0-windows/FlaUI.Automation.exe run automation/offline.config.json --scenario preferences-save-to-folder --repeat 2
 ```
 
 For each run, inspect the final manifest for success, settingsRestored, no pending
@@ -88,7 +88,7 @@ content requirements in screenshot-backlog.json instead of substituting generic 
 File Formats keeps the raw image and adds the original-style arrows separately:
 
 ```powershell
-./src/FlaUI.Automation/bin/Foundation/net8.0-windows/FlaUI.Automation.exe compose RUN/manifest.json automation/file-formats.composition.json RUN/file-formats-annotated.png
+./src/FlaUI.Automation/bin/Debug/net8.0-windows/FlaUI.Automation.exe compose RUN/manifest.json automation/file-formats.composition.json RUN/file-formats-annotated.png
 ```
 
 Use a run with the annotation-anchor checks; older raw runs did not verify them.
