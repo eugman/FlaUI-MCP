@@ -208,6 +208,8 @@ public class SendKeysTool : ToolBase
             // later step must not allow an earlier shortcut (such as Save) to run.
             var prepared = PrepareSequence(hasChord ? new[] { chord! } : keyList!);
             var handle = GetStringArgument(arguments, "handle");
+            if (handle != null && _sessions == null)
+                return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
             if (refId != null && handle != null && _elementRegistry.WindowForRef(refId) != handle) throw new ArgumentException("Handle/ref mismatch.");
             if (!string.IsNullOrWhiteSpace(refId))
             {

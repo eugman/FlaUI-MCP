@@ -114,10 +114,10 @@ Or using `dotnet run`:
 | `windows_batch` | Execute multiple actions in one call |
 
 `windows_screenshot` supports `background: true` with a window `handle` or Window
-`ref`. Unrestricted handle captures retain screen-pixel fallback. Window refs and
-`strictNative: true` require native capture to succeed. An app allowlist always
-requires strict native capture and an explicit window target, preventing screen
-captures from including another app covering the target.
+`ref`. Handle captures retain screen-pixel fallback. Background Window refs and
+opt-in `strictNative: true` require native capture to succeed. An app allowlist
+restricts target apps, not overlapping screen pixels: normal captures can include
+another app covering the target. Use strict native capture when that is unacceptable.
 It can also save screenshots with `savePath`, which must be an absolute local
 `.png` path. Existing files are not replaced unless `overwrite: true` is set.
 
@@ -306,7 +306,7 @@ FlaUI-MCP handles this instead of hanging:
 - While the call is pending, UIA-based tools targeting that app (`windows_snapshot`, `windows_get_text`, ref-based typing/clicking) **fail fast** with guidance instead of timing out.
 - Native-handle keyboard input, window listing, focus and close remain available.
   Screenshot fallback while a provider is blocked is available only without strict
-  native mode or an app allowlist; otherwise capture fails rather than exposing
+  native mode; otherwise capture fails rather than exposing
   unrelated screen pixels.
 
 Typical flow: click a button → "modal dialog opened" → screenshot to see it → send keys (e.g. `Enter` or `Tab`+`Enter`) to dismiss it → snapshot works again.

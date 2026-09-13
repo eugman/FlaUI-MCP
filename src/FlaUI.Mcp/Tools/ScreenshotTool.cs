@@ -63,7 +63,7 @@ public class ScreenshotTool : ToolBase
             strictNative = new
             {
                 type = "boolean",
-                description = "Require native window capture without screen-pixel fallback. Implies background=true. Always required under an app allowlist; use an explicit window handle or Window ref."
+                description = "Opt in to native window capture without screen-pixel fallback. Implies background=true; use an explicit window handle or Window ref."
             },
             savePath = new
             {
@@ -89,7 +89,7 @@ public class ScreenshotTool : ToolBase
         var refId = GetStringArgument(arguments, "ref");
         var fullScreen = GetBoolArgument(arguments, "fullScreen", false);
         var background = GetBoolArgument(arguments, "background", false);
-        var strictNative = GetBoolArgument(arguments, "strictNative", false) || _processPolicy.IsRestricted;
+        var strictNative = GetBoolArgument(arguments, "strictNative", false);
         background |= strictNative;
         var savePath = GetStringArgument(arguments, "savePath");
         var overwrite = GetBoolArgument(arguments, "overwrite", false);

@@ -69,6 +69,8 @@ public class TypeTool : ToolBase
         {
             OperationContext.Check();
             var handle = GetStringArgument(arguments, "handle");
+            if (handle != null && _sessions == null)
+                return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
             if (refId != null && handle != null && _elementRegistry.WindowForRef(refId) != handle) throw new ArgumentException("Handle/ref mismatch.");
             // Focus element if ref provided
             if (!string.IsNullOrEmpty(refId))

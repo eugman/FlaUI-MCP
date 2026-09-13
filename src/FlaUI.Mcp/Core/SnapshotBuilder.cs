@@ -31,6 +31,7 @@ public class SnapshotBuilder
             var processId = Read(() => root.Properties.ProcessId.ValueOrDefault);
             if (processId != 0)
             {
+                _elementRegistry.SetWindowProcessId(windowHandle, processId);
                 _elementRegistry.SetWindowIdentity(windowHandle, processId, Read(() => root.Properties.NativeWindowHandle.ValueOrDefault), generation);
             }
         }

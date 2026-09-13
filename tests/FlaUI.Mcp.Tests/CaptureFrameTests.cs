@@ -32,7 +32,7 @@ public sealed class CaptureFrameTests
 
     [Theory]
     [InlineData(false, true)]
-    [InlineData(true, false)]
+    [InlineData(true, true)]
     public async Task StrictCaptureRequiresExplicitWindowBeforeDesktopAccess(bool restricted, bool strict)
     {
         var tool = new ScreenshotTool(null!, new ElementRegistry(),

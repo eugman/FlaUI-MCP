@@ -7,6 +7,14 @@ namespace FlaUI.Mcp.Tests;
 
 public sealed class KeySequenceValidationTests
 {
+    [Fact]
+    public async Task HandleWithoutSessionsReturnsActionableError()
+    {
+        var tool = new SendKeysTool(new ElementRegistry());
+        var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { handle = "w1", chord = "Enter" }));
+        Assert.True(result.IsError);
+        Assert.Contains("requires a session manager", result.Content[0].Text);
+    }
     [Theory]
     [InlineData("unsupported", "Unsupported key")]
     [InlineData("", "No keys were parsed")]
