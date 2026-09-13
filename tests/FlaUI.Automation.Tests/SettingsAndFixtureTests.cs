@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using Xunit;
 
@@ -29,5 +28,19 @@ public sealed class SettingsAndFixtureTests : IDisposable
         File.WriteAllText(Path.Combine(root, "backup", "UiPreferences.json"), "tampered");
         Assert.ThrowsAny<Exception>(lease.Restore);
         Assert.Equal("{}", File.ReadAllText(Path.Combine(root, "UiPreferences.json")));
+    }
+    [Fact] public void RestorePreservesPreExistingRecentFiles()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var recentFiles = Path.Combine(root, "RecentFiles.json");
+        File.WriteAllText(recentFiles, "[\"user-model.bim\"]\r\n");
+        var original = File.ReadAllBytes(recentFiles);
+        var lease = new SettingsLease(root, Path.Combine(root, "backup"));
+        lease.Normalize(true);
+        File.WriteAllText(recentFiles, "[\"fla_test.bim\"]");
+
+        lease.Restore();
+
+        Assert.Equal(original, File.ReadAllBytes(recentFiles));
     }
 }

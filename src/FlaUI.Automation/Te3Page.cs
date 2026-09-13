@@ -58,7 +58,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     public static Target PreferencesTarget() => new(new(Name: "Preferences", ControlType: "Window", RootOnly: true), null, true);
     public async Task OpenPreferences()
     {
-        await Click(new(new(Name: "Tools", ControlType: "MenuItem"), new(Name: "Main menu", ControlType: "MenuBar")), physical: false);
+        await Click(new(new(Name: "Tools", ControlType: "MenuItem"), new(Name: "Main menu", ControlType: "MenuBar")));
         var command = await Resolve(new(new(Name: "Preferences...", ControlType: "Button"), null, true));
         var popup = await MenuPopup(command);
         var owner = host.Sessions.GetInputTarget(handle);
@@ -661,7 +661,8 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
             if (Win32Desktop.WindowAt(menuBarPoint) != ownerIdentity.Hwnd) throw new InvalidOperationException("Model menu is obscured");
             input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(menuBarPoint));
         }
-        await Click(modelMenu, physical: false);
+        // Invoke can remain pending for TE3 menu popups; use the guarded input path.
+        await Click(modelMenu);
         await Task.Delay(500);
         var discovery = await Task.Run(() => Win32Desktop.GetTopLevelWindows(ownerIdentity.ProcessId)
             .Where(w => w.Hwnd != ownerIdentity.Hwnd && !w.IsCloaked).Select(w => new

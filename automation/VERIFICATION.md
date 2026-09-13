@@ -6,10 +6,17 @@ Current simplification branch: unit tests and builds do not establish live UI be
 |---|---|
 | `dotnet build FlaUI.Mcp.slnx` | Passed, zero warnings/errors |
 | MCP unit tests, Debug | 117 passed |
-| Runner unit tests, Debug | 72 passed |
-| Integration tests | Build passed; not run for this refactor |
+| Runner unit tests, Debug | 61 passed |
+| Integration tests | 30 passed live, 2026-09-13; see artifacts/live-refresh-96aa6c2/integration.trx |
 | Screenshot approval/promotion | None approved or promoted |
 | Original docs checkout | Untouched |
+
+Live rerun on TE3 3.26.3: all 15 default offline recipes plus language choices
+and Preferences mapping passed with settings restored (17/17, 2026-09-13).
+The menu run exposed a pending Invoke result; the runner now opens Model and
+Tools menus using guarded physical clicks. No generic modal guard was weakened.
+Current main-window display observation is 120 DPI (125%). This is not a
+verification of other scaling variants or approval of screenshot replacements.
 
 ## Historical screenshot verification
 

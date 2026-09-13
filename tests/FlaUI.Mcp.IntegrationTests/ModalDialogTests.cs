@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using PlaywrightWindows.Mcp.Core;
 using PlaywrightWindows.Mcp.Tools;
 using Xunit.Abstractions;
@@ -73,6 +74,20 @@ public class ModalDialogTests
                 input.Verify();
                 Assert.Equal(modal.Hwnd, Win32Desktop.GetForegroundWindow());
             }
+
+            // An allowlist must not force strict native capture or block the modal's
+            // own handle merely because an Invoke in its process is still pending.
+            using var process = Process.GetProcessById(processId);
+            var screenshots = new ScreenshotTool(_fixture.Session, _fixture.Elements,
+                tracker, new ProcessPolicy([process.ProcessName]));
+            var modalHandle = _fixture.Session.RegisterNativeWindow(modal.Hwnd, processId);
+            var capture = await screenshots.ExecuteAsync(JsonSerializer.SerializeToElement(
+                new { handle = modalHandle, background = true }));
+            Assert.False(capture.IsError == true, string.Join("; ", capture.Content.Select(c => c.Text)));
+            var image = Assert.Single(capture.Content.Where(c => c.Type == "image"));
+            using var pixels = new MemoryStream(Convert.FromBase64String(image.Data!));
+            using var bitmap = new System.Drawing.Bitmap(pixels);
+            Assert.True(bitmap.Width > 0 && bitmap.Height > 0);
         }
         finally
         {
