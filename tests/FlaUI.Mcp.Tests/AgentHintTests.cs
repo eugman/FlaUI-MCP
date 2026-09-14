@@ -17,6 +17,10 @@ public sealed class AgentHintTests
         => Assert.Equal(expected, ClickTool.PrefersPhysical(type, name));
 
     [Fact]
+    public void FocusDescriptionSaysUnknownWithoutAWindow()
+        => Assert.Equal("focused element (control unknown)", Win32Desktop.DescribeFocus(0));
+
+    [Fact]
     public void FindHintsOnlyWhenAFilteredSearchMatchesNothing()
     {
         var empty = new QueryResult([], 10, false, 0);

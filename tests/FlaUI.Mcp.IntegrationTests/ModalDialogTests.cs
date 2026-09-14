@@ -155,7 +155,10 @@ public class ModalDialogTests
             if (dialog != null)
             {
                 var handle = _fixture.Session.RegisterNativeWindow(dialog.Hwnd, processId);
-                Assert.Contains("Sent keys", await _fixture.CallTool(sendKeysTool, new { handle, chord = "Enter" }));
+                var dismissed = await _fixture.CallTool(sendKeysTool, new { handle, chord = "Enter" });
+                _output.WriteLine($"Dismiss result: {dismissed}");
+                // Keys sent without a ref name the Win32 control that received them.
+                Assert.Contains("in window \"Test Modal Dialog\"", dismissed);
                 await Task.Delay(250);
             }
         }

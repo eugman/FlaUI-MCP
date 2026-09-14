@@ -26,7 +26,7 @@ public class TypeTool : ToolBase
     public override string Name => "windows_type";
 
     public override string Description => 
-        "Type text into an element. The element will be focused first. " +
+        "Type text into an element. The element will be focused first. Without a ref, the result names the control that had focus. " +
         "Use this for typing without clearing existing content. Use windows_fill to replace content.";
 
     public override object InputSchema => new
@@ -100,6 +100,8 @@ public class TypeTool : ToolBase
 
             // Type the text
             using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId), verifyFocus);
+            // Name the receiver before typing: text typed blind into a focused Cancel button closes the dialog.
+            var target = string.IsNullOrEmpty(refId) ? Win32Desktop.DescribeFocus(Win32Desktop.GetForegroundWindow()) : refId;
             input.Type(text);
 
             if (submit)
@@ -107,7 +109,6 @@ public class TypeTool : ToolBase
                 input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.ENTER));
             }
 
-            var target = string.IsNullOrEmpty(refId) ? "focused element" : refId;
             var action = submit ? "Typed and submitted" : "Typed";
             return Task.FromResult(TextResult($"{action} \"{text}\" into {target}"));
         }

@@ -237,6 +237,8 @@ public class SendKeysTool : ToolBase
             }
 
             using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId), verifyFocus);
+            // Name the receiver before sending: keys sent blind can press a focused Cancel button.
+            var targetName = string.IsNullOrWhiteSpace(refId) ? Win32Desktop.DescribeFocus(Win32Desktop.GetForegroundWindow()) : refId;
             foreach (var step in prepared)
             {
                 inputAttempted = true;
@@ -245,7 +247,6 @@ public class SendKeysTool : ToolBase
                 if (!hasChord) Thread.Sleep(30);
             }
 
-            var targetName = string.IsNullOrWhiteSpace(refId) ? "focused element" : refId;
             return Task.FromResult(TextResult(hasChord
                 ? $"Sent keys {prepared[0].Text} to {targetName}"
                 : $"Sent key sequence [{string.Join(", ", prepared.Select(step => step.Text))}] to {targetName}"));
