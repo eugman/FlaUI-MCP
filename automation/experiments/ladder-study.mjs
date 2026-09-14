@@ -6,45 +6,25 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-export const models = [
-  ['luna', 'gpt-5.6-luna', 'low'],
-  ['terra', 'gpt-5.6-terra', 'medium'],
-  ['sol', 'gpt-5.6-sol', 'low']
-];
+
+export const rungs = ['0a', '0b', '1', '2', '3'];
+export const models = ['sonnet', 'opus'];
+export const companionTools = ['te3_inspect', 'te3_navigate', 'te3_capture'];
 export const tasks = {
   formatting: 'Capture Preferences > Text Editors > DAX Editor > Auto Formatting with that section selected, empty search, all section controls (including Use default formatting settings), title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
   object: 'Select the Amount column in the Comparison table, not Sales[Amount]. Verify the table, name and column type through UI evidence. Capture the selected row with visible table context and readable Properties. Leave the object selected.',
-  script: 'Open the supplied .csx through TE3 UI. Verify its source is exactly `"Hello World".Output();` ignoring trailing whitespace, execute only that source, and capture the output dialog title, Hello World text and Close button. Leave the output open. Do not type replacement source, change file associations, or interact with unrelated applications. Stop if an unrelated app chooser appears.'
+  script: 'Open the supplied .csx through TE3 UI. Verify its source is exactly `"Hello World".Output();` ignoring trailing whitespace, execute only that source, and capture the output dialog title, Hello World text and Close button. Leave the output open. Do not type replacement source, change file associations, or interact with unrelated applications. Stop if an unrelated app chooser appears.',
+  'code-actions': 'Capture Preferences > Text Editors > DAX Editor > Code Actions with that section selected, empty search, all section controls, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.'
 };
-export function schedule() {
-  const orders = ['ABDC', 'BCAD', 'CDBA', 'DACB'];
-  const trials = [];
-  let block = 0;
-  for (const task of Object.keys(tasks)) {
-    for (const [label, model, effort] of models) {
-      const order = orders[block++ % orders.length];
-      for (const arm of order) {
-        trials.push({ id: `${label}-${task}-${arm}-01`, model, effort, arm, task, repetition: 1 });
-      }
-    }
-  }
-  return trials;
-}
-export function promptFor(trial, skill, bootstrap, scriptPath, outputPath) {
-  let prompt = `${tasks[trial.task]}\n\nThe owned TE3 processId is {{PID}}. Save the final PNG to ${outputPath}. Preserve model content and preferences. Do not launch or close TE3; the controller owns lifecycle and restoration. You may focus this test instance during the authorized handoff. This is an offline disposable model; no server access is needed.`;
-  if (trial.task === 'script') {
-    prompt += `\nSupplied source: ${scriptPath}. You are authorized to execute this exact read-only output script.`;
-  }
-  prompt += '\n\nUse only the supplied MCP tools and functions orchestration. No shell, web, delegation, other applications, repository or prior trial artifacts. The supplied script may be read only through TE3. Do not load other skills. Stop within 60 dispatched MCP calls or seven minutes. Report failure if unfinished; success requires evidence. Do not save or edit the model.';
-  if (trial.arm !== 'A') prompt += `\n\nApply this frozen generic MCP skill:\n${skill}`;
-  if (trial.arm === 'C' || trial.arm === 'D') prompt += `\n\n${bootstrap}`;
-  return prompt + '\n';
-}
+// Never used to write skill layers; it measures whether guidance generalizes.
+export const holdoutTasks = ['code-actions'];
+
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const write = (file, value) => fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
 const runtimeRecord = file => ({ path: fs.realpathSync(file), sha256: hash(file) });
+
 function expand(value) {
   if (typeof value !== 'string' || !value.trim()) throw new Error('Configuration paths must be nonempty strings');
   const expanded = value.replace(/%([^%]+)%/g, (_, key) => {
@@ -53,46 +33,102 @@ function expand(value) {
   });
   return path.resolve(expanded);
 }
+
+export function promptFor(task, skillText, scriptPath, outputPath) {
+  let prompt = `${tasks[task]}\n\nThe owned TE3 processId is {{PID}}. Save the final PNG to ${outputPath}. Preserve model content and preferences. Do not launch or close TE3; the controller owns lifecycle and restoration. You may focus this test instance. Offline disposable model; no server access.`;
+  if (task === 'script') {
+    prompt += `\nSupplied source: ${scriptPath}. You are authorized to execute this exact read-only output script.`;
+  }
+  prompt += '\n\nUse only the supplied MCP tools. Stop within 60 MCP tool calls or seven minutes. Report failure if unfinished; claim success only for what the final image shows. Do not save or edit the model.';
+  if (skillText) prompt += `\n\nGuidance:\n${skillText}`;
+  return prompt + '\n';
+}
+
+// Mulberry32: a small seeded generator, so the run order is reproducible from the config.
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function schedule({ rung, model, tasks: taskNames, trialsPerTask, seed }) {
+  const trials = [];
+  for (const task of taskNames) {
+    for (let repetition = 1; repetition <= trialsPerTask; repetition++) {
+      const id = `${rung}-${model}-${task}-${String(repetition).padStart(2, '0')}`;
+      trials.push({ id, rung, model, task, repetition, holdout: holdoutTasks.includes(task) });
+    }
+  }
+  const random = seededRandom(seed);
+  for (let index = trials.length - 1; index > 0; index--) {
+    const other = Math.floor(random() * (index + 1));
+    [trials[index], trials[other]] = [trials[other], trials[index]];
+  }
+  return trials;
+}
+
+export function validateConfig(input) {
+  const config = { trialsPerTask: 3, tasks: Object.keys(tasks), genericCommand: ['FlaUI.Mcp.exe', 'mcp'], ...input };
+  if (!rungs.includes(config.rung)) throw new Error(`rung must be one of ${rungs.join(', ')}`);
+  if (!models.includes(config.model)) throw new Error('model must be sonnet or opus');
+  if (!Number.isInteger(config.trialsPerTask) || config.trialsPerTask < 1) throw new Error('trialsPerTask must be a positive integer');
+  if (!Array.isArray(config.tasks) || !config.tasks.length || new Set(config.tasks).size !== config.tasks.length ||
+      config.tasks.some(task => !tasks[task])) {
+    throw new Error('tasks must be a nonempty list of distinct known tasks');
+  }
+  if (!Number.isSafeInteger(config.seed)) throw new Error('seed must be an integer');
+  if (!Array.isArray(config.genericCommand) || !config.genericCommand.length ||
+      config.genericCommand.some(part => typeof part !== 'string' || !part)) {
+    throw new Error('genericCommand must be a nonempty string array');
+  }
+  if (config.rung === '3' && !config.companionBuild) throw new Error('Rung 3 requires companionBuild');
+  if (config.rung !== '3' && config.companionBuild) throw new Error('Companion tools are only for rung 3');
+  const paths = ['genericBuild', 'controller', 'baseline', 'te3', 'te', 'claudeEntry'];
+  if (config.companionBuild) paths.push('companionBuild');
+  if (config.currentBuild) paths.push('currentBuild');
+  for (const key of paths) {
+    config[key] = expand(config[key]);
+    if (!fs.existsSync(config[key])) throw new Error(`Missing ${key}`);
+  }
+  if (!fs.existsSync(path.join(config.genericBuild, config.genericCommand[0]))) {
+    throw new Error(`Missing ${config.genericCommand[0]} in genericBuild`);
+  }
+  if (config.companionBuild && !fs.existsSync(path.join(config.companionBuild, 'FlaUI.Automation.exe'))) {
+    throw new Error('Missing FlaUI.Automation.exe in companionBuild');
+  }
+  return config;
+}
+
 export function usageFrom(events, malformedLines = 0) {
   const unknown = reason => ({ status: 'unknown', reason, usage: null });
   if (malformedLines) return unknown(`${malformedLines} malformed agent event line(s)`);
-  const completed = events.filter(event => event?.type === 'turn.completed');
-  if (completed.length !== 1) return unknown(`Expected one completed turn; observed ${completed.length}`);
-  const usage = completed[0].usage;
-  if (!usage) return unknown('Completed turn has no usage');
-  const counters = ['input_tokens', 'cached_input_tokens', 'output_tokens'];
-  if (!counters.every(key => Number.isSafeInteger(usage[key]) && usage[key] >= 0) ||
-      usage.cached_input_tokens > usage.input_tokens ||
-      !Number.isSafeInteger(usage.input_tokens + usage.output_tokens)) {
+  const results = events.filter(event => event?.type === 'result');
+  if (results.length !== 1) return unknown(`Expected one result event; observed ${results.length}`);
+  const result = results[0];
+  if (!result.usage) return unknown('Result event has no usage');
+  const counters = {
+    input_tokens: result.usage.input_tokens,
+    cache_creation_input_tokens: result.usage.cache_creation_input_tokens ?? 0,
+    cache_read_input_tokens: result.usage.cache_read_input_tokens ?? 0,
+    output_tokens: result.usage.output_tokens
+  };
+  const values = Object.values(counters);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (!values.every(value => Number.isSafeInteger(value) && value >= 0) || !Number.isSafeInteger(total)) {
     return unknown('Invalid token counters');
   }
-  return {
-    status: 'final', reason: null,
-    usage: { ...usage, uncached_input_tokens: usage.input_tokens - usage.cached_input_tokens,
-      total_tokens: usage.input_tokens + usage.output_tokens }
+  const usage = {
+    ...counters, uncached_input_tokens: counters.input_tokens + counters.cache_creation_input_tokens, total_tokens: total
   };
-}
-function codexNativeRuntime(launcher) {
-  const triples = {
-    win32: { x64: 'x86_64-pc-windows-msvc', arm64: 'aarch64-pc-windows-msvc' },
-    darwin: { x64: 'x86_64-apple-darwin', arm64: 'aarch64-apple-darwin' },
-    linux: { x64: 'x86_64-unknown-linux-musl', arm64: 'aarch64-unknown-linux-musl' }
-  };
-  const triple = triples[process.platform]?.[process.arch];
-  if (!triple) throw new Error(`Unsupported Codex runtime platform: ${process.platform}/${process.arch}`);
-  const packageName = `codex-${process.platform}-${process.arch}`;
-  const packageRoot = path.resolve(fs.realpathSync(launcher), '..', '..');
-  const packageRoots = [
-    path.join(packageRoot, 'node_modules', '@openai', packageName),
-    path.resolve(packageRoot, '..', packageName),
-    packageRoot
-  ];
-  const binary = process.platform === 'win32' ? 'codex.exe' : 'codex';
-  for (const root of packageRoots) {
-    const candidate = path.join(root, 'vendor', triple, 'bin', binary);
-    if (fs.existsSync(candidate)) return candidate;
+  for (const key of ['total_cost_usd', 'num_turns', 'is_error', 'session_id']) {
+    if (result[key] !== undefined) usage[key] = result[key];
   }
-  throw new Error(`Missing native Codex runtime for ${triple}; the configured launcher is not reproducible.`);
+  return { status: 'final', reason: null, usage };
 }
 
 // The controller restores settings with its own copy of the runner; it must match the build agents use.
@@ -125,7 +161,7 @@ export function verifyFrozenInputs(directory) {
     if (hash(file) !== digest) throw new Error(`Frozen input changed: ${relative}`);
   }
   const runtimes = study.runtimes;
-  const requiredRuntimes = ['node', 'codexLauncher', 'codexNative', 'te3', 'te'];
+  const requiredRuntimes = ['node', 'claude', 'te3', 'te'];
   if (!runtimes || typeof runtimes !== 'object' || Array.isArray(runtimes)) throw new Error('Runtime inventory missing');
   for (const name of requiredRuntimes) {
     const runtime = runtimes[name];
@@ -137,74 +173,67 @@ export function verifyFrozenInputs(directory) {
   return { inputs: Object.keys(frozen).length, runtimes: requiredRuntimes.length };
 }
 
-export function validateEvidence(evidence) {
-  if (!evidence.rules?.length) {
-    throw Error('No evidence-qualified skill rules');
-  }
-  for (const rule of evidence.rules) {
-    if (!rule.id || !rule.correction || !Array.isArray(rule.traces)) {
-      throw Error('Each skill rule needs an id, correction, and trace references');
+function inventory(root) {
+  const frozen = {};
+  const visit = directory => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else frozen[path.relative(root, file)] = hash(file);
     }
-    for (const trace of rule.traces) {
-      for (const field of ['trial', 'event', 'tool', 'log', 'observed']) {
-        if (typeof trace[field] !== 'string' || !trace[field].trim()) {
-          throw Error(`Rule ${rule.id}: trace is missing ${field}`);
-        }
-      }
-    }
-    if (new Set(rule.traces.map(trace => trace.trial)).size < 3) {
-      throw Error(`Rule ${rule.id} needs three distinct trials`);
-    }
-  }
-  // This validates reference structure, not the truth of a reviewer’s assessment.
+  };
+  visit(root);
+  return frozen;
 }
-export function prepare(configPath, destination) {
-  const config = json(configPath);
-  const requiredPaths = ['buildDirectory', 'controller', 'baseline', 'te3', 'te', 'codexEntry'];
-  for (const key of requiredPaths) {
-    config[key] = expand(config[key]);
-    if (!fs.existsSync(config[key])) throw new Error(`Missing ${key}`);
-  }
-  for (const executable of ['FlaUI.Mcp.exe', 'FlaUI.Automation.exe']) {
-    if (!fs.existsSync(path.join(config.buildDirectory, executable))) throw new Error(`Missing ${executable}`);
-  }
-  const evidence = json(path.join(here, 'generic-skill-evidence.json'));
-  validateEvidence(evidence);
-  const skill = fs.readFileSync(path.join(here, '../skills/flaui-mcp/SKILL.md'), 'utf8');
-  const bootstrap = 'Use te3_catalog() for the index, then read the relevant map topic using its exact ID. For screenshots also read capture. Map access is guidance, not a guarantee of successful navigation or a complete image.';
+
+function gatewayConfig(out, config, trialDirectory) {
+  const [executable, ...args] = config.genericCommand;
+  const gateway = {
+    genericCommand: [path.join(out, 'build', executable), ...args],
+    logPath: path.join(trialDirectory, 'calls.jsonl'), maxCalls: 60
+  };
+  if (config.rung === '3') gateway.companionCommand = [path.join(out, 'companion', 'FlaUI.Automation.exe'), 'mcp'];
+  return gateway;
+}
+
+export async function prepare(configPath, destination) {
+  const config = validateConfig(json(configPath));
   const out = path.resolve(destination);
   if (fs.existsSync(out)) throw new Error('Use a fresh study directory');
-  assertSameAssemblies(config.buildDirectory, path.dirname(config.controller));
+  const controllerDirectory = path.dirname(config.controller);
+  if (config.rung === '3') assertSameAssemblies(config.companionBuild, controllerDirectory);
+  else if (config.currentBuild) assertSameAssemblies(config.currentBuild, controllerDirectory);
+  // Imported lazily: the frozen copy of this file runs trials from inside the study, away from skills/.
+  const { composeSkill } = await import('../skills/build-skill.mjs');
+  const skill = composeSkill(config.rung);
   const runtimes = {
     node: runtimeRecord(process.execPath),
-    codexLauncher: runtimeRecord(config.codexEntry),
-    codexNative: runtimeRecord(codexNativeRuntime(config.codexEntry)),
+    claude: runtimeRecord(config.claudeEntry),
     te3: runtimeRecord(config.te3),
     te: runtimeRecord(config.te)
   };
 
   // Copy immutable inputs before creating per-trial output directories.
   fs.mkdirSync(out, { recursive: true });
-  fs.cpSync(config.buildDirectory, path.join(out, 'build'), { recursive: true });
-  fs.cpSync(path.dirname(config.controller), path.join(out, 'controller'), { recursive: true });
+  fs.cpSync(config.genericBuild, path.join(out, 'build'), { recursive: true });
+  if (config.rung === '3') fs.cpSync(config.companionBuild, path.join(out, 'companion'), { recursive: true });
+  fs.cpSync(controllerDirectory, path.join(out, 'controller'), { recursive: true });
   fs.copyFileSync(config.baseline, path.join(out, 'fixture.bim'));
   fs.writeFileSync(path.join(out, 'hello-world.csx'), '"Hello World".Output();\r\n', { flag: 'wx' });
-  fs.writeFileSync(path.join(out, 'generic-SKILL.md'), skill, { flag: 'wx' });
-  fs.writeFileSync(path.join(out, 'map-bootstrap.txt'), bootstrap, { flag: 'wx' });
-  fs.cpSync(path.join(here, '../map'), path.join(out, 'map'), { recursive: true });
+  fs.writeFileSync(path.join(out, 'skill.md'), skill.text, { flag: 'wx' });
   fs.copyFileSync(path.join(here, 'study-gateway.mjs'), path.join(out, 'study-gateway.mjs'));
-  fs.copyFileSync(fileURLToPath(import.meta.url), path.join(out, 'four-arm-study.mjs'));
-  write(path.join(out, 'evidence.json'), evidence);
+  fs.copyFileSync(fileURLToPath(import.meta.url), path.join(out, 'ladder-study.mjs'));
 
-  const trials = schedule();
+  const trials = schedule(config);
   for (const trial of trials) {
     const dir = path.join(out, trial.id);
     fs.mkdirSync(dir);
-    const prompt = promptFor(trial, skill, bootstrap,
+    const prompt = promptFor(trial.task, skill.text,
       path.win32.normalize(path.join(out, 'hello-world.csx')), path.join(dir, 'result.png'));
     fs.writeFileSync(path.join(dir, 'prompt-template.txt'), prompt, { flag: 'wx' });
-    write(path.join(dir, 'gateway.json'), {
-      arm: trial.arm, buildDirectory: path.join(out, 'build'), logPath: path.join(dir, 'calls.jsonl'), maxCalls: 60
+    write(path.join(dir, 'gateway.json'), gatewayConfig(out, config, dir));
+    write(path.join(dir, 'mcp.json'), {
+      mcpServers: { study: { command: process.execPath, args: [path.join(out, 'study-gateway.mjs'), path.join(dir, 'gateway.json')] } }
     });
   }
   write(path.join(out, 'controller.config.json'), {
@@ -212,25 +241,18 @@ export function prepare(configPath, destination) {
     output: out, maximizeWindow: true, expectedDpi: 120, repeat: 1, scenarios: ['model-open']
   });
 
-  const frozen = {};
-  function inventory(directory) {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const file = path.join(directory, entry.name);
-      if (entry.isDirectory()) inventory(file);
-      else frozen[path.relative(out, file)] = hash(file);
-    }
-  }
-  inventory(out);
   write(path.join(out, 'study.json'), {
-    version: 1, trials,
+    version: 2, rung: config.rung, model: config.model, holdoutTasks,
+    skill: { sha256: skill.sha256, layers: skill.layers },
+    trials,
     config: { ...config, controller: path.join(out, 'controller', path.basename(config.controller)) },
-    frozen, runtimes, desktopPreflight: 'not-run', liveExecution: 'one-trial-with-handoff',
-    isolation: 'Instruction-controlled; audit violations and retain contaminated trials with their costs.',
+    frozen: inventory(out), runtimes, liveExecution: 'one-trial-with-handoff',
     freezeLimitations: 'Input/runtime hashes detect changes; they do not freeze the OS or hosted model, or authorize desktop access.'
   });
   fs.writeFileSync(path.join(out, 'study.json.sha256'), hash(path.join(out, 'study.json')) + '\n', { flag: 'wx' });
   return { directory: out, trials: trials.length };
 }
+
 // File descriptors avoid a second asynchronous log-drain lifecycle. Read logs
 // only once the child has closed; spawn and stdin errors are retained as data.
 export function startOwned(command, cwd, stdoutPath, stderrPath) {
@@ -317,26 +339,6 @@ export function readEvents(file) {
   return { events, malformedLines };
 }
 
-// Shared by the two standalone probes; deliberately excludes TE3/controller lifecycle.
-export async function runOwnedPrompt(command, cwd, prompt, outputDirectory, timeoutMs = 90000) {
-  const logPath = path.join(outputDirectory, 'agent.jsonl');
-  const owned = startOwned(command, cwd, logPath, path.join(outputDirectory, 'stderr.log'));
-  let executionError = null;
-  let cleanupError = null;
-  try {
-    owned.child.stdin.end(prompt);
-    await within(owned.finished, timeoutMs, 'Standalone probe');
-    if (owned.result.code !== 0 || owned.result.errors.length) {
-      executionError = `Probe process failed: ${JSON.stringify(owned.result)}`;
-    }
-  } catch (error) { executionError = error.message; }
-  finally {
-    try { await stopOwned(owned, 10000); }
-    catch (error) { cleanupError = error.message; }
-  }
-  return { process: owned.result, executionError, cleanupError, ...readEvents(logPath) };
-}
-
 export function inspectControllerCleanup(directory, result) {
   if (!result || result.code !== 0 || result.errors.length) {
     throw new Error(`Controller did not exit cleanly: ${JSON.stringify(result)}`);
@@ -381,13 +383,16 @@ async function waitForReady(controller, directory, signal, milliseconds) {
   }
 }
 
-// Codex names rollouts rollout-<timestamp>-<threadId>.jsonl under YYYY/MM/DD folders.
-export function findRollout(threadId, sessionsRoot) {
-  if (!threadId || !fs.existsSync(sessionsRoot)) return null;
-  const suffix = `-${threadId}.jsonl`;
-  const match = fs.readdirSync(sessionsRoot, { recursive: true })
-    .find(relative => path.basename(relative).startsWith('rollout-') && relative.endsWith(suffix));
-  return match ? path.join(path.resolve(sessionsRoot), match) : null;
+// The stream is the whole transcript. The init event shows what the model could actually see.
+export function transcriptFacts(events, transcriptPath) {
+  const init = events.find(event => event.type === 'system' && event.subtype === 'init');
+  const result = events.find(event => event.type === 'result');
+  return {
+    transcriptPath,
+    sessionId: result?.session_id ?? init?.session_id ?? null,
+    agentModel: init?.model ?? null,
+    visibleTools: Array.isArray(init?.tools) ? init.tools : null
+  };
 }
 
 // The public CLI stays gated below. This explicit session boundary permits
@@ -395,11 +400,11 @@ export function findRollout(threadId, sessionsRoot) {
 export async function runTrialSession({ directory, trial, controllerCommand, agentCommand,
   agentCwd = directory,
   promptTemplate = '{{PID}}', signal: externalSignal, readyMs = 180000,
-  agentMs = 420000, cleanupMs = 90000, stopMs = 10000,
-  sessionsRoot = path.join(os.homedir(), '.codex', 'sessions') }) {
+  agentMs = 420000, cleanupMs = 90000, stopMs = 10000 }) {
   const dir = path.resolve(directory);
   const lock = path.join(path.dirname(dir), 'active');
   const usagePath = path.join(dir, 'usage.json');
+  const transcriptPath = path.join(dir, 'agent.jsonl');
   if (fs.existsSync(usagePath) || fs.existsSync(path.join(dir, 'controller.stdout.log'))) {
     throw new Error('Trial already attempted; never overwrite it');
   }
@@ -434,7 +439,7 @@ export async function runTrialSession({ directory, trial, controllerCommand, age
     fs.writeFileSync(path.join(dir, 'prompt.txt'), prompt, { flag: 'wx' });
     if (signal.aborted || controller.result) throw new Error('Controller session ended before agent launch');
     agentStarted = new Date().toISOString();
-    agent = startOwned(agentCommand, agentCwd, path.join(dir, 'agent.jsonl'), path.join(dir, 'agent.stderr.log'));
+    agent = startOwned(agentCommand, agentCwd, transcriptPath, path.join(dir, 'agent.stderr.log'));
     agent.child.stdin.end(prompt);
     let timer;
     let ended;
@@ -478,20 +483,19 @@ export async function runTrialSession({ directory, trial, controllerCommand, age
 
   let accounting = { events: [], malformedLines: 0 };
   let accountingError = null;
-  try { accounting = readEvents(path.join(dir, 'agent.jsonl')); }
+  try { accounting = readEvents(transcriptPath); }
   catch (error) { accountingError = error.message; }
   const usage = accountingError
     ? { status: 'unknown', reason: accountingError, usage: null }
     : usageFrom(accounting.events, accounting.malformedLines);
-  const threadId = accounting.events.find(event => event.type === 'thread.started')?.thread_id ?? null;
   const record = {
     ...trial, started, agentStarted, ended: new Date().toISOString(),
     agentProcess: agent?.result ?? null, controllerProcess: controller?.result ?? null,
     timedOut, interrupted: signal.aborted,
     originalError: originalError?.message ?? null, cleanupErrors, cleanup,
     lifecycleOutcome: originalError || cleanupErrors.length ? 'failed' : 'completed',
-    review: 'pending: write review.json after inspecting the image and rollout',
-    threadId, rolloutPath: findRollout(threadId, sessionsRoot),
+    review: 'pending: write review.json after inspecting the image and transcript',
+    ...transcriptFacts(accounting.events, fs.existsSync(transcriptPath) ? transcriptPath : null),
     malformedEventLines: accounting.malformedLines, ...usage
   };
   // Durable outcome precedes lock release. Failed persistence retains the lock.
@@ -505,22 +509,19 @@ export async function runTrialSession({ directory, trial, controllerCommand, age
   return record;
 }
 
-export function agentArguments(study, trial, directory, cwd) {
-  const args = [study.config.codexEntry, 'exec', '--model', trial.model,
-    '--approve-for-me', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
-    '-C', cwd, '-c', `model_reasoning_effort="${trial.effort}"`,
-    '-c', 'shell_environment_policy.inherit="none"',
-    '-c', 'web_search="disabled"'];
-  // view_image stays enabled in every arm so agents can review the saved PNG.
-  const disabledFeatures = ['apps', 'plugins', 'remote_plugin', 'browser_use', 'browser_use_external',
-    'in_app_browser', 'computer_use', 'image_generation', 'multi_agent', 'shell_tool', 'unified_exec', 'sleep_tool',
-    'goals', 'hooks', 'memories'];
-  for (const feature of disabledFeatures) args.push('-c', `features.${feature}=false`);
-  const tomlPath = value => JSON.stringify(value.replaceAll('\\', '/'));
-  args.push('-c', 'features.skip_host_skill_discovery=true',
-    '-c', `mcp_servers.study.command=${tomlPath(process.execPath)}`,
-    '-c', `mcp_servers.study.args=[${tomlPath(path.join(directory, 'study-gateway.mjs'))},${tomlPath(path.join(directory, trial.id, 'gateway.json'))}]`, '--json', '-');
-  return args;
+export function claudeCommand(claudeEntry, model, mcpConfigPath) {
+  const launcher = /\.[cm]?js$/i.test(claudeEntry) ? [process.execPath, claudeEntry] : [claudeEntry];
+  return [...launcher, '-p',
+    '--model', model,
+    '--output-format', 'stream-json', '--verbose',
+    '--no-session-persistence',
+    // The agent cwd is an empty temp directory, so "local" loads nothing; user and project settings are skipped.
+    '--setting-sources', 'local',
+    '--disable-slash-commands',
+    '--strict-mcp-config', '--mcp-config', mcpConfigPath,
+    '--tools', '',
+    '--allowedTools', 'mcp__study__*',
+    '--permission-mode', 'dontAsk'];
 }
 
 export async function run(directory, id, approved) {
@@ -536,7 +537,7 @@ export async function run(directory, id, approved) {
     throw new Error('Study active or trial already attempted; do not overwrite or automatically retry.');
   }
   const agentCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'fla_study_agent_'));
-  const agentCommand = [process.execPath, ...agentArguments(study, trial, root, agentCwd)];
+  const agentCommand = claudeCommand(study.config.claudeEntry, trial.model, path.join(dir, 'mcp.json'));
   const controllerCommand = [study.config.controller, 'hold', path.join(root, 'controller.config.json'), dir];
   write(path.join(dir, 'invocation.json'), { agentCwd, agentCommand, controllerCommand });
   return runTrialSession({ directory: dir, trial, agentCwd, agentCommand, controllerCommand,
@@ -554,13 +555,17 @@ function countCalls(file) {
   };
 }
 
-function reviewOutcome(file) {
-  if (!fs.existsSync(file)) return 'unreviewed';
+function readReview(file) {
+  if (!fs.existsSync(file)) return { reviewed: false, passed: null, claimedSuccess: null, rubric: null, notes: null };
   const review = json(file);
-  return review.taskOutcome ?? review.outcome ?? review.result ?? 'unreviewed';
+  if (typeof review.passed !== 'boolean' || typeof review.claimedSuccess !== 'boolean') {
+    throw new Error(`review.json needs boolean passed and claimedSuccess: ${file}`);
+  }
+  return { reviewed: true, passed: review.passed, claimedSuccess: review.claimedSuccess,
+    rubric: review.rubric ?? null, notes: review.notes ?? null };
 }
 
-// One row per attempted trial. Older studies lack some fields, so they read as null.
+// One row per attempted trial.
 export function summarize(studyDirectory) {
   const root = path.resolve(studyDirectory);
   const rows = [];
@@ -573,30 +578,62 @@ export function summarize(studyDirectory) {
     const calls = fs.existsSync(callsPath)
       ? countCalls(callsPath)
       : { dispatchedCalls: null, budgetRejections: null, toolRejections: null };
-    const reviewPath = path.join(dir, 'review.json');
     rows.push({
-      id: record.id ?? entry.name, model: record.model ?? null, effort: record.effort ?? null,
-      arm: record.arm ?? null, task: record.task ?? null,
+      kind: 'trial', id: record.id ?? entry.name,
+      rung: record.rung ?? null, model: record.model ?? null, task: record.task ?? null,
+      holdout: holdoutTasks.includes(record.task),
       lifecycleOutcome: record.lifecycleOutcome ?? null, cleanup: record.cleanup?.status ?? null,
       timedOut: record.timedOut ?? null, interrupted: record.interrupted ?? null,
       usageStatus: record.status ?? null,
-      inputTokens: tokens.input_tokens ?? null, cachedInputTokens: tokens.cached_input_tokens ?? null,
-      uncachedInputTokens: tokens.uncached_input_tokens ?? null, outputTokens: tokens.output_tokens ?? null,
-      totalTokens: tokens.total_tokens ?? null,
+      inputTokens: tokens.input_tokens ?? null,
+      cacheCreationInputTokens: tokens.cache_creation_input_tokens ?? null,
+      cacheReadInputTokens: tokens.cache_read_input_tokens ?? null,
+      uncachedInputTokens: tokens.uncached_input_tokens ?? null,
+      outputTokens: tokens.output_tokens ?? null, totalTokens: tokens.total_tokens ?? null,
+      costUsd: tokens.total_cost_usd ?? null,
       ...calls,
-      reviewOutcome: reviewOutcome(reviewPath), reviewed: fs.existsSync(reviewPath)
+      ...readReview(path.join(dir, 'review.json'))
     });
   }
   return rows;
 }
 
+function mean(values) {
+  const known = values.filter(value => typeof value === 'number');
+  return known.length ? known.reduce((sum, value) => sum + value, 0) / known.length : null;
+}
+
+// pass^k: a group passes only when every one of its trials passed review.
+export function groupRows(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = `${row.rung}|${row.task}|${row.model}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  return [...groups.values()].map(members => {
+    const passes = members.filter(row => row.passed === true).length;
+    return {
+      kind: 'group', rung: members[0].rung, task: members[0].task, model: members[0].model,
+      holdout: members[0].holdout, n: members.length, passes, passAll: passes === members.length,
+      falseClaims: members.filter(row => row.claimedSuccess === true && row.passed === false).length,
+      meanDispatchedCalls: mean(members.map(row => row.dispatchedCalls)),
+      meanTotalTokens: mean(members.map(row => row.totalTokens)),
+      meanUncachedInputTokens: mean(members.map(row => row.uncachedInputTokens)),
+      unreviewed: members.filter(row => !row.reviewed).length
+    };
+  });
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [command, first, second, ...options] = process.argv.slice(2);
-    if (command === 'prepare') console.log(JSON.stringify(prepare(first, second)));
+    if (command === 'prepare') console.log(JSON.stringify(await prepare(first, second)));
     else if (command === 'run') await run(first, second, options.includes('--handoff'));
-    else if (command === 'summarize') for (const row of summarize(first)) console.log(JSON.stringify(row));
-    else throw new Error('prepare CONFIG NEW_DIRECTORY | run STUDY TRIAL --handoff | summarize STUDY');
+    else if (command === 'summarize') {
+      const rows = summarize(first);
+      for (const row of [...rows, ...groupRows(rows)]) console.log(JSON.stringify(row));
+    } else throw new Error('prepare CONFIG NEW_DIRECTORY | run STUDY TRIAL --handoff | summarize STUDY');
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

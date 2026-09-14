@@ -2,16 +2,22 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import test from 'node:test';
 import { StudyGateway } from './study-gateway.mjs';
+
+const gatewayScript = fileURLToPath(new URL('./study-gateway.mjs', import.meta.url));
 
 // Every child in this suite is a Node fake. No desktop tool is launched.
 const backendSource = String.raw`
 import { appendFileSync } from 'node:fs';
 import readline from 'node:readline';
 const [kind, dispatchLog] = process.argv.slice(2);
+const inventories = {
+  generic: ['safe'], duplicate: ['safe'], launcher: ['safe', 'windows_launch'], companion: ['guide', 'capture']
+};
 let calls = 0;
 readline.createInterface({ input: process.stdin }).on('line', line => {
   const message = JSON.parse(line);
@@ -25,16 +31,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
       };
       break;
     case 'tools/list':
-      result = { tools: kind === 'generic' || kind === 'duplicate'
-        ? [{ name: 'safe' }]
-        : kind === 'launcher' ? [{ name: 'safe' }, { name: 'windows_launch' }]
-        : kind === 'C' ? [{ name: 'guide' }] : [{ name: 'guide' }, { name: 'capture' }] };
-      break;
-    case 'resources/list':
-      result = { resources: [{ uri: 'te3://map/start' }] };
-      break;
-    case 'resources/read':
-      result = { contents: [{ uri: message.params.uri, text: 'map' }] };
+      result = { tools: inventories[kind].map(name => ({ name })) };
       break;
     case 'tools/call':
       calls++;
@@ -51,39 +48,28 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
 });
 `;
 
-const gatewaySource = `
-import readline from 'node:readline';
-import { StudyGateway } from ${JSON.stringify(new URL('./study-gateway.mjs', import.meta.url).href)};
-const { config, commands } = JSON.parse(process.argv[2]);
-const gateway = new StudyGateway(config, { backendCommands: commands });
-const input = readline.createInterface({ input: process.stdin });
-input.on('line', line => { void gateway.handle(JSON.parse(line)); });
-input.on('close', () => { void gateway.stop(); });
-`;
-
-async function fixture(arm, overrides = {}) {
+// Callers remove the directory only after their child processes have closed.
+async function fixture({ generic = 'generic', companion = null, ...overrides } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'study-gateway-'));
   const backend = join(directory, 'fake-backend.mjs');
-  const harness = join(directory, 'fake-gateway.mjs');
   const dispatchLog = join(directory, 'dispatched.jsonl');
   await writeFile(backend, backendSource);
-  await writeFile(harness, gatewaySource);
-  const config = { arm, buildDirectory: directory, logPath: join(directory, 'calls.jsonl'), ...overrides };
-  const commands = {
-    generic: [process.execPath, backend, 'generic', dispatchLog],
-    companion: [process.execPath, backend, arm, dispatchLog]
+  const config = {
+    genericCommand: [process.execPath, backend, generic, dispatchLog],
+    logPath: join(directory, 'calls.jsonl'), ...overrides
   };
-  // Callers remove this directory only after their child processes have closed.
-  return { directory, harness, config, commands, dispatchLog };
+  if (companion) config.companionCommand = [process.execPath, backend, companion, dispatchLog];
+  return { directory, config, dispatchLog };
 }
 
-async function wire(t, arm, overrides = {}, changeCommands = () => {}) {
-  const files = await fixture(arm, overrides);
-  changeCommands(files.commands, files);
-  const child = spawn(process.execPath, [files.harness, JSON.stringify({
-    config: files.config, commands: files.commands
-  })], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, FLAUI_MCP_ALLOWED_APPS: 'UnrelatedApp' } });
+async function wire(t, options = {}) {
+  const files = await fixture(options);
+  const configPath = join(files.directory, 'gateway.json');
+  await writeFile(configPath, JSON.stringify(files.config));
+  const child = spawn(process.execPath, [gatewayScript, configPath], {
+    windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, FLAUI_MCP_ALLOWED_APPS: 'UnrelatedApp' }
+  });
   let stderr = '';
   child.stderr.on('data', chunk => { stderr += chunk; });
   const closed = new Promise(resolveClosed => child.once('close', resolveClosed));
@@ -106,7 +92,7 @@ async function wire(t, arm, overrides = {}, changeCommands = () => {}) {
     lines.close();
     for (const request of pending.values()) clearTimeout(request.timer);
     await rm(files.directory, { recursive: true, force: true });
-    assert.equal(stderr, '', 'fake gateway must not crash or emit unhandled errors');
+    assert.equal(stderr, '', 'gateway must not crash or emit unhandled errors');
   });
   return {
     ...files,
@@ -121,26 +107,19 @@ async function wire(t, arm, overrides = {}, changeCommands = () => {}) {
   };
 }
 
-for (const arm of ['A', 'B', 'C', 'D']) {
-  test(`${arm}: wire capabilities, repeated discovery, resources, and backend environment`, { timeout: 15000 }, async t => {
-    const client = await wire(t, arm);
+for (const companion of [null, 'companion']) {
+  test(`${companion ? 'with' : 'without'} companion: tools only, repeated discovery, backend environment`, { timeout: 15000 }, async t => {
+    const client = await wire(t, { companion });
     const initialization = await client.request('initialize');
-    const withCompanion = arm === 'C' || arm === 'D';
-    assert.deepEqual(initialization.result.capabilities, withCompanion ? { tools: {}, resources: {} } : { tools: {} });
-    const expectedTools = arm === 'D' ? ['safe', 'guide', 'capture'] : arm === 'C' ? ['safe', 'guide'] : ['safe'];
+    assert.deepEqual(initialization.result.capabilities, { tools: {} });
+    const expectedTools = companion ? ['safe', 'guide', 'capture'] : ['safe'];
     for (let repeat = 0; repeat < 2; repeat++) {
       const discovery = await client.request('tools/list');
       assert.deepEqual(discovery.result.tools.map(tool => tool.name), expectedTools);
     }
-    const resources = await client.request('resources/list');
-    if (withCompanion) {
-      assert.equal(resources.result.resources[0].uri, 'te3://map/start');
-      const resource = await client.request('resources/read', { uri: 'te3://map/start' });
-      assert.equal(resource.result.contents[0].text, 'map');
-    } else {
-      assert.equal(resources.error.code, -32601);
-    }
-    for (const name of withCompanion ? ['safe', 'guide'] : ['safe']) {
+    assert.equal((await client.request('resources/list')).error.code, -32601);
+    assert.equal((await client.request('resources/read', { uri: 'te3://map/start' })).error.code, -32601);
+    for (const name of companion ? ['safe', 'guide'] : ['safe']) {
       const call = await client.request('tools/call', { name });
       assert.equal(JSON.parse(call.result.content[0].text).allowedApps, 'TabularEditor3');
     }
@@ -148,7 +127,7 @@ for (const arm of ['A', 'B', 'C', 'D']) {
 }
 
 test('wire budget rejects call 61 before dispatch, including concurrent calls', { timeout: 15000 }, async t => {
-  const client = await wire(t, 'D');
+  const client = await wire(t, { companion: 'companion' });
   await client.request('initialize');
   await client.request('tools/list');
   const replies = await Promise.all(Array.from({ length: 61 }, (_, index) => client.request('tools/call', {
@@ -166,8 +145,8 @@ test('wire budget rejects call 61 before dispatch, including concurrent calls', 
   assert.doesNotMatch(log, /secret|private|misleading/);
 });
 
-test('batch steps and resource reads share the budget, and results are summarized', { timeout: 15000 }, async t => {
-  const client = await wire(t, 'C', { maxCalls: 5 });
+test('batch steps count against the budget, and results are summarized', { timeout: 15000 }, async t => {
+  const client = await wire(t, { companion: 'companion', maxCalls: 5 });
   await client.request('initialize');
   await client.request('tools/list');
   const batch = steps => client.request('tools/call', {
@@ -175,19 +154,19 @@ test('batch steps and resource reads share the budget, and results are summarize
   });
   assert.ok((await batch(3)).result);
   assert.match((await batch(3)).error.message, /budget exhausted \(3\/5 used; request needs 3\)/);
-  assert.ok((await client.request('resources/read', { uri: 'te3://map/start' })).result);
+  assert.ok((await client.request('tools/call', { name: 'guide' })).result);
   assert.ok((await client.request('tools/call', { name: 'guide' })).result);
   assert.match((await client.request('tools/call', { name: 'guide' })).error.message, /budget exhausted/);
   assert.equal(JSON.parse(await readFile(`${client.config.logPath}.budget.json`, 'utf8')).calls, 5);
   const records = (await readFile(client.config.logPath, 'utf8')).trim().split('\n').map(JSON.parse);
   const results = records.filter(record => record.type === 'result');
   assert.equal(results.length, 3);
-  assert.deepEqual(results.map(result => result.content[0].type), ['text', null, 'text']);
+  assert.deepEqual(results.map(result => result.content[0].type), ['text', 'text', 'text']);
   assert.deepEqual(records.filter(record => record.type === 'budget-rejected').map(record => record.cost), [3, 1]);
 });
 
 test('lifecycle tools are rejected without dispatch or budget use', { timeout: 15000 }, async t => {
-  const client = await wire(t, 'A', { maxCalls: 1 }, commands => { commands.generic[2] = 'launcher'; });
+  const client = await wire(t, { generic: 'launcher', maxCalls: 1 });
   await client.request('initialize');
   assert.deepEqual((await client.request('tools/list')).result.tools.map(tool => tool.name), ['safe', 'windows_launch']);
   assert.match((await client.request('tools/call', { name: 'windows_launch' })).error.message, /not permitted/);
@@ -196,13 +175,13 @@ test('lifecycle tools are rejected without dispatch or budget use', { timeout: 1
 });
 
 test('a restarted gateway resumes the persisted budget', { timeout: 15000 }, async t => {
-  const files = await fixture('A', { maxCalls: 1 });
-  const first = new StudyGateway(files.config, { backendCommands: files.commands });
+  const files = await fixture({ maxCalls: 1 });
+  const first = new StudyGateway(files.config);
   await first.initialize({});
   await first.listTools({});
   await first.callTool({ name: 'safe' });
   await first.stop();
-  const second = new StudyGateway(files.config, { backendCommands: files.commands });
+  const second = new StudyGateway(files.config);
   t.after(async () => {
     await second.stop();
     await rm(files.directory, { recursive: true, force: true });
@@ -213,17 +192,18 @@ test('a restarted gateway resumes the persisted budget', { timeout: 15000 }, asy
 });
 
 test('wire spawn failure settles initialization and later requests', { timeout: 15000 }, async t => {
-  const client = await wire(t, 'A', {}, (commands, files) => {
-    commands.generic = [join(files.directory, 'does-not-exist.exe')];
-  });
+  const directory = await mkdtemp(join(tmpdir(), 'study-gateway-missing-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const client = await wire(t, {});
+  const gateway = new StudyGateway({ ...client.config, genericCommand: [join(directory, 'does-not-exist.exe')] });
+  t.after(() => gateway.stop());
   for (const method of ['initialize', 'tools/list']) {
-    const response = await client.request(method);
-    assert.match(response.error.message, /generic backend unavailable/);
+    await assert.rejects(gateway.dispatch(method, {}), /generic backend unavailable/);
   }
 });
 
 test('wire backend exit settles outstanding calls and is not replayed', { timeout: 15000 }, async t => {
-  const client = await wire(t, 'A');
+  const client = await wire(t);
   await client.request('initialize');
   await client.request('tools/list');
   const responses = await Promise.all([
@@ -237,36 +217,36 @@ test('wire backend exit settles outstanding calls and is not replayed', { timeou
 });
 
 test('wire duplicate tools fail without publishing partial ownership', { timeout: 15000 }, async t => {
-  const client = await wire(t, 'C', {}, commands => { commands.companion[2] = 'duplicate'; });
+  const client = await wire(t, { companion: 'duplicate' });
   await client.request('initialize');
   assert.match((await client.request('tools/list')).error.message, /duplicate tool ownership/);
   assert.match((await client.request('tools/call', { name: 'safe' })).error.message, /unknown tool/);
 });
 
-test('constructor API preserves observe-only discovery and rejects dispatch', async t => {
-  const files = await fixture('C', { observeOnly: true });
-  const gateway = new StudyGateway(files.config, { backendCommands: files.commands });
+test('observe-only discovery lists tools and rejects dispatch', async t => {
+  const files = await fixture({ companion: 'companion', observeOnly: true });
+  const gateway = new StudyGateway(files.config);
   t.after(async () => {
     await gateway.stop();
     await rm(files.directory, { recursive: true, force: true });
   });
   await gateway.initialize({});
-  await gateway.listTools({});
-  assert.equal((await gateway.request('resources/list', {}, 'companion')).resources.length, 1);
+  assert.equal((await gateway.listTools({})).tools.length, 3);
   await assert.rejects(gateway.callTool({ name: 'safe' }), /observeOnly/);
   await assert.rejects(readFile(files.dispatchLog), { code: 'ENOENT' });
 });
 
 test('constructor validates configuration before starting a child', () => {
-  const base = { arm: 'A', buildDirectory: 'unused', logPath: 'unused' };
-  for (const overrides of [{ arm: 'E' }, { maxCalls: 61 }, { maxCalls: 0 }, { observeOnly: 'yes' }]) {
+  const base = { genericCommand: ['unused.exe'], logPath: 'unused' };
+  for (const overrides of [{ genericCommand: undefined }, { genericCommand: [] }, { companionCommand: 'x.exe' },
+    { maxCalls: 61 }, { maxCalls: 0 }, { observeOnly: 'yes' }]) {
     assert.throws(() => new StudyGateway({ ...base, ...overrides }));
   }
 });
 
 test('shutdown reports unconfirmed stream closure within its deadline', async t => {
-  const files = await fixture('A');
-  const gateway = new StudyGateway(files.config, { backendCommands: files.commands });
+  const files = await fixture();
+  const gateway = new StudyGateway(files.config);
   await gateway.initialize({});
   gateway.backends.generic.child.kill();
   await gateway.backends.generic.closed;

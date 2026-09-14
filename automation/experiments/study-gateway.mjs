@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// A/B expose generic tools; C adds guidance; D adds the full companion.
-// The study prompt, not this gateway, supplies the skill for B/C/D.
+// Proxies one agent's MCP session to the generic server and, on rung 3, the TE3 companion.
+// The gateway enforces the call budget and controller-owned lifecycle; guidance lives in the prompt.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { appendFile, readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
@@ -109,18 +109,16 @@ class Backend {
 const forbiddenTools = new Set(['windows_launch', 'windows_close']);
 
 export class StudyGateway {
-  constructor(config, options = {}) {
+  constructor(config) {
     this.config = validate(config);
     // Persisted so a restarted gateway cannot grant a fresh allowance.
     this.budgetPath = `${this.config.logPath}.budget.json`;
     this.calls = existsSync(this.budgetPath) ? JSON.parse(readFileSync(this.budgetPath, 'utf8')).calls : 0;
     if (!Number.isInteger(this.calls) || this.calls < 0) throw new Error(`invalid budget state: ${this.budgetPath}`);
     this.owners = new Map();
-    this.backends = {};
-    const commands = options.backendCommands || defaultCommands(this.config);
-    this.backends.generic = new Backend('generic', commands.generic);
-    if (this.config.arm === 'C' || this.config.arm === 'D') {
-      this.backends.companion = new Backend('companion', commands.companion);
+    this.backends = { generic: new Backend('generic', this.config.genericCommand) };
+    if (this.config.companionCommand) {
+      this.backends.companion = new Backend('companion', this.config.companionCommand);
     }
   }
 
@@ -128,31 +126,24 @@ export class StudyGateway {
     await appendFile(this.config.logPath, `${JSON.stringify(record)}\n`);
   }
 
-  async request(method, params, preferred = 'generic') {
-    const backend = this.backends[preferred];
-    if (!backend) throw new Error(`${preferred} backend unavailable`);
-    return backend.request(method, params);
+  async requestAll(method, params) {
+    const replies = await Promise.all(Object.entries(this.backends).map(async ([name, backend]) => {
+      return [name, await backend.request(method, params)];
+    }));
+    return Object.fromEntries(replies);
   }
 
   async initialize(params) {
-    const replies = await Promise.all(Object.entries(this.backends).map(async ([name, backend]) => {
-      return [name, await backend.request('initialize', params)];
-    }));
-    const initialized = Object.fromEntries(replies);
-    // Only advertise routed methods. Subscriptions and change notifications
-    // are not forwarded, even if an individual backend supports them.
-    const capabilities = { tools: {} };
-    if (initialized.companion?.capabilities?.resources) capabilities.resources = {};
-    return { ...initialized.generic, capabilities };
+    const initialized = await this.requestAll('initialize', params);
+    // Only tools are routed; other backend capabilities are not advertised.
+    return { ...initialized.generic, capabilities: { tools: {} } };
   }
 
   async listTools(params) {
-    const replies = await Promise.all(Object.entries(this.backends).map(async ([name, backend]) => {
-      return [name, await backend.request('tools/list', params)];
-    }));
+    const replies = await this.requestAll('tools/list', params);
     const owners = new Map();
     const tools = [];
-    for (const [owner, reply] of replies) {
+    for (const [owner, reply] of Object.entries(replies)) {
       for (const tool of reply.tools || []) {
         if (owners.has(tool.name)) throw new Error(`duplicate tool ownership: ${tool.name}`);
         owners.set(tool.name, owner);
@@ -175,7 +166,6 @@ export class StudyGateway {
     return this.calls;
   }
 
-  // Rejections are logged so summaries can count them. The reservation itself stays synchronous.
   async reserveOrLog(cost, record) {
     try {
       return this.reserve(cost);
@@ -186,13 +176,13 @@ export class StudyGateway {
   }
 
   // Results are summarized, not copied, so logs never hold screenshots or UI text.
-  async forward(method, params, owner, record) {
+  async forward(params, owner, record) {
     try {
-      const result = await this.request(method, params, owner);
+      const result = await this.backends[owner].request('tools/call', params);
       await this.log({
         type: 'result', ...record, isError: result?.isError === true,
         dispatch: result?.structuredContent?.dispatch ?? null, provider: result?.structuredContent?.provider ?? null,
-        content: (result?.content ?? result?.contents ?? []).map(item => ({
+        content: (result?.content ?? []).map(item => ({
           type: item?.type ?? null, chars: typeof item?.text === 'string' ? item.text.length : 0
         })),
         time: new Date().toISOString()
@@ -202,14 +192,6 @@ export class StudyGateway {
       await this.log({ type: 'result-error', ...record, error: error.message, time: new Date().toISOString() });
       throw error;
     }
-  }
-
-  async readResource(params) {
-    if (this.config.observeOnly) return this.request('resources/read', params, 'companion');
-    const uri = typeof params?.uri === 'string' ? params.uri : null;
-    const call = await this.reserveOrLog(1, { uri });
-    await this.log({ type: 'resource-requested', call, cost: 1, uri, time: new Date().toISOString() });
-    return this.forward('resources/read', params, 'companion', { call, uri });
   }
 
   async callTool(params) {
@@ -236,7 +218,7 @@ export class StudyGateway {
       }
     }
     // These records describe requests, not proof of executed batch steps.
-    return this.forward('tools/call', params, owner, { call, tool: name });
+    return this.forward(params, owner, { call, tool: name });
   }
 
   async dispatch(method, params) {
@@ -244,12 +226,6 @@ export class StudyGateway {
       case 'initialize': return this.initialize(params);
       case 'tools/list': return this.listTools(params);
       case 'tools/call': return this.callTool(params);
-      case 'resources/list':
-        if (this.backends.companion) return this.request(method, params, 'companion');
-        break;
-      case 'resources/read':
-        if (this.backends.companion) return this.readResource(params);
-        break;
     }
     const error = new Error(`unsupported method: ${method}`);
     error.code = -32601;
@@ -279,10 +255,16 @@ export class StudyGateway {
   }
 }
 
+function isCommand(value) {
+  return Array.isArray(value) && value.length > 0 && value.every(part => typeof part === 'string' && part);
+}
+
 function validate(config) {
-  if (!config || !['A', 'B', 'C', 'D'].includes(config.arm) ||
-      typeof config.buildDirectory !== 'string' || typeof config.logPath !== 'string') {
-    throw new Error('config requires arm A-D, buildDirectory, and logPath');
+  if (!config || !isCommand(config.genericCommand) || typeof config.logPath !== 'string') {
+    throw new Error('config requires genericCommand and logPath');
+  }
+  if (config.companionCommand !== undefined && !isCommand(config.companionCommand)) {
+    throw new Error('companionCommand must be a nonempty string array');
   }
   const maxCalls = config.maxCalls ?? 60;
   if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 60) {
@@ -292,16 +274,8 @@ function validate(config) {
     throw new Error('observeOnly must be boolean');
   }
   return {
-    arm: config.arm, buildDirectory: config.buildDirectory, logPath: config.logPath,
-    maxCalls, observeOnly: config.observeOnly === true
-  };
-}
-
-function defaultCommands(config) {
-  return {
-    generic: [join(config.buildDirectory, 'FlaUI.Mcp.exe'), 'mcp'],
-    companion: [join(config.buildDirectory, 'FlaUI.Automation.exe'), 'mcp',
-      ...(config.arm === 'C' ? ['--guidance-only'] : [])]
+    genericCommand: config.genericCommand, companionCommand: config.companionCommand ?? null,
+    logPath: config.logPath, maxCalls, observeOnly: config.observeOnly === true
   };
 }
 
