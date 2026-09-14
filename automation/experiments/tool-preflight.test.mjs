@@ -10,22 +10,22 @@ const generic = ['windows_find', 'windows_screenshot'];
 const companion = ['te3_inspect', 'te3_navigate', 'te3_capture'];
 
 test('generic-only rungs pass with windows_ tools and reject te3_ tools', () => {
-  for (const rung of ['0a', '0b', '1', '2']) {
+  for (const rung of ['1', '2', '3', '4']) {
     assert.deepEqual(checkToolInventory(generic, rung), { genericTools: 2, companionTools: 0 });
     assert.throws(() => checkToolInventory([...generic, 'te3_capture'], rung), /must not expose te3_/);
   }
 });
 
-test('rung 3 requires exactly the three companion tools', () => {
-  assert.deepEqual(checkToolInventory([...generic, ...companion], '3'), { genericTools: 2, companionTools: 3 });
-  assert.throws(() => checkToolInventory([...generic, 'te3_inspect'], '3'), /exactly/);
-  assert.throws(() => checkToolInventory([...generic, ...companion, 'te3_catalog'], '3'), /exactly/);
+test('condition 5 requires exactly the three companion tools', () => {
+  assert.deepEqual(checkToolInventory([...generic, ...companion], '5'), { genericTools: 2, companionTools: 3 });
+  assert.throws(() => checkToolInventory([...generic, 'te3_inspect'], '5'), /exactly/);
+  assert.throws(() => checkToolInventory([...generic, ...companion, 'te3_catalog'], '5'), /exactly/);
 });
 
 test('unexpected, duplicate or missing generic tools fail', () => {
-  assert.throws(() => checkToolInventory([...generic, 'Bash'], '0b'), /Unexpected tools: Bash/);
-  assert.throws(() => checkToolInventory([generic[0], generic[0]], '0b'), /Duplicate/);
-  assert.throws(() => checkToolInventory([], '0b'), /No generic/);
+  assert.throws(() => checkToolInventory([...generic, 'Bash'], '2'), /Unexpected tools: Bash/);
+  assert.throws(() => checkToolInventory([generic[0], generic[0]], '2'), /Duplicate/);
+  assert.throws(() => checkToolInventory([], '2'), /No generic/);
 });
 
 // Node fake backend; no desktop tool is launched.
@@ -47,9 +47,9 @@ test('observeTools lists the first trial gateway tools twice and writes a summar
   t.after(() => rm(root, { recursive: true, force: true }));
   const backend = join(root, 'backend.mjs');
   await writeFile(backend, backendSource);
-  await mkdir(join(root, '3-sonnet-object-01'));
-  await writeFile(join(root, 'study.json'), JSON.stringify({ rung: '3', trials: [{ id: '3-sonnet-object-01' }] }));
-  await writeFile(join(root, '3-sonnet-object-01', 'gateway.json'), JSON.stringify({
+  await mkdir(join(root, '5-sonnet-object-01'));
+  await writeFile(join(root, 'study.json'), JSON.stringify({ rung: '5', trials: [{ id: '5-sonnet-object-01' }] }));
+  await writeFile(join(root, '5-sonnet-object-01', 'gateway.json'), JSON.stringify({
     genericCommand: [process.execPath, backend, ...generic],
     companionCommand: [process.execPath, backend, ...companion],
     logPath: join(root, 'unused.jsonl'), maxCalls: 60

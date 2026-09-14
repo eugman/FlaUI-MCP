@@ -160,7 +160,7 @@ async function preparationInputs(t, overrides = {}) {
     await writeFile(join(root, name), text);
   }
   const config = {
-    rung: '3', model: 'sonnet', seed: 42,
+    rung: '5', model: 'sonnet', seed: 42,
     genericBuild: join(root, 'generic'), companionBuild: join(root, 'companion'),
     controller: join(root, 'controller', 'Controller.exe'), baseline: join(root, 'baseline.bim'),
     te3: join(root, 'TabularEditor3.exe'), te: join(root, 'TabularEditor.exe'), claudeEntry: join(root, 'claude.exe'),
@@ -172,11 +172,11 @@ async function preparationInputs(t, overrides = {}) {
   return { root, config, configPath };
 }
 
-test('config validation limits companion tools to rung 3 and models to sonnet/opus', async t => {
+test('config validation limits companion tools to condition 5 and models to sonnet/opus', async t => {
   const { config } = await preparationInputs(t);
   assert.equal(validateConfig(config).trialsPerTask, 3);
   assert.deepEqual(validateConfig(config).genericCommand, ['FlaUI.Mcp.exe', 'mcp']);
-  assert.throws(() => validateConfig({ ...config, rung: '2' }), /only for rung 3/);
+  assert.throws(() => validateConfig({ ...config, rung: '2' }), /only for condition 5/);
   assert.throws(() => validateConfig({ ...config, companionBuild: undefined }), /requires companionBuild/);
   assert.throws(() => validateConfig({ ...config, model: 'haiku' }), /sonnet or opus/);
   assert.throws(() => validateConfig({ ...config, seed: 'x' }), /seed/);
@@ -184,12 +184,12 @@ test('config validation limits companion tools to rung 3 and models to sonnet/op
   assert.throws(() => validateConfig({ ...config, genericCommand: ['Missing.exe'] }), /Missing Missing.exe/);
 });
 
-test('prepare freezes a rung 3 study with skill, gateways and MCP configs', async t => {
+test('prepare freezes a condition 5 study with skill, gateways and MCP configs', async t => {
   const { root, configPath } = await preparationInputs(t);
   const out = join(root, 'study');
   assert.deepEqual(await prepare(configPath, out), { directory: out, trials: 12 });
   const study = JSON.parse(readFileSync(join(out, 'study.json'), 'utf8'));
-  const skill = composeSkill('3');
+  const skill = composeSkill('5');
   assert.equal(study.skill.sha256, skill.sha256);
   assert.deepEqual(study.skill.layers, skill.layers);
   assert.equal(readFileSync(join(out, 'skill.md'), 'utf8'), skill.text);
@@ -208,15 +208,15 @@ test('prepare freezes a rung 3 study with skill, gateways and MCP configs', asyn
 
 test('prepare for a generic rung has no companion and checks a supplied current build', async t => {
   const { root, configPath } = await preparationInputs(t, {
-    rung: '0a', companionBuild: undefined, genericCommand: ['FlaUI.Mcp.exe', 'serve', '--stdio'], tasks: ['object'], trialsPerTask: 2
+    rung: '1', companionBuild: undefined, genericCommand: ['FlaUI.Mcp.exe', 'serve', '--stdio'], tasks: ['object'], trialsPerTask: 2
   });
   const out = join(root, 'study');
   await prepare(configPath, out);
   const study = JSON.parse(readFileSync(join(out, 'study.json'), 'utf8'));
-  assert.deepEqual(study.trials.map(trial => trial.id).sort(), ['0a-sonnet-object-01', '0a-sonnet-object-02']);
+  assert.deepEqual(study.trials.map(trial => trial.id).sort(), ['1-sonnet-object-01', '1-sonnet-object-02']);
   assert.equal(readFileSync(join(out, 'skill.md'), 'utf8'), '');
   assert.equal(existsSync(join(out, 'companion')), false);
-  const gateway = JSON.parse(readFileSync(join(out, '0a-sonnet-object-01', 'gateway.json'), 'utf8'));
+  const gateway = JSON.parse(readFileSync(join(out, '1-sonnet-object-01', 'gateway.json'), 'utf8'));
   assert.deepEqual(gateway.genericCommand, [join(out, 'build', 'FlaUI.Mcp.exe'), 'serve', '--stdio']);
   assert.equal(gateway.companionCommand, undefined);
 

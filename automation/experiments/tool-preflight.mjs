@@ -12,9 +12,9 @@ export function checkToolInventory(names, rung) {
   const generic = names.filter(name => name.startsWith('windows_'));
   if (!generic.length) throw new Error('No generic windows_ tools');
   const te3 = names.filter(name => name.startsWith('te3_')).sort();
-  if (rung === '3') {
+  if (rung === '5') {
     if (JSON.stringify(te3) !== JSON.stringify([...companionTools].sort())) {
-      throw new Error(`Rung 3 must expose exactly ${companionTools.join(', ')}; observed ${te3.join(', ') || 'none'}`);
+      throw new Error(`Condition 5 must expose exactly ${companionTools.join(', ')}; observed ${te3.join(', ') || 'none'}`);
     }
   } else if (te3.length) {
     throw new Error(`Rung ${rung} must not expose te3_* tools; observed ${te3.join(', ')}`);

@@ -12,26 +12,25 @@ async function layers(t, files) {
   return directory;
 }
 
-test('baseline rungs inject nothing', async t => {
+test('conditions 1 and 2 inject nothing', async t => {
   const directory = await layers(t, {});
-  assert.equal(composeSkill('0a', directory).text, '');
-  assert.equal(composeSkill('0b', directory).text, '');
+  assert.equal(composeSkill('1', directory).text, '');
+  assert.equal(composeSkill('2', directory).text, '');
 });
 
-test('rungs are cumulative, strip authoring comments and skip empty layers', async t => {
+test('conditions add the generic skill, then the map, and strip authoring comments', async t => {
   const directory = await layers(t, {
     '1-mcp-basics': '<!-- note -->\n- basics\n',
-    '2-te3': '<!-- only a note -->\n',
-    '3-companion': '- companion'
+    map: '<!-- only a note -->\n# Map'
   });
-  assert.equal(composeSkill('1', directory).text, '- basics');
-  assert.equal(composeSkill('2', directory).text, '- basics');
-  assert.equal(composeSkill('3', directory).text, '- basics\n\n- companion');
+  assert.equal(composeSkill('3', directory).text, '- basics');
+  assert.equal(composeSkill('4', directory).text, '- basics\n\n# Map');
+  assert.equal(composeSkill('5', directory).text, composeSkill('4', directory).text);
 });
 
 test('identical layers give identical hashes', async t => {
   const first = await layers(t, { '1-mcp-basics': '- basics' });
   const second = await layers(t, { '1-mcp-basics': '<!-- different note -->- basics' });
-  assert.equal(composeSkill('1', first).sha256, composeSkill('1', second).sha256);
+  assert.equal(composeSkill('3', first).sha256, composeSkill('3', second).sha256);
   assert.throws(() => composeSkill('9', first), /Unknown rung/);
 });

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-export const rungs = ['0a', '0b', '0c', '1', '2', '3'];
+export const rungs = ['1', '2', '3', '4', '5'];
 export const models = ['sonnet', 'opus'];
 export const companionTools = ['te3_inspect', 'te3_navigate', 'te3_capture'];
 export const tasks = {
@@ -97,8 +97,8 @@ export function validateConfig(input) {
       config.genericCommand.some(part => typeof part !== 'string' || !part)) {
     throw new Error('genericCommand must be a nonempty string array');
   }
-  if (config.rung === '3' && !config.companionBuild) throw new Error('Rung 3 requires companionBuild');
-  if (config.rung !== '3' && config.companionBuild) throw new Error('Companion tools are only for rung 3');
+  if (config.rung === '5' && !config.companionBuild) throw new Error('Condition 5 requires companionBuild');
+  if (config.rung !== '5' && config.companionBuild) throw new Error('Companion tools are only for condition 5');
   const paths = ['genericBuild', 'controller', 'baseline', 'te3', 'te', 'claudeEntry'];
   if (config.companionBuild) paths.push('companionBuild');
   if (config.currentBuild) paths.push('currentBuild');
@@ -203,7 +203,7 @@ function gatewayConfig(out, config, trialDirectory) {
     genericCommand: [path.join(out, 'build', executable), ...args],
     logPath: path.join(trialDirectory, 'calls.jsonl'), maxCalls: config.maxCalls
   };
-  if (config.rung === '3') gateway.companionCommand = [path.join(out, 'companion', 'FlaUI.Automation.exe'), 'mcp'];
+  if (config.rung === '5') gateway.companionCommand = [path.join(out, 'companion', 'FlaUI.Automation.exe'), 'mcp'];
   return gateway;
 }
 
@@ -212,7 +212,7 @@ export async function prepare(configPath, destination) {
   const out = path.resolve(destination);
   if (fs.existsSync(out)) throw new Error('Use a fresh study directory');
   const controllerDirectory = path.dirname(config.controller);
-  if (config.rung === '3') assertSameAssemblies(config.companionBuild, controllerDirectory);
+  if (config.rung === '5') assertSameAssemblies(config.companionBuild, controllerDirectory);
   else if (config.currentBuild) assertSameAssemblies(config.currentBuild, controllerDirectory);
   // Imported lazily: the frozen copy of this file runs trials from inside the study, away from skills/.
   const { composeSkill } = await import('../skills/build-skill.mjs');
@@ -227,7 +227,7 @@ export async function prepare(configPath, destination) {
   // Copy immutable inputs before creating per-trial output directories.
   fs.mkdirSync(out, { recursive: true });
   fs.cpSync(config.genericBuild, path.join(out, 'build'), { recursive: true });
-  if (config.rung === '3') fs.cpSync(config.companionBuild, path.join(out, 'companion'), { recursive: true });
+  if (config.rung === '5') fs.cpSync(config.companionBuild, path.join(out, 'companion'), { recursive: true });
   fs.cpSync(controllerDirectory, path.join(out, 'controller'), { recursive: true });
   fs.copyFileSync(config.baseline, path.join(out, 'fixture.bim'));
   fs.writeFileSync(path.join(out, 'hello-world.csx'), '"Hello World".Output();\r\n', { flag: 'wx' });

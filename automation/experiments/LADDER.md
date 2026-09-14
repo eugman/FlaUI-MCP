@@ -1,39 +1,27 @@
-# Evaluation ladder
+# Five-condition study
 
-This study measures what each addition to the TE3 agent setup is worth. Each rung
-adds one thing to the rung below it. Agents run in Claude Code headless mode with
-Sonnet or Opus, one trial at a time, against an offline TE3 fixture that the
-controller launches and restores.
+This study measures what each addition to the TE3 agent setup is worth. Agents run
+in Claude Code headless mode with Sonnet or Opus, one trial at a time, against an
+offline TE3 fixture that the controller launches and restores. The config field
+`rung` holds the condition number.
 
-| Rung | MCP server build | Injected skill | Companion TE3 tools |
-|---|---|---|---|
-| 0a | Original build (TabularEditor main 6a39906) | none | no |
-| 0b | Build at 31f8d56 (hardened generic tools) | none | no |
-| 0c | Current build (0b plus fixes from 0b transcripts) | none | no |
-| 1 | Current build | `composeSkill('1')` | no |
-| 2 | Current build | `composeSkill('2')` | no |
-| 3 | Current build | `composeSkill('3')` | `te3_inspect`, `te3_navigate`, `te3_capture` |
+| Condition | MCP server build | Injected skill | TE3 tools | Data |
+|---|---|---|---|---|
+| 1 | Original (TabularEditor main 6a39906) | none | no | `ladder-20260914-0a-sonnet` |
+| 2 | New (current) | none | no | `ladder-20260914-0c-sonnet` |
+| 3 | New | generic skill (`layers/1-mcp-basics.md`) | no | to run |
+| 4 | New | generic skill + map (`layers/map.md`) | no | to run |
+| 5 | New | generic skill + map | `te3_inspect`, `te3_navigate`, `te3_capture` | to run |
 
-The skill text comes from `automation/skills/layers/` and is appended to the prompt
-under `Guidance:`. Rungs 0a, 0b and 0c inject nothing. Rung 1 builds on 0c. No rung serves the TE3 map
-through MCP.
-
-## Rules for adding layers
-
-- Write a rung's layer lines only after reading the previous rung's transcripts.
-- Each line must fix a failure seen in at least two trials.
-- Never derive a line from the hold-out task (`code-actions`) or its transcripts.
-- Stop adding rungs once a rung passes all 3 trials of every training task with
-  no false claims.
-- Keep a rung only if passes rise, false claims fall, or mean dispatched calls drop
-  by at least 30% without fewer passes. Otherwise remove its layer.
+The skill text is appended to the prompt under `Guidance:`. The map is
+`automation/skills/te3-notes` concatenated as is. Studies named `0b`, `1`, `2`,
+`-extended` and `-rerun` are development history and are not compared.
 
 ## Trials
 
-- Sonnet: all 4 tasks × 3 trials at every rung (12 trials per rung).
-- Opus: the same 12 trials at rung 0c and at the final rung.
-- Trial ids are `RUNG-MODEL-TASK-NN`. `study.json` lists them in a seeded shuffled
-  order; run them in that order.
+- Sonnet: all 4 tasks × 3 trials per condition (12 trials).
+- Trial ids are `CONDITION-MODEL-TASK-NN`. `study.json` lists them in a seeded
+  shuffled order; run them in that order.
 - Keep every attempted trial, including failures and interruptions. Never replace
   one with a retry.
 
