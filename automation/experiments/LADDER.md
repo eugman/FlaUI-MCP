@@ -119,7 +119,10 @@ runner, so the check runs only when the config supplies `currentBuild`.
    `node STUDY/ladder-study.mjs run STUDY TRIAL_ID --handoff`.
    After the first trial of a study, confirm `visibleTools` in `usage.json` lists
    only `mcp__study__*` tools.
-7. Grade and write `review.json`.
+7. Grade blind: `node automation/experiments/blind-review.mjs pack STUDY... NEW_REVIEW_DIRECTORY`
+   copies each attempted trial's image, rubric and redacted final message under a
+   random code. Write `grades.json` there (`{ CODE: { rubric, claimedSuccess, notes } }`),
+   then `blind-review.mjs apply REVIEW_DIRECTORY` writes each trial's `review.json`.
 8. Summarize: `node automation/experiments/ladder-study.mjs summarize STUDY`.
    It prints one JSON line per trial, then one per rung × task × model with
    passes, pass-all, false claims, mean calls and mean tokens.
