@@ -8,13 +8,14 @@ controller launches and restores.
 | Rung | MCP server build | Injected skill | Companion TE3 tools |
 |---|---|---|---|
 | 0a | Original build (TabularEditor main 6a39906) | none | no |
-| 0b | Current build | none | no |
+| 0b | Build at 31f8d56 (hardened generic tools) | none | no |
+| 0c | Current build (0b plus fixes from 0b transcripts) | none | no |
 | 1 | Current build | `composeSkill('1')` | no |
 | 2 | Current build | `composeSkill('2')` | no |
 | 3 | Current build | `composeSkill('3')` | `te3_inspect`, `te3_navigate`, `te3_capture` |
 
 The skill text comes from `automation/skills/layers/` and is appended to the prompt
-under `Guidance:`. Rungs 0a and 0b inject nothing. No rung serves the TE3 map
+under `Guidance:`. Rungs 0a, 0b and 0c inject nothing. Rung 1 builds on 0c. No rung serves the TE3 map
 through MCP.
 
 ## Rules for adding layers
@@ -30,7 +31,7 @@ through MCP.
 ## Trials
 
 - Sonnet: all 4 tasks × 3 trials at every rung (12 trials per rung).
-- Opus: the same 12 trials at rung 0b and at the final rung.
+- Opus: the same 12 trials at rung 0c and at the final rung.
 - Trial ids are `RUNG-MODEL-TASK-NN`. `study.json` lists them in a seeded shuffled
   order; run them in that order.
 - Keep every attempted trial, including failures and interruptions. Never replace

@@ -9,6 +9,7 @@ const defaultLayers = path.join(path.dirname(fileURLToPath(import.meta.url)), 'l
 export const rungLayers = {
   '0a': [],
   '0b': [],
+  '0c': [],
   '1': ['1-mcp-basics'],
   '2': ['1-mcp-basics', '2-te3'],
   '3': ['1-mcp-basics', '2-te3', '3-companion']

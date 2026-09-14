@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-export const rungs = ['0a', '0b', '1', '2', '3'];
+export const rungs = ['0a', '0b', '0c', '1', '2', '3'];
 export const models = ['sonnet', 'opus'];
 export const companionTools = ['te3_inspect', 'te3_navigate', 'te3_capture'];
 export const tasks = {
