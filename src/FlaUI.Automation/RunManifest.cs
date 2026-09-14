@@ -18,15 +18,14 @@ public class RunManifest
     public string? SettingsBackup { get; set; }
     public bool SettingsRestored { get; set; } = true;
     public bool NeedsRecovery { get; set; }
-    public string? CleanupOutcome { get; set; }
     public string? CleanupError { get; set; }
-    public List<string> RecoveryErrors { get; set; } = [];
     public bool Passed { get; set; }
     public string? Error { get; set; }
     public string? CurrentStep { get; set; }
     public string? ErrorDetails { get; set; }
     public List<TestResult> Tests { get; set; } = [];
     public Dictionary<string, string> Screenshots { get; set; } = [];
+    public Dictionary<string, string> ScreenshotHashes { get; set; } = [];
     public string? CaptureVariant { get; set; }
     public int? ExpectedDpi { get; set; }
     public Dictionary<string, CaptureEnvironment> CaptureEnvironments { get; set; } = [];

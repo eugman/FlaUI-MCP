@@ -27,6 +27,7 @@ public static class CaptureComposition
         void RegisterOutput()
         {
             manifest.Screenshots.Add(spec.Checkpoint, output);
+            manifest.ScreenshotHashes.Add(spec.Checkpoint, ArtifactFiles.Sha256(output));
             manifest.Compositions.Add(spec.Checkpoint, spec);
             AtomicJournal.Write(manifestPath, manifest, RunConfig.Json);
             // Index rendering uses the actual manifest location, never a stale output path.

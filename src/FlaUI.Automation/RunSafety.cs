@@ -17,6 +17,13 @@ public static class RunSafety
             !string.Equals(process.MainModule?.FileName, Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Process identity mismatch; refusing termination.");
     }
+    // An exiting process can fail StartTime/MainModule reads. Exit is the goal, not an identity mismatch.
+    internal static bool VerifyUnlessExited(Process process, Action verifyIdentity)
+    {
+        if (process.HasExited) return false;
+        try { verifyIdentity(); return true; }
+        catch (Exception) when (process.HasExited) { return false; }
+    }
     public static async Task CloseOwned(int pid, long startedTicks, string executable)
     {
         if (pid == 0) return;
@@ -24,14 +31,13 @@ public static class RunSafety
         try { process = Process.GetProcessById(pid); } catch (ArgumentException) { return; }
         using (process)
         {
-            VerifyIdentity(process, startedTicks, executable);
-            if (process.HasExited) return;
+            if (!VerifyUnlessExited(process, () => VerifyIdentity(process, startedTicks, executable))) return;
             process.CloseMainWindow();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try { await process.WaitForExitAsync(timeout.Token); }
             catch (OperationCanceledException)
             {
-                VerifyIdentity(process, startedTicks, executable);
+                if (!VerifyUnlessExited(process, () => VerifyIdentity(process, startedTicks, executable))) return;
                 process.Kill();
                 using var killed = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 await process.WaitForExitAsync(killed.Token);

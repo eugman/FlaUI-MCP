@@ -35,6 +35,8 @@ public static class ArtifactFiles
                 throw new IOException("Reparse points are not supported for artifact operations");
         return full;
     }
+    public static string Sha256(string path) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
+
     public static RunManifest ReadManifest(string path) => JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(path), RunConfig.Json)
         ?? throw new ArgumentException("Missing manifest");
 
@@ -44,6 +46,9 @@ public static class ArtifactFiles
         if (!manifest.Passed || manifest.NeedsRecovery) throw new ArgumentException("Promotion requires a passed, cleaned-up run");
         if (!manifest.Screenshots.TryGetValue(checkpoint, out var source)) throw new ArgumentException("Unknown checkpoint");
         source = ContainedPath(source, runDirectory);
+        // Older manifests have no hashes; newer ones must still match the captured bytes.
+        if (manifest.ScreenshotHashes.TryGetValue(checkpoint, out var captured) && Sha256(source) != captured)
+            throw new IOException("Checkpoint PNG changed since capture; refusing promotion");
         var root = manifest.DocsRoot ?? throw new ArgumentException("Set docsRoot in the run config before promotion");
         if (Path.GetFullPath(root).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             .Any(segment => segment.Equals("TabularEditorDocs", StringComparison.OrdinalIgnoreCase)))
@@ -65,14 +70,39 @@ public static class ArtifactFiles
             var start = new ProcessStartInfo("git") { WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var arg in args) start.ArgumentList.Add(arg);
-            using var process = Process.Start(start)!;
-            var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync(); await stdout; await stderr;
-            return process.ExitCode;
+            return await RunGitCheck(start);
         }
         var relative = Path.GetRelativePath(root, path);
         if (await Git("ls-files", "--error-unmatch", "--", relative) != 0 ||
             await Git("diff", "--quiet", "HEAD", "--", relative) != 0)
             throw new IOException("Refusing to overwrite an untracked or locally modified destination");
+    }
+
+    internal static async Task<int> RunGitCheck(ProcessStartInfo start, TimeSpan? timeLimit = null)
+    {
+        using var process = Process.Start(start) ?? throw new IOException("Git did not start");
+        using var timeout = new CancellationTokenSource(timeLimit ?? TimeSpan.FromSeconds(30));
+        var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
+        try
+        {
+            // Await both readers with the exit wait so every failure is observed.
+            await Task.WhenAll(process.WaitForExitAsync(timeout.Token), stdout, stderr);
+            return process.ExitCode;
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await process.WaitForExitAsync(shutdown.Token);
+            }
+            catch (Exception error)
+            {
+                throw new TimeoutException($"Git check timed out; shutdown of PID {process.Id} could not be confirmed. Destination was not overwritten.", error);
+            }
+            throw new TimeoutException($"Git check timed out and PID {process.Id} was terminated. Destination was not overwritten.");
+        }
     }
 }

@@ -10,16 +10,32 @@ public static class RunnerCommands
         FlaUI.Automation list|validate CONFIG
         FlaUI.Automation compose MANIFEST SPEC OUT.png
         FlaUI.Automation promote RUN_DIR CHECKPOINT DEST.png [--overwrite]
+        FlaUI.Automation mcp [--guidance-only]
+        FlaUI.Automation recover BACKUP_DIR
         --no-focus rejects run.
         """;
-    public static async Task<int> Execute(string[] args)
+    public static Task<int> Execute(string[] args) => Execute(args, CancellationToken.None);
+
+    internal static async Task<int> Execute(string[] args, CancellationToken cancellationToken)
     {
         try
         {
+            if (args.Length >= 1 && args[0] == "mcp")
+            {
+                if (args.Length > 2 || args.Length == 2 && args[1] != "--guidance-only") throw new ArgumentException(Usage);
+                DpiUtility.EnablePerMonitorV2();
+                using var host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]));
+                var registry = new PlaywrightWindows.Mcp.ToolRegistry();
+                foreach (var name in args.Length == 2 ? new[] { "te3_catalog" } : Te3Companion.Names)
+                    registry.RegisterTool(new Te3Companion(host, name));
+                var resources = Te3Guide.Topics.Values.ToDictionary(r => r.Uri);
+                await new PlaywrightWindows.Mcp.McpServer(registry, resources).RunAsync();
+                return 0;
+            }
             var noFocus = args.Contains("--no-focus"); args = args.Where(a => a != "--no-focus").ToArray();
             if (args.Length < 2) throw new ArgumentException(Usage);
             var command = args[0];
-            if (noFocus && command == "run")
+            if (noFocus && command is ("run" or "recover"))
                 throw new ArgumentException("Mutating/desktop command rejected by --no-focus");
             if (command == "compose")
             {
@@ -30,6 +46,17 @@ public static class RunnerCommands
             {
                 if (args.Length is not (4 or 5) || args.Length == 5 && args[4] != "--overwrite") throw new ArgumentException(Usage);
                 await ArtifactFiles.Promote(args[1], args[2], args[3], args.Length == 5); return 0;
+            }
+            if (command == "recover")
+            {
+                if (args.Length != 2) throw new ArgumentException(Usage);
+                // Restores an interrupted run's exact backup; hashes are checked before and after copying.
+                var backup = Path.GetFullPath(args[1]);
+                using var recoveryGate = RunExecutor.AcquireRunnerLock();
+                RunSafety.RequireExclusiveTe3();
+                SettingsLease.RestoreBackup(backup);
+                Console.WriteLine(JsonSerializer.Serialize(new { restored = backup, verified = "sha256", backupRetained = true }));
+                return 0;
             }
             if (command is not ("run" or "list" or "validate"))
                 throw new ArgumentException(Usage);
@@ -51,19 +78,26 @@ public static class RunnerCommands
             var recipes = RecipeCatalog.Select(selector == null ? config.Scenarios : [selector]);
             if (recipes.Any(r => r.RequiresServer && !config.UseServer(r))) throw new ArgumentException("Selected recipes require fixed/auto fixture mode");
             if (command == "validate") { Console.WriteLine("Valid: " + string.Join(", ", recipes.Select(r => r.Id))); return 0; }
-            using var runnerGate = Lock();
-            DpiUtility.EnablePerMonitorV2();
-            foreach (var recipe in recipes)
-                for (var n = 0; n < (repeat ?? config.Repeat); n++)
-                {
-                    var result = await RunExecutor.Execute(config, recipe);
-                    Console.WriteLine(JsonSerializer.Serialize(new { result.ManifestPath, result.Manifest.Passed, result.Manifest.Error, result.Manifest.CleanupError }));
-                    if (!result.Manifest.Passed) return 1;
-                }
-            return 0;
+            using var interrupts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; interrupts.Cancel(); };
+            Console.CancelKeyPress += cancel;
+            try
+            {
+                using var runnerGate = RunExecutor.AcquireRunnerLock();
+                DpiUtility.EnablePerMonitorV2();
+                foreach (var recipe in recipes)
+                    for (var n = 0; n < (repeat ?? config.Repeat); n++)
+                    {
+                        var result = await RunExecutor.Execute(config, recipe, interrupts.Token, runnerGate);
+                        Console.WriteLine(JsonSerializer.Serialize(new { result.ManifestPath, result.Manifest.Passed, result.Manifest.Error, result.Manifest.CleanupError }));
+                        if (!result.Manifest.Passed) return 1;
+                    }
+                return 0;
+            }
+            finally { Console.CancelKeyPress -= cancel; }
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or TimeoutException)
+        catch (OperationCanceledException) { Console.Error.WriteLine("Operation canceled; cleanup was attempted if a run started."); return 1; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or TimeoutException or AggregateException)
         { Console.Error.WriteLine(ex.GetType().Name + ": " + ex.Message); return 2; }
     }
-    private static FileStream Lock() => new(Path.Combine(Path.GetTempPath(), "fla_te3_automation.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 }

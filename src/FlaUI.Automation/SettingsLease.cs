@@ -8,7 +8,6 @@ public sealed class SettingsLease
     public static string DefaultDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TabularEditor3");
     public static string DefaultBackupRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlaUI-MCP", "settings-backups");
     public string BackupDirectory { get; }
-    public bool Restored { get; private set; }
     private readonly string directory;
     private readonly Dictionary<string, string?> hashes;
     public static void Validate(string? directory = null)
@@ -41,7 +40,7 @@ public sealed class SettingsLease
         settings["MainWindowRectangle"] = new JsonObject { ["X"] = 40, ["Y"] = 40, ["W"] = 1400, ["H"] = 900 };
         File.WriteAllText(path, settings.ToJsonString());
     }
-    public void Restore() { RestoreBackup(BackupDirectory, directory); Restored = true; }
+    public void Restore() => RestoreBackup(BackupDirectory, directory);
     public static void RestoreBackup(string backup, string? expectedDirectory = null)
     {
         var info = JsonSerializer.Deserialize<BackupInfo>(File.ReadAllText(Path.Combine(backup, "restore.json")))!;

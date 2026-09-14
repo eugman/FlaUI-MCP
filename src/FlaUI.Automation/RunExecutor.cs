@@ -7,6 +7,9 @@ public sealed record RunExecutionResult(string ManifestPath, RunManifest Manifes
 
 public static class RunExecutor
 {
+    internal static FileStream AcquireRunnerLock() => new(Path.Combine(Path.GetTempPath(), "fla_te3_automation.lock"),
+        FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
     public static async Task<string> CreateModel(RunConfig config, string directory, string name)
     {
         var path = Path.Combine(directory, name + ".bim");
@@ -21,8 +24,14 @@ public static class RunExecutor
         }
         return path;
     }
-    public static async Task<RunExecutionResult> Execute(RunConfig config, Recipe recipe)
+    public static Task<RunExecutionResult> Execute(RunConfig config, Recipe recipe, CancellationToken cancellationToken = default)
+        => Execute(config, recipe, cancellationToken, heldRunnerLock: null);
+
+    // A batch passes its held lock so no other runner can start between recipes.
+    internal static async Task<RunExecutionResult> Execute(RunConfig config, Recipe recipe, CancellationToken cancellationToken, FileStream? heldRunnerLock)
     {
+        using var runnerGate = heldRunnerLock == null ? AcquireRunnerLock() : null;
+        cancellationToken.ThrowIfCancellationRequested();
         if (recipe.RequiresServer && !config.UseServer(recipe)) throw new ArgumentException("Recipe requires fixed/auto fixture mode: " + recipe.Id);
         RunSafety.RequireExclusiveTe3();
         var id = "fla_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N")[..8];
@@ -37,14 +46,17 @@ public static class RunExecutor
         var timer = Stopwatch.StartNew();
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var model = manifest.Database.Length == 0 ? await CreateModel(config, output, id) : "";
             if (manifest.Database.Length == 0)
             {
                 manifest.SourceHashes["fixture.bim"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(model)));
                 OfflineModelOptions.Create(model, output, Environment.UserName);
             }
+            cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3();
             settings = AcquireSettings(manifest, Save); settings.Normalize(config.MaximizeWindow);
+            cancellationToken.ThrowIfCancellationRequested();
             host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]));
             var start = new ProcessStartInfo(config.Te3) { UseShellExecute = false, CreateNoWindow = true };
             if (manifest.Database.Length > 0) { start.ArgumentList.Add(config.Server); start.ArgumentList.Add(manifest.Database); }
@@ -59,7 +71,7 @@ public static class RunExecutor
                 var windows = Win32Desktop.GetTopLevelWindows(app.Id).Where(w => !w.IsToolWindow && w.Title.Contains(marker) && w.Title.Contains("Tabular Editor 3")).ToArray();
                 if (windows.Length == 1) { handle = host.Sessions.RegisterNativeWindow(windows[0].Hwnd, app.Id); break; }
                 if (app.HasExited) throw new InvalidOperationException("TE3 exited during startup");
-                await Task.Delay(250);
+                await Task.Delay(250, cancellationToken);
             }
             if (handle == null) throw new TimeoutException("TE3 did not open the owned model");
             host.Sessions.FocusWindow(handle);
@@ -71,11 +83,14 @@ public static class RunExecutor
             {
                 RunSafety.RequireExclusiveTe3(app.Id); target.EnsureAlive();
                 if (activation.Elapsed > TimeSpan.FromSeconds(120)) throw new TimeoutException("Manual activation not received; no input sent");
-                await Task.Delay(250);
+                await Task.Delay(250, cancellationToken);
             }
-            var page = new Te3Page(host, handle, Invoke, step => manifest.CurrentStep = step);
+            cancellationToken.ThrowIfCancellationRequested();
+            var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken));
             await page.DefaultLayout();
+            cancellationToken.ThrowIfCancellationRequested();
             await recipe.Execute(new RecipeContext(page, config, manifest, model, Save));
+            cancellationToken.ThrowIfCancellationRequested();
             manifest.Tests.Add(new(recipe.Id, "passed", timer.ElapsedMilliseconds, recipe.DocsPage));
             manifest.Passed = true;
         }
@@ -88,6 +103,7 @@ public static class RunExecutor
                 try { await Invoke("windows_screenshot", new { handle, savePath = Path.Combine(output, "failure.png"), includeImage = false, background = true }); } catch { }
                 try { await Invoke("windows_find", new { handle, maxResults = 200 }); } catch { }
             }
+            try { WriteWindowList(Path.Combine(output, "failure-windows.json"), manifest.ProcessId); } catch { }
         }
         finally
         {
@@ -113,18 +129,13 @@ public static class RunExecutor
                 manifest.Passed = false;
                 manifest.CleanupError = string.Join("; ", cleanupErrors) + $". Retained settings backup: {manifest.SettingsBackup}";
             }
-            try { Save(); ArtifactFiles.WriteIndex(manifest); }
-            catch (Exception error)
-            {
-                manifest.Passed = false;
-                manifest.CleanupError = (manifest.CleanupError ?? "") + "; Writing results: " + error.Message;
-                Console.Error.WriteLine(manifest.CleanupError);
-            }
+            FinalizeArtifacts(manifest, Save, () => ArtifactFiles.WriteIndex(manifest));
         }
         return new(manifestPath, manifest);
 
         async Task Invoke(string tool, object arguments)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3(manifest.ProcessId);
             var result = await host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(arguments));
             File.AppendAllText(Path.Combine(output, "actions.jsonl"), JsonSerializer.Serialize(new { tool, arguments, result }) + Environment.NewLine);
@@ -137,10 +148,45 @@ public static class RunExecutor
         manifest.Error = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
         manifest.ErrorDetails = error.ToString();
     }
+    // The failure capture shows only the main window; this z-ordered list shows what overlapped it.
+    // Titles of other applications' windows are omitted.
+    internal static void WriteWindowList(string path, int te3ProcessId) => File.WriteAllText(path, JsonSerializer.Serialize(
+        Win32Desktop.GetTopLevelWindows().Select(w => new
+        {
+            hwnd = w.Hwnd.ToInt64(), w.ProcessId, title = w.ProcessId == te3ProcessId ? w.Title : null,
+            w.IsCloaked, bounds = Win32Desktop.GetWindowBounds(w.Hwnd)
+        }), RunConfig.Json));
+    internal static Action<string> ReportStep(RunManifest manifest, CancellationToken cancellationToken) => step =>
+    {
+        manifest.CurrentStep = step;
+        cancellationToken.ThrowIfCancellationRequested();
+    };
     internal static SettingsLease AcquireSettings(RunManifest manifest, Action save, Func<SettingsLease>? create = null)
     {
         var settings = (create ?? (() => new SettingsLease()))();
-        manifest.SettingsBackup = settings.BackupDirectory; manifest.SettingsRestored = false; save();
+        // Persist before normalization so a hard-killed run still reads as needing recovery.
+        manifest.SettingsBackup = settings.BackupDirectory; manifest.SettingsRestored = false; manifest.NeedsRecovery = true; save();
         return settings;
+    }
+    internal static void FinalizeArtifacts(RunManifest manifest, Action save, Action writeIndex)
+    {
+        try
+        {
+            save();
+            writeIndex();
+        }
+        catch (Exception error)
+        {
+            manifest.Passed = false;
+            var reportingError = "Writing results: " + error.Message;
+            manifest.CleanupError = string.IsNullOrWhiteSpace(manifest.CleanupError)
+                ? reportingError : manifest.CleanupError + "; " + reportingError;
+            try { save(); }
+            catch (Exception saveError)
+            {
+                manifest.CleanupError += "; Final manifest save: " + saveError.Message;
+            }
+            Console.Error.WriteLine(manifest.CleanupError);
+        }
     }
 }

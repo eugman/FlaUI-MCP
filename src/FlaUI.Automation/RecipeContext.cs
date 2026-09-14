@@ -5,57 +5,34 @@ using System.Text.Json;
 public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest manifest, string model, Action save)
 {
     public Te3Page Page { get; } = page;
-    private CaptureEnvironment BeforeCapture()
+    // Every checkpoint is new, captured at the expected DPI, and in an unchanged display context.
+    private async Task CaptureCheckpoint(string checkpoint, Func<string, Task> capture)
     {
-        var environment = Page.ObserveCaptureEnvironment();
-        environment.RequireScale(config.ExpectedDpi);
-        return environment;
-    }
-    private void RecordCapture(string checkpoint, string path, CaptureEnvironment before)
-    {
+        var path = Path.Combine(manifest.Output, checkpoint + ".png");
+        if (manifest.Screenshots.ContainsKey(checkpoint) || File.Exists(path)) throw new IOException("Duplicate checkpoint: " + checkpoint);
+        var before = Page.ObserveCaptureEnvironment();
+        before.RequireScale(config.ExpectedDpi);
+        await capture(path);
         var after = Page.ObserveCaptureEnvironment();
         if (before != after) throw new InvalidOperationException("Display context changed during capture; image is not a verified checkpoint");
         manifest.CaptureEnvironments.Add(checkpoint, after);
         manifest.Screenshots.Add(checkpoint, path);
+        manifest.ScreenshotHashes.Add(checkpoint, ArtifactFiles.Sha256(path));
         save();
     }
     public Task MapSerializationModes() => Page.SaveSerializationModes(Path.Combine(manifest.Output, "serialization-modes.uia.json"));
-    public async Task CaptureLanguageChoices()
-    {
-        const string checkpoint = "preferences-language-choices";
-        var path = Path.Combine(manifest.Output, checkpoint + ".png");
-        if (manifest.Screenshots.ContainsKey(checkpoint) || File.Exists(path)) throw new IOException("Duplicate checkpoint: " + checkpoint);
-        var environment = BeforeCapture();
-        await Page.CaptureLanguageChoices(path);
-        RecordCapture(checkpoint, path, environment);
-    }
+    public Task CaptureLanguageChoices() => CaptureCheckpoint("preferences-language-choices", Page.CaptureLanguageChoices);
     public Task MapControls(string name, PlaywrightWindows.Mcp.Core.ElementSelector within)
         => Page.SaveControlMap(Path.Combine(manifest.Output, name + ".uia.json"), within);
     private readonly CliRunner cli = new();
     private string[] Source => manifest.Database.Length == 0 ? [model] : ["-s", config.Server, "-d", manifest.Database];
-    public async Task Capture(string checkpoint, Te3Page.Target? target = null,
-        PlaywrightWindows.Mcp.Core.CaptureFrame? frame = null, bool scalarScene = false, bool screenPixels = false)
+    public Task Capture(string checkpoint, Te3Page.Target? target = null,
+        PlaywrightWindows.Mcp.Core.CaptureFrame? frame = null, bool scalarScene = false)
     {
-        var path = Path.Combine(manifest.Output, checkpoint + ".png");
-        if (manifest.Screenshots.ContainsKey(checkpoint) || File.Exists(path)) throw new IOException("Duplicate checkpoint: " + checkpoint);
-        var environment = BeforeCapture();
-        if (scalarScene)
-        {
-            if (target != null || frame != null || screenPixels) throw new ArgumentException("Scalar scene owns its framing and capture mode");
-            await Page.CaptureScalarScene(path);
-        }
-        else await Page.Capture(path, target, frame, screenPixels);
-        RecordCapture(checkpoint, path, environment);
+        if (scalarScene && (target != null || frame != null)) throw new ArgumentException("Scalar scene owns its framing");
+        return CaptureCheckpoint(checkpoint, path => scalarScene ? Page.CaptureScalarScene(path) : Page.Capture(path, target, frame));
     }
-    public async Task CaptureCalculationGroupMenu()
-    {
-        const string checkpoint = "model-calculation-group-menu";
-        var path = Path.Combine(manifest.Output, checkpoint + ".png");
-        if (manifest.Screenshots.ContainsKey(checkpoint) || File.Exists(path)) throw new IOException("Duplicate checkpoint: " + checkpoint);
-        var environment = BeforeCapture();
-        await Page.CaptureCalculationGroupMenu(path);
-        RecordCapture(checkpoint, path, environment);
-    }
+    public Task CaptureCalculationGroupMenu() => CaptureCheckpoint("model-calculation-group-menu", Page.CaptureCalculationGroupMenu);
     public async Task LoadScript(string name, string source)
     {
         var path = Path.Combine(manifest.Output, name + ".csx");

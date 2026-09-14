@@ -21,6 +21,17 @@ public sealed class SettingsAndFixtureTests : IDisposable
         Assert.Equal(original, File.ReadAllBytes(preferences));
         Assert.False(File.Exists(Path.Combine(root, "RecentFiles.json")));
     }
+    [Fact] public void AcquiredSettingsPersistRecoveryNeedBeforeNormalization()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var manifest = new RunManifest();
+        RunManifest? saved = null;
+        RunExecutor.AcquireSettings(manifest, () => saved = JsonSerializer.Deserialize<RunManifest>(JsonSerializer.Serialize(manifest)),
+            () => new SettingsLease(root, Path.Combine(root, "backup")));
+        Assert.True(saved!.NeedsRecovery);
+        Assert.False(saved.SettingsRestored);
+        Assert.Equal(Path.Combine(root, "backup"), saved.SettingsBackup);
+    }
     [Fact] public void TamperedBackupCannotOverwritePreferences()
     {
         File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");

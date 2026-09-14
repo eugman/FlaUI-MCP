@@ -7,6 +7,7 @@ using PlaywrightWindows.Mcp.Core;
 public sealed class Te3Page(AutomationHost host, string handle, Func<string, object, Task> invoke, Action<string>? reportStep = null)
 {
     private readonly ElementQuery query = new(host.Sessions, host.Elements, host.Pending);
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
     public CaptureEnvironment ObserveCaptureEnvironment()
         => CaptureEnvironment.Observe(host.Sessions.GetInputTarget(handle).Hwnd);
     public sealed record Target(ElementSelector Selector, ElementSelector? Within = null, bool IncludeOwned = false);
@@ -56,6 +57,19 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     public static Target DefaultLayoutTarget() => new(new(Name: "Default layout", ControlType: "Button"), null, true);
     public static Target AutoRollbackTarget() => new(new(Name: "Auto-rollback", ControlType: "CheckBox"));
     public static Target PreferencesTarget() => new(new(Name: "Preferences", ControlType: "Window", RootOnly: true), null, true);
+    internal string PreferencesHandle()
+    {
+        var pid = host.Sessions.GetWindowProcessId(handle);
+        var windows = Win32Desktop.GetTopLevelWindows(pid).Where(w => w.Title == "Preferences").ToArray();
+        if (windows.Length != 1) throw new InvalidOperationException("Expected exactly one native Preferences window.");
+        return host.Sessions.RegisterNativeWindow(windows[0].Hwnd, pid);
+    }
+
+    internal static bool IsPreferencesLookup(Target target) =>
+        target.Selector == PreferencesTarget().Selector || target.Within == PreferencesTarget().Selector ||
+        target.Selector.AutomationId == "treePreferences" || target.Within?.AutomationId == "treePreferences" ||
+        target.Selector.AutomationId?.StartsWith("DAX Editor.", StringComparison.Ordinal) == true ||
+        target.Within?.AutomationId?.StartsWith("DAX Editor.", StringComparison.Ordinal) == true;
     public async Task OpenPreferences()
     {
         await Click(new(new(Name: "Tools", ControlType: "MenuItem"), new(Name: "Main menu", ControlType: "MenuBar")));
@@ -66,6 +80,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         using (var input = new GuardedInput(owner with { HitHwnd = popup }))
         {
             if (Win32Desktop.WindowAt(point) != popup) throw new InvalidOperationException("Preferences command is obscured");
+            reportStep?.Invoke("Click Preferences command");
             input.Send(() => FlaUI.Core.Input.Mouse.Click(point));
         }
         reportStep?.Invoke("Wait for native Preferences window before querying its controls");
@@ -117,18 +132,12 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     public async Task AssertAutoFormattingState()
     {
         var pane = new ElementSelector(AutomationId: "DAX Editor.Auto Formatting");
-        foreach (var (name, enabled) in new[] {
+        await AssertCheckboxes(pane, visibleOnly: false,
             ("Auto format code as you type", true), ("Auto-format function calls", true), ("Auto-indent", true),
             ("Auto-brace", true), ("Wrap selection", true), ("Space after functions", false),
             ("Newline after functions", false), ("Newline before operator", true), ("Pad parentheses", true),
             ("Fix measure/column qualifiers", true), ("Fix keyword/function casing", true), ("Fix object reference casing", true),
-            ("Always quote tables", false), ("Always prefix extension columns", false) })
-        {
-            var control = await Resolve(new(new(Name: name, ControlType: "CheckBox"), pane, true));
-            var state = await Task.Run(() => control.Patterns.Toggle.Pattern.ToggleState.Value).WaitAsync(TimeSpan.FromSeconds(5));
-            if (state != (enabled ? FlaUI.Core.Definitions.ToggleState.On : FlaUI.Core.Definitions.ToggleState.Off))
-                throw new InvalidOperationException("Auto Formatting checkbox differs from original: " + name);
-        }
+            ("Always quote tables", false), ("Always prefix extension columns", false));
         await Expect(new(new(Name: "Long format line limit", ControlType: "Spinner", Pattern: "Value"), pane, true), "120");
         await Expect(new(new(Name: "Short format line limit", ControlType: "Spinner", Pattern: "Value"), pane, true), "60");
         await Expect(new(new(Name: "Preferred keyword casing", ControlType: "ComboBox"), pane, true), "Default");
@@ -139,20 +148,12 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     {
         var pane = new ElementSelector(AutomationId: "File Formats.General");
         await Expect(new(pane, IncludeOwned: true));
-        foreach (var (name, enabled) in new[]
-        {
+        await AssertCheckboxes(pane, visibleOnly: true,
             ("Ignore inferred objects", true), ("Ignore inferred properties", true), ("Ignore timestamps", true),
             ("Ignore lineage tags", false), ("Ignore privacy settings", false), ("Split multiline strings", true),
             ("Sort arrays by name", false), ("Include sensitive", false), ("Ignore incremental refresh partitions", false),
             ("Use PBIX filename as database name when serializing", true), ("Use latest default", true),
-            ("Use workspace database", true), ("Create user options (.tmuo) file", true)
-        })
-        {
-            var control = await Resolve(new(new(Name: name, ControlType: "CheckBox", Visible: true), pane, true));
-            var state = await Task.Run(() => control.Patterns.Toggle.Pattern.ToggleState.Value).WaitAsync(TimeSpan.FromSeconds(5));
-            if (state != (enabled ? FlaUI.Core.Definitions.ToggleState.On : FlaUI.Core.Definitions.ToggleState.Off))
-                throw new InvalidOperationException("File Formats checkbox differs from expected: " + name);
-        }
+            ("Use workspace database", true), ("Create user options (.tmuo) file", true));
         await Expect(new(new(Name: "Default save format", ControlType: "ComboBox", Visible: true), pane, true), "Always ask");
         // TE3 3.26 uses 1600 here; the historical docs show 1500. Do not change the user's default.
         var compatibility = new Target(new(Name: "Compatibility level", ControlType: "ComboBox", Visible: true), pane, true);
@@ -160,6 +161,17 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         var element = await Resolve(compatibility);
         if (await Task.Run(() => element.Properties.IsEnabled.Value).WaitAsync(TimeSpan.FromSeconds(5)))
             throw new InvalidOperationException("Default compatibility level must be disabled");
+    }
+    // Compares each checkbox with its expected original state; preferences are never changed to match.
+    private async Task AssertCheckboxes(ElementSelector pane, bool visibleOnly, params (string Name, bool On)[] expected)
+    {
+        foreach (var (name, on) in expected)
+        {
+            var control = await Resolve(new(new(Name: name, ControlType: "CheckBox", Visible: visibleOnly ? true : null), pane, true));
+            var state = await Task.Run(() => control.Patterns.Toggle.Pattern.ToggleState.Value).WaitAsync(TimeSpan.FromSeconds(5));
+            if (state != (on ? FlaUI.Core.Definitions.ToggleState.On : FlaUI.Core.Definitions.ToggleState.Off))
+                throw new InvalidOperationException($"Checkbox differs from its expected state ({(on ? "on" : "off")}): {name}");
+        }
     }
     private static Target SerializationModeTarget() => new(new(Name: "Serialization mode", ControlType: "ComboBox"),
         new(AutomationId: "File Formats.Save-to-folder"), true);
@@ -178,30 +190,19 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
             await Task.Delay(500);
             var main = host.Sessions.GetInputTarget(handle);
             var preferences = host.Elements.InputForRef(await Reference(PreferencesTarget()));
-            var candidates = Win32Desktop.GetTopLevelWindows(main.ProcessId)
-                .Where(w => w.Hwnd != main.Hwnd && w.Hwnd != preferences.Hwnd && !w.IsCloaked)
-                .ToArray();
-            if (candidates.Length > 5) throw new InvalidOperationException("Language popup discovery incomplete: too many candidate windows");
-            var popups = await Task.Run(() => candidates.Select(w => new
-            {
-                hwnd = w.Hwnd.ToInt64(),
-                bounds = Win32Desktop.GetWindowBounds(w.Hwnd),
-                tree = query.Find(host.Sessions.RegisterNativeWindow(w.Hwnd, main.ProcessId), new(Visible: true),
-                        maxDepth: 5, maxResults: 100, budget: new SearchBudget(1000, TimeSpan.FromSeconds(3)))
-            }).ToArray()).WaitAsync(TimeSpan.FromSeconds(5));
-            File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(popups,
-                new JsonSerializerOptions { WriteIndented = true }));
-            if (popups.Any(p => p.tree.Truncated || p.tree.Unreadable != 0))
+            var popups = await ObservePopups(main.ProcessId, maxWindows: 5, main.Hwnd, preferences.Hwnd);
+            File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(popups, Indented));
+            if (popups.Any(p => !p.Tree.Complete))
                 throw new InvalidOperationException("Language popup observation incomplete");
-            var matches = popups.Where(p => p.tree.Elements.Any(e => e.ControlType == "ListItem")).ToArray();
+            var matches = popups.Where(p => p.Tree.Elements.Any(e => e.ControlType == "ListItem")).ToArray();
             if (matches.Length != 1) throw new InvalidOperationException("Expected one language list popup");
             var popup = matches[0];
-            popupHwnd = new nint(popup.hwnd);
-            var lists = popup.tree.Elements.Where(e => e.ControlType == "List").ToArray();
-            if (lists.Length != 1 || popup.tree.Elements.Where(e => e.ControlType == "ListItem").Any(e => e.Depth <= lists[0].Depth))
+            popupHwnd = new nint(popup.Hwnd);
+            var lists = popup.Tree.Elements.Where(e => e.ControlType == "List").ToArray();
+            if (lists.Length != 1 || popup.Tree.Elements.Where(e => e.ControlType == "ListItem").Any(e => e.Depth <= lists[0].Depth))
                 throw new InvalidOperationException("Expected one language list with descendant items");
-            VerifyLanguageChoices(popup.tree.Elements.Where(e => e.ControlType == "ListItem").ToArray());
-            var bounds = popup.bounds ?? throw new InvalidOperationException("Language popup bounds unavailable");
+            VerifyLanguageChoices(popup.Tree.Elements.Where(e => e.ControlType == "ListItem").ToArray());
+            var bounds = popup.Bounds ?? throw new InvalidOperationException("Language popup bounds unavailable");
             var combo = await Resolve(language);
             var comboBounds = await Task.Run(() => combo.BoundingRectangle).WaitAsync(TimeSpan.FromSeconds(5));
             if (Math.Abs(bounds.Left - comboBounds.Left) > 3 || Math.Abs(bounds.Width - comboBounds.Width) > 6 ||
@@ -210,7 +211,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
             var preferencesBounds = Win32Desktop.GetWindowBounds(preferences.Hwnd)
                 ?? throw new InvalidOperationException("Preferences disappeared");
             var scene = System.Drawing.Rectangle.Union(preferencesBounds, bounds);
-            CaptureScene(path, preferences, InputTarget.Capture(new nint(popup.hwnd), main.ProcessId),
+            CaptureScene(path, preferences, InputTarget.Capture(popupHwnd, main.ProcessId),
                 scene, modal: false, includeOutsideOwner: true, popupShadowPadding: 10);
         }
         catch (Exception error) { failure = error; throw; }
@@ -290,22 +291,27 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     {
         var owner = host.Sessions.GetInputTarget(handle);
         var preferences = host.Elements.InputForRef(await Reference(PreferencesTarget()));
-        // Start at popup HWNDs: traversing the entire editor can exhaust the budget before reaching them.
-        var result = await Task.Run(() => Win32Desktop.GetTopLevelWindows(owner.ProcessId)
-            .Where(w => w.Hwnd != owner.Hwnd && w.Hwnd != preferences.Hwnd && !w.IsCloaked)
-            .Take(4).Select(w => new
+        string[] expected = ["Database.json (default)", "Database.json (customizable)", "TMDL"];
+        // Alt+Down can return before the dropdown window exists, so poll until one popup holds the choices.
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            var popups = await ObservePopups(owner.ProcessId, maxWindows: 6, owner.Hwnd, preferences.Hwnd);
+            var lists = popups.Where(p => p.Tree.Elements.Any(e => e.ControlType == "ListItem")).ToArray();
+            var problem = "Serialization mode popup not found";
+            if (lists.Length == 1 && lists[0].Tree.Complete)
             {
-                window = new { w.Title, bounds = Win32Desktop.GetWindowBounds(w.Hwnd) },
-                tree = query.Find(host.Sessions.RegisterNativeWindow(w.Hwnd, owner.ProcessId), new(Visible: true),
-                    maxDepth: 5, maxResults: 100, budget: new SearchBudget(1000, TimeSpan.FromSeconds(3)))
-            }).ToArray()).WaitAsync(TimeSpan.FromSeconds(5));
-        if (result.Length == 0) throw new InvalidOperationException("Serialization mode popup not found");
-        var items = result.SelectMany(r => r.tree.Elements).Where(e => e.ControlType == "ListItem").ToArray();
-        if (result.Any(r => r.tree.Truncated || r.tree.Unreadable != 0) ||
-            !items.Select(e => e.Name).SequenceEqual(new[] { "Database.json (default)", "Database.json (customizable)", "TMDL" }) ||
-            items.Count(e => e.Selected == true) != 1 || items[0].Selected != true)
-            throw new InvalidOperationException("Serialization mode popup differs from observed choices");
-        File.WriteAllText(path, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+                var items = lists[0].Tree.Elements.Where(e => e.ControlType == "ListItem").ToArray();
+                if (items.Select(e => e.Name).SequenceEqual(expected) && items.Count(e => e.Selected == true) == 1 && items[0].Selected == true)
+                {
+                    File.WriteAllText(path, JsonSerializer.Serialize(popups, Indented));
+                    return;
+                }
+                problem = "Serialization mode popup differs from observed choices";
+            }
+            if (clock.Elapsed > TimeSpan.FromSeconds(5)) throw new InvalidOperationException(problem);
+            await Task.Delay(100);
+        }
     }
     public async Task AssertFileFormatsAnnotationRows()
     {
@@ -340,18 +346,10 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     {
         var pane = new ElementSelector(AutomationId: "DAX Editor.General");
         await Expect(new(pane, IncludeOwned: true));
-        foreach (var (name, enabled) in new[]
-        {
+        await AssertCheckboxes(pane, visibleOnly: true,
             ("Line numbers", true), ("Code folding", true), ("Visible whitespace", false),
             ("Indentation guides", true), ("Use tabs", false),
-            ("Use daxformatter.com instead of built-in formatter", false)
-        })
-        {
-            var control = await Resolve(new(new(Name: name, ControlType: "CheckBox", Visible: true), pane, true));
-            var state = await Task.Run(() => control.Patterns.Toggle.Pattern.ToggleState.Value).WaitAsync(TimeSpan.FromSeconds(5));
-            if (state != (enabled ? FlaUI.Core.Definitions.ToggleState.On : FlaUI.Core.Definitions.ToggleState.Off))
-                throw new InvalidOperationException("DAX General checkbox differs from original: " + name);
-        }
+            ("Use daxformatter.com instead of built-in formatter", false));
         foreach (var (name, value) in new[]
         {
             ("Comment style:", "Slashes"), ("Locale", "US (A, B, C, 1234.00)"),
@@ -373,13 +371,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
             !rows.Elements.Any(row => row.Value == "Model Deployment"))
             throw new InvalidOperationException("Code Actions tree framing must start at Pivot Grid and include Model Deployment");
         var pane = new ElementSelector(AutomationId: "DAX Editor.Code Actions");
-        foreach (var (name, enabled) in new[] { ("Show code actions", true), ("Apply variable casing", false) })
-        {
-            var control = await Resolve(new(new(Name: name, ControlType: "CheckBox"), pane, true));
-            var state = await Task.Run(() => control.Patterns.Toggle.Pattern.ToggleState.Value).WaitAsync(TimeSpan.FromSeconds(5));
-            if (state != (enabled ? FlaUI.Core.Definitions.ToggleState.On : FlaUI.Core.Definitions.ToggleState.Off))
-                throw new InvalidOperationException("Code Actions checkbox differs from original: " + name);
-        }
+        await AssertCheckboxes(pane, visibleOnly: false, ("Show code actions", true), ("Apply variable casing", false));
         await Expect(new(new(Name: "Variable prefix", ControlType: "ComboBox"), pane, true), "_");
         await Expect(new(new(Name: "Extension column prefix", ControlType: "ComboBox"), pane, true), "@");
         var casing = new Target(new(Name: "Preferred variable casing", ControlType: "ComboBox"), pane, true);
@@ -387,18 +379,6 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         var element = await Resolve(casing);
         if (await Task.Run(() => element.Properties.IsEnabled.Value).WaitAsync(TimeSpan.FromSeconds(5)))
             throw new InvalidOperationException("Preferred variable casing must be disabled");
-    }
-    public async Task AssertAgentCodeActions()
-    {
-        await Expect(PreferencesTarget());
-        await Expect(new(new(AutomationId: "searchPreferences", ControlType: "Edit"), PreferencesTarget().Selector, true), "");
-        var row = await Resolve(new(new(ControlType: "TreeItem", Value: "Code Actions", Visible: true),
-            new(AutomationId: "treePreferences"), true));
-        if (!await Task.Run(() => row.Patterns.SelectionItem.Pattern.IsSelected.Value).WaitAsync(TimeSpan.FromSeconds(5)))
-            throw new InvalidOperationException("Agent did not select Code Actions");
-        var pane = new ElementSelector(AutomationId: "DAX Editor.Code Actions");
-        await Expect(new(new(Name: "Variable prefix", ControlType: "ComboBox", Visible: true), pane, true), "_");
-        await Expect(new(new(Name: "Extension column prefix", ControlType: "ComboBox", Visible: true), pane, true), "@");
     }
     public async Task SelectPreferencesSection(string section)
     {
@@ -412,7 +392,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         var visible = false;
         for (var page = 0; page < 8; page++)
         {
-            visible = await Task.Run(() => query.IsPresent(handle, row.Selector, row.Within, true,
+            visible = await Task.Run(() => query.IsPresent(PreferencesHandle(), row.Selector, row.Within, false,
                 new SearchBudget(1000, TimeSpan.FromSeconds(2)))).WaitAsync(TimeSpan.FromSeconds(5));
             if (visible) break;
             await Keys("PageDown", tree);
@@ -457,7 +437,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     {
         var scoped = await Task.Run(() => query.Find(handle, new(Visible: true), within, maxResults: 200,
             includeOwned: true, budget: new SearchBudget(1000, TimeSpan.FromSeconds(3)))).WaitAsync(TimeSpan.FromSeconds(5));
-        File.WriteAllText(path, JsonSerializer.Serialize(scoped, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(path, JsonSerializer.Serialize(scoped, Indented));
     }
 
     public async Task AssertAutoRollbackEnabled()
@@ -470,6 +450,32 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         if (!enabled) throw new InvalidOperationException("Auto-rollback must be on for this original-image capture");
     }
 
+    private sealed record PopupObservation(long Hwnd, string Title, System.Drawing.Rectangle? Bounds, QueryResult Tree);
+
+    // Popups are separate top-level windows; searching them directly avoids spending the budget on the editor.
+    private async Task<PopupObservation[]> ObservePopups(int processId, int? maxWindows, params nint[] exclude)
+    {
+        var windows = Win32Desktop.GetTopLevelWindows(processId).Where(w => !w.IsCloaked && !exclude.Contains(w.Hwnd)).ToArray();
+        if (windows.Length > maxWindows) throw new InvalidOperationException($"Popup discovery incomplete: {windows.Length} candidate windows");
+        return await Task.Run(() => windows.Select(w => new PopupObservation(w.Hwnd.ToInt64(), w.Title, Win32Desktop.GetWindowBounds(w.Hwnd),
+                query.Find(host.Sessions.RegisterNativeWindow(w.Hwnd, processId), new(Visible: true),
+                    maxDepth: 5, maxResults: 100, budget: new SearchBudget(1000, TimeSpan.FromSeconds(3))))).ToArray())
+            .WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    // UIA can report keyboard focus shortly after the key press, so poll briefly before failing.
+    private async Task RequireKeyboardFocus(Target target, string failure)
+    {
+        var clock = Stopwatch.StartNew();
+        do
+        {
+            var element = await Resolve(target);
+            if (await Task.Run(() => element.Properties.HasKeyboardFocus.Value).WaitAsync(TimeSpan.FromSeconds(5))) return;
+            await Task.Delay(100);
+        } while (clock.Elapsed < TimeSpan.FromSeconds(2));
+        throw new InvalidOperationException(failure);
+    }
+
     private async Task<AutomationElement> Resolve(Target target, string? expected = null)
     {
         reportStep?.Invoke($"Find {target.Selector}; expected value: {expected ?? "(any)"}");
@@ -477,11 +483,17 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         var clock = Stopwatch.StartNew();
         do
         {
+            OperationContext.Check();
             try
             {
                 return await Task.Run(() =>
                 {
-                    var element = query.Resolve(handle, target.Selector, target.Within, target.IncludeOwned,
+                    // Avoid reattaching the disabled owner and every popup for a
+                    // known dialog. Keep the lookup and uniqueness check local.
+                    var preferences = IsPreferencesLookup(target);
+                    var queryHandle = preferences ? PreferencesHandle() : handle;
+                    var within = preferences && target.Within == PreferencesTarget().Selector ? null : target.Within;
+                    var element = query.Resolve(queryHandle, target.Selector, within, !preferences && target.IncludeOwned,
                         budget: new SearchBudget(3000, TimeSpan.FromSeconds(2)));
                     var actual = element.Patterns.Value.IsSupported ? element.Patterns.Value.Pattern.Value.ValueOrDefault : element.Properties.Name.ValueOrDefault;
                     if (expected != null && actual != expected) throw new InvalidOperationException($"Expected '{expected}', observed '{actual}'");
@@ -489,6 +501,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
                 }).WaitAsync(TimeSpan.FromSeconds(5));
             }
             catch (System.Reflection.AmbiguousMatchException) { throw; }
+            catch (OperationCanceledException) { throw; }
             catch (TimeoutException) { throw; } // A hung provider must not spawn retry workers.
             catch (Exception ex) { last = ex; }
             await Task.Delay(100);
@@ -564,19 +577,9 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         } while (clock.Elapsed < TimeSpan.FromSeconds(15));
         throw new TimeoutException($"Expected exactly {expected} rows");
     }
-    public async Task Capture(string path, Target? target = null, CaptureFrame? frame = null, bool screenPixels = false)
+    public async Task Capture(string path, Target? target = null, CaptureFrame? frame = null)
     {
         var reference = target == null ? null : await Reference(target);
-        if (screenPixels)
-        {
-            if (reference == null || target?.Selector.ControlType != "Window" || frame != null)
-                throw new ArgumentException("Screen-pixel capture requires a Window target and no crop");
-            var window = host.Elements.InputForRef(reference);
-            var bounds = Win32Desktop.GetWindowBounds(window.Hwnd)
-                ?? throw new InvalidOperationException("Capture window disappeared");
-            CaptureScene(path, window, window, bounds, modal: true);
-            return;
-        }
         reportStep?.Invoke($"Capture {Path.GetFileName(path)}");
         await invoke("windows_screenshot", new
         {
@@ -659,19 +662,14 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         using (var input = new GuardedInput(ownerIdentity))
         {
             if (Win32Desktop.WindowAt(menuBarPoint) != ownerIdentity.Hwnd) throw new InvalidOperationException("Model menu is obscured");
+            reportStep?.Invoke("Open Model menu");
             input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(menuBarPoint));
         }
         // Invoke can remain pending for TE3 menu popups; use the guarded input path.
         await Click(modelMenu);
         await Task.Delay(500);
-        var discovery = await Task.Run(() => Win32Desktop.GetTopLevelWindows(ownerIdentity.ProcessId)
-            .Where(w => w.Hwnd != ownerIdentity.Hwnd && !w.IsCloaked).Select(w => new
-            {
-                window = new { hwnd = w.Hwnd.ToInt64(), w.Title, w.ProcessId, bounds = Win32Desktop.GetWindowBounds(w.Hwnd) },
-                tree = query.Find(host.Sessions.RegisterNativeWindow(w.Hwnd, ownerIdentity.ProcessId), new(Visible: true),
-                    maxDepth: 5, maxResults: 100, budget: new SearchBudget(1000, TimeSpan.FromSeconds(3)))
-            }).ToArray()).WaitAsync(TimeSpan.FromSeconds(5));
-        File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(discovery, new JsonSerializerOptions { WriteIndented = true }));
+        var discovery = await ObservePopups(ownerIdentity.ProcessId, maxWindows: null, ownerIdentity.Hwnd);
+        File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(discovery, Indented));
         var target = new Target(new(Name: "Add Calculation Group", ControlType: "Button"), null, true);
         var element = await Resolve(target);
         var popup = await MenuPopup(element);
@@ -683,16 +681,12 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
             "Refresh model", "Add Table", "Add Calculated Table", "Add Calculation Group" })
         {
             if (name != "Deploy...") await Keys("Down");
-            var selected = await Resolve(new(new(Name: name), null, true));
-            if (!await Task.Run(() => selected.Properties.HasKeyboardFocus.Value).WaitAsync(TimeSpan.FromSeconds(5)))
-                throw new InvalidOperationException("Expected focused menu item: " + name);
+            await RequireKeyboardFocus(new(new(Name: name), null, true), "Expected focused menu item: " + name);
         }
         var ownerBounds = Win32Desktop.GetWindowBounds(owner.Hwnd) ?? throw new InvalidOperationException("Owner disappeared");
         var bounds = Win32Desktop.GetWindowBounds(popup) ?? throw new InvalidOperationException("Menu disappeared");
         await Task.Delay(500);
-        element = await Resolve(target);
-        if (!await Task.Run(() => element.Properties.HasKeyboardFocus.Value).WaitAsync(TimeSpan.FromSeconds(5)))
-            throw new InvalidOperationException("Calculation group menu item is not highlighted/focused");
+        await RequireKeyboardFocus(target, "Calculation group menu item is not highlighted/focused");
         var workArea = Screen.FromHandle(owner.Hwnd).WorkingArea;
         var x = Math.Max(ownerBounds.Left, workArea.Left);
         var y = Math.Max(ownerBounds.Top, workArea.Top);
@@ -936,6 +930,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         using var input = new GuardedInput(owner with { HitHwnd = popup });
         if (Win32Desktop.GetProcessId(popup) != owner.ProcessId || Win32Desktop.WindowAt(point) != popup)
             throw new InvalidOperationException("Default layout click point is obscured");
+        reportStep?.Invoke("Apply default layout");
         input.Send(() => FlaUI.Core.Input.Mouse.Click(point));
     }
     private async Task<nint> MenuPopup(AutomationElement element)
@@ -976,5 +971,55 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
             await SelectObject(objectName);
         }
         await AssertProperty("Name", objectType == "Table" ? table : objectName);
+    }
+
+    /// <summary>Read-only arrival checks shared by companion navigation and capture.</summary>
+    public async Task VerifyCompanionDestination(Te3Destination destination, string? table = null, string? objectName = null, string? objectType = null)
+    {
+        OperationContext.Check();
+        switch (destination)
+        {
+            case { Section: { } section, PaneMarker: { } marker }:
+                await Expect(new(new(AutomationId: "searchPreferences", ControlType: "Edit"), PreferencesTarget().Selector, true), "");
+                var row = await Resolve(new(new(ControlType: "TreeItem", Value: section, Visible: true), new(AutomationId: "treePreferences"), true));
+                if (!row.Patterns.SelectionItem.Pattern.IsSelected.Value) throw new InvalidOperationException("Expected Preferences row is not selected.");
+                var control = await Resolve(new(new(Name: marker, ControlType: "CheckBox", Visible: true), new(AutomationId: "DAX Editor." + section), true));
+                var dialog = await Resolve(PreferencesTarget());
+                if (control.BoundingRectangle.IsEmpty || !dialog.BoundingRectangle.Contains(control.BoundingRectangle))
+                    throw new InvalidOperationException("Expected pane content is not inside the visible Preferences dialog.");
+                break;
+            case { Id: "object" }:
+                var name = (await Resolve(PropertyTarget("Name"))).Patterns.Value.Pattern.Value.Value;
+                var type = (await Resolve(PropertyTarget("Object Type"))).Patterns.Value.Pattern.Value.Value;
+                var dax = objectType == "Table" ? null : (await Resolve(PropertyTarget("DAX identifier"))).Patterns.Value.Pattern.Value.Value;
+                VerifyObjectIdentity(table!, objectName!, objectType!, name, type, dax);
+                break;
+            case { Id: "tom-explorer" }:
+                await RequireSelectedTab(TomTabTarget());
+                break;
+            case { Id: "expression-editor" }:
+                await RequireSelectedTab(ExpressionTabTarget());
+                break;
+            default:
+                throw new ArgumentException("No arrival check for destination " + destination.Id);
+        }
+    }
+
+    private async Task RequireSelectedTab(Target target)
+    {
+        var tab = await Resolve(target);
+        if (!tab.Patterns.SelectionItem.IsSupported || !tab.Patterns.SelectionItem.Pattern.IsSelected.Value)
+            throw new InvalidOperationException("Expected view tab is not selected.");
+    }
+
+    internal static void VerifyObjectIdentity(string table, string objectName, string objectType, string? name, string? type, string? dax)
+    {
+        var actualType = type?.Replace(" ", "", StringComparison.Ordinal);
+        var typeMatches = objectType == "Column" ? actualType is "Column" or "DataColumn" or "CalculatedColumn" or "CalculatedTableColumn"
+            : objectType == "Table" ? actualType is "Table" or "CalculatedTable" : actualType == "Measure";
+        var qualified = "'" + table.Replace("'", "''", StringComparison.Ordinal) + "'[" + objectName.Replace("]", "]]", StringComparison.Ordinal) + "]";
+        var unquoted = table + "[" + objectName.Replace("]", "]]", StringComparison.Ordinal) + "]";
+        if (!typeMatches || name != (objectType == "Table" ? table : objectName) || objectType != "Table" && dax != qualified && dax != unquoted)
+            throw new InvalidOperationException($"Object identity unverified: expected {table}/{objectName} ({objectType}), observed {name}, {type}, {dax}. Inspect the property grid; no fallback guess was made.");
     }
 }
