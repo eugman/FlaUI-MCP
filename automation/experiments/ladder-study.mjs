@@ -660,10 +660,13 @@ function median(values) {
   return known.length % 2 ? known[middle] : (known[middle - 1] + known[middle]) / 2;
 }
 
+// Tasks that no agent could complete (the fixture has no relationships); still reported per trial, never scored.
+export const excludedTasks = ['relationship'];
+
 // One row per condition, with trained and hold-out tasks tallied separately.
 export function conditionRows(rows) {
   const groups = new Map();
-  for (const row of rows) {
+  for (const row of rows.filter(row => !excludedTasks.includes(row.task))) {
     const key = `${row.rung}|${row.model}|${row.label ?? ''}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);

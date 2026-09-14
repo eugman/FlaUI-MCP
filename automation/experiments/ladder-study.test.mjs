@@ -510,6 +510,7 @@ test('summarize reports trials with review fields and rung/task/model groups', a
     trained: { passes: 1, n: 2 }, holdout: { passes: 0, n: 1 },
     falseClaims: 1, medianDispatchedCalls: 4, meanTotalTokens: 100, unreviewed: 1
   }]);
+  assert.deepEqual(conditionRows([...rows, { ...rows[0], task: 'relationship', passed: false }]), conditionRows(rows));
 
   await writeFile(join(root, '1-sonnet-dax-general-01', 'review.json'), JSON.stringify({ passed: 'yes' }));
   assert.throws(() => summarize(root), /boolean passed/);
