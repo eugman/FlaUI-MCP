@@ -42,6 +42,8 @@ export const rubrics = {
   'dax-general': preferences('DAX Editor General'),
   'save-to-folder': [...preferences('Save-to-folder').slice(0, 2), 'All Save-to-folder controls are visible, including Serialization mode', preferences('Save-to-folder')[3]],
   'calc-group-menu': ['The Model menu is open', 'The Calculation Group item is readable in the menu', 'No dialog or new model object is shown'],
+  'model-properties': ['The model root node is selected in TOM Explorer', 'Properties are readable for the model', 'The TOM Explorer search box is empty'],
+  // Replaced by model-properties: the fixture has no relationships. Kept so those trials can still be packed.
   relationship: ['A relationship is selected in TOM Explorer', 'Properties show its from and to columns', 'The TOM Explorer search box is empty'],
   // Task names from the four-task study, kept so its trials can still be packed.
   object: columnIdentity,

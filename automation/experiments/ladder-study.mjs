@@ -24,11 +24,12 @@ export const tasks = {
   'dax-general': 'Capture Preferences > Text Editors > DAX Editor > General with that section selected, empty search, all section controls, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
   'save-to-folder': 'Capture Preferences > File Formats > Save-to-folder with that section selected, empty search, all section controls including Serialization mode, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
   'calc-group-menu': 'Open the Model menu and capture it with the Calculation Group item visible. Do not click any menu item or change the model. Leave the menu open.',
-  relationship: 'Select the model\'s relationship in TOM Explorer. Capture it selected with readable Properties showing its from and to columns, and an empty TOM Explorer search box. Do not edit the relationship. Leave it selected.'
+  // The fixture has no relationships, so a relationship task is impossible; the model root node replaces it.
+  'model-properties': 'Select the model itself, the root node in TOM Explorer. Capture it selected with its Properties readable and an empty TOM Explorer search box. Do not edit the model. Leave the model selected.'
 };
 // Hold-outs get no map topic, skill line or te3_navigate destination, ever, so they show whether guidance
 // written for the trained tasks also works on screenshots nobody wrote it around.
-export const holdoutTasks = ['dax-general', 'save-to-folder', 'calc-group-menu', 'relationship'];
+export const holdoutTasks = ['dax-general', 'save-to-folder', 'calc-group-menu', 'model-properties'];
 
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));

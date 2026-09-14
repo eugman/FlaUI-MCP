@@ -36,7 +36,12 @@ repeats. Prompts are `tasks` in `ladder-study.mjs`; rubrics are `rubrics` in
 | `formatting`, `code-actions` (Preferences) | `dax-general` (Preferences > DAX Editor > General) |
 | `column`, `measure`, `table`, `tom-tree` (TOM Explorer) | `save-to-folder` (Preferences > File Formats) |
 | `script-run`, `script-source` (C# scripts) | `calc-group-menu` (Model menu open) |
-| | `relationship` (relationship Properties) |
+| | `model-properties` (model root node Properties) |
+
+The fixture has no relationships. The first hold-out list had a `relationship` task,
+which no agent could complete; it was replaced by `model-properties`. Trials of
+`relationship` in conditions 1–3 are excluded from scoring, and those conditions run
+`model-properties` in a sibling study `study-tasks12-cN-sonnet-model`.
 
 **Hold-outs** get no map topic, no skill line and no `te3_navigate` destination,
 ever. Guidance can be tuned until the practiced tasks pass; the hold-outs check

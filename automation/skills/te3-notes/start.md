@@ -6,7 +6,7 @@ Locators from TE3 3.26.3. Read only the topic for your task, plus `capture` for 
 |---|---|
 | `preferences-auto-formatting` | Preferences > DAX Editor > Auto Formatting |
 | `preferences-code-actions` | Preferences > DAX Editor > Code Actions |
-| `objects` | Selecting a table, column or measure |
+| `objects` | Selecting or expanding a table, column or measure |
 | `scripts` | Opening and running a C# script |
 | `capture` | Saving and checking a screenshot |
 

@@ -13,7 +13,7 @@ import { composeSkill } from '../skills/build-skill.mjs';
 
 test('twelve distinct tasks, the last four held out', () => {
   assert.equal(Object.keys(tasks).length, 12);
-  assert.deepEqual(holdoutTasks, ['dax-general', 'save-to-folder', 'calc-group-menu', 'relationship']);
+  assert.deepEqual(holdoutTasks, ['dax-general', 'save-to-folder', 'calc-group-menu', 'model-properties']);
   assert.deepEqual(Object.keys(tasks).slice(-4), holdoutTasks);
 });
 
