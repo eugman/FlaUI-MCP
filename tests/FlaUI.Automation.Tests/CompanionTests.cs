@@ -15,13 +15,11 @@ public sealed class CompanionTests
     }
 
     [Fact]
-    public void CatalogSchemaEnumeratesExactlyTheAvailableTopics()
+    public void InspectSchemaAsksOnlyForProcessAndTopic()
     {
-        var schema = JsonSerializer.SerializeToElement(new Te3Companion(null!, "te3_catalog").InputSchema);
-        var topics = schema.GetProperty("properties").GetProperty("topic").GetProperty("enum")
-            .EnumerateArray().Select(x => x.GetString()).Order().ToArray();
-        Assert.Equal(Te3Guide.Topics.Keys.Order().ToArray(), topics);
-        Assert.Empty(schema.GetProperty("required").EnumerateArray());
+        var schema = JsonSerializer.SerializeToElement(new Te3Companion(null!, "te3_inspect").InputSchema);
+        var properties = schema.GetProperty("properties").EnumerateObject().Select(p => p.Name).Order().ToArray();
+        Assert.Equal(["processId", "topic"], properties);
     }
 
     [Theory]
@@ -41,14 +39,6 @@ public sealed class CompanionTests
     public void PreferencesDestinationsNameTheirSectionAndPaneMarker()
         => Assert.All(Te3Destinations.All.Where(d => d.Id.StartsWith("preferences/", StringComparison.Ordinal)),
             d => { Assert.NotNull(d.Section); Assert.NotNull(d.PaneMarker); });
-
-    [Fact]
-    public void MapRevisionIsAHashOfTopicContent()
-    {
-        Assert.Matches("^[0-9a-f]{12}$", Te3Guide.Revision);
-        Assert.Equal(Te3Guide.Revision, Te3Guide.HashTopics(Te3Guide.Topics));
-        Assert.All(Te3Guide.Topics.Values, topic => Assert.DoesNotContain("map revision 20", topic.Text, StringComparison.OrdinalIgnoreCase));
-    }
 
     [Theory]
     [InlineData(null, "not-saved")]
@@ -173,19 +163,6 @@ public sealed class CompanionTests
         frame.Validate();
     }
 
-    [Fact]
-    public void CatalogAndResourcesShareTopicContent()
-    {
-        Assert.NotEmpty(Te3Guide.Topics);
-        foreach (var (topic, resource) in Te3Guide.Topics)
-        {
-            var json = JsonSerializer.SerializeToElement(Te3Guide.Read(topic));
-            Assert.Equal(resource.Text, json.GetProperty("content").GetString());
-            Assert.Equal("te3://map/" + topic, resource.Uri);
-        }
-        Assert.Throws<ArgumentException>(() => Te3Guide.Read("../../private"));
-    }
-
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"processId\":0,\"destination\":\"object\"}")]
@@ -193,14 +170,6 @@ public sealed class CompanionTests
     [InlineData("{\"processId\":123,\"destination\":\"object\",\"objectName\":\"Amount\"}")]
     public void InvalidNavigationRejectedBeforeAttach(string json)
         => Assert.Throws<ArgumentException>(() => Te3Companion.Validate("te3_navigate", JsonDocument.Parse(json).RootElement));
-
-    [Fact]
-    public async Task CatalogDoesNotNeedAutomationHost()
-    {
-        var result = await new Te3Companion(null!, "te3_catalog").ExecuteAsync(JsonSerializer.SerializeToElement(new { topic = "objects" }));
-        Assert.NotEqual(true, result.IsError);
-        Assert.Contains("DAX identifier", result.Content[0].Text);
-    }
 
     [Theory]
     [InlineData("Column", "'Comparison'[Amount]")]

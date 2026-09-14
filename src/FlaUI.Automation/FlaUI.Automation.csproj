@@ -4,7 +4,6 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../FlaUI.Mcp/FlaUI.Mcp.csproj" /></ItemGroup>
-  <ItemGroup><EmbeddedResource Include="../../automation/map/*.md" LogicalName="te3-map/%(Filename)%(Extension)" /></ItemGroup>
   <ItemGroup>
     <Content Include="../../automation/replica-inputs/Columns to Measures.csx"
              Link="replica-inputs/Columns to Measures.csx" CopyToOutputDirectory="PreserveNewest" />

@@ -6,37 +6,41 @@ using PlaywrightWindows.Mcp.Core;
 /// <summary>Attach-only TE3 tools. The generic server remains application-independent.</summary>
 public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
 {
-    public static readonly string[] Names = ["te3_catalog", "te3_inspect", "te3_navigate", "te3_capture"];
+    public static readonly string[] Names = ["te3_inspect", "te3_navigate", "te3_capture"];
     public override string Name => name;
     public override string Description => name switch {
-        "te3_catalog" => "Read a compact TE3 map index or one topic. No desktop access. Read only the destination topic plus capture for screenshot tasks.",
         "te3_inspect" => "Read bounded TE3 state for an explicit processId: windows, preferences, or object. Does not focus. Unknown state is not readiness.",
         "te3_navigate" => "Navigate an explicit TE3 process to a supported destination and verify arrival. Takes desktop focus; requires user handoff permission. No model edits, script execution, or dialog dismissal.",
-        "te3_capture" => "Save a native whole-window PNG of an already prepared TE3 scene. No navigation or resizing. Scene identity is checked; visual completeness is NOT assessed. Display the image before claiming screenshot success. Requires desktop permission.",
+        "te3_capture" => "Save a native whole-window PNG of a scene te3_navigate already prepared; it never navigates, selects or resizes. savePath (absolute PNG) is required. Scene identity is checked, but clipped or scrolled pane content is not: look at the image, and resize with windows_place_window if needed.",
         _ => throw new ArgumentException("Unknown companion tool.")
     };
     public override object InputSchema
     {
         get
         {
-            var properties = new Dictionary<string, object>();
-            if (name == "te3_catalog") properties["topic"] = new { type = "string", @enum = Te3Guide.Topics.Keys.ToArray(), description = "Omit for index. Map topic IDs are not navigation destination IDs." };
+            var properties = new Dictionary<string, object>
+            {
+                ["processId"] = new { type = "integer", minimum = 1, description = "Explicit running TabularEditor3 PID; handles/refs from another MCP server are not accepted." }
+            };
+            if (name == "te3_inspect")
+            {
+                properties["topic"] = new { type = "string", @enum = Te3Destinations.InspectTopics, @default = "windows" };
+            }
             else
             {
-                properties["processId"] = new { type = "integer", minimum = 1, description = "Explicit running TabularEditor3 PID; handles/refs from another MCP server are not accepted." };
-                if (name == "te3_inspect") properties["topic"] = new { type = "string", @enum = Te3Destinations.InspectTopics, @default = "windows" };
-                else properties[name == "te3_capture" ? "scene" : "destination"] = new { type = "string", @enum = Te3Destinations.Ids };
+                properties[name == "te3_capture" ? "scene" : "destination"] = new { type = "string", @enum = Te3Destinations.Ids };
                 foreach (var key in new[] { "table", "objectName", "folder" }) properties[key] = new { type = "string", description = "For destination/scene object; table and objectName required." };
                 properties["objectType"] = new { type = "string", @enum = Te3Destinations.ObjectTypes };
-                if (name == "te3_capture")
-                {
-                    properties["savePath"] = new { type = "string", description = "Absolute local PNG; existing files are never overwritten." };
-                    properties["includeImage"] = new { type = "boolean", @default = false };
-                }
+            }
+            if (name == "te3_capture")
+            {
+                properties["savePath"] = new { type = "string", description = "Absolute local PNG; existing files are never overwritten." };
+                properties["includeImage"] = new { type = "boolean", @default = false };
             }
             string[] required = name switch {
-                "te3_catalog" => [], "te3_inspect" => ["processId"],
-                "te3_navigate" => ["processId", "destination"], _ => ["processId", "scene", "savePath"]
+                "te3_inspect" => ["processId"],
+                "te3_navigate" => ["processId", "destination"],
+                _ => ["processId", "scene", "savePath"]
             };
             return new { type = "object", properties, required, additionalProperties = false };
         }
@@ -51,7 +55,6 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
         {
             var a = arguments ?? JsonSerializer.SerializeToElement(new { });
             Validate(name, a);
-            if (name == "te3_catalog") return Json(Te3Guide.Read(GetStringArgument(a, "topic")));
             phase = "attach";
             using var process = Process.GetProcessById(a.GetProperty("processId").GetInt32());
             if (!string.Equals(process.ProcessName, "TabularEditor3", StringComparison.OrdinalIgnoreCase))
@@ -63,7 +66,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
             var pending = host.Pending.TryGetPending(process.Id, out var pendingCall);
             if (name == "te3_inspect" && (GetStringArgument(a, "topic") ?? "windows") == "windows")
                 return Json(new { processId = process.Id, version = process.MainModule?.FileVersionInfo.FileVersion,
-                    mapRevision = Te3Guide.Revision, foreground = Win32Desktop.GetForegroundWindowProcessId() == process.Id,
+                    foreground =Win32Desktop.GetForegroundWindowProcessId() == process.Id,
                     pending, pendingScope = "operations tracked by this companion process only", blocker = pending ? PendingInvokeTracker.DescribeBlocked(pendingCall!) : null,
                     windows = windows.Select(w => new { w.Title, hwnd = (long)w.Hwnd }),
                     hwndMeaning = "Native HWND, diagnostic only; not a generic MCP handle. Use windows_list_windows for that server's handles.", readiness = "not-assessed" });
@@ -83,8 +86,8 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
             {
                 phase = "inspect";
                 if (GetStringArgument(a, "topic") == "object")
-                    return Json(new { mapRevision = Te3Guide.Revision,
-                        properties = new[] { "Name", "Object Type", "DAX identifier" }.Select(label =>
+                    return Json(new {
+                        properties =new[] { "Name", "Object Type", "DAX identifier" }.Select(label =>
                             query.Find(handle, new(Name: label, ControlType: "DataItem"), new(AutomationId: "PropertyGridView"), maxResults: 3, maxNodes: 500)).ToArray(),
                         readiness = "not-assessed; compare identity with the requested object" });
                 var preferencesHandle = page.PreferencesHandle();
@@ -94,7 +97,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
                 var selected = selectedRows.Length == 1 ? selectedRows[0].Value : null;
                 var pane = Te3Destinations.All.Any(d => d.Section != null && d.Section == selected) ? "DAX Editor." + selected : null;
                 var controls = pane == null ? null : query.Find(preferencesHandle, new(Visible: true), new(AutomationId: pane), maxResults: 30, maxNodes: 200);
-                return Json(new { mapRevision = Te3Guide.Revision, selectedRows, rows.Complete, rows.Scope, controls,
+                return Json(new { selectedRows,rows.Complete, rows.Scope, controls,
                     readiness = "not-assessed; selection/property observations alone do not prove active content" });
             }
 
@@ -134,7 +137,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
             lastStep = "verify " + destination.Id;
             phase = name == "te3_capture" ? "verify-prepared-scene" : "verify-arrival";
             await page.VerifyCompanionDestination(destination, GetStringArgument(a, "table"), GetStringArgument(a, "objectName"), GetStringArgument(a, "objectType"));
-            if (name == "te3_navigate") return Json(new { assessment = Assessment(true, null), destination = destination.Id, phase, lastStep, mapRevision = Te3Guide.Revision });
+            if (name == "te3_navigate") return Json(new { assessment = Assessment(true, null), destination = destination.Id, phase, lastStep });
 
             lastStep = "capture " + destination.Id;
             phase = "capture";
@@ -156,7 +159,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
                 throw new InvalidOperationException("Display context changed during capture. Saved PNG is unverified; inspect it before retrying.");
             phase = "verify-captured-scene";
             await page.VerifyCompanionDestination(destination, GetStringArgument(a, "table"), GetStringArgument(a, "objectName"), GetStringArgument(a, "objectType"));
-            capture.Content.Add(new McpContent { Text = JsonSerializer.Serialize(new { assessment = Assessment(true, savedPath), scene = destination.Id, environment = before, mapRevision = Te3Guide.Revision }, McpProtocol.JsonOptions) });
+            capture.Content.Add(new McpContent { Text = JsonSerializer.Serialize(new { assessment = Assessment(true, savedPath), scene = destination.Id, environment = before }, McpProtocol.JsonOptions) });
             return capture;
         }
         catch (Exception ex)
@@ -193,7 +196,6 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
     internal static void Validate(string tool, JsonElement a)
     {
         if (a.ValueKind != JsonValueKind.Object) throw new ArgumentException("Arguments must be an object.");
-        if (tool == "te3_catalog") return;
         if (!a.TryGetProperty("processId", out var pid) || !pid.TryGetInt32(out var id) || id < 1) throw new ArgumentException("Positive processId required.");
         if (tool == "te3_inspect")
         {
@@ -202,7 +204,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
         }
         var key = tool == "te3_capture" ? "scene" : "destination";
         if (!a.TryGetProperty(key, out var d) || Te3Destinations.Find(d.GetString()) is not { } destination)
-            throw new ArgumentException("Unsupported " + key + "; read te3_catalog.");
+            throw new ArgumentException($"Unsupported {key}; use one of: {string.Join(", ", Te3Destinations.Ids)}.");
         if (destination.Id == "object")
         {
             foreach (var field in new[] { "table", "objectName", "objectType" })

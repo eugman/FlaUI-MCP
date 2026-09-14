@@ -10,7 +10,7 @@ public static class RunnerCommands
         FlaUI.Automation list|validate CONFIG
         FlaUI.Automation compose MANIFEST SPEC OUT.png
         FlaUI.Automation promote RUN_DIR CHECKPOINT DEST.png [--overwrite]
-        FlaUI.Automation mcp [--guidance-only]
+        FlaUI.Automation mcp
         FlaUI.Automation recover BACKUP_DIR
         --no-focus rejects run.
         """;
@@ -22,14 +22,12 @@ public static class RunnerCommands
         {
             if (args.Length >= 1 && args[0] == "mcp")
             {
-                if (args.Length > 2 || args.Length == 2 && args[1] != "--guidance-only") throw new ArgumentException(Usage);
+                if (args.Length != 1) throw new ArgumentException(Usage);
                 DpiUtility.EnablePerMonitorV2();
                 using var host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]));
                 var registry = new PlaywrightWindows.Mcp.ToolRegistry();
-                foreach (var name in args.Length == 2 ? new[] { "te3_catalog" } : Te3Companion.Names)
-                    registry.RegisterTool(new Te3Companion(host, name));
-                var resources = Te3Guide.Topics.Values.ToDictionary(r => r.Uri);
-                await new PlaywrightWindows.Mcp.McpServer(registry, resources).RunAsync();
+                foreach (var name in Te3Companion.Names) registry.RegisterTool(new Te3Companion(host, name));
+                await new PlaywrightWindows.Mcp.McpServer(registry).RunAsync();
                 return 0;
             }
             var noFocus = args.Contains("--no-focus"); args = args.Where(a => a != "--no-focus").ToArray();
