@@ -6,6 +6,6 @@
 
 <!-- 0c formatting-01, -02, -03: saved images omitted the dialog title bar, yet the agents claimed it was readable.
      Reworded after rung 1: intermediate background captures hid menus (script-01) and captured the main window instead of the dialog (code-actions-01, -02). -->
-- Use background:true only for the final saved capture, on the handle of the window that holds the requirements (dialogs have their own handle in windows_list_windows), saving it once with includeImage:true and checking that image before claiming success.
+- Use background:true only for the final saved capture, on the handle of the window that holds the requirements (dialogs have their own handle in windows_list_windows), saving it once with includeImage:true and checking that image before claiming success, except for an open menu, which background captures leave out: capture menus with a plain screenshot.
 
 <!-- Dropped after rung 1: "find tree and list items by value". The windows_find no-match hint already covered it, and agents misapplied it to menu entries (formatting-01, code-actions-02, -03). -->
