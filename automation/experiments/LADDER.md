@@ -18,10 +18,10 @@ The skill text is appended to the prompt under `Guidance:`. The map is
 failures on trained tasks.
 
 Current studies are `artifacts/study-tasks12-cN-sonnet`, prepared from
-`artifacts/tasks12-cN-sonnet.config.json`. The earlier four-task study
-(`ladder-20260914-*`, `study-20260914-*`) is history: it ran 4 tasks × 3 trials,
-and its code-actions hold-out became contaminated once the map and `te3_navigate`
-covered it. Never pool the two.
+`artifacts/tasks12-cN-sonnet.config.json`. An earlier four-task study (4 tasks ×
+3 trials) shaped the tool fixes, the generic skill and the map edits; its run
+folders were deleted on 2026-09-14 and its results are not comparable with the
+12-task suite.
 
 ## Tasks
 
