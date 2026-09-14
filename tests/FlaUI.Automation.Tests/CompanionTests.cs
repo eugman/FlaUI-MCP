@@ -18,6 +18,14 @@ public sealed class CompanionTests
     public void OnlyNavigationIsExposed() => Assert.Equal(["te3_navigate"], Te3Companion.Names);
 
     [Fact]
+    public void FolderSchemaAndMissMessagePointToDisplayFolders()
+    {
+        var schema = JsonSerializer.SerializeToElement(new Te3Companion(null!, "te3_navigate").InputSchema);
+        Assert.Contains("display folder", schema.GetProperty("properties").GetProperty("folder").GetProperty("description").GetString());
+        Assert.Contains("pass folder", Te3Page.ObjectNotFoundMessage("Sales", "Total Amount"));
+    }
+
+    [Fact]
     public void NavigationSchemaAndValidationShareTheRegistry()
     {
         var schema = JsonSerializer.SerializeToElement(new Te3Companion(null!, "te3_navigate").InputSchema);

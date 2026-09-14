@@ -22,7 +22,8 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
                 ["processId"] = new { type = "integer", minimum = 1, description = "Explicit running TabularEditor3 PID; handles/refs from another MCP server are not accepted." },
                 ["destination"] = new { type = "string", @enum = Te3Destinations.Ids }
             };
-            foreach (var key in new[] { "table", "objectName", "folder" }) properties[key] = new { type = "string", description = "For destination object; table and objectName required." };
+            foreach (var key in new[] { "table", "objectName" }) properties[key] = new { type = "string", description = "For destination object; table and objectName required." };
+            properties["folder"] = new { type = "string", description = "Display folder path of the object, backslash-separated; required when the object sits in a display folder." };
             properties["objectType"] = new { type = "string", @enum = Te3Destinations.ObjectTypes };
             return new { type = "object", properties, required = new[] { "processId", "destination" }, additionalProperties = false };
         }

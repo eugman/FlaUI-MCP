@@ -968,10 +968,26 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
             await ExpandSelected();
             foreach (var segment in folder.Split('\\', StringSplitOptions.RemoveEmptyEntries))
             { await SelectObject(segment); await ExpandSelected(); }
+            // Without a folder, an object inside a display folder is simply absent; say so instead of a bare lookup miss.
+            if (folder.Length == 0)
+            {
+                var row = ObjectTarget(objectName);
+                var present = false;
+                for (var attempt = 0; attempt < 4 && !present; attempt++)
+                {
+                    if (attempt > 0) await Task.Delay(500);
+                    present = await Task.Run(() => query.IsPresent(handle, row.Selector, row.Within, row.IncludeOwned,
+                        new SearchBudget(1000, TimeSpan.FromSeconds(2)))).WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                if (!present) throw new InvalidOperationException(ObjectNotFoundMessage(table, objectName));
+            }
             await SelectObject(objectName);
         }
         await AssertProperty("Name", objectType == "Table" ? table : objectName);
     }
+
+    public static string ObjectNotFoundMessage(string table, string objectName) =>
+        $"'{objectName}' is not directly under table '{table}'; if it is in a display folder, pass folder (e.g. Smoke tests).";
 
     /// <summary>Read-only arrival checks shared by companion navigation and capture.</summary>
     public async Task VerifyCompanionDestination(Te3Destination destination, string? table = null, string? objectName = null, string? objectType = null)
