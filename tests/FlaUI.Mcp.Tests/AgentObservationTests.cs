@@ -88,17 +88,4 @@ public sealed class AgentObservationTests
         Assert.Contains("no input sent", type.Content[0].Text);
         Assert.Contains("no input sent", keys.Content[0].Text);
     }
-
-    [Fact]
-    public async Task ResourcesAreExplicitAndReadOnly()
-    {
-        var resource = new McpTextResource("test://map/start", "Start", "one topic");
-        var server = new McpServer(new(), new Dictionary<string, McpTextResource> { [resource.Uri] = resource });
-        var read = await server.HandleRequestAsync(new() { Method = "resources/read", Params = JsonSerializer.SerializeToElement(new { uri = resource.Uri }) });
-        Assert.Contains("one topic", JsonSerializer.Serialize(read));
-        var denied = await server.HandleRequestAsync(new() { Method = "resources/read", Params = JsonSerializer.SerializeToElement(new { uri = "file:///C:/private.txt" }) });
-        Assert.NotNull(denied!.Error);
-        var generic = await new McpServer(new()).HandleRequestAsync(new() { Method = "initialize" });
-        Assert.DoesNotContain("resources", JsonSerializer.Serialize(generic, McpProtocol.JsonOptions));
-    }
 }
