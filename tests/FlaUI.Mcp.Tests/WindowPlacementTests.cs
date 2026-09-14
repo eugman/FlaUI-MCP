@@ -48,7 +48,6 @@ public sealed class WindowPlacementTests
     {
         var placement = new WindowPlacement(-1800, 40, 700, 400);
         placement.RequireVisible([new(-1920, 0, 1920, 1040), new(0, 0, 1920, 1040)]);
-        placement.RequireObserved(new(-1800, 40, 700, 400));
     }
 
     [Theory]
@@ -66,9 +65,4 @@ public sealed class WindowPlacementTests
     [InlineData(0, int.MinValue, 700, 400)]
     public void RejectsInvalidGeometryBeforeNativeAccess(int x, int y, int width, int height)
         => Assert.Throws<ArgumentException>(() => new WindowPlacement(x, y, width, height).Validate());
-
-    [Fact] public void RejectsAppClampingRatherThanClaimingPlacementSuccess()
-        => Assert.Throws<InvalidOperationException>(() => new WindowPlacement(10, 10, 700, 400)
-            .RequireObserved(new(10, 10, 800, 400)));
-
 }

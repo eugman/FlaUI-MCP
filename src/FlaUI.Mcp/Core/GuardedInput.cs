@@ -26,7 +26,7 @@ public sealed class GuardedInput : IDisposable
 {
     private readonly IDisposable lease;
     private readonly InputTarget target;
-    public GuardedInput(InputTarget target, AutomationElement? element = null)
+    public GuardedInput(InputTarget target, AutomationElement? element = null, bool verifyFocus = false)
     {
         this.target = target;
         OperationContext.Check();
@@ -37,7 +37,10 @@ public sealed class GuardedInput : IDisposable
             if (Win32Desktop.GetForegroundWindowProcessId() != target.ProcessId)
                 Win32Desktop.FocusWindow(target.Hwnd);
             if (element != null) { element.Focus(); }
+            RequireActivated(target);
             Verify();
+            if (verifyFocus && (element == null || !element.Properties.HasKeyboardFocus.TryGetValue(out var focused) || !focused))
+                throw new InvalidOperationException("Intended control did not receive verified keyboard focus; no input sent.");
         }
         catch { lease.Dispose(); throw; }
     }
@@ -54,11 +57,45 @@ public sealed class GuardedInput : IDisposable
         public void Dispose() => InputGate.Release();
     }
     public static InputTarget ForegroundTarget(ProcessPolicy policy)
+        => ForegroundTarget(policy, () =>
+        {
+            var hwnd = Win32Desktop.GetForegroundWindow();
+            return InputTarget.Capture(hwnd, Win32Desktop.GetProcessId(hwnd));
+        });
+
+    internal static InputTarget ForegroundTarget(ProcessPolicy policy, Func<InputTarget> captureTarget)
     {
-        var denied = policy.CheckForegroundWindowAllowed();
-        if (denied != null) throw new InvalidOperationException(denied);
-        var hwnd = Win32Desktop.GetForegroundWindow();
-        return InputTarget.Capture(hwnd, Win32Desktop.GetProcessId(hwnd));
+        var captured = captureTarget();
+        // Authorize the captured identity, not an earlier foreground observation.
+        if (!policy.IsProcessAllowed(captured.ProcessId))
+        {
+            var name = ProcessPolicy.TryGetProcessName(captured.ProcessId) ?? "unknown";
+            throw new InvalidOperationException(policy.DescribeDenied($"The foreground window's process '{name}'") +
+                " Focus an allowed window first, or target an element ref directly.");
+        }
+        return captured;
+    }
+
+    private static void RequireActivated(InputTarget target)
+    {
+        var foreground = Win32Desktop.GetForegroundWindow();
+        var foregroundPid = foreground == 0 ? 0 : Win32Desktop.GetProcessId(foreground);
+        var failure = DescribeActivationFailure(target.ProcessId, foreground, foregroundPid,
+            foregroundPid == 0 ? null : ProcessPolicy.TryGetProcessName(foregroundPid));
+        if (failure != null) throw new InvalidOperationException(failure);
+    }
+
+    // Windows can refuse SetForegroundWindow (foreground lock) and retrying cannot override it.
+    // Only a user click or an uncontested interactive session can, so name the blocker.
+    internal static string? DescribeActivationFailure(int targetPid, nint foreground, int foregroundPid, string? foregroundName)
+    {
+        if (foreground == 0)
+            return "desktop-unavailable: Windows reports no foreground window; the session may be locked, disconnected or non-interactive. " +
+                "No input sent. Observe again; unattended runs need an unlocked interactive session.";
+        if (foregroundPid != targetPid)
+            return $"activation-denied: Windows kept '{foregroundName ?? "unknown"}' (PID {foregroundPid}) in the foreground instead of target PID {targetPid}. " +
+                "No input sent. Attended: ask the user to click the target window's title bar, then observe before retrying. Unattended: activation cannot be forced.";
+        return null;
     }
 
     public void Verify()

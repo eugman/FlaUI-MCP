@@ -35,6 +35,7 @@ public class TypeTool : ToolBase
         properties = new
         {
             handle = new { type = "string", description = "Optional explicit window handle; otherwise uses the focused element." },
+            verifyFocus = new { type = "boolean", description = "Require ref and verified keyboard focus on that exact control before typing (default false)." },
             @ref = new
             {
                 type = "string",
@@ -63,6 +64,8 @@ public class TypeTool : ToolBase
         }
 
         var refId = GetStringArgument(arguments, "ref");
+        var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
+        if (verifyFocus && string.IsNullOrWhiteSpace(refId)) return Task.FromResult(ErrorResult("verifyFocus requires an element ref; no input sent."));
         var submit = GetBoolArgument(arguments, "submit", false);
 
         try
@@ -71,15 +74,10 @@ public class TypeTool : ToolBase
             var handle = GetStringArgument(arguments, "handle");
             if (handle != null && _sessions == null)
                 return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
-            if (refId != null && handle != null && _elementRegistry.WindowForRef(refId) != handle) throw new ArgumentException("Handle/ref mismatch.");
             // Focus element if ref provided
             if (!string.IsNullOrEmpty(refId))
             {
-                var element = _elementRegistry.GetElement(refId);
-                if (element == null)
-                {
-                    return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
-                }
+                _elementRegistry.ResolveRef(refId, handle);
 
                 // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
                 // Tip: calling windows_type without a ref types into the focused element
@@ -101,7 +99,7 @@ public class TypeTool : ToolBase
             }
 
             // Type the text
-            using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId));
+            using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId), verifyFocus);
             input.Type(text);
 
             if (submit)
@@ -173,20 +171,16 @@ public class FillTool : ToolBase
             return Task.FromResult(ErrorResult("Missing required argument: value"));
         }
 
-        var element = _elementRegistry.GetElement(refId);
-        if (element == null)
-        {
-            return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
-        }
-
         // Fail fast if this app's UIA provider is blocked by a pending pattern call
         if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
         {
-                    return Task.FromResult(BlockedResult(pending));
+            return Task.FromResult(BlockedResult(pending));
         }
 
         try
         {
+            var handle = GetStringArgument(arguments, "handle");
+            var element = _elementRegistry.ResolveRef(refId, handle);
             var elementName = element.Properties.Name.ValueOrDefault ?? refId;
 
             // Try Value pattern first
@@ -196,18 +190,19 @@ public class FillTool : ToolBase
                 if (!valuePattern.IsReadOnly.ValueOrDefault)
                 {
                     OperationContext.Check();
+                    using var lease = GuardedInput.AcquireLease();
                     var result = ModalAwareInvoker.Execute(_elementRegistry.GetProcessIdForRef(refId), "SetValue",
-                        () => MutationGuard.Execute(() => _elementRegistry.ValidateReference(refId, GetStringArgument(arguments, "handle")),
+                        () => MutationGuard.Execute(() => _elementRegistry.ValidateReference(refId, handle),
                             () => valuePattern.SetValue(value)), _invokeTracker);
                     if (result.Outcome != PatternCallOutcome.Completed)
-                        return Task.FromResult(ErrorResult(_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var p) ? PendingInvokeTracker.DescribeBlocked(p) : "SetValue outcome changed; inspect state before retrying.") with { Outcome = ToolOutcome.FromPattern(result) with { Dispatch = "failed" } });
+                        return Task.FromResult(TextResult("SetValue dispatched; the provider call is still pending. The final value is not verified. Inspect the dialog before continuing; do not repeat the fill.") with { Outcome = ToolOutcome.FromPattern(result) });
                     return Task.FromResult(TextResult($"Filled {elementName} with \"{value}\"") with { Outcome = ToolOutcome.FromPattern(result) });
                 }
             }
 
             // Fall back to focus + select all + type
             OperationContext.Check();
-            _elementRegistry.ValidateReference(refId, GetStringArgument(arguments, "handle"));
+            _elementRegistry.ValidateReference(refId, handle);
             using var input = new GuardedInput(_elementRegistry.InputForRef(refId), element);
             ReplaceByKeyboard(value,
                 () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A)),

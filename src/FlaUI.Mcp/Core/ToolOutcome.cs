@@ -24,9 +24,3 @@ public sealed record ToolStepOutcome(
     [property: JsonPropertyName("action")] string? Action,
     [property: JsonPropertyName("isError")] bool IsError,
     [property: JsonPropertyName("outcome")] ToolOutcome? Outcome);
-
-internal sealed class PendingProviderException(ToolOutcome outcome)
-    : InvalidOperationException("Provider operation still pending; inspect windows_operation_status and handle any dialog explicitly before continuing")
-{
-    public ToolOutcome Outcome { get; } = outcome;
-}

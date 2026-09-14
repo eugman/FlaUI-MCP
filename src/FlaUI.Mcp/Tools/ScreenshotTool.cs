@@ -26,7 +26,7 @@ public class ScreenshotTool : ToolBase
     public override string Name => "windows_screenshot";
 
     public override string Description => 
-        "Capture a window or element as PNG. Use savePath with includeImage=false to save an artifact without returning image tokens.";
+        "Capture a window, element or the screen as PNG. Normal capture uses UIA bounds and may omit the title bar; strictNative captures the whole native window. With savePath and includeImage=false only the path is returned; view the saved image before claiming a visual result.";
 
     public override object InputSchema => new
     {
@@ -48,7 +48,7 @@ public class ScreenshotTool : ToolBase
             @ref = new
             {
                 type = "string",
-                description = "Element ref to capture. If omitted, captures the whole window."
+                description = "Element ref to capture."
             },
             fullScreen = new
             {
@@ -58,12 +58,12 @@ public class ScreenshotTool : ToolBase
             background = new
             {
                 type = "boolean",
-                description = "Use native whole-window capture. Window handles retain normal-capture fallback; Window refs require native capture to succeed (no element-crop fallback). Cannot combine with fullScreen."
+                description = "Native whole-window capture. A handle falls back to screen pixels; a Window ref does not. Not with fullScreen."
             },
             strictNative = new
             {
                 type = "boolean",
-                description = "Opt in to native window capture without screen-pixel fallback. Implies background=true; use an explicit window handle or Window ref."
+                description = "Native whole-window capture with no screen-pixel fallback. Needs a handle or Window ref."
             },
             savePath = new
             {
@@ -79,7 +79,8 @@ public class ScreenshotTool : ToolBase
             {
                 type = "boolean",
                 description = "Return image payload (default true). Set false with savePath for compact artifact-only output."
-            }
+            },
+            includeMetadata = new { type = "boolean", description = "Append capture method, bounds, crop, size and DPI." }
         }
     };
 
@@ -87,6 +88,12 @@ public class ScreenshotTool : ToolBase
     {
         var handle = GetStringArgument(arguments, "handle");
         var refId = GetStringArgument(arguments, "ref");
+        if (refId != null)
+        {
+            try { _elementRegistry.ResolveRef(refId, handle); }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            { return Task.FromResult(ErrorResult(ex.Message)); }
+        }
         var fullScreen = GetBoolArgument(arguments, "fullScreen", false);
         var background = GetBoolArgument(arguments, "background", false);
         var strictNative = GetBoolArgument(arguments, "strictNative", false);
@@ -109,6 +116,25 @@ public class ScreenshotTool : ToolBase
         {
             OperationContext.Check();
             CaptureImage capture;
+            var method = "screen-uia-bounds";
+            System.Drawing.Rectangle? sourceBounds = null;
+            nint targetHwnd = 0;
+            McpToolResult Finish(byte[] bytes)
+            {
+                if (!GetBoolArgument(arguments, "includeMetadata"))
+                    return BuildScreenshotResult(bytes, normalizedSavePath, overwrite, includeImage, frame);
+                using var stream = new MemoryStream(bytes);
+                using var bitmap = System.Drawing.Image.FromStream(stream);
+                var metadata = new { method,
+                    sourceBounds = sourceBounds is { } b ? new { x = b.X, y = b.Y, width = b.Width, height = b.Height } : null,
+                    sourceWidth = bitmap.Width, sourceHeight = bitmap.Height,
+                    width = frame?.Width ?? bitmap.Width, height = frame?.Height ?? bitmap.Height, frame,
+                    windowDpi = targetHwnd == 0 ? (uint?)null : ReadDpi(targetHwnd),
+                    screenFallback = method == "screen-fallback" };
+                var result = BuildScreenshotResult(bytes, normalizedSavePath, overwrite, includeImage, frame);
+                if (result.IsError != true) result.Content.Add(new McpContent { Text = JsonSerializer.Serialize(metadata, McpProtocol.JsonOptions) });
+                return result;
+            }
 
             if (background && (fullScreen || (string.IsNullOrEmpty(refId) && string.IsNullOrEmpty(handle))))
             {
@@ -126,6 +152,7 @@ public class ScreenshotTool : ToolBase
                         $"({ProcessPolicy.EnvironmentVariable}) is active. Capture an allowed window by handle instead."));
                 }
                 capture = Capture.Screen();
+                method = "screen";
             }
             else if (!string.IsNullOrEmpty(refId))
             {
@@ -143,9 +170,8 @@ public class ScreenshotTool : ToolBase
                 // unavailable when an app allowlist is active).
                 if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pendingRef))
                 {
-                    return Task.FromResult(ErrorResult(
-                        PendingInvokeTracker.DescribeBlocked(pendingRef) +
-                        " For screenshots, use a window handle instead of a ref."));
+                    return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(pendingRef) +
+                        " For screenshots, use a window handle instead of a ref.") with { Outcome = BlockedResult(pendingRef).Outcome });
                 }
 
                 if (background)
@@ -154,12 +180,18 @@ public class ScreenshotTool : ToolBase
                         return Task.FromResult(ErrorResult("background ref capture requires a Window element"));
                     if (!NativeWindowCapture.TryCaptureWindow(element.AsWindow(), out var image, out var reason))
                         return Task.FromResult(ErrorResult($"Native Window ref capture failed: {reason}"));
-                    return Task.FromResult(BuildScreenshotResult(image, normalizedSavePath, overwrite, includeImage, frame));
+                    targetHwnd = element.Properties.NativeWindowHandle.ValueOrDefault;
+                    sourceBounds = Win32Desktop.GetWindowBounds(targetHwnd);
+                    method = "native-window";
+                    return Task.FromResult(Finish(image));
                 }
+                sourceBounds = element.BoundingRectangle;
+                targetHwnd = _sessionManager.GetWindowHwnd(_elementRegistry.WindowForRef(refId) ?? "");
                 capture = Capture.Element(element);
             }
             else if (!string.IsNullOrEmpty(handle))
             {
+                targetHwnd = _sessionManager.GetWindowHwnd(handle);
                 if (!_processPolicy.IsProcessAllowed(_sessionManager.GetWindowProcessId(handle)))
                     return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Screenshot target")));
                 // While the app's UIA provider is blocked (pending pattern call, e.g. an
@@ -179,6 +211,8 @@ public class ScreenshotTool : ToolBase
                             "by that handle instead."));
                     }
                     capture = Capture.Rectangle(bounds.Value);
+                    sourceBounds = bounds;
+                    method = "screen-fallback";
                 }
                 else
                 {
@@ -191,49 +225,47 @@ public class ScreenshotTool : ToolBase
                     if (background)
                     {
                         if (NativeWindowCapture.TryCaptureWindow(window, out var backgroundImage, out var reason))
-                            return Task.FromResult(BuildScreenshotResult(backgroundImage, normalizedSavePath, overwrite, includeImage, frame));
+                        {
+                            sourceBounds = Win32Desktop.GetWindowBounds(targetHwnd);
+                            method = "native-window";
+                            return Task.FromResult(Finish(backgroundImage));
+                        }
                         if (strictNative)
                             return Task.FromResult(ErrorResult($"Native capture failed: {reason}. Screen-pixel fallback is disabled; no screenshot was taken."));
                     }
 
                     capture = Capture.Element(window);
+                    sourceBounds = window.BoundingRectangle;
+                    if (background) method = "screen-fallback";
                 }
             }
             else
             {
-                // Capturing the foreground window: verify it belongs to an
-                // allowed app before touching it.
-                if (_processPolicy.IsRestricted)
+                // Resolve the foreground window through Win32 and authorize its process before
+                // reading its provider; a focused-element walk can hang on unrelated apps.
+                var foreground = Win32Desktop.GetForegroundWindow();
+                if (foreground == 0)
                 {
-                    var foregroundPid = Win32Desktop.GetForegroundWindowProcessId();
-                    if (!_processPolicy.IsProcessAllowed(foregroundPid))
-                    {
-                        var name = ProcessPolicy.TryGetProcessName(foregroundPid) ?? "unknown";
-                        return Task.FromResult(ErrorResult(
-                            _processPolicy.DescribeDenied($"The foreground window's process '{name}'")));
-                    }
+                    return Task.FromResult(ErrorResult("No foreground window found"));
                 }
 
-                // Capture foreground window
-                var focusedElement = _sessionManager.Automation.FocusedElement();
-                if (focusedElement == null)
+                Window? foregroundWindow;
+                try
                 {
-                    return Task.FromResult(ErrorResult("No focused window found"));
+                    foregroundWindow = CaptureForeground(Win32Desktop.GetProcessId(foreground), _processPolicy,
+                        () => _sessionManager.Automation.FromHandle(foreground)?.AsWindow());
                 }
-
-                // Walk up to find the window
-                var current = focusedElement;
-                while (current != null && current.Properties.ControlType.ValueOrDefault != FlaUI.Core.Definitions.ControlType.Window)
+                catch (UnauthorizedAccessException ex)
                 {
-                    current = current.Parent;
+                    return Task.FromResult(ErrorResult(ex.Message));
                 }
-
-                if (current == null)
+                if (foregroundWindow == null)
                 {
-                    return Task.FromResult(ErrorResult("Could not find window for focused element"));
+                    return Task.FromResult(ErrorResult("Could not read the foreground window"));
                 }
-
-                capture = Capture.Element(current);
+                capture = Capture.Element(foregroundWindow);
+                sourceBounds = foregroundWindow.BoundingRectangle;
+                targetHwnd = foreground;
             }
 
             byte[] imageData;
@@ -244,12 +276,26 @@ public class ScreenshotTool : ToolBase
                 imageData = stream.ToArray();
             }
 
-            return Task.FromResult(BuildScreenshotResult(imageData, normalizedSavePath, overwrite, includeImage, frame));
+            return Task.FromResult(Finish(imageData));
         }
         catch (Exception ex)
         {
             return Task.FromResult(ErrorResult($"Failed to capture screenshot: {ex.Message}"));
         }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(nint hwnd);
+    private static uint? ReadDpi(nint hwnd) => GetDpiForWindow(hwnd) is var dpi && dpi != 0 ? dpi : null;
+
+    internal static T CaptureForeground<T>(int processId, ProcessPolicy policy, Func<T> capture)
+    {
+        if (!policy.IsProcessAllowed(processId))
+        {
+            var name = ProcessPolicy.TryGetProcessName(processId) ?? "unknown";
+            throw new UnauthorizedAccessException(policy.DescribeDenied($"The foreground window's process '{name}'"));
+        }
+        return capture();
     }
 
     internal static bool TryNormalizeSavePath(string? savePath, bool overwrite, out string? normalizedPath, out string error)

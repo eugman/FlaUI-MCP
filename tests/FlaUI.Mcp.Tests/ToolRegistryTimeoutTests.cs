@@ -8,6 +8,26 @@ namespace FlaUI.Mcp.Tests;
 public class ToolRegistryTimeoutTests
 {
     [Fact]
+    public async Task TargetMetadataResolutionIsInsideTimeout()
+    {
+        using var release = new ManualResetEventSlim();
+        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(50)) { ResolveTarget = _ =>
+        {
+            try { release.Wait(TimeSpan.FromSeconds(5)); return null; }
+            finally { finished.TrySetResult(); }
+        } };
+        registry.RegisterTool(new SuccessfulTool());
+        try
+        {
+            var result = await registry.ExecuteToolAsync("successful", null).WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(result.IsError);
+            Assert.Contains("timed out", result.Content[0].Text);
+        }
+        finally { release.Set(); await finished.Task.WaitAsync(TimeSpan.FromSeconds(2)); }
+    }
+
+    [Fact]
     public async Task ExecuteToolAsync_TimesOutSynchronousToolBody()
     {
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(50));

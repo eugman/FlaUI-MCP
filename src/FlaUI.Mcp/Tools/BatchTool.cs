@@ -4,23 +4,11 @@ namespace PlaywrightWindows.Mcp.Tools;
 
 public sealed class BatchTool : ToolBase
 {
+    // Steps dispatch through the same registry, so each keeps its tool's guards.
     private readonly ToolRegistry registry;
 
-    public BatchTool(SessionManager sessions, ElementRegistry refs, PendingInvokeTracker? tracker = null, ProcessPolicy? policy = null)
-        : this(sessions, refs, StandaloneRegistry(sessions, refs, tracker ?? new(), policy ?? ProcessPolicy.AllowAll)) { }
+    internal BatchTool(ToolRegistry registry) => this.registry = registry;
 
-    internal BatchTool(SessionManager sessions, ElementRegistry refs, ToolRegistry registry)
-    {
-        this.registry = registry;
-    }
-
-    private static ToolRegistry StandaloneRegistry(SessionManager sessions, ElementRegistry refs,
-        PendingInvokeTracker pending, ProcessPolicy policy)
-    {
-        var registry = new ToolRegistry();
-        ToolComposition.Register(registry, sessions, refs, pending, policy, includeDesktopTools: false);
-        return registry;
-    }
     public override string Name => "windows_batch";
     public override string Description => "Execute click/type/fill/wait/snapshot actions in order, returning numbered results and structured step outcomes. Stops on errors by default; always stops when an action is still pending. Never replay a pending action.";
     public override object InputSchema => new { type = "object", properties = new {

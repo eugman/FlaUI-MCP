@@ -72,9 +72,13 @@ public record McpServerInfo
 
 public record McpCapabilities
 {
+    public object? Resources { get; init; }
     [JsonPropertyName("tools")]
     public ToolsCapability? Tools { get; init; }
 }
+
+/// <summary>Immutable, explicitly registered text; never resolves arbitrary filesystem URIs.</summary>
+public sealed record McpTextResource(string Uri, string Name, string Text, string MimeType = "text/markdown");
 
 public record ToolsCapability
 {

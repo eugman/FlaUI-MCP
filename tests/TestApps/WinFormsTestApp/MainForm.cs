@@ -47,6 +47,14 @@ namespace WinFormsTestApp
             };
             tab.Controls.Add(layout);
 
+            // Deliberately overlap a container's center with a child control.
+            // Native HWND hit checks cannot distinguish these two UIA targets.
+            var hitPanel = new Panel { Name = "ContainerHitPanel", Size = new Size(240, 40), AccessibleRole = AccessibleRole.Pane };
+            hitPanel.Controls.Add(new CheckBox {
+                Name = "ContainerHitCheckBox", Text = "Child fills container", Dock = DockStyle.Fill
+            });
+            layout.Controls.Add(hitPanel);
+
             // Simple button with click counter
             var clickCount = 0;
             var counterLabel = new Label

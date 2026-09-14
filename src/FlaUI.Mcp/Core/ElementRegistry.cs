@@ -14,6 +14,9 @@ public class ElementRegistry
     private readonly Dictionary<string, int> _windowCounters = new();
     private readonly Dictionary<string, int> _windowProcessIds = new();
     private readonly Dictionary<string, InputTarget> _identities = new();
+    // Find and wait register every match, so each window's refs are capped; the oldest go first.
+    internal const int MaxRefsPerWindow = 5000;
+    private readonly Dictionary<string, Queue<string>> _refOrder = new();
 
     public void SetWindowIdentity(string handle, int pid, nint hwnd, long? generation = null)
     {
@@ -33,14 +36,21 @@ public class ElementRegistry
         if (separator <= 0 || !HasElement(reference)) throw new ArgumentException("Unknown element ref.");
         return reference[..separator];
     }
-    public void ValidateReference(string reference, string? handle = null)
+    /// <summary>Resolve a ref for a tool call: known, owned by the given window, and that window still alive.</summary>
+    public AutomationElement ResolveRef(string reference, string? handle = null)
     {
-        if (handle != null && WindowForRef(reference) != handle) throw new ArgumentException("Handle/ref ownership mismatch.");
+        var element = GetElement(reference)
+            ?? throw new ArgumentException($"Element not found: {reference}. Refresh refs with windows_find or windows_snapshot.");
         var owner = WindowForRef(reference);
+        if (handle != null && owner != handle)
+            throw new ArgumentException($"Ref {reference} belongs to window {owner}, not {handle}.");
         InputTarget? identity;
         lock (_gate) identity = _identities.GetValueOrDefault(owner);
         identity?.EnsureAlive();
+        return element;
     }
+
+    public void ValidateReference(string reference, string? handle = null) => ResolveRef(reference, handle);
     public InputTarget InputForRef(string reference)
     {
         InputTarget owner;
@@ -62,12 +72,6 @@ public class ElementRegistry
         return owner;
     }
 
-    /// <summary>
-    /// Clear all elements for a window (called before new snapshot)
-    /// </summary>
-    public void ClearWindow(string windowHandle)
-        => BeginSnapshot(windowHandle);
-
     public long BeginSnapshot(string windowHandle)
     {
         lock (_gate)
@@ -81,6 +85,7 @@ public class ElementRegistry
             {
                 _elements.Remove(key);
             }
+            _refOrder.Remove(windowHandle);
             // Never recycle refs: an old snapshot must not silently target a new control.
             return generation;
         }
@@ -111,6 +116,9 @@ public class ElementRegistry
 
             var refId = $"{windowHandle}e{++_windowCounters[windowHandle]}";
             _elements[refId] = element;
+            if (!_refOrder.TryGetValue(windowHandle, out var order)) _refOrder[windowHandle] = order = new();
+            order.Enqueue(refId);
+            while (order.Count > MaxRefsPerWindow) _elements.Remove(order.Dequeue());
             return refId;
         }
     }

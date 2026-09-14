@@ -154,6 +154,7 @@ public class SendKeysTool : ToolBase
         properties = new
         {
             handle = new { type = "string", description = "Optional explicit window handle; otherwise uses the focused element." },
+            verifyFocus = new { type = "boolean", description = "Require ref and verified keyboard focus on that exact control before the sequence (default false)." },
             @ref = new
             {
                 type = "string",
@@ -184,6 +185,8 @@ public class SendKeysTool : ToolBase
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var refId = GetStringArgument(arguments, "ref");
+        var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
+        if (verifyFocus && string.IsNullOrWhiteSpace(refId)) return Task.FromResult(ErrorResult("verifyFocus requires an element ref; no input sent."));
         var chord = GetStringArgument(arguments, "chord");
         var keyList = GetArgument<List<string>>(arguments, "keys");
         var hasChord = !string.IsNullOrWhiteSpace(chord);
@@ -210,14 +213,9 @@ public class SendKeysTool : ToolBase
             var handle = GetStringArgument(arguments, "handle");
             if (handle != null && _sessions == null)
                 return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
-            if (refId != null && handle != null && _elementRegistry.WindowForRef(refId) != handle) throw new ArgumentException("Handle/ref mismatch.");
             if (!string.IsNullOrWhiteSpace(refId))
             {
-                var element = _elementRegistry.GetElement(refId);
-                if (element == null)
-                {
-                    return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
-                }
+                _elementRegistry.ResolveRef(refId, handle);
 
                 // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
                 // Tip: calling windows_send_keys without a ref sends pure keyboard input to the
@@ -238,7 +236,7 @@ public class SendKeysTool : ToolBase
                 }
             }
 
-            using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId));
+            using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId), verifyFocus);
             foreach (var step in prepared)
             {
                 inputAttempted = true;

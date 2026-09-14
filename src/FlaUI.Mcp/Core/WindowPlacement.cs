@@ -26,10 +26,4 @@ public sealed record WindowPlacement(
         if (!workAreas.Any(area => area.Contains(Bounds)))
             throw new InvalidOperationException("Requested window must fit entirely in one monitor work area; no clipping or automatic resizing");
     }
-
-    public void RequireObserved(Rectangle actual)
-    {
-        if (actual != Bounds)
-            throw new InvalidOperationException($"Window placement not achieved: requested {Bounds}; observed {actual}. Mutation was not replayed.");
-    }
 }

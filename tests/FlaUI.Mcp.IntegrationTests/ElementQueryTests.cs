@@ -8,6 +8,32 @@ namespace FlaUI.Mcp.IntegrationTests;
 [Collection("TestApps")]
 public class ElementQueryTests(TestAppFixture fixture)
 {
+    [Fact]
+    public void CompactFindReportsToggleAndOptionalBounds()
+    {
+        var query = Query;
+        query.Resolve(fixture.WinFormsHandle, new(AutomationId: "ButtonsTab", ControlType: "TabItem")).Patterns.SelectionItem.Pattern.Select();
+        var checkbox = query.Resolve(fixture.WinFormsHandle, new(AutomationId: "EnableCheckbox"));
+        var expected = checkbox.Patterns.Toggle.Pattern.ToggleState.Value.ToString();
+        var result = query.Find(fixture.WinFormsHandle, new(AutomationId: "EnableCheckbox", Pattern: "Toggle"), includeBounds: true);
+        var item = Assert.Single(result.Elements);
+        Assert.Equal(expected, item.ToggleState);
+        Assert.NotNull(item.Bounds);
+        Assert.True(item.Bounds.Width > 0);
+    }
+
+    [Fact]
+    public async Task AbsentWaitHonorsSettlement()
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var result = await new WaitTool(Query).ExecuteAsync(JsonSerializer.SerializeToElement(new {
+            handle = fixture.WinFormsHandle, selector = new { automationId = "fla_missing", rootOnly = true },
+            state = "absent", settleMs = 150, timeoutMs = 2000
+        }));
+        Assert.NotEqual(true, result.IsError);
+        Assert.True(clock.ElapsedMilliseconds >= 150);
+    }
+
     private ElementQuery Query => new(fixture.Session, fixture.Elements, new PendingInvokeTracker());
 
     [Fact]

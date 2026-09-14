@@ -2,20 +2,19 @@ using System.Collections.Concurrent;
 
 namespace PlaywrightWindows.Mcp.Core;
 
+public sealed record ProcessIdentity(int ProcessId, long StartedTicks);
+
 public sealed class OperationContext
 {
     public static readonly AsyncLocal<OperationContext?> Current = new();
     public string Id { get; } = Guid.NewGuid().ToString("N");
-    public int ProcessId { get; init; }
-    public long ProcessStartedTicks { get; init; }
+    public int ProcessId { get; set; }
+    public long ProcessStartedTicks { get; set; }
     public string Tool { get; init; } = "";
     public DateTime StartedUtc { get; } = DateTime.UtcNow;
     public CancellationTokenSource Stop { get; } = new();
     public volatile bool Finished;
     public string? Error { get; set; }
-    public string? Action { get; set; }
-    public string? Step { get; set; }
-    public string? Target { get; set; }
     public static void Check() => Current.Value?.Stop.Token.ThrowIfCancellationRequested();
 }
 
@@ -23,13 +22,13 @@ public sealed class OperationCoordinator
 {
     private readonly object gate = new();
     private readonly ConcurrentDictionary<string, OperationContext> operations = new();
-    public OperationContext Begin(int pid, string tool, long startedTicks = 0)
+    public OperationContext Begin(string tool)
     {
         lock (gate)
         {
             foreach (var old in operations.Values.Where(o => o.Finished).OrderByDescending(o => o.StartedUtc).Skip(100).ToArray())
                 operations.TryRemove(old.Id, out _);
-            var op = new OperationContext { ProcessId = pid, ProcessStartedTicks = startedTicks, Tool = tool };
+            var op = new OperationContext { Tool = tool };
             operations[op.Id] = op;
             return op;
         }

@@ -33,7 +33,7 @@ public class ClickTool : ToolBase
         properties = new
         {
             handle = new { type = "string", description = "Optional window handle; when supplied, the ref must belong to this window." },
-            physical = new { type = "boolean", description = "Use guarded physical selection, including exact native hit-testing." },
+            physical = new { type = "boolean", description = "Use a physical mouse click with foreground and native-window hit checks. These checks do not prove which UIA child receives the click; a container's clickable point may hit a child control." },
             @ref = new
             {
                 type = "string",
@@ -66,30 +66,27 @@ public class ClickTool : ToolBase
         var doubleClick = GetBoolArgument(arguments, "doubleClick", false);
         var physical = GetBoolArgument(arguments, "physical", false);
 
-        var element = _elementRegistry.GetElement(refId);
-        if (element == null)
-        {
-            return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
-        }
-
         // Fail fast if this app's UIA provider is already blocked by an earlier call
         var processId = _elementRegistry.GetProcessIdForRef(refId);
         if (_invokeTracker.TryGetPending(processId, out var pending))
         {
-                    return Task.FromResult(BlockedResult(pending));
+            return Task.FromResult(BlockedResult(pending));
         }
 
         try
         {
             OperationContext.Check();
-            void Validate() => _elementRegistry.ValidateReference(refId, GetStringArgument(arguments, "handle"));
-            Validate();
+            var handle = GetStringArgument(arguments, "handle");
+            var element = _elementRegistry.ResolveRef(refId, handle);
+            void Validate() => _elementRegistry.ValidateReference(refId, handle);
             OperationContext.Check();
             var elementName = element.Properties.Name.ValueOrDefault ?? refId;
 
             // Try Invoke pattern first (most reliable for buttons)
             if (!physical && button == "left" && !doubleClick && element.Patterns.Invoke.IsSupported)
             {
+                // Pattern mutations share the input lease so they cannot interleave with physical input.
+                using var lease = GuardedInput.AcquireLease();
                 var invokePattern = element.Patterns.Invoke.Pattern;
                 var result = ModalAwareInvoker.Execute(
                     processId,
@@ -102,6 +99,7 @@ public class ClickTool : ToolBase
             // Try Toggle pattern for checkboxes
             if (!physical && button == "left" && !doubleClick && element.Patterns.Toggle.IsSupported)
             {
+                using var lease = GuardedInput.AcquireLease();
                 var togglePattern = element.Patterns.Toggle.Pattern;
                 ToggleState? newState = null;
                 var result = ModalAwareInvoker.Execute(
@@ -119,6 +117,7 @@ public class ClickTool : ToolBase
             // Try SelectionItem pattern for list items
             if (!physical && button == "left" && !doubleClick && element.Patterns.SelectionItem.IsSupported)
             {
+                using var lease = GuardedInput.AcquireLease();
                 var selectionPattern = element.Patterns.SelectionItem.Pattern;
                 var result = ModalAwareInvoker.Execute(
                     processId,
@@ -164,14 +163,11 @@ public class ClickTool : ToolBase
         {
             PatternCallOutcome.Completed => TextResult(completedMessage),
             PatternCallOutcome.ModalDetected => TextResult(
-                $"{completedMessage} — a modal dialog \"{result.ModalTitle}\" opened and is waiting for input. " +
-                "Note: UIA-based tools (windows_snapshot, windows_get_text) on this app will fail until the " +
-                "dialog closes. Give the dialog a moment to appear and take focus, find its window handle via " +
-                "windows_list_windows, see it with windows_screenshot using that handle, and interact via " +
-                "windows_send_keys with that explicit dialog handle (without ref)."),
+                $"{completedMessage}; a modal dialog \"{result.ModalTitle}\" opened and blocks UI Automation on this app until it closes. " +
+                "Find it with windows_list_windows, then use windows_screenshot or windows_send_keys (no ref) with its handle."),
             _ => TextResult(
-                $"{completedMessage} — the app's handler is still running in the background. " +
-                "Take a windows_screenshot to check the app's state; UIA-based tools may block until it completes."),
+                $"{completedMessage}; the app's handler is still running. Check windows_operation_status or take a screenshot " +
+                "by handle before continuing; do not repeat the click."),
         };
         return response with { Outcome = ToolOutcome.FromPattern(result) };
     }

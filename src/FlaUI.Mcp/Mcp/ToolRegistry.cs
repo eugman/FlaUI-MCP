@@ -13,6 +13,7 @@ public class ToolRegistry
     private readonly Action? _onToolActivity;
     public OperationCoordinator Operations { get; } = new();
     public Func<JsonElement?, ProcessIdentity?>? ResolveTarget { get; set; }
+    public PendingInvokeTracker? Pending { get; set; }
 
     public ToolRegistry(TimeSpan? toolTimeout = null, Action? onToolActivity = null)
     {
@@ -51,25 +52,29 @@ public class ToolRegistry
         try
         {
             _onToolActivity?.Invoke();
-            // Batch actions resolve independently: upstream batches may span windows/processes.
-            var target = arguments is { ValueKind: JsonValueKind.Object } a && a.TryGetProperty("actions", out _)
-                ? null : ResolveTarget?.Invoke(arguments);
             if (OperationContext.Current.Value != null)
             {
                 OperationContext.Check();
-                var current = OperationContext.Current.Value;
-                if (target != null && current.ProcessId != 0 && (target.ProcessId != current.ProcessId || target.StartedTicks != current.ProcessStartedTicks))
-                    throw new ArgumentException("Nested operation target identity mismatch.");
                 return await tool.ExecuteAsync(arguments);
             }
-            var operation = Operations.Begin(target?.ProcessId ?? 0, name, target?.StartedTicks ?? 0);
+            var operation = Operations.Begin(name);
             var toolTask = Task.Run(async () =>
             {
                 OperationContext.Current.Value = operation;
                 try
                 {
+                    // Metadata collection is inside the timeout. Target validation
+                    // belongs to the tool, preserving its specific error contract.
+                    var target = ResolveTarget?.Invoke(arguments);
+                    operation.ProcessId = target?.ProcessId ?? 0;
+                    operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
+                    OperationContext.Check();
                     var result = await tool.ExecuteAsync(arguments);
-                    if (result.IsError == true) operation.Error = string.Join("; ", result.Content.Select(c => c.Text));
+                    if (result.IsError == true || result.Outcome?.Dispatch == "failed")
+                    {
+                        var error = string.Join("; ", result.Content.Select(c => c.Text));
+                        operation.Error = string.IsNullOrWhiteSpace(error) ? "Tool reported a failed dispatch." : error;
+                    }
                     return result;
                 }
                 catch (Exception ex) { operation.Error = ex.Message; throw; }
@@ -80,6 +85,12 @@ public class ToolRegistry
             if (await Task.WhenAny(toolTask, timeoutTask) == timeoutTask)
             {
                 operation.Stop.Cancel();
+                // A stranded call can still hold this app's UIA provider. Fail later ref tools fast until it returns.
+                if (Pending != null && operation.ProcessId != 0)
+                {
+                    var stranded = Pending.Begin(operation.ProcessId, $"timed-out {name}");
+                    _ = toolTask.ContinueWith(_ => Pending.Complete(stranded), TaskScheduler.Default);
+                }
                 _ = toolTask.ContinueWith(
                     task => { _ = task.Exception; },
                     TaskContinuationOptions.OnlyOnFaulted);

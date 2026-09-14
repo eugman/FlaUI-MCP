@@ -8,13 +8,13 @@ namespace PlaywrightWindows.Mcp.Tools;
 public sealed class WindowPlacementTool(ElementRegistry refs, PendingInvokeTracker pending, SessionManager? sessions = null) : ToolBase
 {
     public override string Name => "windows_place_window";
-    public override string Description => "Place an observed normal-state native window in physical screen pixels without activating it. Desktop mutation: requires handoff permission. Returns requested and observed bounds; the operating system may constrain size. Rejects clipping and child controls; never replays the move.";
+    public override string Description => "Move or resize an observed normal-state native window in physical screen pixels without activating it. Returns requested and observed bounds; the operating system may constrain size. Rejects clipping and child controls; never replays the move.";
     public override object InputSchema => new
     {
         type = "object", properties = new
         {
             @ref = new { type = "string" },
-            handle = new { type = "string", description = "Native window handle from windows_list_windows; alternative to ref." },
+            handle = new { type = "string", description = "Window identifier from windows_list_windows (for example w1), not a numeric HWND; alternative to ref." },
             placement = new { type = "object", properties = new
             {
                 x = new { type = "integer", minimum = -100000, maximum = 100000 },
@@ -40,7 +40,7 @@ public sealed class WindowPlacementTool(ElementRegistry refs, PendingInvokeTrack
         placement.Validate();
         var pid = reference == null ? 0 : refs.GetProcessIdForRef(reference);
         if (reference != null && pending.TryGetPending(pid, out var blocked))
-            return Task.FromResult(ErrorResult(PendingInvokeTracker.DescribeBlocked(blocked)));
+            return Task.FromResult(BlockedResult(blocked));
         OperationContext.Check();
         var target = reference == null ? sessions!.GetInputTarget(handle!) : refs.InputForRef(reference);
         if (reference != null)
@@ -66,6 +66,7 @@ public sealed class WindowPlacementTool(ElementRegistry refs, PendingInvokeTrack
         MutationGuard.Execute(Validate, () => Win32Desktop.PlaceWindow(target.Hwnd, placement.Bounds));
         target.EnsureAlive();
         var after = Win32Desktop.GetWindowBounds(target.Hwnd) ?? throw new InvalidOperationException("Window disappeared after placement; mutation not replayed");
-        return Task.FromResult(TextResult(JsonSerializer.Serialize(new { requested = placement.Bounds, before, after, activationRequested = false, replayed = false })));
+        static object Box(System.Drawing.Rectangle r) => new { x = r.X, y = r.Y, width = r.Width, height = r.Height };
+        return Task.FromResult(TextResult(JsonSerializer.Serialize(new { requested = Box(placement.Bounds), before = Box(before), after = Box(after) })));
     }
 }

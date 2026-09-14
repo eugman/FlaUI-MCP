@@ -84,29 +84,6 @@ public sealed class ProcessPolicy
         return IsNameAllowed(appPath);
     }
 
-    /// <summary>
-    /// Verify the current foreground window's process against the allowlist.
-    /// Returns null when allowed (or unrestricted), otherwise an error message.
-    /// Used to gate ref-less keyboard input, which goes to whatever has focus.
-    /// </summary>
-    public string? CheckForegroundWindowAllowed()
-    {
-        if (!IsRestricted)
-        {
-            return null;
-        }
-
-        var processId = Win32Desktop.GetForegroundWindowProcessId();
-        if (IsProcessAllowed(processId))
-        {
-            return null;
-        }
-
-        var name = TryGetProcessName(processId) ?? "unknown";
-        return DescribeDenied($"The foreground window's process '{name}'") +
-               " Focus an allowed window first, or target an element ref directly.";
-    }
-
     public string DescribeDenied(string subject)
     {
         return $"{subject} is not in the FlaUI-MCP app allowlist. " +

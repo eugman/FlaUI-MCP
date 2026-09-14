@@ -8,10 +8,12 @@ namespace PlaywrightWindows.Mcp;
 public class McpServer
 {
     private readonly ToolRegistry _toolRegistry;
+    private readonly IReadOnlyDictionary<string, McpTextResource>? _resources;
 
-    public McpServer(ToolRegistry toolRegistry)
+    public McpServer(ToolRegistry toolRegistry, IReadOnlyDictionary<string, McpTextResource>? resources = null)
     {
         _toolRegistry = toolRegistry;
+        _resources = resources;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
@@ -49,7 +51,7 @@ public class McpServer
         }
     }
 
-    private async Task<JsonRpcResponse?> HandleRequestAsync(JsonRpcRequest request)
+    internal async Task<JsonRpcResponse?> HandleRequestAsync(JsonRpcRequest request)
     {
         try
         {
@@ -59,6 +61,9 @@ public class McpServer
                 "notifications/initialized" => null, // No response for notifications
                 "tools/list" => HandleToolsList(),
                 "tools/call" => await HandleToolCallAsync(request),
+                "resources/list" when _resources != null => new { resources = _resources.Values.Select(r => new { r.Uri, r.Name, r.MimeType }) },
+                "resources/templates/list" when _resources != null => new { resourceTemplates = Array.Empty<object>() },
+                "resources/read" when _resources != null => ReadResource(request),
                 _ => throw new Exception($"Unknown method: {request.Method}")
             };
 
@@ -92,6 +97,7 @@ public class McpServer
             Capabilities = new McpCapabilities
             {
                 Tools = new ToolsCapability { ListChanged = false }
+                , Resources = _resources == null ? null : new { }
             },
             ServerInfo = new McpServerInfo
             {
@@ -99,6 +105,14 @@ public class McpServer
                 Version = "0.1.0"
             }
         };
+    }
+
+    private object ReadResource(JsonRpcRequest request)
+    {
+        var uri = request.Params?.GetProperty("uri").GetString();
+        if (uri == null || !_resources!.TryGetValue(uri, out var resource))
+            throw new ArgumentException("Unknown resource URI; use resources/list. Filesystem paths are not accepted.");
+        return new { contents = new[] { new { resource.Uri, resource.MimeType, resource.Text } } };
     }
 
     private McpToolsListResult HandleToolsList()

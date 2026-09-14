@@ -82,13 +82,6 @@ public sealed class SearchAndCancellationTests
         finally { OperationContext.Current.Value = null; }
     }
 
-    [Fact] public void HandleRefMismatchFailsBeforeDispatch()
-    {
-        var validator = new TargetValidator(_ => new(10, 20), _ => "w1");
-        Assert.Throws<ArgumentException>(() => validator.Resolve(JsonSerializer.SerializeToElement(new { handle = "w2", @ref = "r1" })));
-        Assert.Equal(new ProcessIdentity(10, 20), validator.Resolve(JsonSerializer.SerializeToElement(new { handle = "w1", @ref = "r1" })));
-    }
-
     [Fact] public void LogicalControlsSharingHostRemainDistinct()
     {
         var found = BoundedSearch.Find(new[] { 1 }, n => n == 1 ? new[] { 2 } : [], n => n == 2,
@@ -111,9 +104,9 @@ public sealed class SearchAndCancellationTests
     [Fact] public void TimeoutDoesNotQuarantineOtherCallsButCancelsOldWork()
     {
         var operations = new OperationCoordinator();
-        var first = operations.Begin(1, "first");
+        var first = operations.Begin("first");
         first.Stop.Cancel();
-        var recovery = operations.Begin(1, "recovery");
+        var recovery = operations.Begin("recovery");
         Assert.NotEqual(first.Id, recovery.Id);
         OperationContext.Current.Value = first;
         try { Assert.Throws<OperationCanceledException>(OperationContext.Check); }

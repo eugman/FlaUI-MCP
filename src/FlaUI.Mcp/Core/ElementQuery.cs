@@ -10,8 +10,17 @@ public sealed record ElementSelector(string? AutomationId = null, string? Name =
     bool RootOnly = false);
 public sealed record ElementInfo(string Ref, string Name, string AutomationId, string ControlType,
     string ClassName, bool Enabled, bool Offscreen, string? Value, string[] Patterns, int Depth,
-    bool? Selected = null, bool ValueTruncated = false);
-public sealed record QueryResult(List<ElementInfo> Elements, int Visited, bool Truncated, int Unreadable);
+    bool? Selected = null, bool ValueTruncated = false, string? ToggleState = null,
+    bool? KeyboardFocus = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] ElementBounds? Bounds = null);
+public sealed record ElementBounds(double X, double Y, double Width, double Height);
+public sealed record QueryResult(List<ElementInfo> Elements, int Visited, bool Truncated, int Unreadable)
+{
+    public bool Complete => !Truncated && Unreadable == 0;
+    public string Scope { get; init; } = "subtree";
+    // The matched nodes in Elements order; internal, so never serialized.
+    internal IReadOnlyList<AutomationElement> Nodes { get; init; } = [];
+}
 
 /// <summary>Bounded raw-tree discovery. Selectors use exact, case-sensitive UIA values.</summary>
 public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, PendingInvokeTracker pending)
@@ -20,6 +29,8 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
     {
         if (selector.ControlType != null && (!Enum.TryParse<ControlType>(selector.ControlType, out var type) || !Enum.IsDefined(type)))
             throw new ArgumentException($"Unknown controlType: {selector.ControlType}");
+        if (selector.Pattern is not (null or "Value" or "SelectionItem" or "Toggle"))
+            throw new ArgumentException("pattern must be Value, SelectionItem, or Toggle.");
     }
 
     private List<AutomationElement> SearchRoots(string handle, ElementSelector selector, ElementSelector? within,
@@ -28,8 +39,8 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
         ValidateSelector(selector);
         if (within != null) ValidateSelector(within);
         var pid = sessions.GetWindowProcessId(handle);
-        if (pending.TryGetPending(pid, out var call)) throw new InvalidOperationException(PendingInvokeTracker.DescribeBlocked(call));
-        var root = sessions.GetWindow(handle) ?? throw new ArgumentException("Unknown window handle");
+        if (pending.TryGetPending(pid, out var call)) throw new ProviderBlockedException(call);
+        var root = sessions.GetWindow(handle) ?? throw new ArgumentException("Unknown window handle. Use a current handle from windows_list_windows, not an element ref.");
         var hwnd = sessions.GetWindowHwnd(handle);
         if (hwnd != 0) refs.SetWindowIdentity(handle, pid, hwnd);
         else refs.SetWindowProcessId(handle, pid);
@@ -51,11 +62,13 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
         return result;
     }
     public QueryResult Find(string handle, ElementSelector selector, ElementSelector? within = null,
-        int maxDepth = 24, int maxNodes = 3000, int maxResults = 30, bool includeOwned = false, SearchBudget? budget = null)
+        int maxDepth = 24, int maxNodes = 3000, int maxResults = 30, bool includeOwned = false, SearchBudget? budget = null, bool includeBounds = false,
+        bool register = true)
     {
         if (maxDepth is < 0 or > 64 || maxNodes is < 1 or > 20000 || maxResults is < 1 or > 1000)
             throw new ArgumentException("Limits: depth 0..64, nodes 1..20000, results 1..1000");
         budget ??= new SearchBudget(maxNodes, TimeSpan.FromSeconds(10));
+        budget.LimitRemaining(maxNodes);
         var roots = SearchRoots(handle, selector, within, includeOwned, budget);
         var walker = sessions.Automation.TreeWalkerFactory.GetRawViewWalker();
         IEnumerable<AutomationElement> Children(AutomationElement node)
@@ -69,8 +82,10 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
         cache.Add(properties.Element.ControlType); cache.Add(properties.Element.ClassName);
         cache.Add(properties.Element.IsOffscreen); cache.Add(properties.Element.IsPassword);
         cache.Add(properties.PatternAvailability.IsValuePatternAvailable); cache.Add(properties.PatternAvailability.IsSelectionItemPatternAvailable);
+        cache.Add(properties.PatternAvailability.IsTogglePatternAvailable);
         cache.Add(sessions.Automation.PatternLibrary.ValuePattern);
         cache.Add(sessions.Automation.PatternLibrary.SelectionItemPattern);
+        cache.Add(sessions.Automation.PatternLibrary.TogglePattern);
         cache.Add(properties.Value.Value);
         bool CachedMatch(AutomationElement node)
         {
@@ -84,16 +99,31 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
             RuntimeIdentity(n.Properties.RuntimeId.ValueOrDefault),
             budget, maxDepth, maxResults);
         var result = new List<ElementInfo>();
+        var nodes = new List<AutomationElement>();
         var unreadable = found.Unreadable;
         foreach (var (node, depth) in found.Matches)
         {
             OperationContext.Check();
             if (budget.Expired) break;
-            try { result.Add(Describe(refs.Register(handle, node), node, depth)); }
+            try
+            {
+                result.Add(Describe(register ? refs.Register(handle, node) : "", node, depth, includeBounds));
+                nodes.Add(node);
+            }
             catch { unreadable++; }
         }
-        return new(result, budget.Visited, found.Truncated || budget.Expired, unreadable);
+        return new(result, budget.Visited, found.Truncated || budget.Expired, unreadable)
+        {
+            Scope = selector.RootOnly ? "roots-only; descendants not searched" : "subtree; provider-realized nodes only",
+            Nodes = nodes
+        };
     }
+
+    /// <summary>Give an unregistered observation fresh refs, such as the poll that satisfied a wait.</summary>
+    public QueryResult WithRefs(string handle, QueryResult observation) => observation with
+    {
+        Elements = observation.Elements.Select((element, index) => element with { Ref = refs.Register(handle, observation.Nodes[index]) }).ToList()
+    };
 
     public static string? RuntimeIdentity(int[]? runtimeId)
         => runtimeId is { Length: > 0 } ? string.Join(",", runtimeId) : null;
@@ -169,7 +199,7 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
     }
 
     private static bool Matches(AutomationElement e, ElementSelector s) =>
-        (s.Pattern == null || (s.Pattern == "Value" && e.Patterns.Value.IsSupported) || (s.Pattern == "SelectionItem" && e.Patterns.SelectionItem.IsSupported)) &&
+        (s.Pattern == null || (s.Pattern == "Value" && e.Patterns.Value.IsSupported) || (s.Pattern == "SelectionItem" && e.Patterns.SelectionItem.IsSupported) || (s.Pattern == "Toggle" && e.Patterns.Toggle.IsSupported)) &&
         (s.AutomationId == null || e.Properties.AutomationId.ValueOrDefault == s.AutomationId) &&
         (s.Name == null || e.Properties.Name.ValueOrDefault == s.Name) &&
         (s.ControlType == null || e.Properties.ControlType.ValueOrDefault.ToString() == s.ControlType) &&
@@ -177,7 +207,7 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
         (s.Visible == null || !e.Properties.IsOffscreen.ValueOrDefault == s.Visible) &&
         (s.Value == null || (!e.Properties.IsPassword.ValueOrDefault && e.Patterns.Value.IsSupported && e.Patterns.Value.Pattern.Value.ValueOrDefault == s.Value));
 
-    private static ElementInfo Describe(string reference, AutomationElement e, int depth)
+    private static ElementInfo Describe(string reference, AutomationElement e, int depth, bool includeBounds)
     {
         var patterns = new List<string>();
         if (e.Patterns.Invoke.IsSupported) patterns.Add("Invoke");
@@ -194,8 +224,15 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
         bool? selected = null;
         if (e.Patterns.SelectionItem.IsSupported && e.Patterns.SelectionItem.Pattern.IsSelected.TryGetValue(out var isSelected))
             selected = isSelected;
+        string? toggle = null;
+        if (e.Patterns.Toggle.IsSupported && e.Patterns.Toggle.Pattern.ToggleState.TryGetValue(out var state))
+            toggle = state.ToString();
+        bool? focus = e.Properties.HasKeyboardFocus.TryGetValue(out var focused) ? focused : null;
+        ElementBounds? bounds = null;
+        if (includeBounds && e.Properties.BoundingRectangle.TryGetValue(out var rectangle))
+            bounds = new(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
         return new(reference, e.Properties.Name.ValueOrDefault ?? "", e.Properties.AutomationId.ValueOrDefault ?? "",
             e.Properties.ControlType.ValueOrDefault.ToString(), e.Properties.ClassName.ValueOrDefault ?? "",
-            e.Properties.IsEnabled.ValueOrDefault, e.Properties.IsOffscreen.ValueOrDefault, value, patterns.ToArray(), depth, selected, valueTruncated);
+            e.Properties.IsEnabled.ValueOrDefault, e.Properties.IsOffscreen.ValueOrDefault, value, patterns.ToArray(), depth, selected, valueTruncated, toggle, focus, bounds);
     }
 }

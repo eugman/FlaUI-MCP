@@ -16,7 +16,6 @@ public class ProcessPolicyTests
         Assert.True(policy.IsNameAllowed(null));
         Assert.True(policy.IsProcessAllowed(0));
         Assert.True(policy.IsExecutableAllowed(@"C:\Windows\explorer.exe"));
-        Assert.Null(policy.CheckForegroundWindowAllowed());
     }
 
     [Fact]
@@ -125,18 +124,5 @@ public class ProcessPolicyTests
         Assert.Contains("TabularEditor3", message);
         Assert.Contains("notepad", message);
         Assert.Contains(ProcessPolicy.EnvironmentVariable, message);
-    }
-
-    [Fact]
-    public void CheckForegroundWindowAllowed_DeniesWhenForegroundIsNotAllowed()
-    {
-        // Whatever the foreground window is while tests run, it cannot belong
-        // to a process with this name.
-        var policy = new ProcessPolicy(new[] { "NoSuchProcessName_1b2c3d" });
-
-        var denied = policy.CheckForegroundWindowAllowed();
-
-        Assert.NotNull(denied);
-        Assert.Contains("allowlist", denied);
     }
 }

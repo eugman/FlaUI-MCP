@@ -9,9 +9,11 @@ internal static class ToolComposition
         PendingInvokeTracker pending, ProcessPolicy policy, bool includeDesktopTools)
     {
         registry.ResolveTarget = arguments => sessions.ResolveTarget(arguments, elements);
+        registry.Pending = pending;
         var query = new ElementQuery(sessions, elements, pending);
         registry.RegisterTool(new OperationStatusTool(registry.Operations, pending));
         registry.RegisterTool(new FindTool(query));
+        registry.RegisterTool(new WaitTool(query));
         registry.RegisterTool(new SnapshotTool(sessions, elements, pending));
         registry.RegisterTool(new ClickTool(elements, pending));
         registry.RegisterTool(new FillTool(elements, pending));
@@ -26,7 +28,7 @@ internal static class ToolComposition
             registry.RegisterTool(new ListWindowsTool(sessions));
             registry.RegisterTool(new FocusWindowTool(sessions));
             registry.RegisterTool(new CloseWindowTool(sessions));
-            registry.RegisterTool(new BatchTool(sessions, elements, registry));
+            registry.RegisterTool(new BatchTool(registry));
         }
     }
 }

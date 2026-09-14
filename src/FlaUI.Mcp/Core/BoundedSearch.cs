@@ -10,6 +10,11 @@ public sealed class SearchBudget(int maxNodes, TimeSpan duration, Func<TimeSpan>
     public bool Expired => (elapsed?.Invoke() ?? watch.Elapsed) >= duration;
     public bool Available => Remaining > 0 && !Expired;
     public void Visit() => Visited++;
+    public void LimitRemaining(int maximum)
+    {
+        if (maximum < 1) throw new ArgumentOutOfRangeException(nameof(maximum));
+        maxNodes = Math.Min(maxNodes, Visited + maximum);
+    }
 }
 
 public sealed record SearchResult<T>(List<(T Node, int Depth)> Matches, bool Truncated, int Unreadable);

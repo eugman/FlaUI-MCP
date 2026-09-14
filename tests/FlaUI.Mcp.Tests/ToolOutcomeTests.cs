@@ -58,6 +58,22 @@ public sealed class ToolOutcomeTests
         finally { release.Set(); }
     }
 
+    [Fact]
+    public async Task StructuredBatchFailureMarksRegistryOperationAsFailedWithoutChangingBatchContract()
+    {
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new StructuredBatchFailureTool());
+
+        var result = await registry.ExecuteToolAsync("structured-batch-failure", null);
+
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal("failed", result.Outcome!.Dispatch);
+        Assert.Contains("1. click: failed", result.Content[0].Text);
+        var status = JsonSerializer.SerializeToElement(registry.Operations.Status())[0];
+        Assert.Equal("failed", status.GetProperty("dispatch").GetString());
+        Assert.Contains("1. click: failed", status.GetProperty("Error").GetString());
+    }
+
     private sealed class PendingTool(PendingInvokeTracker tracker, ManualResetEventSlim release) : ToolBase
     {
         public override string Name => "pending-test";
@@ -77,6 +93,20 @@ public sealed class ToolOutcomeTests
         public override string Description => "No input or UIA calls";
         public override object InputSchema => new { };
         public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) => Task.FromResult(TextResult("accepted"));
+    }
+
+    private sealed class StructuredBatchFailureTool : ToolBase
+    {
+        public override string Name => "structured-batch-failure";
+        public override string Description => "Produces the legacy non-error batch result with a failed structured dispatch.";
+        public override object InputSchema => new { };
+        public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) => BatchTool.ExecuteRows(
+            JsonSerializer.Deserialize<JsonElement[]>("""[{"action":"click","ref":"first"}]""")!,
+            (_, _) => Task.FromResult(new McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Type = "text", Text = "failed" }]
+            }));
     }
 
 }

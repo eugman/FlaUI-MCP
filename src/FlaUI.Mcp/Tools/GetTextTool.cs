@@ -45,20 +45,15 @@ public class GetTextTool : ToolBase
             return Task.FromResult(ErrorResult("Missing required argument: ref"));
         }
 
-        var element = _elementRegistry.GetElement(refId);
-        if (element == null)
-        {
-            return Task.FromResult(ErrorResult($"Element not found: {refId}. Run windows_snapshot to refresh element refs."));
-        }
-
         // Fail fast if this app's UIA provider is blocked by a pending pattern call
         if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
         {
-                    return Task.FromResult(BlockedResult(pending));
+            return Task.FromResult(BlockedResult(pending));
         }
 
         try
         {
+            var element = _elementRegistry.ResolveRef(refId);
             string? text = null;
 
             // Try Value pattern first (for text inputs)

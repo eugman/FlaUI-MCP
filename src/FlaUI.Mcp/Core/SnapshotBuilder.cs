@@ -18,7 +18,7 @@ public class SnapshotBuilder
         _maxDepth = maxDepth;
     }
 
-    public string BuildSnapshot(string windowHandle, AutomationElement root, int maxNodes = 3000, int maxCharacters = 120000)
+    public string BuildSnapshot(string windowHandle, AutomationElement root, int maxNodes = 3000, int maxCharacters = 20000)
     {
         var budget = new SnapshotBudget(maxNodes, maxCharacters);
         // Clear previous elements for this window

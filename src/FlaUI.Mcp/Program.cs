@@ -26,8 +26,6 @@ using var keepAwake = keepAwakeSeconds > 0
     : null;
 
 // MCP exposes the shared runner tools plus explicit window-management extensions.
-if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FLAUI_MCP_PROFILE")))
-    Console.Error.WriteLine("FLAUI_MCP_PROFILE is no longer supported. Use generic MCP tools or the separate typed automation runner.");
 using var host = new AutomationHost(processPolicy,
     includeDesktopTools: true, onToolActivity: keepAwake != null ? keepAwake.Poke : null);
 var sessionManager = host.Sessions;

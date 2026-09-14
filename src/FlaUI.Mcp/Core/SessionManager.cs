@@ -1,7 +1,6 @@
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.UIA3;
-using FlaUIApplication = FlaUI.Core.Application;
 
 namespace PlaywrightWindows.Mcp.Core;
 
@@ -10,8 +9,9 @@ namespace PlaywrightWindows.Mcp.Core;
 /// </summary>
 public class SessionManager : IDisposable
 {
-    private readonly UIA3Automation _automation;
-    private readonly Dictionary<string, FlaUIApplication> _applications = new();
+    private readonly UIA3Automation? _automation;
+    private readonly object _gate = new();
+    private bool _disposed;
     private readonly Dictionary<string, Window> _windows = new();
     private readonly Dictionary<string, nint> _windowHwnds = new();
     private readonly Dictionary<string, int> _windowPids = new();
@@ -21,23 +21,31 @@ public class SessionManager : IDisposable
     private readonly Dictionary<string, InputTarget> _identities = new();
     public InputTarget GetInputTarget(string handle)
     {
-        var target = _identities.TryGetValue(handle, out var value) ? value : throw new ArgumentException("Unknown input target.");
+        InputTarget target;
+        lock (_gate) target = _identities.TryGetValue(handle, out var value) ? value : throw new ArgumentException("Unknown input target.");
         target.EnsureAlive(); return target;
     }
-    public int ResolveProcess(System.Text.Json.JsonElement? args, ElementRegistry refs)
-        => ResolveTarget(args, refs)?.ProcessId ?? 0;
-
     public ProcessIdentity? ResolveTarget(System.Text.Json.JsonElement? args, ElementRegistry refs)
-        => new TargetValidator(h => { if (_identities.TryGetValue(h, out var t)) { t.EnsureAlive(); return new(t.ProcessId, t.StartedTicks); } return new(GetWindowProcessId(h), 0); },
-            r => { if (!refs.HasElement(r)) throw new ArgumentException("Unknown element ref."); return refs.WindowForRef(r); }).Resolve(args);
-
-    public SessionManager(ProcessPolicy? processPolicy = null)
     {
-        _automation = new UIA3Automation();
-        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
+        // Diagnostic metadata only: no provider/process reads and no input validation.
+        if (args is not { ValueKind: System.Text.Json.JsonValueKind.Object } a || a.TryGetProperty("actions", out _)) return null;
+        string? handle = null;
+        if (a.TryGetProperty("handle", out var h) && h.ValueKind == System.Text.Json.JsonValueKind.String) handle = h.GetString();
+        else if (a.TryGetProperty("ref", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String && refs.HasElement(r.GetString()!)) handle = refs.WindowForRef(r.GetString()!);
+        lock (_gate) return handle != null && _identities.TryGetValue(handle, out var identity) ? new(identity.ProcessId, identity.StartedTicks) : null;
     }
 
-    public UIA3Automation Automation => _automation;
+    public SessionManager(ProcessPolicy? processPolicy = null)
+        : this(new UIA3Automation(), processPolicy ?? ProcessPolicy.AllowAll) { }
+
+    // A null automation supports metadata-only tests without constructing a native provider.
+    internal SessionManager(UIA3Automation? automation, ProcessPolicy processPolicy)
+    {
+        _automation = automation;
+        _processPolicy = processPolicy;
+    }
+
+    public UIA3Automation Automation => _automation ?? throw new InvalidOperationException("No UI Automation provider configured.");
 
     public (string handle, Window window) LaunchApp(string appPath, string[]? args = null)
     {
@@ -75,7 +83,7 @@ public class SessionManager : IDisposable
                 .Where(w => !w.IsToolWindow && !w.IsCloaked).ToArray();
             if (candidates.Length == 1)
             {
-                window = _automation.FromHandle(candidates[0].Hwnd)?.AsWindow();
+                window = Automation.FromHandle(candidates[0].Hwnd)?.AsWindow();
                 OperationContext.Check();
             }
             if (window == null) Thread.Sleep(500);
@@ -99,8 +107,10 @@ public class SessionManager : IDisposable
 
     public (string handle, Window window) AttachToWindow(string title)
     {
-        var desktop = _automation.GetDesktop();
-        var window = desktop.FindFirstDescendant(cf => cf.ByName(title))?.AsWindow();
+        OperationContext.Check();
+        // Match top-level titles through Win32; a desktop-wide UIA search can hang on unrelated apps.
+        var match = Win32Desktop.GetTopLevelWindows().FirstOrDefault(w => w.Title == title && !w.IsCloaked);
+        var window = match == null ? null : Automation.FromHandle(match.Hwnd)?.AsWindow();
 
         if (window == null)
         {
@@ -113,6 +123,7 @@ public class SessionManager : IDisposable
 
     public string RegisterWindow(Window window)
     {
+        OperationContext.Check();
         // Capture the native handle and process id while the provider is
         // responsive, so later operations (focus, close, blocked-provider
         // checks) can work without any UI Automation round-trips.
@@ -130,27 +141,7 @@ public class SessionManager : IDisposable
 
         // Capture before publishing even when re-registering an existing HWND.
         var identity = hwnd != 0 ? InputTarget.Capture(hwnd, pid) : null;
-        if (hwnd != 0 && _hwndToHandle.TryGetValue(hwnd, out var existing) &&
-            _identities.TryGetValue(existing, out var oldIdentity) && oldIdentity == identity)
-        {
-            _windows[existing] = window;
-            return existing;
-        }
-
-        // Capture can fail if the window closes; publish no partial registration.
-        var handle = $"w{++_windowCounter}";
-        _windows[handle] = window;
-        if (identity != null) _identities[handle] = identity;
-        if (hwnd != 0)
-        {
-            _windowHwnds[handle] = hwnd;
-            _hwndToHandle[hwnd] = handle;
-        }
-        if (pid != 0)
-        {
-            _windowPids[handle] = pid;
-        }
-        return handle;
+        return PublishWindow(window, hwnd, pid, identity);
     }
 
     /// <summary>
@@ -159,44 +150,79 @@ public class SessionManager : IDisposable
     /// </summary>
     public string RegisterNativeWindow(nint hwnd, int processId)
     {
+        OperationContext.Check();
         EnsureProcessAllowed(processId);
 
         var identity = InputTarget.Capture(hwnd, processId);
-        if (_hwndToHandle.TryGetValue(hwnd, out var existing) &&
-            _identities.TryGetValue(existing, out var oldIdentity) && oldIdentity == identity)
-        {
-            _windowPids[existing] = processId;
-            return existing;
-        }
+        return PublishWindow(null, hwnd, processId, identity);
+    }
 
-        var handle = $"w{++_windowCounter}";
-        _windowHwnds[handle] = hwnd;
-        _identities[handle] = identity;
-        _hwndToHandle[hwnd] = handle;
-        _windowPids[handle] = processId;
-        return handle;
+    internal string PublishWindow(Window? window, nint hwnd, int processId, InputTarget? identity)
+    {
+        // Native/provider reads must finish before entering the metadata gate.
+        lock (_gate)
+        {
+            OperationContext.Check();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (hwnd != 0 && _hwndToHandle.TryGetValue(hwnd, out var existing) &&
+                _identities.TryGetValue(existing, out var oldIdentity) && oldIdentity == identity)
+            {
+                if (window != null) _windows[existing] = window;
+                if (processId != 0) _windowPids[existing] = processId;
+                return existing;
+            }
+
+            var handle = $"w{++_windowCounter}";
+            if (window != null) _windows[handle] = window;
+            if (identity != null) _identities[handle] = identity;
+            if (hwnd != 0)
+            {
+                _windowHwnds[handle] = hwnd;
+                _hwndToHandle[hwnd] = handle;
+            }
+            if (processId != 0) _windowPids[handle] = processId;
+            return handle;
+        }
     }
 
     public Window? GetWindow(string handle)
+        => GetWindow(handle, hwnd => Automation.FromHandle(hwnd)?.AsWindow(), identity => identity.EnsureAlive());
+
+    internal Window? GetWindow(string handle, Func<nint, Window?> attach, Action<InputTarget> validateIdentity)
     {
-        if (_identities.ContainsKey(handle))
+        OperationContext.Check();
+        InputTarget? identity;
+        Window? window;
+        nint hwnd;
+        lock (_gate)
         {
-            try { GetInputTarget(handle); }
-            catch (ArgumentException) { return null; }
-            catch (InvalidOperationException) { return null; }
-            catch (System.ComponentModel.Win32Exception) { return null; }
+            identity = _identities.GetValueOrDefault(handle);
+            window = _windows.GetValueOrDefault(handle);
+            hwnd = _windowHwnds.GetValueOrDefault(handle);
         }
-        if (_windows.TryGetValue(handle, out var window))
+        if (identity != null)
         {
-            return window;
+            try { validateIdentity(identity); }
+            catch (ArgumentException) { ForgetWindow(handle); return null; }
+            catch (InvalidOperationException) { ForgetWindow(handle); return null; }
+            catch (System.ComponentModel.Win32Exception) { ForgetWindow(handle); return null; }
+        }
+        OperationContext.Check();
+        if (window != null)
+        {
+            lock (_gate) return ReferenceEquals(_windows.GetValueOrDefault(handle), window) ? window : null;
         }
 
         // Lazily attach to windows registered via RegisterNativeWindow
-        if (_windowHwnds.TryGetValue(handle, out var hwnd))
+        if (hwnd != 0)
         {
-            var attached = _automation.FromHandle(hwnd)?.AsWindow();
-            if (attached != null)
+            var attached = attach(hwnd);
+            lock (_gate)
             {
+                OperationContext.Check();
+                // Recovery may have forgotten this registration during the provider call.
+                if (attached == null || _disposed || _windowHwnds.GetValueOrDefault(handle) != hwnd ||
+                    _identities.GetValueOrDefault(handle) != identity) return null;
                 _windows[handle] = attached;
                 return attached;
             }
@@ -211,7 +237,7 @@ public class SessionManager : IDisposable
     /// </summary>
     public int GetWindowProcessId(string handle)
     {
-        return _windowPids.TryGetValue(handle, out var pid) ? pid : 0;
+        lock (_gate) return _windowPids.TryGetValue(handle, out var pid) ? pid : 0;
     }
 
     /// <summary>
@@ -220,7 +246,7 @@ public class SessionManager : IDisposable
     /// </summary>
     public nint GetWindowHwnd(string handle)
     {
-        return _windowHwnds.TryGetValue(handle, out var hwnd) ? hwnd : 0;
+        lock (_gate) return _windowHwnds.TryGetValue(handle, out var hwnd) ? hwnd : 0;
     }
 
     /// <summary>
@@ -230,6 +256,10 @@ public class SessionManager : IDisposable
     /// </summary>
     public List<(string handle, string title, string? processName)> ListWindows()
     {
+        (string Handle, nint Hwnd, int Pid)[] registered;
+        lock (_gate) registered = _windowHwnds.Select(pair => (pair.Key, pair.Value, _windowPids.GetValueOrDefault(pair.Key))).ToArray();
+        foreach (var (handle, hwnd, pid) in registered)
+            if (Win32Desktop.GetProcessId(hwnd) != pid) ForgetWindow(handle);
         var result = new List<(string, string, string?)>();
         foreach (var info in Win32Desktop.GetTopLevelWindows())
         {
@@ -275,7 +305,8 @@ public class SessionManager : IDisposable
         OperationContext.Check();
         // Prefer Win32 focus (never blocks); fall back to UIA for windows
         // registered before a native handle was captured.
-        if (_windowHwnds.TryGetValue(handle, out var hwnd))
+        var hwnd = GetWindowHwnd(handle);
+        if (hwnd != 0)
         {
             GetInputTarget(handle);
             Win32Desktop.FocusWindow(hwnd);
@@ -296,7 +327,8 @@ public class SessionManager : IDisposable
     {
         OperationContext.Check();
         // Prefer a Win32 WM_CLOSE (never blocks); fall back to UIA.
-        if (_windowHwnds.TryGetValue(handle, out var hwnd))
+        var hwnd = GetWindowHwnd(handle);
+        if (hwnd != 0)
         {
             GetInputTarget(handle);
             Win32Desktop.CloseWindow(hwnd);
@@ -318,14 +350,22 @@ public class SessionManager : IDisposable
             return;
         }
 
-        _windows.Remove(handle);
-        _identities.Remove(handle);
-        if (_windowHwnds.TryGetValue(handle, out var removedHwnd))
+        ForgetWindow(handle);
+    }
+
+    internal void ForgetWindow(string handle)
+    {
+        lock (_gate)
         {
-            _hwndToHandle.Remove(removedHwnd);
-            _windowHwnds.Remove(handle);
+            _windows.Remove(handle);
+            _identities.Remove(handle);
+            if (_windowHwnds.TryGetValue(handle, out var removedHwnd))
+            {
+                if (_hwndToHandle.GetValueOrDefault(removedHwnd) == handle) _hwndToHandle.Remove(removedHwnd);
+                _windowHwnds.Remove(handle);
+            }
+            _windowPids.Remove(handle);
         }
-        _windowPids.Remove(handle);
     }
 
     /// <summary>
@@ -356,16 +396,16 @@ public class SessionManager : IDisposable
 
     public void Dispose()
     {
-        foreach (var app in _applications.Values)
+        lock (_gate)
         {
-            try { app.Close(); } catch { }
+            if (_disposed) return;
+            _disposed = true;
+            _windows.Clear();
+            _identities.Clear();
+            _windowHwnds.Clear();
+            _windowPids.Clear();
+            _hwndToHandle.Clear();
         }
-        _applications.Clear();
-        _windows.Clear();
-        _identities.Clear();
-        _windowHwnds.Clear();
-        _windowPids.Clear();
-        _hwndToHandle.Clear();
-        _automation.Dispose();
+        _automation?.Dispose();
     }
 }

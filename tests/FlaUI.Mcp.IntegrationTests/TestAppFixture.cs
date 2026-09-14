@@ -15,6 +15,10 @@ namespace FlaUI.Mcp.IntegrationTests;
 /// </summary>
 public class TestAppFixture : IAsyncLifetime
 {
+    // Match the production host before constructing UIA services or reading
+    // coordinates. Testhost otherwise mixes UIA physical and virtualized pixels.
+    static TestAppFixture() => DpiUtility.EnablePerMonitorV2();
+
     private const int WindowPollIntervalMs = 250;
     private const int WindowPollTimeoutMs = 15000;
 
@@ -48,25 +52,16 @@ public class TestAppFixture : IAsyncLifetime
         {
             await Task.Delay(WindowPollIntervalMs);
 
-            var desktop = Session.Automation.GetDesktop();
-            var windows = desktop.FindAllChildren(cf => cf.ByControlType(ControlType.Window));
-            foreach (var w in windows)
+            // Discover only the processes we launched through Win32. Desktop-wide
+            // UIA enumeration can block on an unrelated application's provider.
+            foreach (var w in Win32Desktop.GetTopLevelWindows(winFormsProcessId))
             {
-                var win = w.AsWindow();
-                var processId = w.Properties.ProcessId.ValueOrDefault;
-                if (win?.Title == "FlaUI-MCP Test App"
-                    && processId == winFormsProcessId
-                    && WinFormsHandle == "")
-                {
-                    WinFormsHandle = Session.RegisterWindow(win);
-                }
-                else if (win?.Title == "FlaUI-MCP WPF Test App"
-                         && processId == wpfProcessId
-                         && WpfHandle == "")
-                {
-                    WpfHandle = Session.RegisterWindow(win);
-                }
+                if (w.Title == "FlaUI-MCP Test App" && WinFormsHandle == "")
+                    WinFormsHandle = Session.RegisterNativeWindow(w.Hwnd, winFormsProcessId);
             }
+            foreach (var w in Win32Desktop.GetTopLevelWindows(wpfProcessId))
+                if (w.Title == "FlaUI-MCP WPF Test App" && WpfHandle == "")
+                    WpfHandle = Session.RegisterNativeWindow(w.Hwnd, wpfProcessId);
         }
 
         if (WinFormsHandle == "")
