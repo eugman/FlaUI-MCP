@@ -3,12 +3,27 @@
 Observed on TE3 3.26.3. This is a locator/operation index, not a stored UI snapshot.
 Use fresh window handles and refs; never reuse identifiers from saved run maps.
 
+## Map delivery and optional companion
+
+Read [map/start.md](map/start.md), then only the matching topic. The same content
+is embedded in `FlaUI.Automation mcp` as `te3_catalog` and `te3://map/...` resources.
+`mcp --guidance-only` exposes just the catalog/resources for guided ablation arms.
+Full companion adds `te3_inspect`, `te3_navigate`, and `te3_capture`; it attaches by
+explicit TE3 PID and never launches, resets preferences, or closes TE3. Its handles
+are private to that server; do not pass generic-server refs into companion calls.
+See [COMPANION.md](COMPANION.md); live status is in [VERIFICATION.md](VERIFICATION.md).
+
+Optional packaged skill: [te3-ui](skills/te3-ui/SKILL.md). It is not installed
+automatically; do not expose it to unguided experiment arms.
+
 ## Choose the cheapest adequate observation
 
 1. Known screenshot task: find its typed recipe in [RECIPES.md](RECIPES.md).
    Run one recipe, then read its final manifest. Inspect PNGs for visual fidelity.
 2. Interactive task: use the relevant selector below with `windows_find`.
-   Request a few results in a narrow scope; inspect patterns/value/selection.
+   Request a few results in a narrow scope; inspect value/selection/toggle/focus.
+   Pattern support is not current state; null means unknown. Request bounds only
+   for geometry checks. Use `windows_wait` for settled assertions.
 3. Unexpected result: inspect that subtree or owned popup, then widen if needed.
    Ambiguity, truncation and unreadable nodes are not successful assertions.
 4. Use a screenshot for geometry, visual quality or inaccessible UI—not after
@@ -25,10 +40,11 @@ Use fresh window handles and refs; never reuse identifiers from saved run maps.
 | C# output | ID `ScriptOutputForm`, rootOnly, includeOwned |
 | Preview | ID `ScriptPreviewDialog`, rootOnly, includeOwned |
 
-Example input to `windows_find` (replace HANDLE with the current selected window):
+Refresh `windows_list_windows` after opening Preferences and use its own handle,
+not the main editor handle. Example input to `windows_find`:
 
 ```json
-{"handle":"HANDLE","selector":{"automationId":"searchPreferences","controlType":"Edit"},"within":{"name":"Preferences","controlType":"Window","rootOnly":true},"includeOwned":true,"maxResults":2,"maxNodes":300}
+{"handle":"PREFERENCES_HANDLE","selector":{"automationId":"searchPreferences","controlType":"Edit"},"maxResults":2,"maxNodes":300}
 ```
 
 The selector budget bounds traversal, not a hung UIA provider. A timeout leaves

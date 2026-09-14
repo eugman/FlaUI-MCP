@@ -1,7 +1,8 @@
 # TE3 3.26.3 locator notes
 
-Selectors are owned by typed page objects. Post-refactor evidence includes seven
-smoke recipes and the complete three-cycle file-load run.
+For agent procedures start with [the compact map](map/start.md); the catalog and MCP
+resources serve the same topic files. The notes below are historical runner
+observations. Live status is in [VERIFICATION.md](VERIFICATION.md).
 
 | Area | Locator | Notes |
 |---|---|---|
@@ -62,7 +63,7 @@ English, Deutsch (Beta), Español (Preview), Français (Beta), 中文(简体) (P
 Capture the actual Preferences/popup union, not only the background dialog;
 Escape then verify English unchanged. Recipe: `preferences-language-choices`.
 
-Preferences: invoke Tools on Main menu, then physically click the observed
+Preferences: physically click Tools on Main menu, then physically click the observed
 Preferences... Button using its same-process popup HWND. Invoke on Preferences...
 kept its handler running; do not replay it. Wait for native title Preferences and
 input idle before UIA discovery. The window contains pane PreferencesDialog,

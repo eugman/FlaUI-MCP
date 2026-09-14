@@ -26,62 +26,40 @@
 | file-load-three-cycles | Exact source/output/close repeated in one window | No |
 | csharp-auto-rollback-source | Original 21-line source and enabled Auto-rollback; never executed | No |
 
-See VERIFICATION.md for live results. Seventeen offline capture recipes are verified individually;
-the default batch includes fifteen, omitting the discovery-only preferences-map.
-Save-to-folder passed its final visibility checks with identical pre/post-reboot PNGs.
-Auto-rollback has an original-sized, outlined candidate; it is not approved/promoted.
+Live results are in [VERIFICATION.md](VERIFICATION.md). The default offline batch runs
+fifteen recipes; `preferences-map` (discovery only) and `preferences-language-choices`
+run individually. No candidate PNG, including the outlined auto-rollback image, is approved.
 
 ## Repeatability and recovery
 
-To reproduce the language-choice candidate (not approved for replacement):
-
-```powershell
-./src/FlaUI.Automation/bin/Debug/net8.0-windows/FlaUI.Automation.exe run automation/offline.config.json --scenario preferences-language-choices
-```
-
-Targets `content/assets/images/user-interface/chaning-language-preferences.png`
-on the application-language page. Saves a scoped pane map and popup map; requires
-the six observed TE3 3.26.3 labels, English selected and a visible popup adjacent to its
-combo. Uses actual screen pixels for the dialog/popup union, not a background
-dialog-only capture. The 1155x714 dialog differs from the historical 1917x1275
-scene; inspect readability, all options and clipping before accepting a candidate.
-Failures attempt Escape; runner recovery still owns restoring settings/closing TE3.
-The first live map confirmed all six choices; current TE3 capitalizes Español
-and Français, unlike the historical screenshot. That failed attempt restored
-settings and produced no candidate PNG; exact current captions are now asserted.
-Follow-up `fla_20260913_064543_7a6b4d92` passed labels, selection and adjacency
-but rejected the popup's 10-pixel shadow (the menu guard expected 7). Language
-capture now explicitly permits the observed 10-pixel same-process, untitled
-shadow geometry; other obstructions remain rejected. Unit checks pass, but the
-updated capture passed in `fla_20260913_064954_369bac03`. The PNG was inspected:
-all six choices are readable, English selected, popup fully included. Model
-unchanged and settings restored. Current categories, size and typography differ
-from the original; this is a candidate, not an approved replacement.
-
-Do not launch more live tests while memory is exhausted. Check Windows memory
-headroom and confirm TE3 is closed; do not terminate unrelated processes to make
-room. Desktop permission must still be in force. Keep using offline.config.json:
-the server-backed recipes and new infrastructure remain deferred.
-
-To repeat the checked-tree recipe:
+Runs take focus. Run one recipe with `--scenario`, optionally repeated:
 
 ```powershell
 ./src/FlaUI.Automation/bin/Debug/net8.0-windows/FlaUI.Automation.exe run automation/offline.config.json --scenario preferences-save-to-folder --repeat 2
 ```
 
-For each run, inspect the final manifest for success, settingsRestored, no pending
-recovery and the unchanged-model check. Then inspect preferences-save-to-folder-custom.png:
-three serialization toggles checked, prefix off, Data Sources selected, Tables
-expanded, and the six original checked rows visible. Compare the two PNG hashes.
-Do not use the clipped 809x437 experiment as an update candidate. The readable
-1155x714 capture still differs in mode selector, size and left-tree viewport.
+For each run, check the manifest (`passed`, `settingsRestored`, `needsRecovery: false`,
+the unchanged-model check). Then look at the PNG itself.
 
-Use preferences-file-formats as a Preferences regression check and compose its
-arrows as below. After an interruption, inspect the latest manifest and run
-`recover MANIFEST` if settings were not restored, even if needsRecovery is false:
-an interrupted manifest may still contain its initial flags. Next targets are
-the language-dropdown scene and context/cascade menus; retain exact original
-content requirements in screenshot-backlog.json instead of substituting generic views.
+- **preferences-language-choices:** targets `user-interface/chaning-language-preferences.png`.
+  - **Asserts:** the six TE3 3.26.3 captions, English selected, and the popup next to its combo.
+    Español and Français are capitalized, unlike the historical image.
+  - **Capture:** uses screen pixels for the dialog-plus-popup area, and allows the popup's
+    observed 10-pixel shadow.
+  - **Differs from the original:** the 1155x714 dialog doesn't match the historical 1917x1275
+    scene, in categories, size or typography.
+- **preferences-save-to-folder:** expects three serialization toggles checked, prefix off,
+  Data Sources selected, Tables expanded, and the six original rows visible.
+  - Compare the PNG hashes across repeats.
+  - The 1155x714 capture still differs from the original in mode selector, size and tree
+    viewport. Ignore the clipped 809x437 experiment.
+- **preferences-file-formats:** doubles as a Preferences regression check. Compose its arrows as below.
+
+**Interrupted runs:** if `settingsRestored` is false, close TE3 and run
+`recover BACKUP_DIR` with the manifest's `settingsBackup`.
+
+**Next targets:** the language dropdown scene and context/cascade menus. Keep the exact
+original content requirements in screenshot-backlog.json.
 
 ## Annotated File Formats image
 

@@ -7,6 +7,14 @@ retains original source/page mappings; related recipes are not approved replicas
 Agents should start with the compact [agent quickstart](AGENT-QUICKSTART.md),
 then load only the relevant locator or recipe section.
 
+The opt-in [TE3 MCP companion](COMPANION.md) serves compact map topics and typed
+attach-only navigation/capture tools; the generic MCP server stays TE3-independent.
+Agent comparisons follow the [four-arm runbook](experiments/FOUR-ARM.md).
+
+Composition is optional post-processing, not a capture prerequisite. Raw checkpoint
+PNGs remain unchanged. Use a separate output/checkpoint for each crop or annotation
+variant, or edit a copy manually; a composed image is not automatically approved.
+
 ## Configure and build
 
 Optional `captureVariant` (for example `preferences-150pct`) labels a run;
@@ -60,7 +68,8 @@ row-position checks. These annotations are explicit additions, not raw UI pixels
 
 Commands: `run CONFIG [--scenario ID] [--repeat N]`, `list CONFIG`,
 `validate CONFIG`, `compose MANIFEST SPEC OUT`,
-and `promote RUN_DIR CHECKPOINT DEST [--overwrite]`.
+`promote RUN_DIR CHECKPOINT DEST [--overwrite]`, and `recover BACKUP_DIR`.
+A batch `run` holds the runner lock across all its recipes.
 
 ## Safety
 
@@ -69,7 +78,9 @@ and `promote RUN_DIR CHECKPOINT DEST [--overwrite]`.
   persist there; prepare suitable metadata yourself and use offline mode by default.
 - Settings backups live under LocalAppData/FlaUI-MCP/settings-backups. The run's
   finally block restores them after TE3 closes. If shutdown/restoration fails,
-  retain the reported backup and resolve it manually before another run.
+  retain the reported backup and run `recover BACKUP_DIR` with TE3 closed before
+  another run. It checks backup hashes, restores all four files byte-for-byte
+  (removing files that did not exist before), verifies them, and keeps the backup.
 - CLI timeout handling attempts to terminate the launched process tree and confirm
   exit. If confirmation fails, inspect the reported PID before retrying; no PID
   journal or automatic replay is used.
@@ -90,7 +101,7 @@ dotnet build tests/FlaUI.Mcp.IntegrationTests/FlaUI.Mcp.IntegrationTests.csproj 
 The first two suites are no-focus. The integration suite launches apps: build
 only until a desktop handoff. Recipe/profile JSON, dependency planners, dashboards,
 release descriptors and approval receipts were removed. Select typed recipe IDs.
-FLAUI_MCP_PROFILE is obsolete and produces a stderr migration warning.
+FLAUI_MCP_PROFILE is obsolete and is not read.
 Historical artifacts are unchanged; old runs do not verify the rewritten runner.
 Pre-refactor code/docs are recoverable under ignored
 artifacts/refactor-backup-20260912-172012.
