@@ -6,13 +6,13 @@ import { fileURLToPath } from 'node:url';
 
 const defaultLayers = path.join(path.dirname(fileURLToPath(import.meta.url)), 'layers');
 
-// 1 original MCP, 2 new MCP, 3 + generic skill, 4 + map, 5 + TE3 tools (same text as 4).
+// 1 original MCP, 2 new MCP, 3 + generic skill, 4 + map, 5 + TE3 tools and the line that points to them.
 export const rungLayers = {
   '1': [],
   '2': [],
   '3': ['1-mcp-basics'],
   '4': ['1-mcp-basics', 'map'],
-  '5': ['1-mcp-basics', 'map']
+  '5': ['1-mcp-basics', 'map', 'te3-tools']
 };
 
 // Layer files may hold authoring notes in HTML comments; agents never see them.

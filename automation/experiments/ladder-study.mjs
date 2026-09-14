@@ -9,7 +9,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const rungs = ['1', '2', '3', '4', '5'];
 export const models = ['sonnet', 'opus'];
-export const companionTools = ['te3_inspect', 'te3_navigate', 'te3_capture'];
+export const companionTools = ['te3_navigate'];
 export const tasks = {
   formatting: 'Capture Preferences > Text Editors > DAX Editor > Auto Formatting with that section selected, empty search, all section controls (including Use default formatting settings), title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
   object: 'Select the Amount column in the Comparison table, not Sales[Amount]. Verify the table, name and column type through UI evidence. Capture the selected row with visible table context and readable Properties. Leave the object selected.',

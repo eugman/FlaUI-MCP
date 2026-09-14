@@ -11,7 +11,7 @@ offline TE3 fixture that the controller launches and restores. The config field
 | 2 | New (current) | none | no | `ladder-20260914-0c-sonnet` |
 | 3 | New | generic skill (`layers/1-mcp-basics.md`) | no | to run |
 | 4 | New | generic skill + map (`layers/map.md`) | no | to run |
-| 5 | New | generic skill + map | `te3_inspect`, `te3_navigate`, `te3_capture` | to run |
+| 5 | New | generic skill + map + TE3 tool line (`layers/te3-tools.md`) | `te3_navigate` | `study-20260914-c5v3-sonnet` (ran before the tool line, with `te3_inspect` and `te3_capture` also exposed) |
 
 The skill text is appended to the prompt under `Guidance:`. The map is
 `automation/skills/te3-notes` concatenated as is. Studies named `0b`, `1`, `2`,

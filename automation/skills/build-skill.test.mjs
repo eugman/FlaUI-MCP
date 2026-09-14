@@ -18,14 +18,15 @@ test('conditions 1 and 2 inject nothing', async t => {
   assert.equal(composeSkill('2', directory).text, '');
 });
 
-test('conditions add the generic skill, then the map, and strip authoring comments', async t => {
+test('conditions add the generic skill, the map, then the TE3 tools line, and strip authoring comments', async t => {
   const directory = await layers(t, {
     '1-mcp-basics': '<!-- note -->\n- basics\n',
-    map: '<!-- only a note -->\n# Map'
+    map: '<!-- only a note -->\n# Map',
+    'te3-tools': '- navigate'
   });
   assert.equal(composeSkill('3', directory).text, '- basics');
   assert.equal(composeSkill('4', directory).text, '- basics\n\n# Map');
-  assert.equal(composeSkill('5', directory).text, composeSkill('4', directory).text);
+  assert.equal(composeSkill('5', directory).text, '- basics\n\n# Map\n\n- navigate');
 });
 
 test('identical layers give identical hashes', async t => {

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { checkToolInventory, observeTools } from './tool-preflight.mjs';
 
 const generic = ['windows_find', 'windows_screenshot'];
-const companion = ['te3_inspect', 'te3_navigate', 'te3_capture'];
+const companion = ['te3_navigate'];
 
 test('generic-only rungs pass with windows_ tools and reject te3_ tools', () => {
   for (const rung of ['1', '2', '3', '4']) {
@@ -16,8 +16,8 @@ test('generic-only rungs pass with windows_ tools and reject te3_ tools', () => 
   }
 });
 
-test('condition 5 requires exactly the three companion tools', () => {
-  assert.deepEqual(checkToolInventory([...generic, ...companion], '5'), { genericTools: 2, companionTools: 3 });
+test('condition 5 requires exactly te3_navigate', () => {
+  assert.deepEqual(checkToolInventory([...generic, ...companion], '5'), { genericTools: 2, companionTools: 1 });
   assert.throws(() => checkToolInventory([...generic, 'te3_inspect'], '5'), /exactly/);
   assert.throws(() => checkToolInventory([...generic, ...companion, 'te3_catalog'], '5'), /exactly/);
 });
@@ -57,8 +57,8 @@ test('observeTools lists the first trial gateway tools twice and writes a summar
   const output = join(root, 'preflight');
   const summary = await observeTools(root, output);
   assert.equal(summary.genericTools, 2);
-  assert.equal(summary.companionTools, 3);
+  assert.equal(summary.companionTools, 1);
   assert.deepEqual(summary.tools, [...generic, ...companion]);
-  assert.equal(JSON.parse(readFileSync(join(output, 'tools.json'), 'utf8')).length, 5);
+  assert.equal(JSON.parse(readFileSync(join(output, 'tools.json'), 'utf8')).length, 3);
   await assert.rejects(observeTools(root, output), { code: 'EEXIST' });
 });

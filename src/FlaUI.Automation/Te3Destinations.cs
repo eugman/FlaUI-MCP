@@ -15,7 +15,6 @@ public static class Te3Destinations
     ];
     public static readonly string[] Ids = All.Select(d => d.Id).ToArray();
     public static readonly string[] ObjectTypes = ["Table", "Column", "Measure"];
-    public static readonly string[] InspectTopics = ["windows", "preferences", "object"];
 
     public static Te3Destination? Find(string? id) => All.FirstOrDefault(d => d.Id == id);
 }

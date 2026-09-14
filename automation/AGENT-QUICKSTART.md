@@ -5,7 +5,7 @@ Use fresh window handles and refs; never reuse identifiers from saved run maps.
 
 ## Companion and guidance
 
-`FlaUI.Automation mcp` adds `te3_inspect`, `te3_navigate` and `te3_capture`. It attaches by
+`FlaUI.Automation mcp` adds `te3_navigate`. It attaches by
 explicit TE3 PID and never launches, resets preferences or closes TE3. Its handles are
 private to that server; don't pass generic-server refs into companion calls. See
 [COMPANION.md](COMPANION.md); live status is in [VERIFICATION.md](VERIFICATION.md).
