@@ -1,18 +1,14 @@
 # TE3 Preferences can show a blank content pane
 
-Observed in TE3 3.26.3. The exact application/provider cause is unconfirmed.
-Clearing Preferences search can leave its content blank even while UIA reports
-a selected category. Both native background and actual screen captures showed
-the issue; both Value-pattern clearing and keyboard clearing reproduced it.
+Confirmed by hand in TE3 3.26.3.12966 on 2026-09-14. This is a TE3 defect, and a
+report is ready in the `bug-reports` repository at
+`te3-desktop/preferences-search-clear-blanks-settings-pane/`.
 
-Manual reproduction:
-
-1. Physically click Tools > Preferences. Avoid Invoke: its modal handler blocks UIA.
-2. Search for Code Actions and physically select the matching category.
-3. Confirm its controls are visible, then clear search with Ctrl+A, Backspace.
-4. Inspect the actual pane, not merely the selected-row accessibility property.
-5. If blank, search again and physically reselect the category; close/reopen if needed.
-6. Cancel to avoid persisting preference changes.
+Clearing the Preferences search box, with its × button or by deleting the text,
+blanks the settings pane. It does this even when the category was chosen by
+navigating the tree and the search box was already empty; the category stays
+highlighted. Automation should never use the search box: navigate the tree to
+the category instead. Clicking the category again restores its settings.
 
 A successful interaction test is not visual approval of its screenshot.
 

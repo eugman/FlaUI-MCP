@@ -197,7 +197,14 @@ public class FillTool : ToolBase
                             () => valuePattern.SetValue(value)), _invokeTracker);
                     if (result.Outcome != PatternCallOutcome.Completed)
                         return Task.FromResult(TextResult("SetValue dispatched; the provider call is still pending. The final value is not verified. Inspect the dialog before continuing; do not repeat the fill.") with { Outcome = ToolOutcome.FromPattern(result) });
-                    return Task.FromResult(TextResult($"Filled {elementName} with \"{value}\"") with { Outcome = ToolOutcome.FromPattern(result) });
+                    // Some providers accept SetValue without applying it (e.g. a file dialog's ComboBox).
+                    string? observed = null;
+                    if (!element.Properties.IsPassword.ValueOrDefault)
+                    {
+                        try { observed = valuePattern.Value.ValueOrDefault; } catch { }
+                    }
+                    return Task.FromResult(TextResult($"Filled {elementName} with \"{value}\"" +
+                        FillMismatch(value, observed, element.Properties.ControlType.ValueOrDefault)) with { Outcome = ToolOutcome.FromPattern(result) });
                 }
             }
 
@@ -217,6 +224,11 @@ public class FillTool : ToolBase
             return Task.FromResult(ErrorResult($"Failed to fill {refId}: {ex.Message}"));
         }
     }
+
+    internal static string FillMismatch(string expected, string? observed, FlaUI.Core.Definitions.ControlType type) =>
+        observed == null || observed == expected ? "" :
+        $"; warning: it now reads \"{observed}\", so the value may not have applied" +
+        (type == FlaUI.Core.Definitions.ControlType.ComboBox ? ". For a ComboBox, fill its Edit child instead." : ".");
 
     internal static void ReplaceByKeyboard(string value, Action selectAll, Action deleteSelection, Action<string> type)
     {

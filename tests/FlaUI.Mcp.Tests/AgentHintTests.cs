@@ -17,6 +17,24 @@ public sealed class AgentHintTests
         => Assert.Equal(expected, ClickTool.PrefersPhysical(type, name));
 
     [Fact]
+    public void FillWarnsOnlyWhenTheValueReadsBackDifferently()
+    {
+        Assert.Equal("", FillTool.FillMismatch("C:\\a.csx", "C:\\a.csx", ControlType.Edit));
+        Assert.Equal("", FillTool.FillMismatch("C:\\a.csx", null, ControlType.Edit));
+        Assert.Contains("fill its Edit child", FillTool.FillMismatch("C:\\a.csx", "", ControlType.ComboBox));
+        Assert.DoesNotContain("Edit child", FillTool.FillMismatch("x", "y", ControlType.Edit));
+    }
+
+    [Fact]
+    public void PageKeyAliasesMapToPageUpAndPageDown()
+    {
+        var sequence = new SendKeysTool(new ElementRegistry()).PrepareSequence(["Next", "PgDn", "Prior", "PgUp"]);
+        Assert.Equal(4, sequence.Count);
+        Assert.Equal(sequence[0].Keys, sequence[1].Keys);
+        Assert.Equal(sequence[2].Keys, sequence[3].Keys);
+    }
+
+    [Fact]
     public void FocusDescriptionSaysUnknownWithoutAWindow()
         => Assert.Equal("focused element (control unknown)", Win32Desktop.DescribeFocus(0));
 
