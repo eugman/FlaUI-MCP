@@ -1,0 +1,42 @@
+{
+  "revision": "four-arm-2",
+  "review": "Rules 1-2 retain the historical parent/Terra audit. Rule 3 was added after parent visual and trace review of the first 12 four-arm formatting trials. Each rule has three distinct trials; repeated calls in one trial count once. The original frozen study remains unchanged; its results now provide training evidence for the revised skill, not held-out validation.",
+  "rules": [
+    {
+      "id": "key-tokens-not-literal-text",
+      "skillParagraph": 1,
+      "correction": "Use supported key/chord tokens with the documented shape; send literal text with type/fill.",
+      "traces": [
+        {"trial":"luna-A-script-01","event":"item_8","tool":"windows_send_keys","log":"artifacts/live-companion-20260913/trials/luna-A-script-01/agent.jsonl","observed":"Full file path in keys array rejected as Unsupported key; zero chords dispatched."},
+        {"trial":"luna-B-object-01","event":"item_11","tool":"windows_send_keys","log":"artifacts/live-companion-20260913/trials/luna-B-object-01/agent.jsonl","observed":"Scalar string {RIGHT} could not convert to List<String>."},
+        {"trial":"terra-A-auto-01","event":"item_13","tool":"windows_send_keys","log":"artifacts/live-companion-20260913/trials/terra-A-auto-01/agent.jsonl","observed":"Characters from literal DAX Editor sent as key tokens; no keys parsed from whitespace chord, zero dispatched."}
+      ]
+    },
+    {
+      "id": "dialog-root-scope",
+      "skillParagraph": 2,
+      "correction": "Resolve the dialog's own current window handle before child lookup; do not scope it as the owner root.",
+      "traces": [
+        {"trial":"luna-B-auto-01","event":"item_13","tool":"windows_find","log":"artifacts/live-companion-20260913/trials/luna-B-auto-01/agent.jsonl","observed":"Preferences within rootOnly on main handle: expected one element, found zero."},
+        {"trial":"luna-B-script-01","event":"item_8","tool":"windows_find","log":"artifacts/live-companion-20260913/trials/luna-B-script-01/agent.jsonl","observed":"Open File within rootOnly on main handle: expected one element, found zero. Occurred before user termination; termination itself is not counted."},
+        {"trial":"terra-B-auto-01","event":"item_11","tool":"windows_find","log":"artifacts/live-companion-20260913/trials/terra-B-auto-01/agent.jsonl","observed":"Preferences within rootOnly on main handle: expected one element, found zero."}
+      ]
+    },
+    {
+      "id": "inspect-final-image-before-success",
+      "skillParagraph": 3,
+      "correction": "Inspect the final saved image against requested content; display image payloads or load the PNG. Tool success is not visual completeness.",
+      "traces": [
+        {"trial":"luna-formatting-B-01","event":"item_35","tool":"windows_screenshot","log":"artifacts/instruction-study-20260913-r1/luna-formatting-B-01/agent.jsonl","observed":"Final success claim despite result.png missing title and clipping required content; see adjacent review.json."},
+        {"trial":"terra-formatting-D-01","event":"item_33","tool":"te3_capture","log":"artifacts/instruction-study-20260913-r1/terra-formatting-D-01/agent.jsonl","observed":"Final claim cites capture verification; required default-formatting button clipped. Image result passed through text rather than displayed; see adjacent review.json and exact rollout."},
+        {"trial":"sol-formatting-B-01","event":"item_58","tool":"windows_screenshot","log":"artifacts/instruction-study-20260913-r1/sol-formatting-B-01/agent.jsonl","observed":"Final verified-PNG success claim despite missing Preferences title in result.png; see adjacent review.json."}
+      ]
+    }
+  ],
+  "excluded": [
+    {"candidate":"catalog-topic-identifiers","reason":"Three occurrences exist but all concern the TE3 catalog. Keep this in the C/D map bootstrap, not the B generic skill."},
+    {"candidate":"native-handle-confusion","reason":"Fewer than three distinct verified trial references in this audit."},
+    {"candidate":"application-specific-visibility-checklist","reason":"The generic review rule is admitted; TE3 control names, title requirements and dimensions remain in the map."},
+    {"candidate":"pane-center-focus-click","reason":"One observed incident; document the tool limitation and TE3 pitfall, not an additional generic skill rule."}
+  ]
+}
