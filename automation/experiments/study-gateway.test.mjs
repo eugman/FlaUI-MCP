@@ -239,7 +239,7 @@ test('observe-only discovery lists tools and rejects dispatch', async t => {
 test('constructor validates configuration before starting a child', () => {
   const base = { genericCommand: ['unused.exe'], logPath: 'unused' };
   for (const overrides of [{ genericCommand: undefined }, { genericCommand: [] }, { companionCommand: 'x.exe' },
-    { maxCalls: 61 }, { maxCalls: 0 }, { observeOnly: 'yes' }]) {
+    { maxCalls: 201 }, { maxCalls: 0 }, { observeOnly: 'yes' }]) {
     assert.throws(() => new StudyGateway({ ...base, ...overrides }));
   }
 });

@@ -3,7 +3,8 @@ using System.Text.Json;
 using PlaywrightWindows.Mcp.Core;
 
 // Reuse the screenshot runner for exclusive ownership, startup and restoration.
-if (args.Length != 3 || args[0] != "hold") throw new ArgumentException("hold CONFIG OUTPUT");
+if (args.Length is not (3 or 4) || args[0] != "hold") throw new ArgumentException("hold CONFIG OUTPUT [MINUTES]");
+var holdMinutes = args.Length == 4 ? int.Parse(args[3]) : 10;
 var output = Path.GetFullPath(args[2]);
 Directory.CreateDirectory(output);
 if (File.Exists(Path.Combine(output, "ready.json")) || File.Exists(Path.Combine(output, "done")))
@@ -25,7 +26,7 @@ var result = await RunExecutor.Execute(config, new Recipe("study-hold", "", fals
     var timer = Stopwatch.StartNew();
     while (!File.Exists(Path.Combine(output, "done")))
     {
-        if (timer.Elapsed > TimeSpan.FromMinutes(10)) throw new TimeoutException("Agent handoff expired");
+        if (timer.Elapsed > TimeSpan.FromMinutes(holdMinutes)) throw new TimeoutException("Agent handoff expired");
         if (process.HasExited) throw new InvalidOperationException("Test TE3 exited");
         await Task.Delay(250, cancellation.Token);
     }

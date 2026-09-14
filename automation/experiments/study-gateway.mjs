@@ -267,8 +267,8 @@ function validate(config) {
     throw new Error('companionCommand must be a nonempty string array');
   }
   const maxCalls = config.maxCalls ?? 60;
-  if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 60) {
-    throw new Error('maxCalls must be 1..60');
+  if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 200) {
+    throw new Error('maxCalls must be 1..200');
   }
   if (config.observeOnly !== undefined && typeof config.observeOnly !== 'boolean') {
     throw new Error('observeOnly must be boolean');

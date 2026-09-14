@@ -41,6 +41,15 @@ test('prompt appends guidance only when the skill has text', () => {
 
 const result = usage => ({ type: 'result', is_error: false, num_turns: 4, total_cost_usd: 0.12, session_id: 's-1', usage });
 
+test('extended-budget reruns select exact cells, label their ids and state the raised limits', () => {
+  const trials = schedule({ rung: '0a', model: 'sonnet', tasks: ['formatting', 'code-actions'], trialsPerTask: 3, seed: 1,
+    onlyTrials: ['formatting-02', 'code-actions-01'], label: 'extended' });
+  assert.deepEqual(trials.map(trial => trial.id).sort(), ['0a-sonnet-code-actions-01-extended', '0a-sonnet-formatting-02-extended']);
+  assert.ok(trials.every(trial => trial.label === 'extended'));
+  assert.ok(promptFor('formatting', '', 'x', 'y', { maxCalls: 120, agentMinutes: 15 }).includes('Stop within 120 MCP tool calls or 15 minutes.'));
+  assert.ok(promptFor('formatting', '', 'x', 'y').includes('Stop within 60 MCP tool calls or seven minutes.'));
+});
+
 test('usage sums all four Claude counters and treats missing cache fields as zero', () => {
   const full = usageFrom([result({
     input_tokens: 10, cache_creation_input_tokens: 200, cache_read_input_tokens: 3000, output_tokens: 40
@@ -485,7 +494,7 @@ test('summarize reports trials with review fields and rung/task/model groups', a
   const groups = groupRows(rows);
   const formatting = groups.find(group => group.task === 'formatting');
   assert.deepEqual({ ...formatting }, {
-    kind: 'group', rung: '1', task: 'formatting', model: 'sonnet', holdout: false, n: 2, passes: 1, passAll: false,
+    kind: 'group', rung: '1', task: 'formatting', model: 'sonnet', label: null, holdout: false, n: 2, passes: 1, passAll: false,
     falseClaims: 1, meanDispatchedCalls: 4, meanTotalTokens: 100, meanUncachedInputTokens: 20, unreviewed: 0
   });
   assert.equal(groups.find(group => group.task === 'code-actions').unreviewed, 1);

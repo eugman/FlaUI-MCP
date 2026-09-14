@@ -34,12 +34,14 @@ function expand(value) {
   return path.resolve(expanded);
 }
 
-export function promptFor(task, skillText, scriptPath, outputPath) {
+export function promptFor(task, skillText, scriptPath, outputPath, { maxCalls = 60, agentMinutes = 7 } = {}) {
   let prompt = `${tasks[task]}\n\nThe owned TE3 processId is {{PID}}. Save the final PNG to ${outputPath}. Preserve model content and preferences. Do not launch or close TE3; the controller owns lifecycle and restoration. You may focus this test instance. Offline disposable model; no server access.`;
   if (task === 'script') {
     prompt += `\nSupplied source: ${scriptPath}. You are authorized to execute this exact read-only output script.`;
   }
-  prompt += '\n\nUse only the supplied MCP tools. Stop within 60 MCP tool calls or seven minutes. Report failure if unfinished; claim success only for what the final image shows. Do not save or edit the model.';
+  // The default wording matches the standard-budget rungs exactly.
+  const minutes = agentMinutes === 7 ? 'seven' : String(agentMinutes);
+  prompt += `\n\nUse only the supplied MCP tools. Stop within ${maxCalls} MCP tool calls or ${minutes} minutes. Report failure if unfinished; claim success only for what the final image shows. Do not save or edit the model.`;
   if (skillText) prompt += `\n\nGuidance:\n${skillText}`;
   return prompt + '\n';
 }
@@ -56,12 +58,15 @@ function seededRandom(seed) {
   };
 }
 
-export function schedule({ rung, model, tasks: taskNames, trialsPerTask, seed }) {
+// onlyTrials selects exact TASK-NN cells (e.g. reruns); label keeps their ids apart from the originals.
+export function schedule({ rung, model, tasks: taskNames, trialsPerTask, seed, onlyTrials, label }) {
   const trials = [];
   for (const task of taskNames) {
     for (let repetition = 1; repetition <= trialsPerTask; repetition++) {
-      const id = `${rung}-${model}-${task}-${String(repetition).padStart(2, '0')}`;
-      trials.push({ id, rung, model, task, repetition, holdout: holdoutTasks.includes(task) });
+      const cell = `${task}-${String(repetition).padStart(2, '0')}`;
+      if (onlyTrials && !onlyTrials.includes(cell)) continue;
+      const id = [rung, model, cell, label].filter(Boolean).join('-');
+      trials.push({ id, rung, model, task, repetition, holdout: holdoutTasks.includes(task), ...(label ? { label } : {}) });
     }
   }
   const random = seededRandom(seed);
@@ -73,8 +78,14 @@ export function schedule({ rung, model, tasks: taskNames, trialsPerTask, seed })
 }
 
 export function validateConfig(input) {
-  const config = { trialsPerTask: 3, tasks: Object.keys(tasks), genericCommand: ['FlaUI.Mcp.exe', 'mcp'], ...input };
+  const config = { trialsPerTask: 3, tasks: Object.keys(tasks), genericCommand: ['FlaUI.Mcp.exe', 'mcp'], maxCalls: 60, agentMinutes: 7, ...input };
   if (!rungs.includes(config.rung)) throw new Error(`rung must be one of ${rungs.join(', ')}`);
+  if (!Number.isInteger(config.maxCalls) || config.maxCalls < 1 || config.maxCalls > 200) throw new Error('maxCalls must be 1..200');
+  if (!Number.isInteger(config.agentMinutes) || config.agentMinutes < 1 || config.agentMinutes > 30) throw new Error('agentMinutes must be 1..30');
+  if (config.label !== undefined && !/^[a-z0-9]+$/.test(config.label)) throw new Error('label must be lowercase letters and digits');
+  if (config.onlyTrials !== undefined && (!Array.isArray(config.onlyTrials) || !config.onlyTrials.length)) {
+    throw new Error('onlyTrials must be a nonempty list of TASK-NN cells');
+  }
   if (!models.includes(config.model)) throw new Error('model must be sonnet or opus');
   if (!Number.isInteger(config.trialsPerTask) || config.trialsPerTask < 1) throw new Error('trialsPerTask must be a positive integer');
   if (!Array.isArray(config.tasks) || !config.tasks.length || new Set(config.tasks).size !== config.tasks.length ||
@@ -190,7 +201,7 @@ function gatewayConfig(out, config, trialDirectory) {
   const [executable, ...args] = config.genericCommand;
   const gateway = {
     genericCommand: [path.join(out, 'build', executable), ...args],
-    logPath: path.join(trialDirectory, 'calls.jsonl'), maxCalls: 60
+    logPath: path.join(trialDirectory, 'calls.jsonl'), maxCalls: config.maxCalls
   };
   if (config.rung === '3') gateway.companionCommand = [path.join(out, 'companion', 'FlaUI.Automation.exe'), 'mcp'];
   return gateway;
@@ -225,11 +236,12 @@ export async function prepare(configPath, destination) {
   fs.copyFileSync(fileURLToPath(import.meta.url), path.join(out, 'ladder-study.mjs'));
 
   const trials = schedule(config);
+  if (config.onlyTrials && trials.length !== config.onlyTrials.length) throw new Error('onlyTrials names a cell outside tasks × trialsPerTask');
   for (const trial of trials) {
     const dir = path.join(out, trial.id);
     fs.mkdirSync(dir);
     const prompt = promptFor(trial.task, skill.text,
-      path.win32.normalize(path.join(out, 'hello-world.csx')), path.join(dir, 'result.png'));
+      path.win32.normalize(path.join(out, 'hello-world.csx')), path.join(dir, 'result.png'), config);
     fs.writeFileSync(path.join(dir, 'prompt-template.txt'), prompt, { flag: 'wx' });
     write(path.join(dir, 'gateway.json'), gatewayConfig(out, config, dir));
     write(path.join(dir, 'mcp.json'), {
@@ -538,9 +550,12 @@ export async function run(directory, id, approved) {
   }
   const agentCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'fla_study_agent_'));
   const agentCommand = claudeCommand(study.config.claudeEntry, trial.model, path.join(dir, 'mcp.json'));
-  const controllerCommand = [study.config.controller, 'hold', path.join(root, 'controller.config.json'), dir];
+  const agentMinutes = study.config.agentMinutes ?? 7;
+  // The hold outlasts the agent deadline by the controller's startup and restoration margin.
+  const controllerCommand = [study.config.controller, 'hold', path.join(root, 'controller.config.json'), dir, String(agentMinutes + 3)];
   write(path.join(dir, 'invocation.json'), { agentCwd, agentCommand, controllerCommand });
   return runTrialSession({ directory: dir, trial, agentCwd, agentCommand, controllerCommand,
+    agentMs: agentMinutes * 60000,
     promptTemplate: fs.readFileSync(path.join(dir, 'prompt-template.txt'), 'utf8') });
 }
 
@@ -580,7 +595,7 @@ export function summarize(studyDirectory) {
       : { dispatchedCalls: null, budgetRejections: null, toolRejections: null };
     rows.push({
       kind: 'trial', id: record.id ?? entry.name,
-      rung: record.rung ?? null, model: record.model ?? null, task: record.task ?? null,
+      rung: record.rung ?? null, model: record.model ?? null, task: record.task ?? null, label: record.label ?? null,
       holdout: holdoutTasks.includes(record.task),
       lifecycleOutcome: record.lifecycleOutcome ?? null, cleanup: record.cleanup?.status ?? null,
       timedOut: record.timedOut ?? null, interrupted: record.interrupted ?? null,
@@ -607,14 +622,15 @@ function mean(values) {
 export function groupRows(rows) {
   const groups = new Map();
   for (const row of rows) {
-    const key = `${row.rung}|${row.task}|${row.model}`;
+    // Labelled reruns (e.g. extended budget) are never pooled with standard trials.
+    const key = `${row.rung}|${row.task}|${row.model}|${row.label ?? ''}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   }
   return [...groups.values()].map(members => {
     const passes = members.filter(row => row.passed === true).length;
     return {
-      kind: 'group', rung: members[0].rung, task: members[0].task, model: members[0].model,
+      kind: 'group', rung: members[0].rung, task: members[0].task, model: members[0].model, label: members[0].label,
       holdout: members[0].holdout, n: members.length, passes, passAll: passes === members.length,
       falseClaims: members.filter(row => row.claimedSuccess === true && row.passed === false).length,
       meanDispatchedCalls: mean(members.map(row => row.dispatchedCalls)),

@@ -36,6 +36,15 @@ through MCP.
 - Keep every attempted trial, including failures and interruptions. Never replace
   one with a retry.
 
+### Extended-budget reruns
+
+A trial that hits the call limit or the time limit may be rerun once in a sibling
+study with a larger budget. The config adds `label: "extended"`, `onlyTrials`
+(e.g. `["formatting-01"]`), `maxCalls: 120` and `agentMinutes: 15`. Rerun ids end in
+`-extended`, and `summarize` groups them separately. They show whether a task is
+solvable with more room; rung comparisons still use the standard 60-call,
+7-minute trials.
+
 Tasks: `formatting`, `object` and `script` are training tasks. `code-actions` is
 the hold-out.
 
