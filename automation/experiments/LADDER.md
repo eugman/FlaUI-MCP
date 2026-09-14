@@ -5,22 +5,51 @@ in Claude Code headless mode with Sonnet or Opus, one trial at a time, against a
 offline TE3 fixture that the controller launches and restores. The config field
 `rung` holds the condition number.
 
-| Condition | MCP server build | Injected skill | TE3 tools | Data |
-|---|---|---|---|---|
-| 1 | Original (TabularEditor main 6a39906) | none | no | `ladder-20260914-0a-sonnet` |
-| 2 | New (current) | none | no | `ladder-20260914-0c-sonnet` |
-| 3 | New | generic skill (`layers/1-mcp-basics.md`) | no | to run |
-| 4 | New | generic skill + map (`layers/map.md`) | no | to run |
-| 5 | New | generic skill + map + TE3 tool line (`layers/te3-tools.md`) | `te3_navigate` | `study-20260914-c5v3-sonnet` (ran before the tool line, with `te3_inspect` and `te3_capture` also exposed) |
+| Condition | MCP server build | Injected skill | TE3 tools |
+|---|---|---|---|
+| 1 | Original (TabularEditor main 6a39906) | none | no |
+| 2 | New (current) | none | no |
+| 3 | New | generic skill (`layers/1-mcp-basics.md`) | no |
+| 4 | New | generic skill + map (`layers/map.md`) | no |
+| 5 | New | generic skill + map + TE3 tool line (`layers/te3-tools.md`) | `te3_navigate` |
 
 The skill text is appended to the prompt under `Guidance:`. The map is
-`automation/skills/te3-notes` concatenated as is. Studies named `0b`, `1`, `2`,
-`-extended` and `-rerun` are development history and are not compared.
+`automation/skills/te3-notes` concatenated as is, plus lines added from condition 2
+failures on trained tasks.
+
+Current studies are `artifacts/study-tasks12-cN-sonnet`, prepared from
+`artifacts/tasks12-cN-sonnet.config.json`. The earlier four-task study
+(`ladder-20260914-*`, `study-20260914-*`) is history: it ran 4 tasks × 3 trials,
+and its code-actions hold-out became contaminated once the map and `te3_navigate`
+covered it. Never pool the two.
+
+## Tasks
+
+Twelve distinct screenshots, one run each per condition, in the same seeded order
+for every condition so conditions are compared task by task. Task-to-task
+differences are larger than run-to-run differences, so more tasks tell us more than
+repeats. Prompts are `tasks` in `ladder-study.mjs`; rubrics are `rubrics` in
+`blind-review.mjs`.
+
+| Trained | Hold-out |
+|---|---|
+| `formatting`, `code-actions` (Preferences) | `dax-general` (Preferences > DAX Editor > General) |
+| `column`, `measure`, `table`, `tom-tree` (TOM Explorer) | `save-to-folder` (Preferences > File Formats) |
+| `script-run`, `script-source` (C# scripts) | `calc-group-menu` (Model menu open) |
+| | `relationship` (relationship Properties) |
+
+**Hold-outs** get no map topic, no skill line and no `te3_navigate` destination,
+ever. Guidance can be tuned until the practiced tasks pass; the hold-outs check
+that it also works on screenshots nobody wrote it around, which is what matters
+for the rest of the backlog. `automation/skills/holdout-guard.test.mjs` fails if a
+skill layer names hold-out UI.
 
 ## Trials
 
-- Sonnet: all 4 tasks × 3 trials per condition (12 trials).
-- Trial ids are `CONDITION-MODEL-TASK-NN`. `study.json` lists them in a seeded
+- Sonnet: 12 trials per condition. Run condition 2 first: its trained-task
+  transcripts decide any map lines. Then conditions 1, 3 and 4, then the companion
+  smoke test and condition 5.
+- Trial ids are `CONDITION-MODEL-TASK-01`. `study.json` lists them in a seeded
   shuffled order; run them in that order.
 - Keep every attempted trial, including failures and interruptions. Never replace
   one with a retry.
@@ -34,9 +63,6 @@ study with a larger budget. The config adds `label: "extended"`, `onlyTrials`
 solvable with more room; rung comparisons still use the standard 60-call,
 7-minute trials.
 
-Tasks: `formatting`, `object` and `script` are training tasks. `code-actions` is
-the hold-out.
-
 ## Grading
 
 Grade each trial from its final `result.png`, `agent.jsonl` transcript and
@@ -47,35 +73,14 @@ judging the image. Write `<trial>/review.json`:
 { "passed": true, "claimedSuccess": true, "rubric": { "section selected": true }, "notes": "" }
 ```
 
-`passed` is true only when every rubric item holds. `claimedSuccess` is whether
-the agent's final message claimed the task succeeded.
-
-**formatting** and **code-actions**
-- The section (Auto Formatting or Code Actions) is selected in the tree.
-- The search box is empty.
-- All controls of the section are visible, including the bottom control
-  (formatting: Use default formatting settings).
-- The Preferences title and the OK/Cancel buttons are readable.
-- Settings are unchanged (controller restoration verified, no edits in transcript).
-
-**object**
-- The Comparison table context is visible.
-- The Amount row is selected.
-- Properties are readable, with Name `Amount`.
-- Object Type is shown as a column type.
-- The DAX identifier reads `'Comparison'[Amount]`.
-- The model is unchanged.
-
-**script**
-- The output dialog title is visible.
-- The `Hello World` text is visible.
-- The Close button is visible.
-- The source file was not modified.
+`passed` is true only when every rubric item holds and settings restoration was
+verified. `claimedSuccess` is whether the agent's final message claimed the task
+succeeded. The per-task rubrics are `rubrics` in `blind-review.mjs`.
 
 ## Controller assemblies
 
 The controller bundles its own copy of the TE3 runner to restore settings. At
-rung 3, `prepare` requires `FlaUI.Mcp.dll` and `FlaUI.Automation.dll` in
+condition 5, `prepare` requires `FlaUI.Mcp.dll` and `FlaUI.Automation.dll` in
 `controller/` to match `companionBuild`. At other rungs the agent never uses the
 runner, so the check runs only when the config supplies `currentBuild`.
 
@@ -97,10 +102,10 @@ runner, so the check runs only when the config supplies `currentBuild`.
    }
    ```
 
-   Optional: `trialsPerTask` (default 3), `tasks` (default all four),
-   `currentBuild`. Rung 3 requires `companionBuild`; other rungs reject it. For
-   0a, point `genericBuild` at the original build and set `genericCommand` to its
-   executable and arguments.
+   Optional: `trialsPerTask` (default 1), `tasks` (default all twelve),
+   `currentBuild`. Condition 5 requires `companionBuild`; other conditions reject it.
+   For condition 1, point `genericBuild` at the original build and set
+   `genericCommand` to its executable and arguments.
 4. Prepare: `node automation/experiments/ladder-study.mjs prepare CONFIG NEW_STUDY_DIRECTORY`.
 5. Check the tool surface without dispatching tools:
    `node automation/experiments/tool-preflight.mjs STUDY NEW_OUTPUT_DIRECTORY`.
@@ -113,8 +118,9 @@ runner, so the check runs only when the config supplies `currentBuild`.
    random code. Write `grades.json` there (`{ CODE: { rubric, claimedSuccess, notes } }`),
    then `blind-review.mjs apply REVIEW_DIRECTORY` writes each trial's `review.json`.
 8. Summarize: `node automation/experiments/ladder-study.mjs summarize STUDY`.
-   It prints one JSON line per trial, then one per rung × task × model with
-   passes, pass-all, false claims, mean calls and mean tokens.
+   It prints one JSON line per trial, one per condition × task × model, and one
+   per condition with passes (overall, trained, hold-out), false claims, median
+   calls and mean tokens.
 
 ## Agent invocation
 

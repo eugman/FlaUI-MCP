@@ -10,14 +10,25 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const rungs = ['1', '2', '3', '4', '5'];
 export const models = ['sonnet', 'opus'];
 export const companionTools = ['te3_navigate'];
+// Twelve distinct screenshots, one run each per condition. The first eight are trained: the map and
+// te3_navigate may cover them. The last four are hold-outs (see holdoutTasks).
 export const tasks = {
   formatting: 'Capture Preferences > Text Editors > DAX Editor > Auto Formatting with that section selected, empty search, all section controls (including Use default formatting settings), title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
-  object: 'Select the Amount column in the Comparison table, not Sales[Amount]. Verify the table, name and column type through UI evidence. Capture the selected row with visible table context and readable Properties. Leave the object selected.',
-  script: 'Open the supplied .csx through TE3 UI. Verify its source is exactly `"Hello World".Output();` ignoring trailing whitespace, execute only that source, and capture the output dialog title, Hello World text and Close button. Leave the output open. Do not type replacement source, change file associations, or interact with unrelated applications. Stop if an unrelated app chooser appears.',
-  'code-actions': 'Capture Preferences > Text Editors > DAX Editor > Code Actions with that section selected, empty search, all section controls, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.'
+  'code-actions': 'Capture Preferences > Text Editors > DAX Editor > Code Actions with that section selected, empty search, all section controls, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
+  column: 'Select the Amount column in the Comparison table, not Sales[Amount]. Verify the table, name and column type through UI evidence. Capture the selected row with visible table context, readable Properties and an empty TOM Explorer search box. Leave the column selected.',
+  measure: 'Select the Total Amount measure in the Sales table. Capture it selected with its DAX expression visible in the expression editor, readable Properties and an empty TOM Explorer search box. Do not edit the expression. Leave the measure selected.',
+  table: 'Select the Sales table in TOM Explorer. Capture it selected with readable Properties showing its name and object type, and an empty TOM Explorer search box. Leave the table selected.',
+  'tom-tree': 'In TOM Explorer, expand the Sales and Comparison tables so their columns and measures are visible. Capture TOM Explorer with both tables expanded and an empty search box. Do not edit objects.',
+  'script-run': 'Open the supplied .csx through TE3 UI. Verify its source is exactly `"Hello World".Output();` ignoring trailing whitespace, execute only that source, and capture the output dialog title, Hello World text and Close button. Leave the output open. Do not type replacement source, change file associations, or interact with unrelated applications. Stop if an unrelated app chooser appears.',
+  'script-source': 'Open the supplied .csx through TE3 UI and verify its source is exactly `"Hello World".Output();` ignoring trailing whitespace, but do not run it. Capture the C# script editor showing that source. Leave the script open and unexecuted. Do not type replacement source, change file associations, or interact with unrelated applications. Stop if an unrelated app chooser appears.',
+  'dax-general': 'Capture Preferences > Text Editors > DAX Editor > General with that section selected, empty search, all section controls, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
+  'save-to-folder': 'Capture Preferences > File Formats > Save-to-folder with that section selected, empty search, all section controls including Serialization mode, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
+  'calc-group-menu': 'Open the Model menu and capture it with the Calculation Group item visible. Do not click any menu item or change the model. Leave the menu open.',
+  relationship: 'Select the model\'s relationship in TOM Explorer. Capture it selected with readable Properties showing its from and to columns, and an empty TOM Explorer search box. Do not edit the relationship. Leave it selected.'
 };
-// Never used to write skill layers; it measures whether guidance generalizes.
-export const holdoutTasks = ['code-actions'];
+// Hold-outs get no map topic, skill line or te3_navigate destination, ever, so they show whether guidance
+// written for the trained tasks also works on screenshots nobody wrote it around.
+export const holdoutTasks = ['dax-general', 'save-to-folder', 'calc-group-menu', 'relationship'];
 
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -36,8 +47,8 @@ function expand(value) {
 
 export function promptFor(task, skillText, scriptPath, outputPath, { maxCalls = 60, agentMinutes = 7 } = {}) {
   let prompt = `${tasks[task]}\n\nThe owned TE3 processId is {{PID}}. Save the final PNG to ${outputPath}. Preserve model content and preferences. Do not launch or close TE3; the controller owns lifecycle and restoration. You may focus this test instance. Offline disposable model; no server access.`;
-  if (task === 'script') {
-    prompt += `\nSupplied source: ${scriptPath}. You are authorized to execute this exact read-only output script.`;
+  if (task.startsWith('script')) {
+    prompt += `\nSupplied source: ${scriptPath}.` + (task === 'script-run' ? ' You are authorized to execute this exact read-only output script.' : '');
   }
   // The default wording matches the standard-budget rungs exactly.
   const minutes = agentMinutes === 7 ? 'seven' : String(agentMinutes);
@@ -78,7 +89,7 @@ export function schedule({ rung, model, tasks: taskNames, trialsPerTask, seed, o
 }
 
 export function validateConfig(input) {
-  const config = { trialsPerTask: 3, tasks: Object.keys(tasks), genericCommand: ['FlaUI.Mcp.exe', 'mcp'], maxCalls: 60, agentMinutes: 7, ...input };
+  const config = { trialsPerTask: 1, tasks: Object.keys(tasks), genericCommand: ['FlaUI.Mcp.exe', 'mcp'], maxCalls: 60, agentMinutes: 7, ...input };
   if (!rungs.includes(config.rung)) throw new Error(`rung must be one of ${rungs.join(', ')}`);
   if (!Number.isInteger(config.maxCalls) || config.maxCalls < 1 || config.maxCalls > 200) throw new Error('maxCalls must be 1..200');
   if (!Number.isInteger(config.agentMinutes) || config.agentMinutes < 1 || config.agentMinutes > 30) throw new Error('agentMinutes must be 1..30');
@@ -641,6 +652,33 @@ export function groupRows(rows) {
   });
 }
 
+function median(values) {
+  const known = values.filter(value => typeof value === 'number').sort((a, b) => a - b);
+  if (!known.length) return null;
+  const middle = Math.floor(known.length / 2);
+  return known.length % 2 ? known[middle] : (known[middle - 1] + known[middle]) / 2;
+}
+
+// One row per condition, with trained and hold-out tasks tallied separately.
+export function conditionRows(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = `${row.rung}|${row.model}|${row.label ?? ''}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  const tally = members => ({ passes: members.filter(row => row.passed === true).length, n: members.length });
+  return [...groups.values()].map(members => ({
+    kind: 'condition', rung: members[0].rung, model: members[0].model, label: members[0].label,
+    ...tally(members),
+    trained: tally(members.filter(row => !row.holdout)), holdout: tally(members.filter(row => row.holdout)),
+    falseClaims: members.filter(row => row.claimedSuccess === true && row.passed === false).length,
+    medianDispatchedCalls: median(members.map(row => row.dispatchedCalls)),
+    meanTotalTokens: mean(members.map(row => row.totalTokens)),
+    unreviewed: members.filter(row => !row.reviewed).length
+  }));
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [command, first, second, ...options] = process.argv.slice(2);
@@ -648,7 +686,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     else if (command === 'run') await run(first, second, options.includes('--handoff'));
     else if (command === 'summarize') {
       const rows = summarize(first);
-      for (const row of [...rows, ...groupRows(rows)]) console.log(JSON.stringify(row));
+      for (const row of [...rows, ...groupRows(rows), ...conditionRows(rows)]) console.log(JSON.stringify(row));
     } else throw new Error('prepare CONFIG NEW_DIRECTORY | run STUDY TRIAL --handoff | summarize STUDY');
   } catch (error) {
     console.error(error.message);

@@ -6,37 +6,44 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  tasks, holdoutTasks, schedule, promptFor, validateConfig, usageFrom, verifyFrozenInputs, prepare, run,
+  tasks, holdoutTasks, conditionRows, schedule, promptFor, validateConfig, usageFrom, verifyFrozenInputs, prepare, run,
   runTrialSession, claudeCommand, assertSameAssemblies, readEvents, summarize, groupRows
 } from './ladder-study.mjs';
 import { composeSkill } from '../skills/build-skill.mjs';
 
-test('tasks include the code-actions hold-out', () => {
-  assert.deepEqual(Object.keys(tasks), ['formatting', 'object', 'script', 'code-actions']);
-  assert.deepEqual(holdoutTasks, ['code-actions']);
+test('twelve distinct tasks, the last four held out', () => {
+  assert.equal(Object.keys(tasks).length, 12);
+  assert.deepEqual(holdoutTasks, ['dax-general', 'save-to-folder', 'calc-group-menu', 'relationship']);
+  assert.deepEqual(Object.keys(tasks).slice(-4), holdoutTasks);
 });
 
-test('schedule numbers trials per task and shuffles deterministically by seed', () => {
-  const base = { rung: '1', model: 'sonnet', tasks: Object.keys(tasks), trialsPerTask: 3 };
+test('schedule runs each task once and shuffles deterministically by seed', () => {
+  const base = { rung: '1', model: 'sonnet', tasks: Object.keys(tasks), trialsPerTask: 1 };
   const first = schedule({ ...base, seed: 7 });
   assert.equal(first.length, 12);
-  assert.deepEqual(first.map(trial => trial.id).sort(), Object.keys(tasks)
-    .flatMap(task => ['01', '02', '03'].map(nn => `1-sonnet-${task}-${nn}`)).sort());
+  assert.deepEqual(first.map(trial => trial.id).sort(), Object.keys(tasks).map(task => `1-sonnet-${task}-01`).sort());
   assert.deepEqual(schedule({ ...base, seed: 7 }), first);
   assert.notDeepEqual(schedule({ ...base, seed: 8 }).map(trial => trial.id), first.map(trial => trial.id));
-  assert.equal(first.find(trial => trial.task === 'code-actions').holdout, true);
-  assert.equal(first.find(trial => trial.task === 'object').holdout, false);
+  assert.equal(first.find(trial => trial.task === 'dax-general').holdout, true);
+  assert.equal(first.find(trial => trial.task === 'column').holdout, false);
+});
+
+test('only the script-run task is authorized to execute its source', () => {
+  const source = promptFor('script-source', '', 'C:\\study\\hello-world.csx', 'C:\\trial\\result.png');
+  assert.ok(source.includes('Supplied source: C:\\study\\hello-world.csx.'));
+  assert.ok(!source.includes('authorized to execute'));
+  assert.ok(promptFor('script-run', '', 'C:\\study\\hello-world.csx', 'y').includes('authorized to execute'));
 });
 
 test('prompt appends guidance only when the skill has text', () => {
-  const bare = promptFor('script', '', 'C:\\study\\hello-world.csx', 'C:\\trial\\result.png');
-  const guided = promptFor('script', '- rule', 'C:\\study\\hello-world.csx', 'C:\\trial\\result.png');
+  const bare = promptFor('script-run', '', 'C:\\study\\hello-world.csx', 'C:\\trial\\result.png');
+  const guided = promptFor('script-run', '- rule', 'C:\\study\\hello-world.csx', 'C:\\trial\\result.png');
   assert.ok(bare.includes('The owned TE3 processId is {{PID}}. Save the final PNG to C:\\trial\\result.png.'));
   assert.ok(bare.includes('Supplied source: C:\\study\\hello-world.csx.'));
   assert.ok(bare.includes('Stop within 60 MCP tool calls or seven minutes.'));
   assert.ok(!bare.includes('Guidance'));
   assert.equal(guided, bare.trimEnd() + '\n\nGuidance:\n- rule\n');
-  assert.ok(!promptFor('object', '', 'x', 'y').includes('Supplied source'));
+  assert.ok(!promptFor('column', '', 'x', 'y').includes('Supplied source'));
 });
 
 const result = usage => ({ type: 'result', is_error: false, num_turns: 4, total_cost_usd: 0.12, session_id: 's-1', usage });
@@ -174,7 +181,7 @@ async function preparationInputs(t, overrides = {}) {
 
 test('config validation limits companion tools to condition 5 and models to sonnet/opus', async t => {
   const { config } = await preparationInputs(t);
-  assert.equal(validateConfig(config).trialsPerTask, 3);
+  assert.equal(validateConfig(config).trialsPerTask, 1);
   assert.deepEqual(validateConfig(config).genericCommand, ['FlaUI.Mcp.exe', 'mcp']);
   assert.throws(() => validateConfig({ ...config, rung: '2' }), /only for condition 5/);
   assert.throws(() => validateConfig({ ...config, companionBuild: undefined }), /requires companionBuild/);
@@ -208,15 +215,15 @@ test('prepare freezes a condition 5 study with skill, gateways and MCP configs',
 
 test('prepare for a generic rung has no companion and checks a supplied current build', async t => {
   const { root, configPath } = await preparationInputs(t, {
-    rung: '1', companionBuild: undefined, genericCommand: ['FlaUI.Mcp.exe', 'serve', '--stdio'], tasks: ['object'], trialsPerTask: 2
+    rung: '1', companionBuild: undefined, genericCommand: ['FlaUI.Mcp.exe', 'serve', '--stdio'], tasks: ['column'], trialsPerTask: 2
   });
   const out = join(root, 'study');
   await prepare(configPath, out);
   const study = JSON.parse(readFileSync(join(out, 'study.json'), 'utf8'));
-  assert.deepEqual(study.trials.map(trial => trial.id).sort(), ['1-sonnet-object-01', '1-sonnet-object-02']);
+  assert.deepEqual(study.trials.map(trial => trial.id).sort(), ['1-sonnet-column-01', '1-sonnet-column-02']);
   assert.equal(readFileSync(join(out, 'skill.md'), 'utf8'), '');
   assert.equal(existsSync(join(out, 'companion')), false);
-  const gateway = JSON.parse(readFileSync(join(out, '1-sonnet-object-01', 'gateway.json'), 'utf8'));
+  const gateway = JSON.parse(readFileSync(join(out, '1-sonnet-column-01', 'gateway.json'), 'utf8'));
   assert.deepEqual(gateway.genericCommand, [join(out, 'build', 'FlaUI.Mcp.exe'), 'serve', '--stdio']);
   assert.equal(gateway.companionCommand, undefined);
 
@@ -471,7 +478,7 @@ test('summarize reports trials with review fields and rung/task/model groups', a
     'review.json': review(true, true)
   });
   await trial('1-sonnet-formatting-02', 'formatting', { 'review.json': review(false, true) });
-  await trial('1-sonnet-code-actions-01', 'code-actions', {});
+  await trial('1-sonnet-dax-general-01', 'dax-general', {});
   await mkdir(join(root, '1-sonnet-object-01'));
 
   const rows = summarize(root);
@@ -486,7 +493,7 @@ test('summarize reports trials with review fields and rung/task/model groups', a
   assert.equal(scored.budgetRejections, 1);
   assert.equal(scored.passed, true);
   assert.deepEqual(scored.rubric, { 'section selected': true });
-  const holdout = rows.find(row => row.task === 'code-actions');
+  const holdout = rows.find(row => row.task === 'dax-general');
   assert.equal(holdout.holdout, true);
   assert.equal(holdout.reviewed, false);
   assert.equal(holdout.dispatchedCalls, null);
@@ -497,8 +504,13 @@ test('summarize reports trials with review fields and rung/task/model groups', a
     kind: 'group', rung: '1', task: 'formatting', model: 'sonnet', label: null, holdout: false, n: 2, passes: 1, passAll: false,
     falseClaims: 1, meanDispatchedCalls: 4, meanTotalTokens: 100, meanUncachedInputTokens: 20, unreviewed: 0
   });
-  assert.equal(groups.find(group => group.task === 'code-actions').unreviewed, 1);
+  assert.equal(groups.find(group => group.task === 'dax-general').unreviewed, 1);
+  assert.deepEqual(conditionRows(rows), [{
+    kind: 'condition', rung: '1', model: 'sonnet', label: null, passes: 1, n: 3,
+    trained: { passes: 1, n: 2 }, holdout: { passes: 0, n: 1 },
+    falseClaims: 1, medianDispatchedCalls: 4, meanTotalTokens: 100, unreviewed: 1
+  }]);
 
-  await writeFile(join(root, '1-sonnet-code-actions-01', 'review.json'), JSON.stringify({ passed: 'yes' }));
+  await writeFile(join(root, '1-sonnet-dax-general-01', 'review.json'), JSON.stringify({ passed: 'yes' }));
   assert.throws(() => summarize(root), /boolean passed/);
 });

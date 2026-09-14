@@ -5,6 +5,21 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
+const preferences = section => [
+  `${section} is selected in the Preferences tree`,
+  'The search box is empty',
+  `All ${section} controls are visible`,
+  'The Preferences title and OK/Cancel buttons are readable'
+];
+const outputDialog = ['The output dialog title is visible', 'The Hello World text is visible', 'The Close button is visible'];
+const columnIdentity = [
+  'The Comparison table context is visible',
+  'The Amount row under Comparison is selected',
+  'Properties are readable with Name Amount',
+  'Object Type shows a column type',
+  "DAX identifier reads 'Comparison'[Amount]"
+];
+
 export const rubrics = {
   formatting: [
     'Auto Formatting is selected in the Preferences tree',
@@ -12,24 +27,25 @@ export const rubrics = {
     'All Auto Formatting controls are visible, including Use default formatting settings',
     'The Preferences title and OK/Cancel buttons are readable'
   ],
-  'code-actions': [
-    'Code Actions is selected in the Preferences tree',
-    'The search box is empty',
-    'All Code Actions controls are visible',
-    'The Preferences title and OK/Cancel buttons are readable'
+  'code-actions': preferences('Code Actions'),
+  column: [...columnIdentity, 'The TOM Explorer search box is empty'],
+  measure: [
+    'The Total Amount measure under Sales is selected',
+    "The expression editor shows SUM('Sales'[Amount])",
+    'Properties are readable with Name Total Amount',
+    'The TOM Explorer search box is empty'
   ],
-  object: [
-    'The Comparison table context is visible',
-    'The Amount row under Comparison is selected',
-    'Properties are readable with Name Amount',
-    'Object Type shows a column type',
-    "DAX identifier reads 'Comparison'[Amount]"
-  ],
-  script: [
-    'The output dialog title is visible',
-    'The Hello World text is visible',
-    'The Close button is visible'
-  ]
+  table: ['The Sales table is selected', 'Properties are readable with Name Sales', 'Object Type shows Table', 'The TOM Explorer search box is empty'],
+  'tom-tree': ['Sales is expanded showing Amount and Total Amount', 'Comparison is expanded showing Amount', 'The TOM Explorer search box is empty'],
+  'script-run': outputDialog,
+  'script-source': ['The C# script editor shows "Hello World".Output();', 'No script output dialog is open'],
+  'dax-general': preferences('DAX Editor General'),
+  'save-to-folder': [...preferences('Save-to-folder').slice(0, 2), 'All Save-to-folder controls are visible, including Serialization mode', preferences('Save-to-folder')[3]],
+  'calc-group-menu': ['The Model menu is open', 'The Calculation Group item is readable in the menu', 'No dialog or new model object is shown'],
+  relationship: ['A relationship is selected in TOM Explorer', 'Properties show its from and to columns', 'The TOM Explorer search box is empty'],
+  // Task names from the four-task study, kept so its trials can still be packed.
+  object: columnIdentity,
+  script: outputDialog
 };
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
