@@ -9,30 +9,30 @@ don't establish live UI behavior.
 | MCP unit tests (Debug) | 148 passed, 2026-09-14 |
 | Runner unit tests (Debug) | 110 passed, 2026-09-14 |
 | Experiment harness tests (`node --test "automation/experiments/*.test.mjs"`) | 65 passed, 2026-09-14 |
-| Integration tests | 34/34 passed 2026-09-13 (`artifacts/live-companion-20260913/integration-fixed.trx`); not rerun since |
-| Offline recipes | Batch of 15 plus language choices and Preferences map passed on TE3 3.26.3, 2026-09-13, settings restored |
+| Integration tests | 38/38 passed 2026-09-14 (`artifacts/live-main-20260914/integration-fixed.trx`) |
+| Offline recipes | Batch of 15 and Preferences map passed on TE3 3.26.3, 2026-09-14; settings restored and all PNG hashes match. Language choices failed closed because a pinned Microsoft Teams window overlapped the popup scene |
 | Companion navigation/capture | Live smoke passed 2026-09-13 |
 | Four-arm study | Formatting: 16 trials scored (12 in r1, plus a 4-trial Luna repeat). Object: none scored yet (2 model-capacity failures, 1 interrupted Terra run, whose settings were recovered 2026-09-14). `instruction-study-20260914-object-r3` was prepared and preflighted from the build before the generic MCP hardening; no trials run yet. See [FOUR-ARM.md](experiments/FOUR-ARM.md) |
 | Screenshot approval/promotion | None approved or promoted |
 | Original docs checkout | Untouched |
 
+**Verified live 2026-09-14:**
+- integration tests and recipes exercised the generic MCP hardening
+- the batch-wide runner lock
+- serialization dropdown and menu-focus polling
+- PNG hash recording
+- the failure window list (other apps' titles omitted)
+
+The 38/38 run followed one fix: `SnapshotBuilder` callers keep the 120k-character
+default. The earlier 20k default truncated the WinForms Grid tab, and 2 order-dependent
+tests failed. `windows_snapshot` still defaults to 20k for agents.
+
 **Not yet live-verified:**
 - activation blocker results
-- screenshot handle/ref checks
-- `recover` and the crash-safe `needsRecovery` flag
-- the batch-wide runner lock
+- `recover` and `needsRecovery` after a real interruption
+- the PNG hash check during an actual promotion
+- the companion destination registry and content-hash map revision (companion smoke not rerun)
 - study harness revision four-arm-3
-- generic MCP hardening:
-  - one ref resolver and a capped ref table
-  - timeout quarantine and a single blocked-result shape
-  - pattern calls under the input lease
-  - Win32 title and foreground lookups
-  - shorter responses (20k-character snapshot default, nulls omitted)
-- companion destination registry and content-hash map revision
-- runner:
-  - polling for the serialization dropdown and menu focus
-  - failure window list
-  - PNG hashes checked at promotion
 
 The main window was observed at 120 DPI (125%). Other scaling levels are unverified.
 
