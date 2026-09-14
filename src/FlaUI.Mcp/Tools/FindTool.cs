@@ -38,10 +38,17 @@ public sealed class FindTool(ElementQuery query) : ToolBase
             object response = GetBoolArgument(arguments, "ancestry")
                 ? new { result = found, ancestors = found.Elements.Select(e => new { e.Ref, chain = query.Ancestors(e.Ref) }) }
                 : found;
-            return Task.FromResult(TextResult(JsonSerializer.Serialize(response, McpProtocol.JsonOptions)));
+            var json = JsonSerializer.SerializeToNode(response, McpProtocol.JsonOptions)!.AsObject();
+            if (EmptyHint(selector, found) is { } hint) json["hint"] = hint;
+            return Task.FromResult(TextResult(json.ToJsonString(McpProtocol.JsonOptions)));
         }
         catch (ProviderBlockedException ex) { return Task.FromResult(BlockedResult(ex.Pending)); }
         catch (Exception ex) when (ex is ArgumentException or JsonException or InvalidOperationException or FormatException)
         { return Task.FromResult(ErrorResult("windows_find: " + ex.Message)); }
     }
+
+    internal static string? EmptyHint(ElementSelector selector, QueryResult found) =>
+        found.Elements.Count == 0 && (selector.Name ?? selector.ControlType ?? selector.Value) != null
+            ? "No match. Selectors are exact and case-sensitive. Item text is often in value rather than name, and a menu entry may be a Button; retry with fewer fields."
+            : null;
 }

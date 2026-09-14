@@ -24,8 +24,9 @@ public class ClickTool : ToolBase
 
     public override string Description =>
         "Click an element by its ref (from windows_snapshot). Prefers Invoke pattern for reliability, " +
-        "falls back to mouse click if needed. If the click opens a modal dialog, returns immediately " +
-        "with the dialog title instead of waiting for the dialog to close.";
+        "falls back to mouse click if needed. Menu items and controls whose name ends in \"...\" get a physical click " +
+        "by default, because an Invoke that opens a menu or dialog blocks UI Automation until it closes; pass physical=false to force Invoke. " +
+        "If the click opens a modal dialog, returns immediately with the dialog title instead of waiting for the dialog to close.";
 
     public override object InputSchema => new
     {
@@ -33,7 +34,7 @@ public class ClickTool : ToolBase
         properties = new
         {
             handle = new { type = "string", description = "Optional window handle; when supplied, the ref must belong to this window." },
-            physical = new { type = "boolean", description = "Use a physical mouse click with foreground and native-window hit checks. These checks do not prove which UIA child receives the click; a container's clickable point may hit a child control." },
+            physical = new { type = "boolean", description = "Use a physical mouse click with foreground and native-window hit checks. Defaults to true for menu items and names ending in \"...\", otherwise false. These checks do not prove which UIA child receives the click; a container's clickable point may hit a child control." },
             @ref = new
             {
                 type = "string",
@@ -64,7 +65,8 @@ public class ClickTool : ToolBase
 
         var button = GetStringArgument(arguments, "button") ?? "left";
         var doubleClick = GetBoolArgument(arguments, "doubleClick", false);
-        var physical = GetBoolArgument(arguments, "physical", false);
+        bool? requestedPhysical = arguments is { ValueKind: JsonValueKind.Object } a && a.TryGetProperty("physical", out _)
+            ? GetBoolArgument(arguments, "physical", false) : null;
 
         // Fail fast if this app's UIA provider is already blocked by an earlier call
         var processId = _elementRegistry.GetProcessIdForRef(refId);
@@ -81,6 +83,7 @@ public class ClickTool : ToolBase
             void Validate() => _elementRegistry.ValidateReference(refId, handle);
             OperationContext.Check();
             var elementName = element.Properties.Name.ValueOrDefault ?? refId;
+            var physical = requestedPhysical ?? PrefersPhysical(element.Properties.ControlType.ValueOrDefault, elementName);
 
             // Try Invoke pattern first (most reliable for buttons)
             if (!physical && button == "left" && !doubleClick && element.Patterns.Invoke.IsSupported)
@@ -152,6 +155,16 @@ public class ClickTool : ToolBase
         {
             return Task.FromResult(ErrorResult($"Failed to click {refId}: {ex.Message}"));
         }
+    }
+
+    /// <summary>
+    /// Menus and "..." commands usually open a popup or modal. Invoke on them does not return
+    /// until it closes, which blocks the provider the agent needs to inspect that popup.
+    /// </summary>
+    internal static bool PrefersPhysical(ControlType type, string? name)
+    {
+        var trimmed = name?.TrimEnd() ?? "";
+        return type == ControlType.MenuItem || trimmed.EndsWith("...") || trimmed.EndsWith('…');
     }
 
     /// <summary>

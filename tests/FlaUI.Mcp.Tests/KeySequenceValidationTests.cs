@@ -17,6 +17,7 @@ public sealed class KeySequenceValidationTests
     }
     [Theory]
     [InlineData("unsupported", "Unsupported key")]
+    [InlineData("Code Actions", "use windows_type")]
     [InlineData("", "No keys were parsed")]
     [InlineData("Win+R", "Windows key is disabled")]
     public async Task InvalidLaterChordFailsBeforeTargetResolution(string later, string error)

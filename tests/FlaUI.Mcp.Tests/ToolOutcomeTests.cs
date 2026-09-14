@@ -44,6 +44,7 @@ public sealed class ToolOutcomeTests
             Assert.Equal(456, pattern.GetProperty("ProcessStartedTicks").GetInt64());
             var status = JsonSerializer.SerializeToElement(registry.Operations.Status(parent, tracker))[0];
             Assert.Equal("completed", status.GetProperty("dispatch").GetString());
+            Assert.Equal("provider_pending", status.GetProperty("status").GetString());
             Assert.Equal("pending", status.GetProperty("provider").GetString());
             Assert.Equal(result.Outcome.PendingPatternId, status.GetProperty("pendingPatternIds")[0].GetString());
             // Provider guards still decide which real operations are safe. The coordinator
@@ -53,6 +54,7 @@ public sealed class ToolOutcomeTests
             Assert.True(SpinWait.SpinUntil(() => !tracker.TryGetPending(123, out _), TimeSpan.FromSeconds(3)));
             status = JsonSerializer.SerializeToElement(registry.Operations.Status(parent, tracker))[0];
             Assert.Equal("idle", status.GetProperty("provider").GetString());
+            Assert.Equal("completed", status.GetProperty("status").GetString());
             Assert.Empty(status.GetProperty("pendingPatternIds").EnumerateArray());
         }
         finally { release.Set(); }

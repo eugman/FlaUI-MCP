@@ -297,7 +297,7 @@ public class SendKeysTool : ToolBase
         {
             if (!TryMapKey(token, out var virtualKey))
             {
-                error = $"Unsupported key: {token}";
+                error = $"Unsupported key: {token}. For literal text, use windows_type.";
                 return keys;
             }
 

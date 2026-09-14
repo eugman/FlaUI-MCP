@@ -11,16 +11,25 @@ internal static class NativeWindowCapture
 
     public static bool TryCaptureWindow(Window window, out byte[] imageData, out string? failureReason)
     {
+        if (window.Properties.NativeWindowHandle.TryGetValue(out var nativeWindowHandle))
+            return TryCaptureHwnd(nativeWindowHandle, out imageData, out failureReason);
+        imageData = Array.Empty<byte>();
+        failureReason = "No native window handle available";
+        return false;
+    }
+
+    /// <summary>Capture by native handle only; never calls UI Automation, so it works while a provider is unresponsive.</summary>
+    public static bool TryCaptureHwnd(nint hwnd, out byte[] imageData, out string? failureReason)
+    {
         imageData = Array.Empty<byte>();
         failureReason = null;
 
-        if (!window.Properties.NativeWindowHandle.TryGetValue(out var nativeWindowHandle) || nativeWindowHandle == 0)
+        if (hwnd == 0)
         {
             failureReason = "No native window handle available";
             return false;
         }
 
-        var hwnd = new IntPtr(nativeWindowHandle);
         if (!GetWindowRect(hwnd, out var rect))
         {
             failureReason = "Could not read window bounds";

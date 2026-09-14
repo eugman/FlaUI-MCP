@@ -113,6 +113,55 @@ public class ModalDialogTests
     }
 
     [Fact]
+    public async Task WinForms_EllipsisButtonOpensModalWithoutBlockingTheProvider()
+    {
+        var tracker = new PendingInvokeTracker();
+        var clickTool = new ClickTool(_fixture.Elements, tracker);
+        var snapshotTool = new SnapshotTool(_fixture.Session, _fixture.Elements, tracker);
+        var sendKeysTool = new SendKeysTool(_fixture.Elements, tracker, sessions: _fixture.Session);
+        var processId = GetWinFormsProcessId();
+        Assert.NotEqual(0, processId);
+
+        var dialogsTabRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Dialogs");
+        Assert.NotNull(dialogsTabRef);
+        await _fixture.CallTool(clickTool, new { @ref = dialogsTabRef });
+        await Task.Delay(250);
+        var buttonRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Choose Options...");
+        Assert.NotNull(buttonRef);
+
+        try
+        {
+            // No physical argument: the "..." name selects a physical click instead of Invoke.
+            var clickResult = await _fixture.CallTool(clickTool, new { @ref = buttonRef });
+            _output.WriteLine($"Click result: {clickResult}");
+            Assert.Contains("Clicked Choose Options...", clickResult);
+
+            Win32WindowInfo? modal = null;
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while ((modal = Win32Desktop.GetTopLevelWindows(processId).SingleOrDefault(w => w.Title == "Test Modal Dialog")) == null && DateTime.UtcNow < deadline)
+                await Task.Delay(100);
+            Assert.NotNull(modal);
+            Assert.False(tracker.TryGetPending(processId, out _));
+
+            // The provider stays free, so the dialog itself can be inspected.
+            var modalHandle = _fixture.Session.RegisterNativeWindow(modal!.Hwnd, processId);
+            var snapshot = await _fixture.CallTool(snapshotTool, new { handle = modalHandle });
+            _output.WriteLine($"Dialog snapshot: {snapshot}");
+            Assert.Contains("This is a test modal dialog.", snapshot);
+        }
+        finally
+        {
+            var dialog = Win32Desktop.GetTopLevelWindows(processId).SingleOrDefault(w => w.Title == "Test Modal Dialog");
+            if (dialog != null)
+            {
+                var handle = _fixture.Session.RegisterNativeWindow(dialog.Hwnd, processId);
+                Assert.Contains("Sent keys", await _fixture.CallTool(sendKeysTool, new { handle, chord = "Enter" }));
+                await Task.Delay(250);
+            }
+        }
+    }
+
+    [Fact]
     public async Task WinForms_ClickOpensModeless_CompletesNormally()
     {
         var tracker = new PendingInvokeTracker();

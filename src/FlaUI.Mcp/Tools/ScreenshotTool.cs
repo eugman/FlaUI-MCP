@@ -53,7 +53,7 @@ public class ScreenshotTool : ToolBase
             fullScreen = new
             {
                 type = "boolean",
-                description = "Capture the entire screen (default: false)"
+                description = "Capture the entire screen (default: false). Disabled while an app allowlist is active."
             },
             background = new
             {
@@ -216,15 +216,22 @@ public class ScreenshotTool : ToolBase
                 }
                 else
                 {
-                    var window = _sessionManager.GetWindow(handle);
-                    if (window == null)
+                    // A provider can stop answering after a dialog opens even with no tracked
+                    // call; the cached HWND paths below never touch UI Automation.
+                    Window? window = null;
+                    try
                     {
-                        return Task.FromResult(ErrorResult($"Window not found: {handle}"));
+                        window = _sessionManager.GetWindow(handle);
+                        if (window == null)
+                        {
+                            return Task.FromResult(ErrorResult($"Window not found: {handle}"));
+                        }
                     }
+                    catch (TimeoutException) { }
 
                     if (background)
                     {
-                        if (NativeWindowCapture.TryCaptureWindow(window, out var backgroundImage, out var reason))
+                        if (NativeWindowCapture.TryCaptureHwnd(targetHwnd, out var backgroundImage, out var reason))
                         {
                             sourceBounds = Win32Desktop.GetWindowBounds(targetHwnd);
                             method = "native-window";
@@ -234,9 +241,27 @@ public class ScreenshotTool : ToolBase
                             return Task.FromResult(ErrorResult($"Native capture failed: {reason}. Screen-pixel fallback is disabled; no screenshot was taken."));
                     }
 
-                    capture = Capture.Element(window);
-                    sourceBounds = window.BoundingRectangle;
-                    if (background) method = "screen-fallback";
+                    CaptureImage? elementCapture = null;
+                    try
+                    {
+                        if (window != null)
+                        {
+                            sourceBounds = window.BoundingRectangle;
+                            elementCapture = Capture.Element(window);
+                            if (background) method = "screen-fallback";
+                        }
+                    }
+                    catch (TimeoutException) { }
+                    if (elementCapture == null)
+                    {
+                        var bounds = targetHwnd != 0 ? Win32Desktop.GetWindowBounds(targetHwnd) : null;
+                        if (bounds == null)
+                            return Task.FromResult(ErrorResult("UI Automation timed out for this window and its bounds are unknown. Use windows_list_windows for a current handle."));
+                        elementCapture = Capture.Rectangle(bounds.Value);
+                        sourceBounds = bounds;
+                        method = "screen-fallback";
+                    }
+                    capture = elementCapture;
                 }
             }
             else

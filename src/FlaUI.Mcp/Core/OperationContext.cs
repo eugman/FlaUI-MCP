@@ -38,8 +38,9 @@ public sealed class OperationCoordinator
         {
             var dispatch = o.Finished ? (o.Error == null ? "completed" : "failed") : (o.Stop.IsCancellationRequested ? "timed_out_pending" : "running");
             var patterns = pending?.ForOperation(o.Id) ?? [];
+            // A returned dispatch whose pattern call still holds the provider is not done for the caller.
             return new { operationId = o.Id, o.ProcessId, o.ProcessStartedTicks, o.Tool, o.StartedUtc,
-                status = dispatch, dispatch, provider = pending == null ? "not-tracked" : patterns.Length > 0 ? "pending" : "idle",
+                status = patterns.Length > 0 ? "provider_pending" : dispatch, dispatch, provider = pending == null ? "not-tracked" : patterns.Length > 0 ? "pending" : "idle",
                 pendingPatternIds = patterns, o.Error };
         }).ToArray();
 }

@@ -452,6 +452,11 @@ namespace WinFormsTestApp
             };
             layout.Controls.Add(modalButton);
 
+            // The same modal behind an ellipsis name, which windows_click opens with a physical click
+            var ellipsisButton = new Button { Text = "Choose Options...", Name = "ChooseOptionsButton", AutoSize = true };
+            ellipsisButton.Click += (s, e) => modalButton.PerformClick();
+            layout.Controls.Add(ellipsisButton);
+
             // Button that opens a modeless dialog
             var modelessButton = new Button
             {

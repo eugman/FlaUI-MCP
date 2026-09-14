@@ -7,6 +7,14 @@ namespace FlaUI.Mcp.Tests;
 public class NativeWindowCaptureTests
 {
     [Fact]
+    public void TryCaptureHwnd_RejectsMissingHandleWithoutUiAutomation()
+    {
+        Assert.False(NativeWindowCapture.TryCaptureHwnd(0, out var image, out var reason));
+        Assert.Empty(image);
+        Assert.Equal("No native window handle available", reason);
+    }
+
+    [Fact]
     public void IsBlankOrNearlyBlank_ReturnsTrue_ForBlackBitmap()
     {
         using var bitmap = new Bitmap(16, 16);
