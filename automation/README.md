@@ -9,7 +9,7 @@ then load only the relevant locator or recipe section.
 
 The opt-in [TE3 MCP companion](COMPANION.md) serves compact map topics and typed
 attach-only navigation/capture tools; the generic MCP server stays TE3-independent.
-Agent comparisons follow the [four-arm runbook](experiments/FOUR-ARM.md).
+Agent comparisons follow the [ladder study](experiments/LADDER.md).
 
 Composition is optional post-processing, not a capture prerequisite. Raw checkpoint
 PNGs remain unchanged. Use a separate output/checkpoint for each crop or annotation

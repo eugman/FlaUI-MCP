@@ -1,8 +1,8 @@
 # TE3 3.26.3 locator notes
 
-For agent procedures start with [the compact map](map/start.md); the catalog and MCP
-resources serve the same topic files. The notes below are historical runner
-observations. Live status is in [VERIFICATION.md](VERIFICATION.md).
+Agent guidance is built as skill layers by [the ladder study](experiments/LADDER.md),
+using author notes in [skills/te3-notes](skills/te3-notes/start.md). The notes below are
+historical runner observations. Live status is in [VERIFICATION.md](VERIFICATION.md).
 
 | Area | Locator | Notes |
 |---|---|---|

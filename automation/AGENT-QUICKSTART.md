@@ -3,18 +3,15 @@
 Observed on TE3 3.26.3. This is a locator/operation index, not a stored UI snapshot.
 Use fresh window handles and refs; never reuse identifiers from saved run maps.
 
-## Map delivery and optional companion
+## Companion and guidance
 
-Read [map/start.md](map/start.md), then only the matching topic. The same content
-is embedded in `FlaUI.Automation mcp` as `te3_catalog` and `te3://map/...` resources.
-`mcp --guidance-only` exposes just the catalog/resources for guided ablation arms.
-Full companion adds `te3_inspect`, `te3_navigate`, and `te3_capture`; it attaches by
-explicit TE3 PID and never launches, resets preferences, or closes TE3. Its handles
-are private to that server; do not pass generic-server refs into companion calls.
-See [COMPANION.md](COMPANION.md); live status is in [VERIFICATION.md](VERIFICATION.md).
+`FlaUI.Automation mcp` adds `te3_inspect`, `te3_navigate` and `te3_capture`. It attaches by
+explicit TE3 PID and never launches, resets preferences or closes TE3. Its handles are
+private to that server; don't pass generic-server refs into companion calls. See
+[COMPANION.md](COMPANION.md); live status is in [VERIFICATION.md](VERIFICATION.md).
 
-Optional packaged skill: [te3-ui](skills/te3-ui/SKILL.md). It is not installed
-automatically; do not expose it to unguided experiment arms.
+Agent guidance is built as skill layers by [the ladder study](experiments/LADDER.md).
+Author notes for those layers are in [skills/te3-notes](skills/te3-notes/start.md).
 
 ## Choose the cheapest adequate observation
 

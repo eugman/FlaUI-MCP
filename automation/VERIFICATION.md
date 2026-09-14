@@ -12,7 +12,7 @@ don't establish live UI behavior.
 | Integration tests | 38/38 passed 2026-09-14 (`artifacts/live-main-20260914/integration-fixed.trx`) |
 | Offline recipes | Batch of 15, Preferences map and language choices passed on TE3 3.26.3, 2026-09-14; settings restored and all PNG hashes match. Language choices first failed closed while a pinned Microsoft Teams window overlapped the popup scene, then passed with it closed |
 | Companion navigation/capture | Live smoke passed 2026-09-14 (`artifacts/live-main-20260914/companion-smoke`): catalog, inspect, and navigate plus capture for all five registry destinations; map revision `40c8c181762f` (before the map trim); settings restored |
-| Four-arm study | Formatting: 16 trials scored (12 in r1, plus a 4-trial Luna repeat). Object: none scored yet (2 model-capacity failures, 1 interrupted Terra run, whose settings were recovered 2026-09-14). `instruction-study-20260914-object-r3` was prepared and preflighted from the build before the generic MCP hardening; no trials run yet. See [FOUR-ARM.md](experiments/FOUR-ARM.md) |
+| Agent studies | Codex four-arm results (16 formatting trials, 2026-09-13/14) are historical and not pooled. The Claude ladder study ([LADDER.md](experiments/LADDER.md)) has not run yet |
 | Screenshot approval/promotion | None approved or promoted |
 | Original docs checkout | Untouched |
 
@@ -31,7 +31,7 @@ tests failed. `windows_snapshot` still defaults to 20k for agents.
 - activation blocker results
 - `recover` and `needsRecovery` after a real interruption
 - the PNG hash check during an actual promotion
-- study harness revision four-arm-3
+- the Claude ladder harness
 
 The main window was observed at 120 DPI (125%). Other scaling levels are unverified.
 
