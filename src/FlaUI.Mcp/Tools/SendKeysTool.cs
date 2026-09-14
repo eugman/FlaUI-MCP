@@ -241,8 +241,7 @@ public class SendKeysTool : ToolBase
             }
 
             using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId), verifyFocus);
-            // Name the receiver before sending: keys sent blind can press a focused Cancel button.
-            var targetName = string.IsNullOrWhiteSpace(refId) ? Win32Desktop.DescribeFocus(Win32Desktop.GetForegroundWindow()) : refId;
+            var targetName = string.IsNullOrWhiteSpace(refId) ? "focused element" : refId;
             foreach (var step in prepared)
             {
                 inputAttempted = true;

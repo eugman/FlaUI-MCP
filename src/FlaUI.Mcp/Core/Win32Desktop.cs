@@ -94,42 +94,6 @@ public static class Win32Desktop
     [DllImport("user32.dll")]
     private static extern nint WindowFromPoint(System.Drawing.Point point);
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct GUITHREADINFO
-    {
-        public int cbSize, flags;
-        public nint hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
-        public RECT rcCaret;
-    }
-
-    [DllImport("user32.dll")]
-    private static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO info);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(nint hWnd, StringBuilder lpClassName, int nMaxCount);
-
-    /// <summary>
-    /// Names the native control holding keyboard focus in a window's GUI thread, e.g. BUTTON "Cancel".
-    /// Win32 only, so it answers while UI Automation is blocked. A control drawn inside a parent
-    /// (no HWND of its own) is reported as that parent.
-    /// </summary>
-    public static string DescribeFocus(nint hwnd)
-    {
-        var thread = hwnd == 0 ? 0 : GetWindowThreadProcessId(hwnd, out _);
-        var info = new GUITHREADINFO { cbSize = Marshal.SizeOf<GUITHREADINFO>() };
-        if (thread == 0 || !GetGUIThreadInfo(thread, ref info) || info.hwndFocus == 0) return "focused element (control unknown)";
-        static string Read(Func<nint, StringBuilder, int, int> read, nint target)
-        {
-            var text = new StringBuilder(256);
-            read(target, text, text.Capacity);
-            return text.Length > 60 ? text.ToString(0, 60) + "…" : text.ToString();
-        }
-        // WinForms classes look like WindowsForms10.BUTTON.app.0.2b89eaa_r3_ad1; the middle part is the control kind.
-        var className = Read(GetClassName, info.hwndFocus).Split(".app.")[0].Replace("WindowsForms10.", "");
-        var text = Read(GetWindowText, info.hwndFocus);
-        return $"focused {className}{(text.Length > 0 ? $" \"{text}\"" : "")} in window \"{Read(GetWindowText, GetAncestor(info.hwndFocus, 2))}\"";
-    }
-
     public static int GetProcessId(nint hwnd)
     {
         GetWindowThreadProcessId(hwnd, out var pid);

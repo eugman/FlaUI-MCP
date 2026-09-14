@@ -147,8 +147,18 @@ public class ClickTool : ToolBase
             }
             else
             {
+                var opensDialog = physical && EndsWithEllipsis(elementName) && processId != 0;
+                var before = opensDialog ? Win32Desktop.GetTopLevelWindows(processId) : [];
                 input.Click(element, mouseButton);
-                return Task.FromResult(TextResult($"Clicked {elementName}"));
+                if (!opensDialog) return Task.FromResult(TextResult($"Clicked {elementName}"));
+                // A physical click returns before its dialog exists; report the window so agents don't list too early.
+                for (var waited = 0; waited < 2000; waited += 100)
+                {
+                    if (NewWindowTitle(before, Win32Desktop.GetTopLevelWindows(processId)) is { } title)
+                        return Task.FromResult(TextResult($"Clicked {elementName}; window \"{title}\" opened. Get its handle from windows_list_windows."));
+                    Thread.Sleep(100);
+                }
+                return Task.FromResult(TextResult($"Clicked {elementName}; no new window appeared within 2 seconds."));
             }
         }
         catch (Exception ex)
@@ -161,10 +171,18 @@ public class ClickTool : ToolBase
     /// Menus and "..." commands usually open a popup or modal. Invoke on them does not return
     /// until it closes, which blocks the provider the agent needs to inspect that popup.
     /// </summary>
-    internal static bool PrefersPhysical(ControlType type, string? name)
+    internal static bool PrefersPhysical(ControlType type, string? name) => type == ControlType.MenuItem || EndsWithEllipsis(name);
+
+    private static bool EndsWithEllipsis(string? name)
     {
         var trimmed = name?.TrimEnd() ?? "";
-        return type == ControlType.MenuItem || trimmed.EndsWith("...") || trimmed.EndsWith('…');
+        return trimmed.EndsWith("...") || trimmed.EndsWith('…');
+    }
+
+    internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after)
+    {
+        var known = before.Select(w => w.Hwnd).ToHashSet();
+        return after.FirstOrDefault(w => !known.Contains(w.Hwnd) && w.Title.Length > 0)?.Title;
     }
 
     /// <summary>

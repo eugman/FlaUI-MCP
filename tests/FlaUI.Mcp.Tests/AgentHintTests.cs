@@ -35,8 +35,13 @@ public sealed class AgentHintTests
     }
 
     [Fact]
-    public void FocusDescriptionSaysUnknownWithoutAWindow()
-        => Assert.Equal("focused element (control unknown)", Win32Desktop.DescribeFocus(0));
+    public void NewWindowTitleReportsOnlyATitledWindowThatWasNotThereBefore()
+    {
+        Win32WindowInfo[] before = [new(1, "Main", 7, true, false, false)];
+        Assert.Null(ClickTool.NewWindowTitle(before, before));
+        Assert.Null(ClickTool.NewWindowTitle(before, [.. before, new(2, "", 7, true, false, false)]));
+        Assert.Equal("Preferences", ClickTool.NewWindowTitle(before, [.. before, new(3, "Preferences", 7, true, false, false)]));
+    }
 
     [Fact]
     public void FindHintsOnlyWhenAFilteredSearchMatchesNothing()
