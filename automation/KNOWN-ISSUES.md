@@ -7,8 +7,8 @@ report is ready in the `bug-reports` repository at
 Clearing the Preferences search box, with its × button or by deleting the text,
 blanks the settings pane. It does this even when the category was chosen by
 navigating the tree and the search box was already empty; the category stays
-highlighted. Automation should never use the search box: navigate the tree to
-the category instead. Clicking the category again restores its settings.
+highlighted. It is being filed upstream. Until it is fixed, click the category
+again after any change to the search text; that restores its settings.
 
 A successful interaction test is not visual approval of its screenshot.
 
