@@ -24,7 +24,6 @@ public static partial class DiscoveryRecipes
     private static readonly string[][] Submenus = [["File", "Open"], ["Window", "Language"], ["Window", "Theme"], ["Edit", "Code Assist"], ["View", "Toolbars"]];
     private static readonly string[][] DialogPaths =
     [
-        ["File", "Open", "Model from DB..."],
         ["Window", "Layouts..."],
         ["Window", "Windows..."],
         ["Tools", "Manage BPA rules..."]
@@ -111,6 +110,8 @@ public static partial class DiscoveryRecipes
         WriteErrors(c, errors);
     }
 
+    // Round 2 first ran on 2026-09-15 (fla_20260915_111556_d7a3fd70): the submenus, Roles > Create and the Model from DB
+    // and Layouts dialogs were mapped. It stopped when Escape did not close Layouts. The rerun keeps only what is left.
     public static async Task Backlog2(RecipeContext c)
     {
         var page = c.Page;
@@ -119,25 +120,7 @@ public static partial class DiscoveryRecipes
 
         await c.Unchanged(async () =>
         {
-            foreach (var path in Submenus)
-                await probe("submenu " + string.Join(" > ", path), async () =>
-                {
-                    await page.OpenMenuPath(path);
-                    var name = Slug(string.Join(" ", path));
-                    await page.MapPopups(c.OutputPath($"menu-{name}.uia.json"));
-                    await page.SaveImage(page.MainHandle, c.OutputPath($"menu-{name}.png"), background: false);
-                    for (var i = 0; i < path.Length; i++) await page.PressKeys("Escape");
-                });
-
             await probe("TOM tab", page.OpenTom);
-            await probe("Roles > Create", async () =>
-            {
-                await page.OpenContextMenu(["Roles"], "Create");
-                await page.MapPopups(c.OutputPath("context-roles-create.uia.json"));
-                await page.SaveImage(page.MainHandle, c.OutputPath("context-roles-create.png"), background: false);
-                await page.PressKeys("Escape");
-                await page.PressKeys("Escape");
-            });
             // Two ways to reach a table row that may be scrolled out of view; the errors file says which works.
             await probe("Invoices by node path", async () =>
             {

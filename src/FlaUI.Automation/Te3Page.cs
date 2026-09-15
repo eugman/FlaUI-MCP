@@ -1005,24 +1005,47 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         await ClickThroughPopups(before, path.Skip(1));
     }
 
-    /// <summary>Selects a TOM Explorer row by the values along its path, expanding each parent, e.g. ("Tables", "Invoices").</summary>
+    /// <summary>
+    /// Selects a TOM Explorer row by the values along its path, e.g. ("Tables", "Invoices"). The tree is collapsed first so
+    /// top-level folders are in view; each parent is expanded and the child is the first matching row below it.
+    /// </summary>
     public async Task SelectNodePath(params string[] path)
     {
         if (path.Length == 0) throw new ArgumentException("Node path required");
+        await CollapseObjectTree();
         for (var i = 0; i < path.Length; i++)
         {
-            await SelectObject(path[i]);
+            await SelectFirstRow(path[i]);
             if (i < path.Length - 1) await ExpandSelected();
         }
     }
 
-    /// <summary>Selects a TOM Explorer row by filtering with the search box, then clears the search.</summary>
+    /// <summary>
+    /// Selects a TOM Explorer row by filtering with the search box, then clears the search. A filter can show a table and
+    /// its partition with the same value; the table is the first row in tree order.
+    /// </summary>
     public async Task SelectBySearch(string name)
     {
         await Fill(SearchTarget(), name);
         await Task.Delay(500);
-        await SelectObject(name);
+        await SelectFirstRow(name);
         await ResetSearch();
+    }
+
+    // Rows are matched by value in tree order; a row scrolled out of view is brought into view before the physical click.
+    private async Task SelectFirstRow(string value)
+    {
+        var target = ObjectTarget(value);
+        reportStep?.Invoke($"Select first TOM Explorer row with value {value}");
+        var found = await Task.Run(() => query.Find(handle, target.Selector, target.Within, maxResults: 10,
+            budget: new SearchBudget(3000, TimeSpan.FromSeconds(3)))).WaitAsync(TimeSpan.FromSeconds(5));
+        var first = found.Elements.FirstOrDefault() ?? throw new InvalidOperationException($"No TOM Explorer row with value {value}");
+        var element = host.Elements.GetElement(first.Ref);
+        await Task.Run(() =>
+        {
+            if (element.Patterns.ScrollItem.IsSupported) element.Patterns.ScrollItem.Pattern.ScrollIntoView();
+        }).WaitAsync(TimeSpan.FromSeconds(5));
+        await invoke("windows_click", new { @ref = first.Ref, physical = true });
     }
 
     /// <summary>Opens the context menu of a TOM Explorer row with Shift+F10, then clicks any cascade items such as "Create".</summary>
@@ -1044,11 +1067,21 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         return new(dialogHandle, window.Hwnd, window.Title);
     }
 
-    /// <summary>Closes a dialog with Escape; nothing is confirmed.</summary>
+    /// <summary>
+    /// Closes a dialog without confirming anything: Escape first, then its Cancel button, then the title-bar Close button.
+    /// Escape can be swallowed by a focused grid (the Layouts dialog has no Cancel button at all).
+    /// </summary>
     public async Task CancelDialog(Dialog dialog)
     {
         await SendKeysTo(dialog.Handle, "Escape");
-        await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(10));
+        foreach (var button in new[] { "Cancel", "Close" })
+        {
+            try { await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(2)); return; }
+            catch (TimeoutException) { }
+            try { await invoke("windows_click", new { @ref = await DialogRef(dialog, button, "Button") }); }
+            catch (Exception error) when (error is InvalidOperationException or TimeoutException) { }
+        }
+        await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(5));
     }
 
     public async Task StageField(Dialog dialog, string name, string controlType, string value) =>

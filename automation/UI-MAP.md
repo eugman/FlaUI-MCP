@@ -179,6 +179,30 @@ Maps from the `discovery-backlog` run (`artifacts/te3/fla_20260915_104919_ab1414
   "Features" return nothing.
 - A plain (non-background) `windows_screenshot` of the main window includes an open popup menu; background captures do not.
 
+Round 2 (`fla_20260915_111556_d7a3fd70`), using the recipe helpers:
+
+- **File > Open:** Model from File..., Model from DB..., Model from Folder..., File..., Import from Metric View YAML....
+  `OpenMenuPath` resolved "Model from DB..." uniquely by searching only the Open popup.
+- **Window > Language:** CheckBoxes English, Deutsch (Beta), Español (Preview), Français (Beta), 中文(简体) (Preview),
+  日本語 (Beta). **Window > Theme:** Basic, Bezier, Blue, Dark, Light.
+- **Edit > Code Assist:** Peek Definition, Go to definition, Define Measure, Inline Measure, Format DAX, Comment Code,
+  Uncomment Code, Comment/Uncomment, Refactor, Show Calltip, Autocomplete, Show Code Actions.
+- **View > Toolbars:** Tools, Status bar, DAX Query, DAX Script, DAX Expression, C# Script, Pivot Grid, Table Preview, Debug,
+  Perspective Editor, Metadata Translation Editor, Customize ....
+- **Roles context menu > Create:** Role. Shift+F10 on the Roles row opens the menu; the Create cascade opens with a physical click.
+- **Load Semantic Model from Database:** Server and Local instance ComboBoxes; Integrated, Microsoft Entra MFA and Username
+  and password RadioButtons; Username/Password Edits; Advanced options with Mode (Read/Write) and Status bar color; OK/Cancel.
+  Escape closes it.
+- **Layouts:** a Name/Path grid (Default, Classic) with Apply Layout, Load Layout..., Remove Layout, Remove All Layouts,
+  Save Layout, Save Layout As... and OK, and no Cancel. **Escape does not close it** (the grid takes it); use the
+  title-bar Close button. `CancelDialog` now falls back to Cancel, then Close, and never presses OK.
+- **TOM Explorer rows:** after expanding Tables, rows below the viewport (Invoices) cannot be clicked physically, and a
+  collapsed-then-expanded tree pushes top-level folders such as Roles out of view. Searching "Invoices" shows both the
+  table and its partition with the same value. The helpers now take the first match in tree order, call ScrollIntoView
+  when the row supports ScrollItem, and collapse the tree before walking a path.
+- **Invoices on the offline fixture:** Properties show Incremental Refresh Enabled True and Refresh Policy
+  "5 year rolling, 10 day incremental"; the Expression Editor offers "Default Detail Rows Expression" on the table.
+
 ## Original scalar-output image: remaining fidelity gap
 
 Original `c-sharp-script-output-function.png` is 704x361, including a source strip
