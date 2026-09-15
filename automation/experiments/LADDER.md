@@ -33,10 +33,18 @@ repeats. Prompts are `tasks` in `ladder-study.mjs`; rubrics are `rubrics` in
 
 | Trained | Hold-out |
 |---|---|
-| `formatting`, `code-actions` (Preferences) | `dax-general` (Preferences > DAX Editor > General) |
-| `column`, `measure`, `table`, `tom-tree` (TOM Explorer) | `save-to-folder` (Preferences > File Formats) |
-| `script-run`, `script-source` (C# scripts) | `calc-group-menu` (Model menu open) |
+| `formatting`, `code-actions` (Preferences) | `bpa-view` (Best Practice Analyzer view) |
+| `column`, `measure`, `table`, `tom-tree` (TOM Explorer) | `dax-query` (new DAX Query document) |
+| `script-run`, `script-edit` (C# scripts) | `calc-group-menu` (Model menu open) |
 | | `model-properties` (model root node Properties) |
+
+Round 1 used `script-source`, `dax-general` and `save-to-folder` in place of
+`script-edit`, `bpa-view` and `dax-query`. Guidance was written after reading the
+`dax-general` and `save-to-folder` transcripts (the Preferences search-scope line,
+added in 2ff9d1c and removed before round 2), so those two results are contaminated
+for conditions 4 and 5 from the `c4b`/`c5b` reruns on. Round 2 replaced them.
+`summarize` takes each trial's hold-out status from its own `study.json`, so round-1
+rows keep their original classification.
 
 The fixture has no relationships. The first hold-out list had a `relationship` task,
 which no agent could complete; it was replaced by `model-properties`. Trials of
@@ -58,6 +66,32 @@ skill layer names hold-out UI.
   shuffled order; run them in that order.
 - Keep every attempted trial, including failures and interruptions. Never replace
   one with a retry.
+
+### Round 2
+
+- **Question:** do the call-count differences between conditions 3, 4 and 5
+  replicate on the 9 unchanged tasks, and did anything regress? It also gives first
+  results on the 3 new tasks. It does not estimate the effect of the generic MCP
+  fixes made between rounds (key names, newlines, `windows_paste`, lookup
+  candidates, launch error).
+- **Conditions:** 5, 4, 3, then 1, one run per task (48 trials).
+  - Condition 1 is unchanged and checks for drift in Claude Code, Sonnet or TE3.
+  - Condition 2 is not rerun.
+- **Setup:** configs `artifacts/tasks12-r2-cN-sonnet.config.json`, with
+  `label: "r2"` and seed 20260915, prepared into `artifacts/study-tasks12-r2-cN-sonnet`.
+- **Guidance is frozen:** the generic skill, map and `te3-tools` line don't change
+  during or after round 2. The round-2 transcript review classifies failures only.
+- **Grading:** all 48 trials are packed into one blind review.
+- **Report:** rounds side by side per task, with no averaging across rounds and median
+  calls as the cost measure.
+
+**Pre-registered targets**
+- Conditions 3–5 pass 12/12 with 0 false claims.
+- No "Unsupported key" error in any trial.
+- Median calls on the 9 unchanged tasks: condition 5 ≤ condition 4 ≤ condition 3.
+- `script-edit` shows the exact two lines in conditions 3–5, and at least one trial
+  uses `windows_paste`.
+- Condition 4 formatting has no rejected key names.
 
 ### Extended-budget reruns
 
