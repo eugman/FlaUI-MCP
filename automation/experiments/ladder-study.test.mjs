@@ -17,6 +17,11 @@ test('twelve distinct tasks, the last three held out', () => {
   assert.deepEqual(Object.keys(tasks).slice(-3), holdoutTasks);
 });
 
+test('only server tasks are told they have a local test database', () => {
+  assert.match(promptFor('dax-query', '', 'x.csx', 'out.png'), /Disposable test database on a local server/);
+  assert.match(promptFor('table', '', 'x.csx', 'out.png'), /Offline disposable model; no server access\./);
+});
+
 test('schedule runs each task once and shuffles deterministically by seed', () => {
   const base = { rung: '1', model: 'sonnet', tasks: Object.keys(tasks), trialsPerTask: 1 };
   const first = schedule({ ...base, seed: 7 });

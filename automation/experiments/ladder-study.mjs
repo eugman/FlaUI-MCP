@@ -48,8 +48,13 @@ function expand(value) {
   return path.resolve(expanded);
 }
 
+// TE3 needs an engine connection for DAX queries, so these tasks open an existing test database instead of the offline fixture.
+export const serverTasks = ['dax-query'];
+const serverFixture = { server: 'localhost', fixedSlot: 'fla_te3_small' };
+
 export function promptFor(task, skillText, scriptPath, outputPath, { maxCalls = 60, agentMinutes = 7 } = {}) {
-  let prompt = `${tasks[task]}\n\nThe owned TE3 processId is {{PID}}. Save the final PNG to ${outputPath}. Preserve model content and preferences. Do not launch or close TE3; the controller owns lifecycle and restoration. You may focus this test instance. Offline disposable model; no server access.`;
+  const fixture = serverTasks.includes(task) ? 'Disposable test database on a local server; do not deploy or save changes.' : 'Offline disposable model; no server access.';
+  let prompt = `${tasks[task]}\n\nThe owned TE3 processId is {{PID}}. Save the final PNG to ${outputPath}. Preserve model content and preferences. Do not launch or close TE3; the controller owns lifecycle and restoration. You may focus this test instance. ${fixture}`;
   if (task === 'script-run') {
     prompt += `\nSupplied source: ${scriptPath}. You are authorized to execute this exact read-only output script.`;
   }
@@ -265,6 +270,9 @@ export async function prepare(configPath, destination) {
   write(path.join(out, 'controller.config.json'), {
     te3: config.te3, te: config.te, fixtureMode: 'offline', offlineBaseline: path.join(out, 'fixture.bim'),
     output: out, maximizeWindow: true, expectedDpi: 120, repeat: 1, scenarios: ['model-open']
+  });
+  write(path.join(out, 'controller.server.config.json'), {
+    ...json(path.join(out, 'controller.config.json')), fixtureMode: 'fixed', ...serverFixture
   });
 
   write(path.join(out, 'study.json'), {
@@ -566,7 +574,8 @@ export async function run(directory, id, approved) {
   const agentCommand = claudeCommand(study.config.claudeEntry, trial.model, path.join(dir, 'mcp.json'));
   const agentMinutes = study.config.agentMinutes ?? 7;
   // The hold outlasts the agent deadline by the controller's startup and restoration margin.
-  const controllerCommand = [study.config.controller, 'hold', path.join(root, 'controller.config.json'), dir, String(agentMinutes + 3)];
+  const controllerConfig = serverTasks.includes(trial.task) ? 'controller.server.config.json' : 'controller.config.json';
+  const controllerCommand = [study.config.controller, 'hold', path.join(root, controllerConfig), dir, String(agentMinutes + 3)];
   write(path.join(dir, 'invocation.json'), { agentCwd, agentCommand, controllerCommand });
   return runTrialSession({ directory: dir, trial, agentCwd, agentCommand, controllerCommand,
     agentMs: agentMinutes * 60000,

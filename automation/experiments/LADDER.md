@@ -82,6 +82,9 @@ skill layer names hold-out UI.
   - Condition 2 is not rerun.
 - **Setup:** configs `artifacts/tasks12-r2-cN-sonnet.config.json`, with
   `label: "r2"` and seed 20260915, prepared into `artifacts/study-tasks12-r2-cN-sonnet`.
+- **Server task:** TE3 needs an engine connection for DAX queries, so `dax-query`
+  opens the existing `fla_te3_small` database on localhost (`controller.server.config.json`)
+  and its prompt says so. Every other task uses the offline fixture.
 - **Guidance is frozen:** the generic skill, map and `te3-tools` line don't change
   during or after round 2. The round-2 transcript review classifies failures only.
   Round-1 condition 3 ran before the open-menu exception was added, so its

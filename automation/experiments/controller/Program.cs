@@ -11,7 +11,8 @@ if (File.Exists(Path.Combine(output, "ready.json")) || File.Exists(Path.Combine(
     throw new IOException("Use a fresh trial directory");
 var config = RunConfig.Read(args[1]) with { Output = output };
 config.ValidateFiles();
-if (config.FixtureMode != "offline") throw new ArgumentException("Study requires an offline fixture");
+// Tasks that need an engine (dax-query) hold an existing fla_ database instead of the offline fixture.
+if (config.FixtureMode is not ("offline" or "fixed")) throw new ArgumentException("Study requires an offline fixture or a fixed fla_ database");
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 DpiUtility.EnablePerMonitorV2();
