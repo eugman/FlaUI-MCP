@@ -73,19 +73,20 @@ public class SessionManager : IDisposable
 
         Thread.Sleep(1000); // Extra wait for window to appear
         Window? window = null;
+        var timeouts = 0;
+        IReadOnlyList<Win32WindowInfo> Candidates() => Win32Desktop.GetTopLevelWindows(process.Id).Where(w => !w.IsToolWindow && !w.IsCloaked).ToArray();
         // A title or an unregistered window is not proof of launch ownership.
         // Brokered/single-instance launches must be attached explicitly by the caller.
-        for (var attempt = 0; attempt < 10 && window == null; attempt++)
+        for (var attempt = 0; attempt < 10 && window == null && timeouts < 2; attempt++)
         {
             OperationContext.Check();
             if (process.HasExited) break;
-            var candidates = Win32Desktop.GetTopLevelWindows(process.Id)
-                .Where(w => !w.IsToolWindow && !w.IsCloaked).ToArray();
-            if (candidates.Length == 1)
+            var candidates = Candidates();
+            if (candidates.Count == 1)
             {
-                // A provider still starting up can time out; keep polling, then fall through to the no-relaunch error.
+                // A provider still starting up can time out; each timeout already waited, so stop after two.
                 try { window = Automation.FromHandle(candidates[0].Hwnd)?.AsWindow(); }
-                catch (TimeoutException) { }
+                catch (TimeoutException) { timeouts++; }
                 OperationContext.Check();
             }
             if (window == null) Thread.Sleep(500);
@@ -95,17 +96,18 @@ public class SessionManager : IDisposable
         {
             var exited = process.HasExited;
             var titles = exited || !_processPolicy.IsProcessAllowed(process.Id) ? Array.Empty<string>()
-                : Win32Desktop.GetTopLevelWindows(process.Id).Select(w => w.Title).Where(t => t.Length > 0).ToArray();
-            throw new Exception(LaunchFailure(appPath, process.Id, exited, titles));
+                : Candidates().Select(w => w.Title).Where(t => t.Length > 0).ToArray();
+            throw new Exception(LaunchFailure(appPath, process.Id, exited, titles, timeouts > 0));
         }
 
         var windowHandle = RegisterWindow(window);
         return (windowHandle, window);
     }
 
-    internal static string LaunchFailure(string appPath, int processId, bool exited, IReadOnlyList<string> titles) => exited
+    internal static string LaunchFailure(string appPath, int processId, bool exited, IReadOnlyList<string> titles, bool timedOut = false) => exited
         ? $"Launch was requested for {appPath} (PID {processId}), but that process has exited; another instance may own the window. Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window."
-        : $"Launch was requested for {appPath} (PID {processId}), but no unique owned window was found" +
+        : $"Launch was requested for {appPath} (PID {processId}), but " +
+          (timedOut ? "its window did not respond to UI Automation in time" : "no unique owned window was found") +
           (titles.Count > 0 ? $"; its windows are {string.Join(", ", titles.Select(t => $"\"{t}\""))}" : "") +
           ". Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window.";
 

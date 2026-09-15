@@ -54,6 +54,7 @@ public sealed class AgentHintTests
     }
 
     [Theory]
+    [InlineData("", new[] { "" })]
     [InlineData("one", new[] { "one" })]
     [InlineData("a\r\nb", new[] { "a", "b" })]
     [InlineData("a\rb\n", new[] { "a", "b", "" })]
@@ -64,6 +65,7 @@ public sealed class AgentHintTests
     {
         var tool = new SendKeysTool(new ElementRegistry());
         Assert.Equal(tool.PrepareSequence(["PageDown"])[0].Keys, tool.PrepareSequence(["Page Down"])[0].Keys);
+        Assert.Equal([FlaUI.Core.WindowsAPI.VirtualKeyShort.APPS], tool.PrepareSequence(["Context Menu"])[0].Keys);
         Assert.Equal(tool.PrepareSequence(["Apps"])[0].Keys, tool.PrepareSequence(["Context Menu"])[0].Keys);
     }
 
@@ -82,6 +84,9 @@ public sealed class AgentHintTests
         Assert.Contains("\"Use a Workspace Database?\"", running);
         Assert.Contains("Do not blindly relaunch", running);
         Assert.Contains("has exited", SessionManager.LaunchFailure("te3.exe", 7, true, []));
+        var slow = SessionManager.LaunchFailure("te3.exe", 7, false, [], timedOut: true);
+        Assert.Contains("did not respond to UI Automation in time", slow);
+        Assert.DoesNotContain("no unique owned window", slow);
     }
 
     [Fact]

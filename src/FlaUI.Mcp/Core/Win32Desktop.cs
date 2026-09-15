@@ -92,7 +92,9 @@ public static class Win32Desktop
             {
                 EmptyClipboard();
                 SetClipboardBytes(CF_UNICODETEXT, Encoding.Unicode.GetBytes(text + "\0"));
-                SetClipboardBytes(RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing"), new byte[4]);
+                // Keeping the text out of clipboard history is best effort; the paste still works without it.
+                try { SetClipboardBytes(RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing"), new byte[4]); }
+                catch (InvalidOperationException) { }
                 return true;
             }
             finally { CloseClipboard(); }
@@ -104,8 +106,14 @@ public static class Win32Desktop
     {
         var memory = GlobalAlloc(GMEM_MOVEABLE, (nuint)bytes.Length);
         if (memory == 0) throw new InvalidOperationException("Clipboard memory allocation failed.");
-        Marshal.Copy(bytes, 0, GlobalLock(memory), bytes.Length);
-        GlobalUnlock(memory);
+        var pointer = GlobalLock(memory);
+        if (pointer == 0)
+        {
+            GlobalFree(memory);
+            throw new InvalidOperationException("Clipboard memory could not be locked.");
+        }
+        try { Marshal.Copy(bytes, 0, pointer, bytes.Length); }
+        finally { GlobalUnlock(memory); }
         // On success the clipboard owns the memory.
         if (SetClipboardData(format, memory) == 0)
         {

@@ -70,6 +70,7 @@ public class TypeTool : ToolBase
         var submit = GetBoolArgument(arguments, "submit", false);
         var lines = Lines(text);
         var sentLines = 0;
+        var inputStarted = false;
 
         try
         {
@@ -107,6 +108,7 @@ public class TypeTool : ToolBase
             // Keyboard.Type maps '\n' to Ctrl+Enter, so line breaks are sent as explicit Enter presses.
             foreach (var line in lines)
             {
+                inputStarted = true;
                 if (sentLines > 0) input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.ENTER));
                 input.Type(line);
                 sentLines++;
@@ -122,11 +124,12 @@ public class TypeTool : ToolBase
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ErrorResult($"Failed to type: {ex.Message} Typed {sentLines} of {lines.Length} line(s)."));
+            return Task.FromResult(ErrorResult($"Failed to type: {ex.Message} Typed {sentLines} of {lines.Length} line(s)" +
+                (inputStarted && sentLines < lines.Length ? $"; line {sentLines + 1} may be partly typed." : ".")));
         }
     }
 
-    internal static string[] Lines(string text) => text.ReplaceLineEndings("\n").Split('\n');
+    internal static string[] Lines(string text) => System.Text.RegularExpressions.Regex.Split(text, "\r\n|\r|\n");
 }
 
 /// <summary>

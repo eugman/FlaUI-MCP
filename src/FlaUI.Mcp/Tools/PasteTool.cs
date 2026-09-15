@@ -53,7 +53,8 @@ public sealed class PasteTool(ElementRegistry elements, PendingInvokeTracker pen
             // Take the input lease and verify focus before touching the clipboard.
             using var input = new GuardedInput(refId != null ? elements.InputForRef(refId) : handle != null ? sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(policy),
                 refId == null ? null : elements.GetElement(refId));
-            if (!Win32Desktop.SetClipboardText(text))
+            // Clipboard text uses CRLF; edit controls don't break lines on a bare LF.
+            if (!Win32Desktop.SetClipboardText(text.ReplaceLineEndings("\r\n")))
                 return Task.FromResult(ErrorResult("The clipboard is in use by another process; no input sent."));
             input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
             return Task.FromResult(TextResult($"Pasted {text.Length} characters into {(string.IsNullOrEmpty(refId) ? "focused element" : refId)}. The clipboard now holds that text."));

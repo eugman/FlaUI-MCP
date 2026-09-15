@@ -152,12 +152,13 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
     // windows_find only: when a typed scope selector misses, one small extra search names what is there.
     private string MissCandidates(string handle, ElementSelector selector, ElementSelector? within, bool includeOwned)
     {
-        if (selector.ControlType == null) return "";
+        if (selector.ControlType == null || pending.TryGetPending(sessions.GetWindowProcessId(handle), out _)) return "";
         try
         {
             var found = Find(handle, new ElementSelector(ControlType: selector.ControlType), within, maxResults: 5, includeOwned: includeOwned,
                 budget: new SearchBudget(300, TimeSpan.FromSeconds(1)), register: false);
-            return DescribeCandidates(selector.ControlType, found.Elements);
+            // A search cut short by its budget can't prove there are none.
+            return found.Elements.Count == 0 && !found.Complete ? "" : DescribeCandidates(selector.ControlType, found.Elements);
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or ProviderBlockedException)) { return ""; }
     }
