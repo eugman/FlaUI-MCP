@@ -31,7 +31,8 @@ public static class RecipeCatalog
         new("csharp-output-object", CSharpPage, false, ObjectOutput),
         new("csharp-output-values", CSharpPage, false, ValuesOutput),
         new("file-load-three-cycles", CSharpPage, false, FileLoad),
-        new("csharp-auto-rollback-source", CSharpPage, false, AutoRollbackSource)
+        new("csharp-auto-rollback-source", CSharpPage, false, AutoRollbackSource),
+        new("discovery-backlog", "automation/RECIPES.md", false, DiscoveryRecipes.Backlog)
     ];
 
     public static Recipe[] Select(IEnumerable<string> ids)

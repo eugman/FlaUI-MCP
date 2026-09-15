@@ -73,16 +73,8 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     public async Task OpenPreferences()
     {
         await Click(new(new(Name: "Tools", ControlType: "MenuItem"), new(Name: "Main menu", ControlType: "MenuBar")));
-        var command = await Resolve(new(new(Name: "Preferences...", ControlType: "Button"), null, true));
-        var popup = await MenuPopup(command);
+        await ClickPopupCommand(await Resolve(new(new(Name: "Preferences...", ControlType: "Button"), null, true)), "Preferences command");
         var owner = host.Sessions.GetInputTarget(handle);
-        var point = await Task.Run(command.GetClickablePoint).WaitAsync(TimeSpan.FromSeconds(5));
-        using (var input = new GuardedInput(owner with { HitHwnd = popup }))
-        {
-            if (Win32Desktop.WindowAt(point) != popup) throw new InvalidOperationException("Preferences command is obscured");
-            reportStep?.Invoke("Click Preferences command");
-            input.Send(() => FlaUI.Core.Input.Mouse.Click(point));
-        }
         reportStep?.Invoke("Wait for native Preferences window before querying its controls");
         var opening = Stopwatch.StartNew();
         while (!Win32Desktop.GetTopLevelWindows(owner.ProcessId).Any(w => w.Title == "Preferences"))
@@ -933,6 +925,72 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         reportStep?.Invoke("Apply default layout");
         input.Send(() => FlaUI.Core.Input.Mouse.Click(point));
     }
+    // TE3 menu commands are clicked physically inside their own popup window; UIA Invoke can stay pending.
+    private async Task ClickPopupCommand(AutomationElement command, string label)
+    {
+        var popup = await MenuPopup(command);
+        var owner = host.Sessions.GetInputTarget(handle);
+        var point = await Task.Run(command.GetClickablePoint).WaitAsync(TimeSpan.FromSeconds(5));
+        using var input = new GuardedInput(owner with { HitHwnd = popup });
+        if (Win32Desktop.WindowAt(point) != popup) throw new InvalidOperationException(label + " is obscured");
+        reportStep?.Invoke("Click " + label);
+        input.Send(() => FlaUI.Core.Input.Mouse.Click(point));
+    }
+
+    // Discovery helpers: capture-only probes that record locators before recipes are written.
+    public string MainHandle => handle;
+    public async Task<string[]> MenuBarItems()
+    {
+        var found = await Task.Run(() => query.Find(handle, new(ControlType: "MenuItem"), new(Name: "Main menu", ControlType: "MenuBar"),
+            maxResults: 30, budget: new SearchBudget(1000, TimeSpan.FromSeconds(3)))).WaitAsync(TimeSpan.FromSeconds(5));
+        return found.Elements.Select(e => e.Name).Where(name => !string.IsNullOrEmpty(name)).Distinct().ToArray();
+    }
+    public async Task OpenMenu(string menu)
+    {
+        await Click(new(new(Name: menu, ControlType: "MenuItem"), new(Name: "Main menu", ControlType: "MenuBar")));
+        await Task.Delay(500);
+    }
+    public async Task ClickPopupItem(string name) =>
+        await ClickPopupCommand(await Resolve(new(new(Name: name), null, true)), name);
+    public async Task MapPopups(string path)
+    {
+        var owner = host.Sessions.GetInputTarget(handle);
+        File.WriteAllText(path, JsonSerializer.Serialize(await ObservePopups(owner.ProcessId, maxWindows: null, owner.Hwnd), Indented));
+    }
+    public Task PressKeys(string chord) => Keys(chord);
+    public string Register(Win32WindowInfo window) => host.Sessions.RegisterNativeWindow(window.Hwnd, window.ProcessId);
+    public Win32WindowInfo[] TitledWindows() =>
+        Win32Desktop.GetTopLevelWindows(host.Sessions.GetWindowProcessId(handle)).Where(w => !w.IsCloaked && w.Title.Length > 0).ToArray();
+    public async Task<(string Handle, Win32WindowInfo Window)> WaitForNewWindow(IReadOnlyCollection<nint> before, TimeSpan timeout)
+    {
+        var clock = Stopwatch.StartNew();
+        while (clock.Elapsed < timeout)
+        {
+            var window = TitledWindows().FirstOrDefault(w => !before.Contains(w.Hwnd));
+            if (window != null) return (host.Sessions.RegisterNativeWindow(window.Hwnd, window.ProcessId), window);
+            await Task.Delay(100);
+        }
+        throw new TimeoutException("No new TE3 window opened");
+    }
+    public async Task WaitForWindowClosed(nint hwnd, TimeSpan timeout)
+    {
+        var clock = Stopwatch.StartNew();
+        while (TitledWindows().Any(w => w.Hwnd == hwnd))
+        {
+            if (clock.Elapsed > timeout) throw new TimeoutException("Window did not close");
+            await Task.Delay(100);
+        }
+    }
+    public async Task MapWindow(string windowHandle, string path)
+    {
+        var map = await Task.Run(() => query.Find(windowHandle, new(Visible: true), maxResults: 300,
+            budget: new SearchBudget(2000, TimeSpan.FromSeconds(4)))).WaitAsync(TimeSpan.FromSeconds(6));
+        File.WriteAllText(path, JsonSerializer.Serialize(map, Indented));
+    }
+    public Task SaveImage(string windowHandle, string path, bool background) =>
+        invoke("windows_screenshot", new { handle = windowHandle, savePath = path, includeImage = false, background });
+    public Task SendKeysTo(string windowHandle, string chord) => invoke("windows_send_keys", new { handle = windowHandle, chord });
+
     private async Task<nint> MenuPopup(AutomationElement element)
     {
         var owner = host.Sessions.GetInputTarget(handle);

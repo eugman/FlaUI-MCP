@@ -20,6 +20,7 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
         manifest.ScreenshotHashes.Add(checkpoint, ArtifactFiles.Sha256(path));
         save();
     }
+    public string OutputPath(string fileName) => Path.Combine(manifest.Output, fileName);
     public Task MapSerializationModes() => Page.SaveSerializationModes(Path.Combine(manifest.Output, "serialization-modes.uia.json"));
     public Task CaptureLanguageChoices() => CaptureCheckpoint("preferences-language-choices", Page.CaptureLanguageChoices);
     public Task MapControls(string name, PlaywrightWindows.Mcp.Core.ElementSelector within)

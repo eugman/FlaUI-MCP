@@ -1,0 +1,77 @@
+{
+  "server": "localhost",
+  "database": "fla_spaceparts",
+  "loadedAt": "2026-09-15T05:51:58.3386236-04:00",
+  "tables": {
+    "Brands": {
+      "rows": 20,
+      "csvRows": 20,
+      "seconds": 0
+    },
+    "BudgetRate": {
+      "rows": 15,
+      "csvRows": 15,
+      "seconds": 0
+    },
+    "Customers": {
+      "rows": 3911,
+      "csvRows": 3911,
+      "seconds": 0
+    },
+    "Employees": {
+      "rows": 893,
+      "csvRows": 893,
+      "seconds": 0
+    },
+    "ExchangeRate": {
+      "rows": 57900,
+      "csvRows": 57900,
+      "seconds": 1
+    },
+    "InvoiceDocumentType": {
+      "rows": 5,
+      "csvRows": 5,
+      "seconds": 0
+    },
+    "OrderDocumentType": {
+      "rows": 4,
+      "csvRows": 4,
+      "seconds": 0
+    },
+    "OrderStatus": {
+      "rows": 6,
+      "csvRows": 6,
+      "seconds": 0
+    },
+    "Products": {
+      "rows": 256293,
+      "csvRows": 256293,
+      "seconds": 4
+    },
+    "Regions": {
+      "rows": 181,
+      "csvRows": 181,
+      "seconds": 0
+    },
+    "Budget": {
+      "rows": 2947811,
+      "csvRows": 2947811,
+      "seconds": 20
+    },
+    "Forecast": {
+      "rows": 5197,
+      "csvRows": 5197,
+      "seconds": 0
+    },
+    "Orders": {
+      "rows": 16910069,
+      "csvRows": 16910069,
+      "seconds": 192
+    },
+    "Invoices": {
+      "rows": 18459441,
+      "csvRows": 18459441,
+      "seconds": 284
+    }
+  }
+}
