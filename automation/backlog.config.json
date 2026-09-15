@@ -1,0 +1,14 @@
+{
+  "te3": "%ProgramFiles%/Tabular Editor 3/TabularEditor3.exe",
+  "te": "%LOCALAPPDATA%/Programs/te/te.exe",
+  "fixtureMode": "offline",
+  "offlineBaseline": "fixtures/spaceparts/spaceparts-offline.bim",
+  "output": "../artifacts/te3",
+  "docsRoot": "../../TabularEditorDocsAutomation",
+  "repeat": 1,
+  "maximizeWindow": true,
+  "expectedDpi": 120,
+  "scenarios": [
+    "preferences-map"
+  ]
+}

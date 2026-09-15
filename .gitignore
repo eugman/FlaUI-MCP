@@ -52,6 +52,7 @@ TestFlaUI/
 *.csx
 !automation/*.csx
 !automation/replica-inputs/*.csx
+!automation/fixtures/spaceparts/*.csx
 .playwright-mcp/
 __pycache__/
 /automation/local.config.json
