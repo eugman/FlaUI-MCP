@@ -1031,17 +1031,22 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         for (var step = 0; step < maxSteps; step++)
         {
             await Keys("Down", tree);
-            var rows = await Task.Run(() => query.Find(handle, new(ControlType: "DataItem", Value: value), tree.Selector, maxResults: 5,
+            // Only the TreeItem reports selection; the DataItem cell with the same value does not.
+            var rows = await Task.Run(() => query.Find(handle, new(ControlType: "TreeItem", Value: value), tree.Selector, maxResults: 5,
                 register: false, budget: new SearchBudget(2000, TimeSpan.FromSeconds(2)))).WaitAsync(TimeSpan.FromSeconds(4));
             if (rows.Elements.Any(row => row.Selected == true)) return;
         }
         throw new InvalidOperationException($"No TOM Explorer row with value {value} within {maxSteps} rows");
     }
 
+    // Setting the search box value does not apply TE3's filter; it has to be typed.
     public async Task SearchTom(string text)
     {
-        await Fill(SearchTarget(), text);
-        await Task.Delay(500);
+        await ResetSearch();
+        var reference = await Reference(SearchTarget());
+        reportStep?.Invoke($"Type TOM Explorer search {text}");
+        await invoke("windows_type", new { @ref = reference, text });
+        await Task.Delay(800);
     }
 
     /// <summary>
@@ -1097,12 +1102,12 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     public async Task CancelDialog(Dialog dialog)
     {
         await SendKeysTo(dialog.Handle, "Escape");
-        // "Close" also names other controls (Layouts has more than one), so that fallback is scoped to the title bar.
-        foreach (var (button, within) in new (string, ElementSelector?)[] { ("Cancel", null), ("Close", new(ControlType: "TitleBar")) })
+        // Layouts has two title bars and two Close buttons; only the title-bar button has AutomationId "Close".
+        foreach (var button in new ElementSelector[] { new(Name: "Cancel", ControlType: "Button"), new(Name: "Close", AutomationId: "Close", ControlType: "Button") })
         {
             try { await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(2)); return; }
             catch (TimeoutException) { }
-            try { await invoke("windows_click", new { @ref = await DialogRef(dialog, button, "Button", within) }); }
+            try { await invoke("windows_click", new { @ref = await DialogRef(dialog, button) }); }
             catch (Exception error) when (error is InvalidOperationException or TimeoutException or System.Reflection.AmbiguousMatchException) { }
         }
         await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(5));
@@ -1116,10 +1121,12 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
 
     public Task MapDialog(Dialog dialog, string path) => MapWindow(dialog.Handle, path);
 
-    private async Task<string> DialogRef(Dialog dialog, string name, string controlType, ElementSelector? within = null)
+    private Task<string> DialogRef(Dialog dialog, string name, string controlType) => DialogRef(dialog, new(Name: name, ControlType: controlType));
+
+    private async Task<string> DialogRef(Dialog dialog, ElementSelector selector)
     {
-        reportStep?.Invoke($"Find {controlType} '{name}' in {dialog.Title}");
-        var element = await Task.Run(() => query.Resolve(dialog.Handle, new(Name: name, ControlType: controlType), within, false,
+        reportStep?.Invoke($"Find {selector} in {dialog.Title}");
+        var element = await Task.Run(() => query.Resolve(dialog.Handle, selector, null, false,
             budget: new SearchBudget(2000, TimeSpan.FromSeconds(3)))).WaitAsync(TimeSpan.FromSeconds(5));
         return host.Elements.Register(dialog.Handle, element);
     }
