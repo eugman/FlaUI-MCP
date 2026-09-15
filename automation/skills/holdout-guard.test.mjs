@@ -5,7 +5,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Hold-out tasks must never get guidance; these phrases name their UI.
-const holdoutPhrases = ['save-to-folder', 'calculation group', 'model menu', 'root node', 'dax editor > general'];
+const holdoutPhrases = ['calculation group', 'model menu', 'root node', 'best practice analyzer', 'dax query',
+  // Round-1 hold-outs, still kept out of guidance.
+  'save-to-folder', 'dax editor > general'];
 
 test('skill layers never mention hold-out UI', () => {
   const layers = join(dirname(fileURLToPath(import.meta.url)), 'layers');

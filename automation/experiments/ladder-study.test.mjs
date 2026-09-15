@@ -13,7 +13,7 @@ import { composeSkill } from '../skills/build-skill.mjs';
 
 test('twelve distinct tasks, the last four held out', () => {
   assert.equal(Object.keys(tasks).length, 12);
-  assert.deepEqual(holdoutTasks, ['dax-general', 'save-to-folder', 'calc-group-menu', 'model-properties']);
+  assert.deepEqual(holdoutTasks, ['bpa-view', 'dax-query', 'calc-group-menu', 'model-properties']);
   assert.deepEqual(Object.keys(tasks).slice(-4), holdoutTasks);
 });
 
@@ -24,14 +24,14 @@ test('schedule runs each task once and shuffles deterministically by seed', () =
   assert.deepEqual(first.map(trial => trial.id).sort(), Object.keys(tasks).map(task => `1-sonnet-${task}-01`).sort());
   assert.deepEqual(schedule({ ...base, seed: 7 }), first);
   assert.notDeepEqual(schedule({ ...base, seed: 8 }).map(trial => trial.id), first.map(trial => trial.id));
-  assert.equal(first.find(trial => trial.task === 'dax-general').holdout, true);
+  assert.equal(first.find(trial => trial.task === 'bpa-view').holdout, true);
   assert.equal(first.find(trial => trial.task === 'column').holdout, false);
 });
 
-test('only the script-run task is authorized to execute its source', () => {
-  const source = promptFor('script-source', '', 'C:\\study\\hello-world.csx', 'C:\\trial\\result.png');
-  assert.ok(source.includes('Supplied source: C:\\study\\hello-world.csx.'));
-  assert.ok(!source.includes('authorized to execute'));
+test('only the script-run task gets the supplied source and the execution authorization', () => {
+  const edit = promptFor('script-edit', '', 'C:\\study\\hello-world.csx', 'C:\\trial\\result.png');
+  assert.ok(!edit.includes('Supplied source'));
+  assert.ok(!edit.includes('authorized to execute'));
   assert.ok(promptFor('script-run', '', 'C:\\study\\hello-world.csx', 'y').includes('authorized to execute'));
 });
 
@@ -478,7 +478,7 @@ test('summarize reports trials with review fields and rung/task/model groups', a
     'review.json': review(true, true)
   });
   await trial('1-sonnet-formatting-02', 'formatting', { 'review.json': review(false, true) });
-  await trial('1-sonnet-dax-general-01', 'dax-general', {});
+  await trial('1-sonnet-bpa-view-01', 'bpa-view', {});
   await mkdir(join(root, '1-sonnet-object-01'));
 
   const rows = summarize(root);
@@ -493,7 +493,7 @@ test('summarize reports trials with review fields and rung/task/model groups', a
   assert.equal(scored.budgetRejections, 1);
   assert.equal(scored.passed, true);
   assert.deepEqual(scored.rubric, { 'section selected': true });
-  const holdout = rows.find(row => row.task === 'dax-general');
+  const holdout = rows.find(row => row.task === 'bpa-view');
   assert.equal(holdout.holdout, true);
   assert.equal(holdout.reviewed, false);
   assert.equal(holdout.dispatchedCalls, null);
@@ -504,7 +504,7 @@ test('summarize reports trials with review fields and rung/task/model groups', a
     kind: 'group', rung: '1', task: 'formatting', model: 'sonnet', label: null, holdout: false, n: 2, passes: 1, passAll: false,
     falseClaims: 1, meanDispatchedCalls: 4, meanTotalTokens: 100, meanUncachedInputTokens: 20, unreviewed: 0
   });
-  assert.equal(groups.find(group => group.task === 'dax-general').unreviewed, 1);
+  assert.equal(groups.find(group => group.task === 'bpa-view').unreviewed, 1);
   assert.deepEqual(conditionRows(rows), [{
     kind: 'condition', rung: '1', model: 'sonnet', label: null, passes: 1, n: 3,
     trained: { passes: 1, n: 2 }, holdout: { passes: 0, n: 1 },
@@ -512,6 +512,15 @@ test('summarize reports trials with review fields and rung/task/model groups', a
   }]);
   assert.deepEqual(conditionRows([...rows, { ...rows[0], task: 'relationship', passed: false }]), conditionRows(rows));
 
-  await writeFile(join(root, '1-sonnet-dax-general-01', 'review.json'), JSON.stringify({ passed: 'yes' }));
+  await writeFile(join(root, '1-sonnet-bpa-view-01', 'review.json'), JSON.stringify({ passed: 'yes' }));
   assert.throws(() => summarize(root), /boolean passed/);
+});
+
+test('summarize keeps the hold-out status a trial was prepared with', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'ladder-holdout-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, '1-sonnet-dax-general-01'));
+  await writeFile(join(root, 'study.json'), JSON.stringify({ trials: [{ id: '1-sonnet-dax-general-01', task: 'dax-general', holdout: true }] }));
+  await writeFile(join(root, '1-sonnet-dax-general-01', 'usage.json'), JSON.stringify({ id: '1-sonnet-dax-general-01', rung: '1', task: 'dax-general' }));
+  assert.equal(summarize(root)[0].holdout, true);
 });

@@ -38,11 +38,19 @@ export const rubrics = {
   table: ['The Sales table is selected', 'Properties are readable with Name Sales', 'Object Type shows Table', 'The TOM Explorer search box is empty'],
   'tom-tree': ['Sales is expanded showing Amount and Total Amount', 'Comparison is expanded showing Amount', 'The TOM Explorer search box is empty'],
   'script-run': outputDialog,
-  'script-source': ['The C# script editor shows "Hello World".Output();', 'No script output dialog is open'],
   'dax-general': preferences('DAX Editor General'),
   'save-to-folder': [...preferences('Save-to-folder').slice(0, 2), 'All Save-to-folder controls are visible, including Serialization mode', preferences('Save-to-folder')[3]],
   'calc-group-menu': ['The Model menu is open', 'The Calculation Group item is readable in the menu', 'No dialog or new model object is shown'],
   'model-properties': ['The model root node is selected in TOM Explorer', 'Properties are readable for the model', 'The TOM Explorer search box is empty'],
+  'script-edit': [
+    'The C# script editor shows exactly two lines: foreach (var m in Selected.Measures) and m.FormatString = "#,0.00";',
+    'Nothing was added or changed by autocomplete, such as a using directive or a replaced word',
+    'No script output dialog is open'
+  ],
+  'bpa-view': ['The Best Practice Analyzer view is open and selected', 'Its rule list or results are readable', 'No dialog is open'],
+  'dax-query': ['A DAX Query document tab is active', 'Its query editor is visible and empty', 'No query result or error is shown'],
+  // Round-1 tasks, kept so their trials can still be packed.
+  'script-source': ['The C# script editor shows "Hello World".Output();', 'No script output dialog is open'],
   // Replaced by model-properties: the fixture has no relationships. Kept so those trials can still be packed.
   relationship: ['A relationship is selected in TOM Explorer', 'Properties show its from and to columns', 'The TOM Explorer search box is empty'],
   // Task names from the four-task study, kept so its trials can still be packed.

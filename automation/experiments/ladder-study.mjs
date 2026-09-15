@@ -20,16 +20,17 @@ export const tasks = {
   table: 'Select the Sales table in TOM Explorer. Capture it selected with readable Properties showing its name and object type, and an empty TOM Explorer search box. Leave the table selected.',
   'tom-tree': 'In TOM Explorer, expand the Sales and Comparison tables so their columns and measures are visible. Capture TOM Explorer with both tables expanded and an empty search box. Do not edit objects.',
   'script-run': 'Open the supplied .csx through TE3 UI. Verify its source is exactly `"Hello World".Output();` ignoring trailing whitespace, execute only that source, and capture the output dialog title, Hello World text and Close button. Leave the output open. Do not type replacement source, change file associations, or interact with unrelated applications. Stop if an unrelated app chooser appears.',
-  'script-source': 'Open the supplied .csx through TE3 UI and verify its source is exactly `"Hello World".Output();` ignoring trailing whitespace, but do not run it. Capture the C# script editor showing that source. Leave the script open and unexecuted. Do not type replacement source, change file associations, or interact with unrelated applications. Stop if an unrelated app chooser appears.',
-  'dax-general': 'Capture Preferences > Text Editors > DAX Editor > General with that section selected, empty search, all section controls, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
-  'save-to-folder': 'Capture Preferences > File Formats > Save-to-folder with that section selected, empty search, all section controls including Serialization mode, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
+  'script-edit': 'Create a new C# script document in TE3 and enter exactly these two lines, without running the script: `foreach (var m in Selected.Measures)` then `    m.FormatString = "#,0.00";`. Capture the C# script editor showing exactly those two lines. Do not run or save the script or change the model. Leave the script open.',
+  'bpa-view': 'Open the Best Practice Analyzer view and capture it with its rule list or results readable. Do not apply fixes, change rules, or edit the model. Leave the view open.',
+  'dax-query': 'Open a new DAX Query document and capture its empty query editor. Do not run a query or edit the model. Leave the document open.',
   'calc-group-menu': 'Open the Model menu and capture it with the Calculation Group item visible. Do not click any menu item or change the model. Leave the menu open.',
   // The fixture has no relationships, so a relationship task is impossible; the model root node replaces it.
   'model-properties': 'Select the model itself, the root node in TOM Explorer. Capture it selected with its Properties readable and an empty TOM Explorer search box. Do not edit the model. Leave the model selected.'
 };
 // Hold-outs get no map topic, skill line or te3_navigate destination, ever, so they show whether guidance
 // written for the trained tasks also works on screenshots nobody wrote it around.
-export const holdoutTasks = ['dax-general', 'save-to-folder', 'calc-group-menu', 'model-properties'];
+// Round 2 swapped dax-general and save-to-folder (guidance had been written from their transcripts) for bpa-view and dax-query.
+export const holdoutTasks = ['bpa-view', 'dax-query', 'calc-group-menu', 'model-properties'];
 
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -48,8 +49,8 @@ function expand(value) {
 
 export function promptFor(task, skillText, scriptPath, outputPath, { maxCalls = 60, agentMinutes = 7 } = {}) {
   let prompt = `${tasks[task]}\n\nThe owned TE3 processId is {{PID}}. Save the final PNG to ${outputPath}. Preserve model content and preferences. Do not launch or close TE3; the controller owns lifecycle and restoration. You may focus this test instance. Offline disposable model; no server access.`;
-  if (task.startsWith('script')) {
-    prompt += `\nSupplied source: ${scriptPath}.` + (task === 'script-run' ? ' You are authorized to execute this exact read-only output script.' : '');
+  if (task === 'script-run') {
+    prompt += `\nSupplied source: ${scriptPath}. You are authorized to execute this exact read-only output script.`;
   }
   // The default wording matches the standard-budget rungs exactly.
   const minutes = agentMinutes === 7 ? 'seven' : String(agentMinutes);
@@ -596,6 +597,9 @@ function readReview(file) {
 export function summarize(studyDirectory) {
   const root = path.resolve(studyDirectory);
   const rows = [];
+  // A trial keeps the hold-out status it was prepared with, even after the task list changes.
+  const studyFile = path.join(root, 'study.json');
+  const prepared = new Map(fs.existsSync(studyFile) ? json(studyFile).trials.map(trial => [trial.id, trial.holdout]) : []);
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const dir = path.join(root, entry.name);
     if (!entry.isDirectory() || !fs.existsSync(path.join(dir, 'usage.json'))) continue;
@@ -608,7 +612,7 @@ export function summarize(studyDirectory) {
     rows.push({
       kind: 'trial', id: record.id ?? entry.name,
       rung: record.rung ?? null, model: record.model ?? null, task: record.task ?? null, label: record.label ?? null,
-      holdout: holdoutTasks.includes(record.task),
+      holdout: prepared.get(record.id ?? entry.name) ?? holdoutTasks.includes(record.task),
       lifecycleOutcome: record.lifecycleOutcome ?? null, cleanup: record.cleanup?.status ?? null,
       timedOut: record.timedOut ?? null, interrupted: record.interrupted ?? null,
       usageStatus: record.status ?? null,
