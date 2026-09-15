@@ -1,0 +1,28 @@
+{
+  "server": "localhost",
+  "database": "fla_spaceparts",
+  "sqlDatabase": "fla_spaceparts",
+  "processedAt": "2026-09-15T05:56:16.0736847-04:00",
+  "tables": {
+    "Invoices": {
+      "rows": 18459441,
+      "sqlRows": 18459441
+    },
+    "Orders": {
+      "rows": 16910069,
+      "sqlRows": 16910069
+    },
+    "Budget": {
+      "rows": 2947811,
+      "sqlRows": 2947811
+    },
+    "Products": {
+      "rows": 256293,
+      "sqlRows": 256293
+    },
+    "Customers": {
+      "rows": 3911,
+      "sqlRows": 3911
+    }
+  }
+}
