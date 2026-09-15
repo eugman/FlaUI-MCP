@@ -61,6 +61,42 @@ the unchanged-model check). Then look at the PNG itself.
 **Next targets:** the language dropdown scene and context/cascade menus. The original-image
 requirements in screenshot-backlog.json describe the UI state to reproduce, not model content to copy.
 
+## Backlog wave 1 (SpaceParts offline fixture)
+
+`run automation/backlog.config.json [--scenario a,b] [--repeat 2] [--continue]` runs these recipes. Checkpoints are named
+after backlog items and captured clean. None has been run yet.
+
+| Recipe | Items | Notes |
+|---|---|---|
+| `backlog-menus` | L234, L232, L233, L473, L377, L257, L295, L457 | Main-window capture including the open popup |
+| `backlog-dialogs` | L301, L436, L081, L285, L188 | Default dialog state; closed with Escape, Cancel or title-bar Close |
+| `backlog-preferences-1` | L375 | Section selected by search, fixed 1155x714 frame |
+| `backlog-menu-highlights` | L212, L336 | Entry highlighted with Home/Down, not hover |
+| `backlog-load-from-db` | L072, L073, L302 | Dummy `.invalid` servers; OK is never pressed |
+| `backlog-preference-dropdowns` | L380, L231, L023 | Pane mapped first; fails listing ComboBox names if more than one |
+| `backlog-new-model-options` | (map only) | Compatibility Level list for L054 and R035 |
+
+Not written yet: L016/L020 (AI Provider fields, after the L023 map), L279/L346 (Keyboard mapping), L054/R035 (New Model
+options), L247 (About, needs redaction), L176 (Edit menu needs an active editor), L482/L483 (need open documents).
+
+## Annotations
+
+`annotate MANIFEST SPEC` writes `SOURCE-annotated.png` from a clean checkpoint; the clean file is never changed.
+A spec is JSON in output pixels:
+
+```json
+{ "schemaVersion": 1, "recipe": "backlog-dialogs", "source": "L247", "expectedWidth": 588, "expectedHeight": 502,
+  "crop": { "x": 0, "y": 0, "width": 588, "height": 502 },
+  "boxes": [ { "x": 10, "y": 20, "width": 120, "height": 30 } ],
+  "arrows": [ { "fromX": 300, "fromY": 200, "toX": 140, "toY": 35 } ],
+  "redactions": [ { "x": 200, "y": 90, "width": 250, "height": 18 } ] }
+```
+
+Keep it light: red boxes, green arrows and solid redaction only, at most 20 shapes. Logos, callout art and borders stay a
+manual design step. `promote RUN_DIR --item ID` writes the annotated image to the docs path and the clean capture and
+spec beside it (`NAME.clean.png`, `NAME.annotations.json`) so anyone can re-annotate it in Figma. A redacted item's clean
+capture is never promoted.
+
 ## Annotated File Formats image
 
 File Formats keeps the raw image and adds the original-style arrows separately:
