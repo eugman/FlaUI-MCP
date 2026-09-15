@@ -24,6 +24,28 @@ public sealed class RunnerTests : IDisposable
         Assert.Throws<ArgumentException>(() => RecipeCatalog.Select(["model-open", "model-open"]));
         Assert.Throws<ArgumentException>(() => RecipeCatalog.Select([]));
     }
+    [Fact] public void RunOptionsAcceptAScenarioListRepeatAndContinue()
+    {
+        var options = RunOptions.Parse("run", ["--scenario", "model-open, dax-query", "--continue", "--repeat", "2"]);
+        Assert.Equal(["model-open", "dax-query"], options.Scenarios);
+        Assert.Equal(2, options.Repeat);
+        Assert.True(options.Continue);
+        Assert.Equal(new RunOptions(null, null, false), RunOptions.Parse("run", []));
+    }
+    [Theory]
+    [InlineData("run", "--continue", "--continue")]
+    [InlineData("run", "--scenario", null)]
+    [InlineData("run", "--repeat", "0")]
+    [InlineData("validate", "--continue", null)]
+    public void RunOptionsRejectInvalidArguments(string command, string first, string? second)
+        => Assert.Throws<ArgumentException>(() => RunOptions.Parse(command, second == null ? [first] : [first, second]));
+    [Fact] public void ContinueStopsWhenTheDesktopWasNotRestored()
+    {
+        Assert.True(RunOptions.SafeToContinue(new RunManifest { SettingsRestored = true }));
+        Assert.False(RunOptions.SafeToContinue(new RunManifest { SettingsRestored = false }));
+        Assert.False(RunOptions.SafeToContinue(new RunManifest { SettingsRestored = true, NeedsRecovery = true }));
+        Assert.False(RunOptions.SafeToContinue(new RunManifest { SettingsRestored = true, CleanupError = "TE3 still running" }));
+    }
     [Theory]
     [InlineData("run")][InlineData("recover")]
     public async Task NoFocusRejectsMutationBeforeReadingFiles(string command)

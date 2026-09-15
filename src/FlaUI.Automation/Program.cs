@@ -6,10 +6,11 @@ return await RunnerCommands.Execute(args);
 public static class RunnerCommands
 {
     public const string Usage = """
-        FlaUI.Automation run CONFIG [--scenario ID] [--repeat N]
+        FlaUI.Automation run CONFIG [--scenario ID[,ID...]] [--repeat N] [--continue]
         FlaUI.Automation list|validate CONFIG
         FlaUI.Automation compose MANIFEST SPEC OUT.png
         FlaUI.Automation promote RUN_DIR CHECKPOINT DEST.png [--overwrite]
+        FlaUI.Automation promote RUN_DIR --item ITEM_ID [--overwrite]
         FlaUI.Automation mcp
         FlaUI.Automation recover BACKUP_DIR
         --no-focus rejects run.
@@ -43,7 +44,9 @@ public static class RunnerCommands
             if (command == "promote")
             {
                 if (args.Length is not (4 or 5) || args.Length == 5 && args[4] != "--overwrite") throw new ArgumentException(Usage);
-                await ArtifactFiles.Promote(args[1], args[2], args[3], args.Length == 5); return 0;
+                if (args[2] == "--item") await ArtifactFiles.PromoteItem(args[1], args[3], args.Length == 5);
+                else await ArtifactFiles.Promote(args[1], args[2], args[3], args.Length == 5);
+                return 0;
             }
             if (command == "recover")
             {
@@ -59,21 +62,14 @@ public static class RunnerCommands
             if (command is not ("run" or "list" or "validate"))
                 throw new ArgumentException(Usage);
             var config = RunConfig.Read(args[1]);
-            string? selector = null; int? repeat = null;
-            for (var i = 2; i < args.Length; i += 2)
-            {
-                if (command != "run" || i + 1 >= args.Length) throw new ArgumentException(Usage);
-                if (args[i] == "--scenario" && selector == null) selector = args[i + 1];
-                else if (args[i] == "--repeat" && repeat == null && int.TryParse(args[i + 1], out var value) && value is >= 1 and <= 100) repeat = value;
-                else throw new ArgumentException(Usage);
-            }
+            var options = RunOptions.Parse(command, args[2..]);
             if (command == "list")
             {
                 foreach (var recipe in RecipeCatalog.All) Console.WriteLine($"{recipe.Id}  {(recipe.RequiresServer ? "engine" : "offline")}  {recipe.DocsPage}");
                 return 0;
             }
             config.ValidateFiles();
-            var recipes = RecipeCatalog.Select(selector == null ? config.Scenarios : [selector]);
+            var recipes = RecipeCatalog.Select(options.Scenarios ?? config.Scenarios);
             if (recipes.Any(r => r.RequiresServer && !config.UseServer(r))) throw new ArgumentException("Selected recipes require fixed/auto fixture mode");
             if (command == "validate") { Console.WriteLine("Valid: " + string.Join(", ", recipes.Select(r => r.Id))); return 0; }
             using var interrupts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -83,14 +79,18 @@ public static class RunnerCommands
             {
                 using var runnerGate = RunExecutor.AcquireRunnerLock();
                 DpiUtility.EnablePerMonitorV2();
+                var failed = false;
                 foreach (var recipe in recipes)
-                    for (var n = 0; n < (repeat ?? config.Repeat); n++)
+                    for (var n = 0; n < (options.Repeat ?? config.Repeat); n++)
                     {
                         var result = await RunExecutor.Execute(config, recipe, interrupts.Token, runnerGate);
-                        Console.WriteLine(JsonSerializer.Serialize(new { result.ManifestPath, result.Manifest.Passed, result.Manifest.Error, result.Manifest.CleanupError }));
-                        if (!result.Manifest.Passed) return 1;
+                        Console.WriteLine(JsonSerializer.Serialize(new { recipe = recipe.Id, result.ManifestPath, result.Manifest.Passed, result.Manifest.Error, result.Manifest.CleanupError }));
+                        if (result.Manifest.Passed) continue;
+                        failed = true;
+                        // A failed recipe can be skipped; a desktop that was not restored cannot.
+                        if (!options.Continue || !RunOptions.SafeToContinue(result.Manifest)) return 1;
                     }
-                return 0;
+                return failed ? 1 : 0;
             }
             finally { Console.CancelKeyPress -= cancel; }
         }
@@ -98,4 +98,27 @@ public static class RunnerCommands
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or TimeoutException or AggregateException)
         { Console.Error.WriteLine(ex.GetType().Name + ": " + ex.Message); return 2; }
     }
+}
+
+public sealed record RunOptions(string[]? Scenarios, int? Repeat, bool Continue)
+{
+    public static RunOptions Parse(string command, string[] args)
+    {
+        string[]? scenarios = null; int? repeat = null; var keepGoing = false;
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (command != "run") throw new ArgumentException(RunnerCommands.Usage);
+            if (args[i] == "--continue" && !keepGoing) { keepGoing = true; continue; }
+            if (i + 1 >= args.Length) throw new ArgumentException(RunnerCommands.Usage);
+            if (args[i] == "--scenario" && scenarios == null)
+                scenarios = args[++i].Split(',', StringSplitOptions.TrimEntries);
+            else if (args[i] == "--repeat" && repeat == null && int.TryParse(args[i + 1], out var value) && value is >= 1 and <= 100)
+            { repeat = value; i++; }
+            else throw new ArgumentException(RunnerCommands.Usage);
+        }
+        return new(scenarios, repeat, keepGoing);
+    }
+
+    public static bool SafeToContinue(RunManifest manifest) =>
+        !manifest.NeedsRecovery && manifest.SettingsRestored && string.IsNullOrEmpty(manifest.CleanupError);
 }

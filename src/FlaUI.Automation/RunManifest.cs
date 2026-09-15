@@ -19,6 +19,8 @@ public class RunManifest
     public bool SettingsRestored { get; set; } = true;
     public bool NeedsRecovery { get; set; }
     public string? CleanupError { get; set; }
+    /// <summary>Settings files changed by the run beyond the restored four; warnings, not failures.</summary>
+    public List<string> SettingsChanges { get; set; } = [];
     public bool Passed { get; set; }
     public string? Error { get; set; }
     public string? CurrentStep { get; set; }

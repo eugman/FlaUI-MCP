@@ -58,8 +58,8 @@ the unchanged-model check). Then look at the PNG itself.
 **Interrupted runs:** if `settingsRestored` is false, close TE3 and run
 `recover BACKUP_DIR` with the manifest's `settingsBackup`.
 
-**Next targets:** the language dropdown scene and context/cascade menus. Keep the exact
-original content requirements in screenshot-backlog.json.
+**Next targets:** the language dropdown scene and context/cascade menus. The original-image
+requirements in screenshot-backlog.json describe the UI state to reproduce, not model content to copy.
 
 ## Annotated File Formats image
 
@@ -83,8 +83,12 @@ The backlog retains all 596 sources, docs pages, priorities, blockers and review
 matching requirements. A linked recipe means related capability, not completion.
 No original is approved/promoted. First reviewed targets are L044 scalar output,
 L042 auto-rollback, L043 enumerable output and L010 Internet Sales Create > Measure.
-Match original code, model names, selection and composition; same-feature images
-are not replacements. Keep external infrastructure and missing-source blockers explicit.
+Reproduce the same UI state as the original (surface, selection, open menus or dialogs,
+control states and composition) on our own fixtures: the SpaceParts fixtures under
+`automation/fixtures/spaceparts`, or the small fixture for existing recipes. Model names and
+data may differ from the original. Screenshots whose UI no longer exists go to
+DOCS-OWNER-REPORT.md instead of being recreated. Keep external infrastructure and
+missing-source blockers explicit.
 
 Original-image inspection adds these constraints:
 

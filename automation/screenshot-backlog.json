@@ -243,8 +243,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
+    "status": "deferred",
+    "blocker": "Deferred: Needs a live LLM provider call; not deterministic. Previously (unreviewed): Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
     "matchRequirements": null
   },
   {
@@ -1543,8 +1543,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "replica-target",
-    "blocker": "Not an empty shell: needs six named documents and a populated diagram thumbnail. Requires safe held-modifier lifetime and capture of a transient switcher, with guaranteed key release. Determine whether Pivot Grid can be opened offline; defer any engine requirement rather than fabricate a tab.",
+    "status": "deferred",
+    "blocker": "Deferred: Ctrl+Tab switcher needs a held modifier; later. Previously (replica-target): Not an empty shell: needs six named documents and a populated diagram thumbnail. Requires safe held-modifier lifetime and capture of a transient switcher, with guaranteed key release. Determine whether Pivot Grid can be opened offline; defer any engine requirement rather than fabricate a tab.",
     "matchRequirements": "719x387 Ctrl+Tab switcher with Diagram 1* selected and title/footer matching. Document list: Diagram 1*, C# Script 1, Pivot Grid 1, Expression Editor, DAX Script 1, DAX Query 1. Left tool list TOM Explorer, Data Refresh, Macros, Best Practice Analyzer, Messages, VertiPaq Analyzer. Right preview shows Customer, Internet Sales and Product diagram with relationship arrows. Capture before releasing the modifier; no random active-document screenshot substitute."
   },
   {
@@ -1554,8 +1554,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "replica-target",
-    "blocker": "No mapped docs page. Historical C# Scripts and Macros compiler pane may no longer exist under that name; verify current version before implementing. This is a blank configuration screenshot, not a request to install, download or run a compiler.",
+    "status": "deferred",
+    "blocker": "Deferred: UI no longer exists in current TE3; reported in automation/DOCS-OWNER-REPORT.md. Previously (replica-target): No mapped docs page. Historical C# Scripts and Macros compiler pane may no longer exist under that name; verify current version before implementing. This is a blank configuration screenshot, not a request to install, download or run a compiler.",
     "matchRequirements": "1083x714 Preferences with Tabular Editor > C# Scripts and Macros selected. Compiler group explains configuring a different compiler such as Roslyn, includes More information link, and has empty Compiler path and Compiler options text boxes. Rest of pane empty. OK/Cancel visible. Do not populate paths or follow the download link."
   },
   {
@@ -2730,8 +2730,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
+    "status": "deferred",
+    "blocker": "Deferred: UI no longer exists in current TE3; reported in automation/DOCS-OWNER-REPORT.md. Previously (unreviewed): Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
     "matchRequirements": null
   },
   {
@@ -3371,8 +3371,8 @@
     "feature": "metadata",
     "priority": 2,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Offline model and local owned output folder; model readback",
+    "status": "deferred",
+    "blocker": "Deferred: Animated GIF; later. Previously (unreviewed): Offline model and local owned output folder; model readback",
     "matchRequirements": null
   },
   {
@@ -3590,8 +3590,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
+    "status": "deferred",
+    "blocker": "Deferred: UI no longer exists in current TE3; reported in automation/DOCS-OWNER-REPORT.md. Previously (unreviewed): Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
     "matchRequirements": null
   },
   {
@@ -4189,8 +4189,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
+    "status": "deferred",
+    "blocker": "Deferred: UI no longer exists in current TE3; reported in automation/DOCS-OWNER-REPORT.md. Previously (unreviewed): Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
     "matchRequirements": null
   },
   {
@@ -4200,8 +4200,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "replica-target",
-    "blocker": "No mapped docs page. Historical Features pane may have split into newer categories. Inspect current UI before choosing a replacement; zero-active-server-traces wording cannot be assumed from an offline model. Do not activate trace cleanup or external-change tracking.",
+    "status": "deferred",
+    "blocker": "Deferred: UI no longer exists in current TE3; reported in automation/DOCS-OWNER-REPORT.md. Previously (replica-target): No mapped docs page. Historical Features pane may have split into newer categories. Inspect current UI before choosing a replacement; zero-active-server-traces wording cannot be assumed from an offline model. Do not activate trace cleanup or external-change tracking.",
     "matchRequirements": "1083x714 Preferences, Tabular Editor > Features selected. Power BI unsupported operations on, Hide auto date/time warnings off, first-line DAX break on with multiline-only on. Metadata synchronization warning, tracking and automatic refresh checked; zero active traces label and disabled cleanup button. BPA background scan on. OK/Cancel visible. Requires editorial/version mapping before reproduction."
   },
   {
@@ -4265,8 +4265,8 @@
     "feature": "metadata",
     "priority": 2,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Offline model and local owned output folder; model readback",
+    "status": "deferred",
+    "blocker": "Deferred: Manual: the Visual Studio half needs Visual Studio/SSDT. Previously (unreviewed): Offline model and local owned output folder; model readback",
     "matchRequirements": null
   },
   {
@@ -4682,8 +4682,8 @@
     "feature": "metadata",
     "priority": 2,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Offline model and local owned output folder; model readback",
+    "status": "deferred",
+    "blocker": "Deferred: Manual: Windows File Explorer, not TE3 UI, and shows a user name. Previously (unreviewed): Offline model and local owned output folder; model readback",
     "matchRequirements": null
   },
   {
@@ -4896,8 +4896,8 @@
     "feature": "metadata",
     "priority": 2,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Offline model and local owned output folder; model readback",
+    "status": "deferred",
+    "blocker": "Deferred: Manual: needs an unsupported-locale machine condition. Previously (unreviewed): Offline model and local owned output folder; model readback",
     "matchRequirements": null
   },
   {
@@ -5261,8 +5261,8 @@
     "feature": "metadata",
     "priority": 2,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Offline model and local owned output folder; model readback",
+    "status": "deferred",
+    "blocker": "Deferred: Needs policy partitions created by applying a refresh policy in Power BI; SSAS cannot create them. Previously (unreviewed): Offline model and local owned output folder; model readback",
     "matchRequirements": null
   },
   {
@@ -5890,8 +5890,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
+    "status": "deferred",
+    "blocker": "Deferred: Commits a language change; needs a human. Previously (unreviewed): Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
     "matchRequirements": null
   },
   {
@@ -6211,8 +6211,8 @@
     "feature": "shell",
     "priority": 1,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
+    "status": "deferred",
+    "blocker": "Deferred: Dock-drag guides need a held mouse drag; later. Previously (unreviewed): Installed/licensed TE3; isolated and restored preferences; entry UI only, no external calls",
     "matchRequirements": null
   },
   {
@@ -6657,8 +6657,8 @@
     "feature": "metadata",
     "priority": 2,
     "recipe": null,
-    "status": "unreviewed",
-    "blocker": "Offline model and local owned output folder; model readback",
+    "status": "deferred",
+    "blocker": "Deferred: UI no longer exists in current TE3; reported in automation/DOCS-OWNER-REPORT.md. Previously (unreviewed): Offline model and local owned output folder; model readback",
     "matchRequirements": null
   },
   {

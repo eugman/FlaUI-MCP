@@ -20,9 +20,33 @@ public static class ArtifactFiles
             var path = ContainedPath(manifest.Screenshots[checkpoint], manifest.Output);
             var file = string.Join("/", Path.GetRelativePath(manifest.Output, path).Split(Path.DirectorySeparatorChar).Select(Uri.EscapeDataString));
             html.Append($"<h2>{Encode(checkpoint)}</h2><a href='{file}'><img style='max-width:100%' src='{file}'></a>");
+            var original = OriginalFor(checkpoint, manifest.DocsRoot);
+            if (original != null) html.Append($"<p>Original in the docs:</p><img style='max-width:100%' src='{Encode(new Uri(original).AbsoluteUri)}'>");
             if (manifest.Compositions.ContainsKey(checkpoint)) html.Append("<p>Derived composition: crop/annotations; source captures retained.</p>");
         }
         File.WriteAllText(Path.Combine(manifest.Output, "index.html"), html.ToString());
+    }
+
+    /// <summary>The original docs image for a checkpoint named after a backlog item, if the docs copy has it.</summary>
+    internal static string? OriginalFor(string checkpoint, string? docsRoot, string? backlogPath = null)
+    {
+        if (docsRoot == null || !Backlog.IsItemId(checkpoint)) return null;
+        try
+        {
+            var item = Backlog.Find(checkpoint, backlogPath);
+            var path = Path.GetFullPath(Path.Combine(docsRoot, item.Source));
+            return item.Source.StartsWith("content/", StringComparison.Ordinal) && File.Exists(path) ? path : null;
+        }
+        catch (Exception error) when (error is ArgumentException or IOException or JsonException) { return null; }
+    }
+
+    /// <summary>Promotes the checkpoint named after a backlog item to that item's docs image path.</summary>
+    public static Task PromoteItem(string runDirectory, string itemId, bool overwrite, string? backlogPath = null)
+    {
+        var manifest = ReadManifest(Path.Combine(runDirectory, "manifest.json"));
+        var root = manifest.DocsRoot ?? throw new ArgumentException("Set docsRoot in the run config before promotion");
+        var image = Backlog.DocsImage(Backlog.Find(itemId, backlogPath));
+        return Promote(runDirectory, itemId, Path.Combine(root, image), overwrite);
     }
 
     public static string ContainedPath(string path, string root)

@@ -43,6 +43,7 @@ public static class RunExecutor
         void Save() => AtomicJournal.Write(manifestPath, manifest, RunConfig.Json);
         Save();
         SettingsLease? settings = null; AutomationHost? host = null; Process? app = null; string? handle = null;
+        Dictionary<string, string>? settingsBefore = null;
         var timer = Stopwatch.StartNew();
         try
         {
@@ -55,6 +56,7 @@ public static class RunExecutor
             }
             cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3();
+            settingsBefore = SettingsChanges.Snapshot(SettingsLease.DefaultDirectory);
             settings = AcquireSettings(manifest, Save); settings.Normalize(config.MaximizeWindow);
             cancellationToken.ThrowIfCancellationRequested();
             host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]));
@@ -120,6 +122,11 @@ public static class RunExecutor
             {
                 try { settings.Restore(); manifest.SettingsRestored = true; }
                 catch (Exception error) { cleanupErrors.Add("Preferences: " + error.Message); }
+            }
+            if (closed && settingsBefore != null)
+            {
+                try { manifest.SettingsChanges = SettingsChanges.Compare(settingsBefore, SettingsChanges.Snapshot(SettingsLease.DefaultDirectory)); }
+                catch (Exception error) { manifest.SettingsChanges = ["snapshot failed: " + error.Message]; }
             }
             try { app?.Dispose(); host?.Dispose(); }
             catch (Exception error) { cleanupErrors.Add("Disposal: " + error.Message); }
