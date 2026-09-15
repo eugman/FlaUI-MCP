@@ -9,6 +9,6 @@
   "maximizeWindow": true,
   "expectedDpi": 120,
   "scenarios": [
-    "discovery-backlog"
+    "discovery-backlog-2"
   ]
 }

@@ -991,6 +991,130 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         invoke("windows_screenshot", new { handle = windowHandle, savePath = path, includeImage = false, background });
     public Task SendKeysTo(string windowHandle, string chord) => invoke("windows_send_keys", new { handle = windowHandle, chord });
 
+    // Recipe helpers built from the 2026-09-15 discovery maps (UI-MAP.md).
+
+    /// <summary>
+    /// Opens a main-menu path such as ("File", "Open", "Model from DB..."). Each entry is searched only in the popup the
+    /// previous step opened and clicked physically, so names shared with toolbars or other menus cannot match.
+    /// </summary>
+    public async Task OpenMenuPath(params string[] path)
+    {
+        if (path.Length == 0) throw new ArgumentException("Menu path required");
+        var before = WindowHandles();
+        await OpenMenu(path[0]);
+        await ClickThroughPopups(before, path.Skip(1));
+    }
+
+    /// <summary>Selects a TOM Explorer row by the values along its path, expanding each parent, e.g. ("Tables", "Invoices").</summary>
+    public async Task SelectNodePath(params string[] path)
+    {
+        if (path.Length == 0) throw new ArgumentException("Node path required");
+        for (var i = 0; i < path.Length; i++)
+        {
+            await SelectObject(path[i]);
+            if (i < path.Length - 1) await ExpandSelected();
+        }
+    }
+
+    /// <summary>Selects a TOM Explorer row by filtering with the search box, then clears the search.</summary>
+    public async Task SelectBySearch(string name)
+    {
+        await Fill(SearchTarget(), name);
+        await Task.Delay(500);
+        await SelectObject(name);
+        await ResetSearch();
+    }
+
+    /// <summary>Opens the context menu of a TOM Explorer row with Shift+F10, then clicks any cascade items such as "Create".</summary>
+    public async Task OpenContextMenu(string[] nodePath, params string[] items)
+    {
+        await SelectNodePath(nodePath);
+        var before = WindowHandles();
+        await Keys("Shift+F10");
+        await ClickThroughPopups(before, items);
+    }
+
+    public sealed record Dialog(string Handle, nint Hwnd, string Title);
+
+    public async Task<Dialog> OpenDialog(params string[] menuPath)
+    {
+        var before = TitledWindows().Select(w => w.Hwnd).ToArray();
+        await OpenMenuPath(menuPath);
+        var (dialogHandle, window) = await WaitForNewWindow(before, TimeSpan.FromSeconds(15));
+        return new(dialogHandle, window.Hwnd, window.Title);
+    }
+
+    /// <summary>Closes a dialog with Escape; nothing is confirmed.</summary>
+    public async Task CancelDialog(Dialog dialog)
+    {
+        await SendKeysTo(dialog.Handle, "Escape");
+        await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(10));
+    }
+
+    public async Task StageField(Dialog dialog, string name, string controlType, string value) =>
+        await invoke("windows_fill", new { @ref = await DialogRef(dialog, name, controlType), value });
+
+    public async Task OpenDropdown(Dialog dialog, string name) =>
+        await invoke("windows_send_keys", new { handle = dialog.Handle, @ref = await DialogRef(dialog, name, "ComboBox"), chord = "Alt+Down" });
+
+    public Task MapDialog(Dialog dialog, string path) => MapWindow(dialog.Handle, path);
+
+    private async Task<string> DialogRef(Dialog dialog, string name, string controlType)
+    {
+        reportStep?.Invoke($"Find {controlType} '{name}' in {dialog.Title}");
+        var element = await Task.Run(() => query.Resolve(dialog.Handle, new(Name: name, ControlType: controlType), null, false,
+            budget: new SearchBudget(2000, TimeSpan.FromSeconds(3)))).WaitAsync(TimeSpan.FromSeconds(5));
+        return host.Elements.Register(dialog.Handle, element);
+    }
+
+    private HashSet<nint> WindowHandles() =>
+        Win32Desktop.GetTopLevelWindows(host.Sessions.GetWindowProcessId(handle)).Select(w => w.Hwnd).ToHashSet();
+
+    private async Task ClickThroughPopups(HashSet<nint> before, IEnumerable<string> items)
+    {
+        var processId = host.Sessions.GetWindowProcessId(handle);
+        var opened = await NewWindows(before, required: true);
+        foreach (var name in items)
+        {
+            var command = await ResolveIn(opened, processId, name);
+            var beforeClick = WindowHandles();
+            await ClickPopupCommand(command, name);
+            // The last item may open a dialog instead of a popup, so a new window is not required here.
+            opened = await NewWindows(beforeClick, required: false);
+        }
+    }
+
+    private async Task<nint[]> NewWindows(HashSet<nint> before, bool required)
+    {
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            var opened = Win32Desktop.GetTopLevelWindows(host.Sessions.GetWindowProcessId(handle))
+                .Where(w => !w.IsCloaked && !before.Contains(w.Hwnd)).Select(w => w.Hwnd).ToArray();
+            // Give a popup a moment to finish building before it is searched.
+            if (opened.Length > 0 && clock.ElapsedMilliseconds >= 300) return opened;
+            if (clock.Elapsed > TimeSpan.FromSeconds(required ? 5 : 1))
+                return required ? throw new TimeoutException("Menu popup did not open") : opened;
+            await Task.Delay(100);
+        }
+    }
+
+    private async Task<AutomationElement> ResolveIn(IEnumerable<nint> windows, int processId, string name)
+    {
+        reportStep?.Invoke($"Find '{name}' in the open popup");
+        var matches = new List<AutomationElement>();
+        foreach (var hwnd in windows)
+        {
+            string popup;
+            try { popup = host.Sessions.RegisterNativeWindow(hwnd, processId); }
+            catch (Exception error) when (error is InvalidOperationException or ArgumentException) { continue; } // closed meanwhile
+            var found = await Task.Run(() => query.Find(popup, new(Name: name, Visible: true), maxResults: 3,
+                budget: new SearchBudget(1000, TimeSpan.FromSeconds(2)))).WaitAsync(TimeSpan.FromSeconds(4));
+            matches.AddRange(found.Elements.Select(element => host.Elements.GetElement(element.Ref)));
+        }
+        return matches.Count == 1 ? matches[0] : throw new InvalidOperationException($"Expected one '{name}' in the open popup; found {matches.Count}");
+    }
+
     private async Task<nint> MenuPopup(AutomationElement element)
     {
         var owner = host.Sessions.GetInputTarget(handle);
