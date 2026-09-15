@@ -36,6 +36,8 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
     // A plain capture of the main window; unlike background captures it includes open popup menus.
     public Task CaptureWithPopups(string checkpoint) =>
         CaptureCheckpoint(checkpoint, path => Page.SaveImage(Page.MainHandle, path, background: false));
+    public Task CapturePreferencesWithPopups(string checkpoint) =>
+        CaptureCheckpoint(checkpoint, path => Page.SaveImage(Page.PreferencesHandle(), path, background: false));
     public Task CaptureDialog(string checkpoint, Te3Page.Dialog dialog) =>
         CaptureCheckpoint(checkpoint, path => Page.SaveImage(dialog.Handle, path, background: true));
     public Task CaptureCalculationGroupMenu() => CaptureCheckpoint("model-calculation-group-menu", Page.CaptureCalculationGroupMenu);

@@ -36,7 +36,11 @@ public static class RecipeCatalog
         new("discovery-backlog-2", "automation/RECIPES.md", false, DiscoveryRecipes.Backlog2),
         new("backlog-menus", "content/features/views/user-interface.md", false, BacklogRecipes.MenuRecipes),
         new("backlog-dialogs", "content/features/views/user-interface.md", false, BacklogRecipes.DialogRecipes),
-        new("backlog-preferences-1", "content/references/preferences.md", false, BacklogRecipes.PreferenceRecipes)
+        new("backlog-preferences-1", "content/references/preferences.md", false, BacklogRecipes.PreferenceRecipes),
+        new("backlog-menu-highlights", "content/features/views/user-interface.md", false, BacklogRecipes.MenuHighlightRecipes),
+        new("backlog-load-from-db", "content/getting-started/getting-started.md", false, BacklogRecipes.LoadFromDbRecipes),
+        new("backlog-preference-dropdowns", "content/references/preferences.md", false, BacklogRecipes.PreferenceDropdownRecipes),
+        new("backlog-new-model-options", "automation/UI-MAP.md", false, BacklogRecipes.NewModelOptions)
     ];
 
     public static Recipe[] Select(IEnumerable<string> ids)

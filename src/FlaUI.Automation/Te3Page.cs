@@ -1098,7 +1098,43 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
         await ClickThroughPopups(before, items);
     }
 
+    /// <summary>
+    /// Highlights an entry of the open menu with Home and Down, checking keyboard focus at each step.
+    /// Hovering would also highlight it but raises a tooltip over the menu.
+    /// </summary>
+    public async Task HighlightMenuItem(string name, int maxSteps = 30)
+    {
+        var target = new Target(new(Name: name, Visible: true), null, true);
+        await Keys("Home");
+        for (var step = 0; step <= maxSteps; step++)
+        {
+            if (step > 0) await Keys("Down");
+            var element = await Resolve(target);
+            if (await Task.Run(() => element.Properties.HasKeyboardFocus.Value).WaitAsync(TimeSpan.FromSeconds(5))) return;
+        }
+        throw new InvalidOperationException($"Menu entry {name} was not highlighted within {maxSteps} steps");
+    }
+
+    /// <summary>Opens a ComboBox in Preferences with Alt+Down. Without a name there must be exactly one visible ComboBox.</summary>
+    public async Task OpenPreferencesDropdown(string? name = null)
+    {
+        var preferences = PreferencesHandle();
+        var found = await Task.Run(() => query.Find(preferences, new(ControlType: "ComboBox", Name: name, Visible: true), maxResults: 10,
+            budget: new SearchBudget(3000, TimeSpan.FromSeconds(3)))).WaitAsync(TimeSpan.FromSeconds(5));
+        if (found.Elements.Count != 1)
+            throw new InvalidOperationException($"Expected one Preferences ComboBox{(name == null ? "" : $" named {name}")}; found: " +
+                string.Join(", ", found.Elements.Select(e => $"'{e.Name}'")));
+        await invoke("windows_send_keys", new { handle = preferences, @ref = found.Elements[0].Ref, chord = "Alt+Down" });
+        await Task.Delay(500);
+    }
+
+    public Task SendKeysToPreferences(string chord) => SendKeysTo(PreferencesHandle(), chord);
+
     public sealed record Dialog(string Handle, nint Hwnd, string Title);
+
+    /// <summary>Selects a RadioButton in a dialog through its SelectionItem pattern.</summary>
+    public async Task ChooseOption(Dialog dialog, string name) =>
+        await invoke("windows_click", new { @ref = await DialogRef(dialog, name, "RadioButton") });
 
     public async Task<Dialog> OpenDialog(params string[] menuPath)
     {

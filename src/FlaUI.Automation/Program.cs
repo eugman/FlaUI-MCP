@@ -9,6 +9,7 @@ public static class RunnerCommands
         FlaUI.Automation run CONFIG [--scenario ID[,ID...]] [--repeat N] [--continue]
         FlaUI.Automation list|validate CONFIG
         FlaUI.Automation compose MANIFEST SPEC OUT.png
+        FlaUI.Automation annotate MANIFEST ANNOTATION_SPEC
         FlaUI.Automation promote RUN_DIR CHECKPOINT DEST.png [--overwrite]
         FlaUI.Automation promote RUN_DIR --item ITEM_ID [--overwrite]
         FlaUI.Automation mcp
@@ -40,6 +41,11 @@ public static class RunnerCommands
             {
                 if (args.Length != 4) throw new ArgumentException(Usage);
                 CaptureComposition.Create(args[1], args[2], args[3]); return 0;
+            }
+            if (command == "annotate")
+            {
+                if (args.Length != 3) throw new ArgumentException(Usage);
+                CaptureAnnotations.Create(args[1], args[2]); return 0;
             }
             if (command == "promote")
             {

@@ -32,6 +32,7 @@ public class RunManifest
     public int? ExpectedDpi { get; set; }
     public Dictionary<string, CaptureEnvironment> CaptureEnvironments { get; set; } = [];
     public Dictionary<string, CompositionSpec> Compositions { get; set; } = [];
+    public Dictionary<string, AnnotationSpec> Annotations { get; set; } = [];
     public Dictionary<string, string> SourceHashes { get; set; } = [];
     public Dictionary<string, string> ModelChecks { get; set; } = [];
 }

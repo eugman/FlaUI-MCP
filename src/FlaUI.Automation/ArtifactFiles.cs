@@ -40,13 +40,28 @@ public static class ArtifactFiles
         catch (Exception error) when (error is ArgumentException or IOException or JsonException) { return null; }
     }
 
-    /// <summary>Promotes the checkpoint named after a backlog item to that item's docs image path.</summary>
-    public static Task PromoteItem(string runDirectory, string itemId, bool overwrite, string? backlogPath = null)
+    /// <summary>
+    /// Promotes the checkpoint named after a backlog item to that item's docs image path. When the item was annotated, the
+    /// annotated image goes to the docs path and the clean capture and spec go beside it (NAME.clean.png,
+    /// NAME.annotations.json) so it can be re-annotated by hand. A redacted item's clean capture is never promoted.
+    /// </summary>
+    public static async Task PromoteItem(string runDirectory, string itemId, bool overwrite, string? backlogPath = null)
     {
         var manifest = ReadManifest(Path.Combine(runDirectory, "manifest.json"));
         var root = manifest.DocsRoot ?? throw new ArgumentException("Set docsRoot in the run config before promotion");
-        var image = Backlog.DocsImage(Backlog.Find(itemId, backlogPath));
-        return Promote(runDirectory, itemId, Path.Combine(root, image), overwrite);
+        var image = Path.Combine(root, Backlog.DocsImage(Backlog.Find(itemId, backlogPath)));
+        var annotation = manifest.Annotations.Values.SingleOrDefault(a => a.Source == itemId);
+        if (annotation == null)
+        {
+            await Promote(runDirectory, itemId, image, overwrite);
+            return;
+        }
+        await Promote(runDirectory, annotation.Checkpoint, image, overwrite);
+        if (annotation.Redacted) return;
+        await Promote(runDirectory, itemId, Path.ChangeExtension(image, ".clean.png"), overwrite);
+        var spec = ContainedPath(Path.ChangeExtension(image, ".annotations.json"), root);
+        if (File.Exists(spec) && !overwrite) throw new IOException("Destination exists; explicit --overwrite required");
+        File.WriteAllText(spec, JsonSerializer.Serialize(annotation, new JsonSerializerOptions(RunConfig.Json) { WriteIndented = true }));
     }
 
     public static string ContainedPath(string path, string root)

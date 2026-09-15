@@ -11,6 +11,10 @@
   "scenarios": [
     "backlog-menus",
     "backlog-dialogs",
-    "backlog-preferences-1"
+    "backlog-preferences-1",
+    "backlog-menu-highlights",
+    "backlog-load-from-db",
+    "backlog-preference-dropdowns",
+    "backlog-new-model-options"
   ]
 }
