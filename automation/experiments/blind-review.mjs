@@ -43,11 +43,11 @@ export const rubrics = {
   'calc-group-menu': ['The Model menu is open', 'The Calculation Group item is readable in the menu', 'No dialog or new model object is shown'],
   'model-properties': ['The model root node is selected in TOM Explorer', 'Properties are readable for the model', 'The TOM Explorer search box is empty'],
   'script-edit': [
-    'The C# script editor shows exactly two lines: foreach (var m in Selected.Measures) and m.FormatString = "#,0.00";',
-    'Nothing was added or changed by autocomplete, such as a using directive or a replaced word',
+    'The C# script editor shows exactly two lines: foreach (var m in Selected.Measures) and m.FormatString = "#,0.00"; with line 2 indented (the indent width is not graded)',
+    'No autocomplete popup or tooltip covers the code',
     'No script output dialog is open'
   ],
-  'bpa-view': ['The Best Practice Analyzer view is open and selected', 'Its rule list or results are readable', 'No dialog is open'],
+  'bpa-view': ['The Best Practice Analyzer tab is active (docked or floating) with its toolbar visible', 'Its results list, or its empty-state text, is readable', 'No dialog is open'],
   'dax-query': ['A DAX Query document tab is active', 'Its query editor is visible and empty', 'No query result or error is shown'],
   // Round-1 tasks, kept so their trials can still be packed.
   'script-source': ['The C# script editor shows "Hello World".Output();', 'No script output dialog is open'],

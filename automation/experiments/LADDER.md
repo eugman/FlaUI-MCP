@@ -35,14 +35,17 @@ repeats. Prompts are `tasks` in `ladder-study.mjs`; rubrics are `rubrics` in
 |---|---|
 | `formatting`, `code-actions` (Preferences) | `bpa-view` (Best Practice Analyzer view) |
 | `column`, `measure`, `table`, `tom-tree` (TOM Explorer) | `dax-query` (new DAX Query document) |
-| `script-run`, `script-edit` (C# scripts) | `calc-group-menu` (Model menu open) |
-| | `model-properties` (model root node Properties) |
+| `script-run`, `script-edit` (C# scripts) | `model-properties` (model root node Properties) |
+| `calc-group-menu` (Model menu open) | |
 
 Round 1 used `script-source`, `dax-general` and `save-to-folder` in place of
 `script-edit`, `bpa-view` and `dax-query`. Guidance was written after reading the
 `dax-general` and `save-to-folder` transcripts (the Preferences search-scope line,
 added in 2ff9d1c and removed before round 2), so those two results are contaminated
 for conditions 4 and 5 from the `c4b`/`c5b` reruns on. Round 2 replaced them.
+Likewise, the generic skill's open-menu exception to background captures (2ff9d1c)
+came from a `calc-group-menu` transcript, so that task is contaminated for conditions
+3–5 from `c4b`/`c5b` on and counts as trained in round 2.
 `summarize` takes each trial's hold-out status from its own `study.json`, so round-1
 rows keep their original classification.
 
@@ -81,17 +84,22 @@ skill layer names hold-out UI.
   `label: "r2"` and seed 20260915, prepared into `artifacts/study-tasks12-r2-cN-sonnet`.
 - **Guidance is frozen:** the generic skill, map and `te3-tools` line don't change
   during or after round 2. The round-2 transcript review classifies failures only.
+  Round-1 condition 3 ran before the open-menu exception was added, so its
+  round-to-round change mixes that guidance change with the MCP fixes.
 - **Grading:** all 48 trials are packed into one blind review.
 - **Report:** rounds side by side per task, with no averaging across rounds and median
   calls as the cost measure.
 
 **Pre-registered targets**
-- Conditions 3–5 pass 12/12 with 0 false claims.
-- No "Unsupported key" error in any trial.
+- Conditions 3–5 pass 12/12 with 0 false claims. A pass also requires settings to
+  be restored, so check a failure for a restoration fault before blaming the agent.
+- No "Unsupported key" error in any trial (search each trial's `agent.jsonl`;
+  `calls.jsonl` records result sizes only).
 - Median calls on the 9 unchanged tasks: condition 5 ≤ condition 4 ≤ condition 3.
+  `summarize` reports one median over all 12 tasks, so compute this one from the
+  per-trial dispatched call counts of those 9 tasks.
 - `script-edit` shows the exact two lines in conditions 3–5, and at least one trial
   uses `windows_paste`.
-- Condition 4 formatting has no rejected key names.
 
 ### Extended-budget reruns
 

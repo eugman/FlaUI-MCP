@@ -10,8 +10,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const rungs = ['1', '2', '3', '4', '5'];
 export const models = ['sonnet', 'opus'];
 export const companionTools = ['te3_navigate'];
-// Twelve distinct screenshots, one run each per condition. The first eight are trained: the map and
-// te3_navigate may cover them. The last four are hold-outs (see holdoutTasks).
+// Twelve distinct screenshots, one run each per condition. The first nine are trained: the map and
+// te3_navigate may cover them. The last three are hold-outs (see holdoutTasks).
 export const tasks = {
   formatting: 'Capture Preferences > Text Editors > DAX Editor > Auto Formatting with that section selected, empty search, all section controls (including Use default formatting settings), title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
   'code-actions': 'Capture Preferences > Text Editors > DAX Editor > Code Actions with that section selected, empty search, all section controls, title and bottom buttons readable. Do not change settings to satisfy the image. Leave the section open.',
@@ -21,16 +21,17 @@ export const tasks = {
   'tom-tree': 'In TOM Explorer, expand the Sales and Comparison tables so their columns and measures are visible. Capture TOM Explorer with both tables expanded and an empty search box. Do not edit objects.',
   'script-run': 'Open the supplied .csx through TE3 UI. Verify its source is exactly `"Hello World".Output();` ignoring trailing whitespace, execute only that source, and capture the output dialog title, Hello World text and Close button. Leave the output open. Do not type replacement source, change file associations, or interact with unrelated applications. Stop if an unrelated app chooser appears.',
   'script-edit': 'Create a new C# script document in TE3 and enter exactly these two lines, without running the script: `foreach (var m in Selected.Measures)` then `    m.FormatString = "#,0.00";`. Capture the C# script editor showing exactly those two lines. Do not run or save the script or change the model. Leave the script open.',
+  'calc-group-menu': 'Open the Model menu and capture it with the Calculation Group item visible. Do not click any menu item or change the model. Leave the menu open.',
   'bpa-view': 'Open the Best Practice Analyzer view and capture it with its rule list or results readable. Do not apply fixes, change rules, or edit the model. Leave the view open.',
   'dax-query': 'Open a new DAX Query document and capture its empty query editor. Do not run a query or edit the model. Leave the document open.',
-  'calc-group-menu': 'Open the Model menu and capture it with the Calculation Group item visible. Do not click any menu item or change the model. Leave the menu open.',
   // The fixture has no relationships, so a relationship task is impossible; the model root node replaces it.
   'model-properties': 'Select the model itself, the root node in TOM Explorer. Capture it selected with its Properties readable and an empty TOM Explorer search box. Do not edit the model. Leave the model selected.'
 };
 // Hold-outs get no map topic, skill line or te3_navigate destination, ever, so they show whether guidance
 // written for the trained tasks also works on screenshots nobody wrote it around.
-// Round 2 swapped dax-general and save-to-folder (guidance had been written from their transcripts) for bpa-view and dax-query.
-export const holdoutTasks = ['bpa-view', 'dax-query', 'calc-group-menu', 'model-properties'];
+// Round 2 swapped dax-general and save-to-folder (guidance had been written from their transcripts) for bpa-view and dax-query,
+// and counts calc-group-menu as trained: the generic skill's open-menu capture exception came from its transcripts.
+export const holdoutTasks = ['bpa-view', 'dax-query', 'model-properties'];
 
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));

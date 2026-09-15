@@ -20,7 +20,7 @@ export function composeSkill(rung, layersDirectory = defaultLayers) {
   const layers = rungLayers[rung];
   if (!layers) throw new Error(`Unknown rung: ${rung}`);
   const text = layers
-    .map(name => fs.readFileSync(path.join(layersDirectory, `${name}.md`), 'utf8').replace(/<!--[\s\S]*?-->/g, '').trim())
+    .map(name => fs.readFileSync(path.join(layersDirectory, `${name}.md`), 'utf8').replace(/<!--[\s\S]*?-->/g, '').replace(/\n{3,}/g, '\n\n').trim())
     .filter(Boolean)
     .join('\n\n');
   return { rung, layers, text, sha256: crypto.createHash('sha256').update(text).digest('hex') };

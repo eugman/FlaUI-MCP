@@ -11,10 +11,10 @@ import {
 } from './ladder-study.mjs';
 import { composeSkill } from '../skills/build-skill.mjs';
 
-test('twelve distinct tasks, the last four held out', () => {
+test('twelve distinct tasks, the last three held out', () => {
   assert.equal(Object.keys(tasks).length, 12);
-  assert.deepEqual(holdoutTasks, ['bpa-view', 'dax-query', 'calc-group-menu', 'model-properties']);
-  assert.deepEqual(Object.keys(tasks).slice(-4), holdoutTasks);
+  assert.deepEqual(holdoutTasks, ['bpa-view', 'dax-query', 'model-properties']);
+  assert.deepEqual(Object.keys(tasks).slice(-3), holdoutTasks);
 });
 
 test('schedule runs each task once and shuffles deterministically by seed', () => {
