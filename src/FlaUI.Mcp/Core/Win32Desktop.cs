@@ -37,6 +37,83 @@ public static class Win32Desktop
 
     private delegate bool EnumWindowsProc(nint hWnd, nint lParam);
 
+    private const uint CF_UNICODETEXT = 13;
+    private const uint GMEM_MOVEABLE = 0x0002;
+    private const nint HWND_MESSAGE = -3;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool OpenClipboard(nint hWndNewOwner);
+
+    [DllImport("user32.dll")]
+    private static extern bool CloseClipboard();
+
+    [DllImport("user32.dll")]
+    private static extern bool EmptyClipboard();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nint SetClipboardData(uint format, nint handle);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterClipboardFormat(string name);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint CreateWindowEx(int exStyle, string className, string? windowName, int style,
+        int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyWindow(nint hWnd);
+
+    [DllImport("kernel32.dll")]
+    private static extern nint GlobalAlloc(uint flags, nuint bytes);
+
+    [DllImport("kernel32.dll")]
+    private static extern nint GlobalLock(nint memory);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool GlobalUnlock(nint memory);
+
+    [DllImport("kernel32.dll")]
+    private static extern nint GlobalFree(nint memory);
+
+    /// <summary>
+    /// Replace the clipboard with Unicode text, excluded from clipboard history.
+    /// A message-only window owns it, since an ownerless EmptyClipboard makes SetClipboardData fail.
+    /// Returns false when another process keeps the clipboard open.
+    /// </summary>
+    public static bool SetClipboardText(string text)
+    {
+        var owner = CreateWindowEx(0, "STATIC", null, 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0);
+        try
+        {
+            var opened = false;
+            for (var attempt = 0; attempt < 10 && !(opened = OpenClipboard(owner)); attempt++) Thread.Sleep(50);
+            if (!opened) return false;
+            try
+            {
+                EmptyClipboard();
+                SetClipboardBytes(CF_UNICODETEXT, Encoding.Unicode.GetBytes(text + "\0"));
+                SetClipboardBytes(RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing"), new byte[4]);
+                return true;
+            }
+            finally { CloseClipboard(); }
+        }
+        finally { if (owner != 0) DestroyWindow(owner); }
+    }
+
+    private static void SetClipboardBytes(uint format, byte[] bytes)
+    {
+        var memory = GlobalAlloc(GMEM_MOVEABLE, (nuint)bytes.Length);
+        if (memory == 0) throw new InvalidOperationException("Clipboard memory allocation failed.");
+        Marshal.Copy(bytes, 0, GlobalLock(memory), bytes.Length);
+        GlobalUnlock(memory);
+        // On success the clipboard owns the memory.
+        if (SetClipboardData(format, memory) == 0)
+        {
+            GlobalFree(memory);
+            throw new InvalidOperationException("Writing to the clipboard failed.");
+        }
+    }
+
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, nint lParam);
 

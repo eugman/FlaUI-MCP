@@ -21,7 +21,8 @@ public sealed class ToolCompositionTests
             using var mcp = new AutomationHost(new ProcessPolicy(["test-app"]), includeDesktopTools: true);
             var shared = runner.Tools.GetToolDefinitions().ToDictionary(tool => tool.Name);
             var all = mcp.Tools.GetToolDefinitions().ToDictionary(tool => tool.Name);
-            Assert.Equal(10, shared.Count);
+            Assert.Equal(11, shared.Count);
+            Assert.Contains("windows_paste", shared.Keys);
             foreach (var (name, definition) in shared)
                 Assert.Equal(JsonSerializer.Serialize(definition), JsonSerializer.Serialize(all[name]));
             Assert.Equal(new[] { "windows_batch", "windows_close", "windows_focus", "windows_get_text", "windows_launch", "windows_list_windows" },
