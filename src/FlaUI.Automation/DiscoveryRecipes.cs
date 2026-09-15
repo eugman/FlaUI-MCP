@@ -8,16 +8,16 @@ using System.Text.RegularExpressions;
 /// </summary>
 public static partial class DiscoveryRecipes
 {
-    // Menu path to a command that opens a dialog. Names are best guesses; the menu maps confirm them.
+    // Menu path to a command that opens a dialog, with names observed in the 2026-09-15 discovery run (UI-MAP.md).
     private static readonly (string Menu, string[] Items)[] Dialogs =
     [
         ("File", ["New", "Model..."]),
-        ("File", ["Open", "Model from DB..."]),
-        ("Window", ["Manage layouts..."]),
-        ("Tools", ["Manage BPA Rules..."]),
+        ("Window", ["Layouts..."]),
+        ("Window", ["Windows..."]),
+        ("Tools", ["Manage BPA rules..."]),
         ("Help", ["About Tabular Editor"])
     ];
-    private static readonly string[] TreeNodes = ["Invoices", "Roles", "Shared Expressions", "Data Sources", "Relationships"];
+    private static readonly string[] TreeNodes = ["Roles", "Shared Expressions", "Data Sources", "Relationships"];
     private static readonly string[] PreferenceSearches = ["Compiler", "Features", "Proxy", "TOM Explorer", "AI Provider", "Keyboard"];
 
     public static async Task Backlog(RecipeContext c)
@@ -84,9 +84,27 @@ public static partial class DiscoveryRecipes
                     await page.MapPopups(c.OutputPath($"context-{Slug(node)}.uia.json"));
                     await page.PressKeys("Escape");
                 });
-            await Probe("properties", async () =>
+            await Probe("Roles > Create cascade", async () =>
             {
+                await page.SelectObject("Roles");
+                await page.PressKeys("Shift+F10");
+                await Task.Delay(500);
+                await page.ClickPopupItem("Create");
+                await Task.Delay(500);
+                await page.MapPopups(c.OutputPath("context-roles-create.uia.json"));
+                await page.PressKeys("Escape");
+                await page.PressKeys("Escape");
+            });
+            // Tables sit under the collapsed Tables folder on this fixture.
+            await Probe("table context menu and properties", async () =>
+            {
+                await page.SelectObject("Tables");
+                await page.ExpandSelected();
                 await page.SelectObject("Invoices");
+                await page.PressKeys("Shift+F10");
+                await Task.Delay(500);
+                await page.MapPopups(c.OutputPath("context-invoices.uia.json"));
+                await page.PressKeys("Escape");
                 await c.MapControls("properties-invoices", new(AutomationId: "PropertyGridView"));
             });
             await Probe("expression editor", () => c.MapControls("expression-editor", new(AutomationId: "QuickEditorView")));

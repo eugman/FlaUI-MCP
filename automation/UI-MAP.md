@@ -145,6 +145,40 @@ property access. Absence polling retries only ElementNotAvailableException and
 COM 0x80040201, resets settlement, and re-enumerates roots. It never interprets a
 provider failure as successful absence. Other errors and hung reads still fail.
 
+## Discovery on the SpaceParts fixture (TE3 3.26.3, 2026-09-15)
+
+Maps from the `discovery-backlog` run (`artifacts/te3/fla_20260915_104919_ab1414b6`).
+
+- **Main menu:** File, Edit, View, Expression Editor, Model, Tools, Window, Help, plus an unnamed-looking `Item` MenuItem.
+  Popup entries are Buttons; only submenu parents are MenuItems.
+- **File:** New and Open (MenuItems), Revert, Close Document, Close Model, Save, Save As..., Save to Folder..., Save All,
+  Recent Files and Recent Tabular Models (MenuItems), Exit. A physical click on New inside its popup opens the submenu:
+  Model..., New DAX Query, New Pivot Grid, New DAX Script, New Diagram, New C# Script.
+- **Edit:** Undo, Redo, Find..., Replace..., Cut, Copy, Paste, Delete, Select All, Code Assist (MenuItem), Word Wrap (CheckBox).
+- **View:** TOM Explorer, AI Assistant, DAX Package Manager, Best Practice Analyzer, Messages, Data Refresh, Expression Editor,
+  Macros, VertiPaq Analyzer, Dependencies, DAX Optimizer, Calendar Editor, Perspective Editor, Metadata Translation Editor,
+  Debug and Toolbars (MenuItems), Properties.
+- **Model:** Deploy..., Serialization options..., Import tables..., Update schema (all tables)..., Script DAX, Refresh model,
+  Add Table, Add Calculated Table, Add Calculation Group, Add Data Source (Legacy), Add Data Source (Power Query),
+  Add Perspective, Add User-Defined Function, Add Shared Expression, Add Relationship, Add Role, Add Translation.
+  On this fixture the enabled order differs from the small fixture's walk in `CaptureCalculationGroupMenu`.
+- **Tools:** Customize..., Preferences..., Manage BPA rules... (lowercase r).
+- **Window:** New... (MenuItem), Float, Pin Tab, New Horizontal/Vertical Tab Group, Close All, Reset Window Layout, numbered
+  documents, Windows..., Capture Layout, Layouts..., Default layout, Classic layout, Theme (MenuItem), Default palette,
+  Language (MenuItem).
+- **Help:** Online Documentation, Onboarding Guide, Community Support, Dedicated Support, What's New, About Tabular Editor.
+  About shows the licence holder, installations and session ID; redact before promotion.
+- **Dialogs:** File > New > Model... opens "New Model" (Model Name Edit, Compatibility Level ComboBox, Use workspace database
+  CheckBox, Direct Lake guidance link, OK/Cancel); Escape closes it. Help > About Tabular Editor opens "About Tabular Editor 3".
+  "Model from DB..." matched more than one control from the unscoped lookup; scope it to the Open submenu popup.
+- **TOM Explorer:** top-level rows are folders (Data Sources, Functions, Perspectives, Relationships, Roles, Shared Expressions,
+  Tables); tables sit under the collapsed Tables folder, so a table row is only found after expanding Tables.
+  Shift+F10 on a folder opens a context menu with Create (MenuItem, a cascade) and Properties; Data Sources adds Import tables....
+- **Expression Editor:** a Property ComboBox (value `Expression`) selects which DAX property is edited.
+- **Preferences search:** AI Provider, Keyboard, Proxy Settings and TOM Explorer each return their section; "Compiler" and
+  "Features" return nothing.
+- A plain (non-background) `windows_screenshot` of the main window includes an open popup menu; background captures do not.
+
 ## Original scalar-output image: remaining fidelity gap
 
 Original `c-sharp-script-output-function.png` is 704x361, including a source strip
