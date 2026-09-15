@@ -203,6 +203,29 @@ Round 2 (`fla_20260915_111556_d7a3fd70`), using the recipe helpers:
 - **Invoices on the offline fixture:** Properties show Incremental Refresh Enabled True and Refresh Policy
   "5 year rolling, 10 day incremental"; the Expression Editor offers "Default Detail Rows Expression" on the table.
 
+Round 2 completed (`fla_20260915_113531_cc04af3e`, no probe errors, model unchanged):
+
+- **Reaching a table row:** the tree exposes only rows in view, and only TreeItems report selection (the DataItem cell
+  with the same value does not). `SelectNodePath("Tables", "Invoices")` works: collapse, click Tables, Right, then Down until
+  the TreeItem with that value is selected. Setting the search box value does not filter; typing it does
+  (`SearchTom`). A typed "Invoices" search shows its relationships, the role table permissions named Invoices, the table
+  and its partition, so a first match by value is not the table after a search.
+- **Hover tooltips:** a physical row click leaves the pointer on the tree, and the next capture showed a row tooltip over
+  the context menu. `SelectFirstRow` now parks the pointer on the title bar after clicking.
+- **Table context menu (Invoices):** Update table schema..., Script DAX, Apply refresh policy, Create (cascade),
+  Move to group (cascade), Make invisible, Shown in Perspectives (cascade), Batch rename children..., Duplicate 1 table,
+  Mark as date table..., Show dependencies, Export script (cascade), Cut, Copy, Paste, Delete, Properties.
+- **Properties grid (table):** categories are TreeItems (Basic, Incremental Refresh, Metadata, Options); properties are
+  DataItems with values (Hidden=False, Name=Invoices, Enabled=True, Refresh Policy=5 year rolling, 10 day incremental,
+  Annotations=2 annotations). Toolbar CheckBoxes Categorized, Alphabetical, Property descriptions; an Expand Button.
+- **Roles expanded:** the eight SpaceParts roles; a Translations folder appears after Tables.
+- **Windows dialog:** Activate Document, Close Document, Close All Documents, OK; no Cancel, and Escape does not close it.
+  The title-bar Close (AutomationId `Close`) does.
+- **Manage Best Practice Rules:** Current model tab; Rule collections list ((Effective rules), Built-in Best Practices,
+  Rules within the current model, Rules for the local user, Rules on the local machine) with Add.../Remove/up/down;
+  Rules in collection grid (Enabled, Rule name, Collection, Severity) grouped by category, with New rule..., Clone rule,
+  Edit rule..., Delete rule, Move to...; OK/Cancel. Escape or Cancel closes it.
+
 ## Original scalar-output image: remaining fidelity gap
 
 Original `c-sharp-script-output-function.png` is 704x361, including a source strip

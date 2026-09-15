@@ -1074,6 +1074,19 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
             if (element.Patterns.ScrollItem.IsSupported) element.Patterns.ScrollItem.Pattern.ScrollIntoView();
         }).WaitAsync(TimeSpan.FromSeconds(5));
         await invoke("windows_click", new { @ref = first.Ref, physical = true });
+        await ParkPointer();
+    }
+
+    // A pointer left on a tree row raises a hover tooltip that covers later menus and captures; park it on the title bar.
+    private async Task ParkPointer()
+    {
+        var owner = host.Sessions.GetInputTarget(handle);
+        var bounds = Win32Desktop.GetWindowBounds(owner.Hwnd) ?? throw new InvalidOperationException("TE3 window disappeared");
+        var point = new System.Drawing.Point(bounds.Left + bounds.Width / 2, Math.Max(bounds.Top, 0) + 12);
+        using var input = new GuardedInput(owner);
+        if (Win32Desktop.WindowAt(point) != owner.Hwnd) throw new InvalidOperationException("TE3 title bar is obscured; pointer not moved");
+        input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(point));
+        await Task.Delay(200);
     }
 
     /// <summary>Opens the context menu of a TOM Explorer row with Shift+F10, then clicks any cascade items such as "Create".</summary>
