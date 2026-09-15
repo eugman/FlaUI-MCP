@@ -33,7 +33,10 @@ public static class RecipeCatalog
         new("file-load-three-cycles", CSharpPage, false, FileLoad),
         new("csharp-auto-rollback-source", CSharpPage, false, AutoRollbackSource),
         new("discovery-backlog", "automation/RECIPES.md", false, DiscoveryRecipes.Backlog),
-        new("discovery-backlog-2", "automation/RECIPES.md", false, DiscoveryRecipes.Backlog2)
+        new("discovery-backlog-2", "automation/RECIPES.md", false, DiscoveryRecipes.Backlog2),
+        new("backlog-menus", "content/features/views/user-interface.md", false, BacklogRecipes.MenuRecipes),
+        new("backlog-dialogs", "content/features/views/user-interface.md", false, BacklogRecipes.DialogRecipes),
+        new("backlog-preferences-1", "content/references/preferences.md", false, BacklogRecipes.PreferenceRecipes)
     ];
 
     public static Recipe[] Select(IEnumerable<string> ids)
