@@ -164,8 +164,26 @@ public class ClickTool : ToolBase
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ErrorResult($"Failed to click {refId}: {ex.Message}"));
+            IReadOnlyList<Win32WindowInfo> windows = [];
+            try
+            {
+                var owner = _elementRegistry.GetProcessIdForRef(refId);
+                if (owner != 0) windows = Win32Desktop.GetTopLevelWindows(owner);
+            }
+            catch { }
+            return Task.FromResult(ErrorResult($"Failed to click {refId}: {ClickFailure(ex.Message, ex.GetType().Name, windows)}"));
         }
+    }
+
+    // An empty reason invites a blind retry; name the exception and any dialog that seems to block input.
+    internal static string ClickFailure(string message, string exceptionType, IReadOnlyList<Win32WindowInfo> windows)
+    {
+        var reason = string.IsNullOrWhiteSpace(message) ? exceptionType : message;
+        var modal = windows.Any(w => !w.IsEnabled && !w.IsToolWindow)
+            ? windows.FirstOrDefault(w => w.IsEnabled && !w.IsToolWindow && !w.IsCloaked && w.Title.Length > 0)
+            : null;
+        return modal == null ? reason
+            : $"{reason.TrimEnd('.')}. Window \"{modal.Title}\" appears to be a modal dialog blocking input; handle it first (see windows_list_windows).";
     }
 
     /// <summary>

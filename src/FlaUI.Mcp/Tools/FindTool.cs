@@ -33,13 +33,15 @@ public sealed class FindTool(ElementQuery query) : ToolBase
                 ? w.Deserialize<ElementSelector>(SelectorOptions) ?? throw new ArgumentException("within must be an object, not null.")
                 : null;
             int Limit(string key, int fallback) => a.TryGetProperty(key, out var v) ? v.GetInt32() : fallback;
+            var includeOwned = GetBoolArgument(arguments, "includeOwned");
             var found = query.Find(handle.GetString()!, selector, within, Limit("maxDepth", 24), Limit("maxNodes", 3000), Limit("maxResults", 30),
-                GetBoolArgument(arguments, "includeOwned"), includeBounds: GetBoolArgument(arguments, "includeBounds"), describeMisses: true);
+                includeOwned, includeBounds: GetBoolArgument(arguments, "includeBounds"), describeMisses: true);
             object response = GetBoolArgument(arguments, "ancestry")
                 ? new { result = found, ancestors = found.Elements.Select(e => new { e.Ref, chain = query.Ancestors(e.Ref) }) }
                 : found;
             var json = JsonSerializer.SerializeToNode(response, McpProtocol.JsonOptions)!.AsObject();
-            if (EmptyHint(selector, found) is { } hint) json["hint"] = hint;
+            var hints = new[] { EmptyHint(selector, found), PopupHint(selector, found, includeOwned), TruncationHint(found) }.OfType<string>().ToArray();
+            if (hints.Length > 0) json["hint"] = string.Join(" ", hints);
             return Task.FromResult(TextResult(json.ToJsonString(McpProtocol.JsonOptions)));
         }
         catch (ProviderBlockedException ex) { return Task.FromResult(BlockedResult(ex.Pending)); }
@@ -51,4 +53,13 @@ public sealed class FindTool(ElementQuery query) : ToolBase
         found.Elements.Count == 0 && (selector.Name ?? selector.ControlType ?? selector.Value) != null
             ? "No match. Selectors are exact and case-sensitive. Item text is often in value rather than name, and a menu entry may be a Button; retry with fewer fields."
             : null;
+
+    // A MenuItem search of an open popup can match only submenu parents, making the menu look nearly empty.
+    internal static string? PopupHint(ElementSelector selector, QueryResult found, bool includeOwned) =>
+        includeOwned && selector.ControlType == "MenuItem" && found.Elements.Count > 0
+            ? "Menu entries are often Buttons; only submenu parents may be MenuItems. Search the open popup without controlType to see every entry."
+            : null;
+
+    internal static string? TruncationHint(QueryResult found) =>
+        found.Elements.Any(e => e.ValueTruncated) ? "Some values are truncated; windows_get_text returns the full value." : null;
 }

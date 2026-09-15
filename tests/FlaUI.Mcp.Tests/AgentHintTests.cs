@@ -90,6 +90,36 @@ public sealed class AgentHintTests
     }
 
     [Fact]
+    public void PopupMenuItemSearchesExplainThatEntriesAreButtons()
+    {
+        var submenus = new QueryResult([new ElementInfo("w1e1", "Debug", "", "MenuItem", "", true, false, null, [], 1)], 1, false, 0);
+        var menuItems = new ElementSelector(ControlType: "MenuItem");
+        Assert.Contains("often Buttons", FindTool.PopupHint(menuItems, submenus, includeOwned: true));
+        Assert.Null(FindTool.PopupHint(menuItems, submenus, includeOwned: false));
+        Assert.Null(FindTool.PopupHint(new ElementSelector(ControlType: "Button"), submenus, includeOwned: true));
+    }
+
+    [Fact]
+    public void TruncatedValuesPointToGetText()
+    {
+        ElementInfo Row(bool truncated) => new("w1e1", "", "", "Edit", "", true, false, "text", [], 1, ValueTruncated: truncated);
+        Assert.Contains("windows_get_text", FindTool.TruncationHint(new QueryResult([Row(false), Row(true)], 2, false, 0)));
+        Assert.Null(FindTool.TruncationHint(new QueryResult([Row(false)], 1, false, 0)));
+    }
+
+    [Fact]
+    public void ClickFailuresNeverHaveAnEmptyReasonAndNameABlockingDialog()
+    {
+        Win32WindowInfo[] blocked = [new(1, "Main", 7, false, false, false), new(2, "Error report", 7, true, false, false)];
+        Assert.Equal("COMException", ToolsClickFailure("", "COMException", []));
+        var withModal = ToolsClickFailure("", "COMException", blocked);
+        Assert.StartsWith("COMException. Window \"Error report\"", withModal);
+        Assert.Equal("Element is offscreen", ToolsClickFailure("Element is offscreen", "X", [new(1, "Main", 7, true, false, false)]));
+    }
+
+    private static string ToolsClickFailure(string message, string type, IReadOnlyList<Win32WindowInfo> windows) => ClickTool.ClickFailure(message, type, windows);
+
+    [Fact]
     public void EmptyWindowListMentionsAnActiveAllowlist()
     {
         Assert.Equal("No windows found (app allowlist active: TabularEditor3)", ListWindowsTool.EmptyMessage(new ProcessPolicy(["TabularEditor3"])));

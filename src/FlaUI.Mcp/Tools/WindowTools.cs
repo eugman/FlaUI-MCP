@@ -38,6 +38,12 @@ public class ListWindowsTool : ToolBase
         try
         {
             var windows = _sessionManager.ListWindows();
+            // Right after a launch or a closed dialog, windows can briefly be untitled; re-check before reporting none.
+            for (var waited = 0; windows.Count == 0 && waited < 1000; waited += 250)
+            {
+                Thread.Sleep(250);
+                windows = _sessionManager.ListWindows();
+            }
 
             if (windows.Count == 0)
             {
