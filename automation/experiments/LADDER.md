@@ -104,6 +104,31 @@ skill layer names hold-out UI.
 - `script-edit` shows the exact two lines in conditions 3–5, and at least one trial
   uses `windows_paste`.
 
+**Round 2 results** (2026-09-15, blind review `artifacts/review-tasks12-r2`)
+
+| Condition | Passes r1 → r2 | False claims r1 → r2 | Median calls, 9 unchanged tasks r1 → r2 | Total calls r1 → r2 |
+|---|---|---|---|---|
+| 1 | 8 → 11 | 2 → 0 | 25 → 30 | 353 → 353 |
+| 3 | 12 → 12 | 0 → 0 | 24 → 16 | 280 → 272 |
+| 4 | 12 → 12 | 0 → 0 | 17 → 17 | 209 → 189 |
+| 5 | 12 → 12 | 0 → 0 | 9 → 9 | 164 → 130 |
+
+Round-1 condition 1's 8 passes include dax-general and save-to-folder failures that round 2 no longer has.
+
+- **Targets:** three of four met.
+  - Met: conditions 3–5 passed 12/12 with no false claims.
+  - Met: no trial hit "Unsupported key".
+  - Met: `script-edit` passed in conditions 3–5, each using `windows_paste`.
+    Condition 1 typed it with 11 `windows_type` calls.
+  - Missed by one call: the median on the 9 unchanged tasks was 9 for condition 5,
+    17 for condition 4 and 16 for condition 3, so condition 4 did not beat
+    condition 3. Condition 5 is still clearly cheapest.
+- **Only failure:** condition 1 formatting ran out of its 60 calls and reported failure.
+- **Outliers (classified, not acted on):** condition 3 formatting (56 calls) closed
+  Preferences with Escape after resizing it and started again; condition 1 script-run
+  (42 calls) hit repeated UIA timeouts on the original MCP's file dialog; condition 5
+  dax-query (14) navigated menus, since hold-outs have no `te3_navigate` destination.
+
 ### Extended-budget reruns
 
 A trial that hits the call limit or the time limit may be rerun once in a sibling
