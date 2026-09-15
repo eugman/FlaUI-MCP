@@ -83,7 +83,9 @@ public class SessionManager : IDisposable
                 .Where(w => !w.IsToolWindow && !w.IsCloaked).ToArray();
             if (candidates.Length == 1)
             {
-                window = Automation.FromHandle(candidates[0].Hwnd)?.AsWindow();
+                // A provider still starting up can time out; keep polling, then fall through to the no-relaunch error.
+                try { window = Automation.FromHandle(candidates[0].Hwnd)?.AsWindow(); }
+                catch (TimeoutException) { }
                 OperationContext.Check();
             }
             if (window == null) Thread.Sleep(500);
@@ -91,12 +93,21 @@ public class SessionManager : IDisposable
 
         if (window == null)
         {
-            throw new Exception($"Launch was requested for {appPath} (PID {process.Id}), but no unique owned window was found. Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window.");
+            var exited = process.HasExited;
+            var titles = exited || !_processPolicy.IsProcessAllowed(process.Id) ? Array.Empty<string>()
+                : Win32Desktop.GetTopLevelWindows(process.Id).Select(w => w.Title).Where(t => t.Length > 0).ToArray();
+            throw new Exception(LaunchFailure(appPath, process.Id, exited, titles));
         }
 
         var windowHandle = RegisterWindow(window);
         return (windowHandle, window);
     }
+
+    internal static string LaunchFailure(string appPath, int processId, bool exited, IReadOnlyList<string> titles) => exited
+        ? $"Launch was requested for {appPath} (PID {processId}), but that process has exited; another instance may own the window. Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window."
+        : $"Launch was requested for {appPath} (PID {processId}), but no unique owned window was found" +
+          (titles.Count > 0 ? $"; its windows are {string.Join(", ", titles.Select(t => $"\"{t}\""))}" : "") +
+          ". Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window.";
 
     internal static System.Diagnostics.ProcessStartInfo LaunchStartInfo(string appPath, string[]? args)
     {

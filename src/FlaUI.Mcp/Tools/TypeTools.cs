@@ -26,7 +26,8 @@ public class TypeTool : ToolBase
     public override string Name => "windows_type";
 
     public override string Description => 
-        "Type text into an element. The element will be focused first. " +
+        "Type text into an element. The element will be focused first. Line breaks are sent as Enter. " +
+        "Code editors can autocomplete typed text; use windows_paste for code. " +
         "Use this for typing without clearing existing content. Use windows_fill to replace content.";
 
     public override object InputSchema => new
@@ -67,6 +68,8 @@ public class TypeTool : ToolBase
         var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
         if (verifyFocus && string.IsNullOrWhiteSpace(refId)) return Task.FromResult(ErrorResult("verifyFocus requires an element ref; no input sent."));
         var submit = GetBoolArgument(arguments, "submit", false);
+        var lines = Lines(text);
+        var sentLines = 0;
 
         try
         {
@@ -101,7 +104,13 @@ public class TypeTool : ToolBase
             // Type the text
             using var input = new GuardedInput(refId != null ? _elementRegistry.InputForRef(refId) : handle != null ? _sessions!.GetInputTarget(handle) : GuardedInput.ForegroundTarget(_processPolicy), refId == null ? null : _elementRegistry.GetElement(refId), verifyFocus);
             var target = string.IsNullOrEmpty(refId) ? "focused element" : refId;
-            input.Type(text);
+            // Keyboard.Type maps '\n' to Ctrl+Enter, so line breaks are sent as explicit Enter presses.
+            foreach (var line in lines)
+            {
+                if (sentLines > 0) input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.ENTER));
+                input.Type(line);
+                sentLines++;
+            }
 
             if (submit)
             {
@@ -113,9 +122,11 @@ public class TypeTool : ToolBase
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ErrorResult($"Failed to type: {ex.Message}"));
+            return Task.FromResult(ErrorResult($"Failed to type: {ex.Message} Typed {sentLines} of {lines.Length} line(s)."));
         }
     }
+
+    internal static string[] Lines(string text) => text.ReplaceLineEndings("\n").Split('\n');
 }
 
 /// <summary>

@@ -34,7 +34,7 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
     }
 
     private List<AutomationElement> SearchRoots(string handle, ElementSelector selector, ElementSelector? within,
-        bool includeOwned, SearchBudget budget)
+        bool includeOwned, SearchBudget budget, bool describeMisses = false)
     {
         ValidateSelector(selector);
         if (within != null) ValidateSelector(within);
@@ -44,7 +44,7 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
         var hwnd = sessions.GetWindowHwnd(handle);
         if (hwnd != 0) refs.SetWindowIdentity(handle, pid, hwnd);
         else refs.SetWindowProcessId(handle, pid);
-        var scope = within == null ? root : Resolve(handle, within, includeOwned: includeOwned, budget: budget);
+        var scope = within == null ? root : Resolve(handle, within, includeOwned: includeOwned, budget: budget, describeMisses: describeMisses);
         var roots = new List<AutomationElement> { scope };
         if (includeOwned && within == null)
             foreach (var window in Win32Desktop.GetTopLevelWindows(pid).Where(w => w.Hwnd != hwnd))
@@ -63,13 +63,13 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
     }
     public QueryResult Find(string handle, ElementSelector selector, ElementSelector? within = null,
         int maxDepth = 24, int maxNodes = 3000, int maxResults = 30, bool includeOwned = false, SearchBudget? budget = null, bool includeBounds = false,
-        bool register = true)
+        bool register = true, bool describeMisses = false)
     {
         if (maxDepth is < 0 or > 64 || maxNodes is < 1 or > 20000 || maxResults is < 1 or > 1000)
             throw new ArgumentException("Limits: depth 0..64, nodes 1..20000, results 1..1000");
         budget ??= new SearchBudget(maxNodes, TimeSpan.FromSeconds(10));
         budget.LimitRemaining(maxNodes);
-        var roots = SearchRoots(handle, selector, within, includeOwned, budget);
+        var roots = SearchRoots(handle, selector, within, includeOwned, budget, describeMisses);
         var walker = sessions.Automation.TreeWalkerFactory.GetRawViewWalker();
         IEnumerable<AutomationElement> Children(AutomationElement node)
         {
@@ -128,13 +128,15 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
     public static string? RuntimeIdentity(int[]? runtimeId)
         => runtimeId is { Length: > 0 } ? string.Join(",", runtimeId) : null;
 
-    public AutomationElement Resolve(string handle, ElementSelector selector, ElementSelector? within = null, bool includeOwned = false, SearchBudget? budget = null)
+    public AutomationElement Resolve(string handle, ElementSelector selector, ElementSelector? within = null, bool includeOwned = false, SearchBudget? budget = null,
+        bool describeMisses = false)
     {
         if (selector.AutomationId != null || selector.Name != null)
         {
             var matches = FindExact(handle, selector, within, includeOwned, budget, 2);
             if (matches.Count > 1) throw new System.Reflection.AmbiguousMatchException("Multiple controls matched; refine selector/scope.");
-            if (matches.Count != 1) throw new InvalidOperationException($"Expected one element; found {matches.Count}. Refine selector/scope.");
+            if (matches.Count != 1) throw new InvalidOperationException($"Expected one element; found {matches.Count}. Refine selector/scope." +
+                (describeMisses ? MissCandidates(handle, selector, within, includeOwned) : ""));
             return matches[0];
         }
         var found = Find(handle, selector, within, maxResults: 2, includeOwned: includeOwned, budget: budget);
@@ -142,9 +144,27 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
         if (found.Truncated || found.Unreadable > 0)
             throw new InvalidOperationException("Incomplete UIA search; narrow the scope or inspect diagnostics.");
         if (found.Elements.Count != 1)
-            throw new InvalidOperationException($"Expected one element; found {found.Elements.Count}. Refine selector/scope.");
+            throw new InvalidOperationException($"Expected one element; found {found.Elements.Count}. Refine selector/scope." +
+                (describeMisses ? MissCandidates(handle, selector, within, includeOwned) : ""));
         return refs.GetElement(found.Elements[0].Ref)!;
     }
+
+    // windows_find only: when a typed scope selector misses, one small extra search names what is there.
+    private string MissCandidates(string handle, ElementSelector selector, ElementSelector? within, bool includeOwned)
+    {
+        if (selector.ControlType == null) return "";
+        try
+        {
+            var found = Find(handle, new ElementSelector(ControlType: selector.ControlType), within, maxResults: 5, includeOwned: includeOwned,
+                budget: new SearchBudget(300, TimeSpan.FromSeconds(1)), register: false);
+            return DescribeCandidates(selector.ControlType, found.Elements);
+        }
+        catch (Exception ex) when (ex is not (OperationCanceledException or ProviderBlockedException)) { return ""; }
+    }
+
+    internal static string DescribeCandidates(string controlType, IReadOnlyList<ElementInfo> elements) => elements.Count == 0
+        ? $" No {controlType} controls were found there."
+        : $" {controlType} controls present: {string.Join(", ", elements.Select(e => e.Name.Length > 0 ? $"\"{e.Name}\"" : $"automationId \"{e.AutomationId}\""))}.";
 
     // Absence covers provider-realized nodes only, not unrealized virtual rows.
     // Provider failures and exhausted budgets propagate; neither means absent.

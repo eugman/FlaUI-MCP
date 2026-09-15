@@ -50,6 +50,8 @@ public class SendKeysTool : ToolBase
         ["pagedown"] = VirtualKeyShort.NEXT,
         ["pgdn"] = VirtualKeyShort.NEXT,
         ["next"] = VirtualKeyShort.NEXT,
+        ["apps"] = VirtualKeyShort.APPS,
+        ["contextmenu"] = VirtualKeyShort.APPS,
         ["media_next"] = VirtualKeyShort.MEDIA_NEXT_TRACK,
         ["media_prev"] = VirtualKeyShort.MEDIA_PREV_TRACK,
         ["media_play_pause"] = VirtualKeyShort.MEDIA_PLAY_PAUSE,
@@ -312,7 +314,7 @@ public class SendKeysTool : ToolBase
         return keys;
     }
 
-    private static void PressKeys(List<VirtualKeyShort> keys)
+    internal static void PressKeys(List<VirtualKeyShort> keys)
     {
         var pressedModifiers = keys.Where(k => ModifierKeys.Contains(k)).ToList();
         try
@@ -338,7 +340,8 @@ public class SendKeysTool : ToolBase
 
     private static bool TryMapKey(string token, out VirtualKeyShort key)
     {
-        var normalized = token.Trim();
+        // "Page Down" and "PageDown" name the same key.
+        var normalized = string.Concat(token.Where(c => !char.IsWhiteSpace(c)));
         return KeyMap.TryGetValue(normalized, out key);
     }
 

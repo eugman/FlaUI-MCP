@@ -9,11 +9,17 @@ namespace PlaywrightWindows.Mcp.Tools;
 public class ListWindowsTool : ToolBase
 {
     private readonly SessionManager _sessionManager;
+    private readonly ProcessPolicy _policy;
 
-    public ListWindowsTool(SessionManager sessionManager)
+    public ListWindowsTool(SessionManager sessionManager, ProcessPolicy? policy = null)
     {
         _sessionManager = sessionManager;
+        _policy = policy ?? ProcessPolicy.AllowAll;
     }
+
+    // Under an allowlist an empty list usually means the allowed app isn't running, not a broken server.
+    internal static string EmptyMessage(ProcessPolicy policy) =>
+        policy.IsRestricted ? $"No windows found ({policy.DescribeAllowed()})" : "No windows found";
 
     public override string Name => "windows_list_windows";
 
@@ -35,7 +41,7 @@ public class ListWindowsTool : ToolBase
 
             if (windows.Count == 0)
             {
-                return Task.FromResult(TextResult("No windows found"));
+                return Task.FromResult(TextResult(EmptyMessage(_policy)));
             }
 
             var lines = windows.Select(w => 

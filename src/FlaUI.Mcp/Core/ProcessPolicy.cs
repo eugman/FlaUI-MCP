@@ -91,6 +91,10 @@ public sealed class ProcessPolicy
                $"(configured via the {EnvironmentVariable} environment variable).";
     }
 
+    public string DescribeAllowed() => IsRestricted
+        ? $"app allowlist active: {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}"
+        : "no app allowlist";
+
     public static string? TryGetProcessName(int processId)
     {
         if (processId <= 0)

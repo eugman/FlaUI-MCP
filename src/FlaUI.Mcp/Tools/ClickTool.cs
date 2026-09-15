@@ -26,7 +26,8 @@ public class ClickTool : ToolBase
         "Click an element by its ref (from windows_snapshot). Prefers Invoke pattern for reliability, " +
         "falls back to mouse click if needed. Menu items and controls whose name ends in \"...\" get a physical click " +
         "by default, because an Invoke that opens a menu or dialog blocks UI Automation until it closes; pass physical=false to force Invoke. " +
-        "If the click opens a modal dialog, returns immediately with the dialog title instead of waiting for the dialog to close.";
+        "If the click opens a modal dialog, returns immediately with the dialog title instead of waiting for the dialog to close. " +
+        "A right-click after selecting a tree or list row can start inline rename; open context menus with windows_send_keys Shift+F10 or Apps.";
 
     public override object InputSchema => new
     {

@@ -34,7 +34,7 @@ public sealed class FindTool(ElementQuery query) : ToolBase
                 : null;
             int Limit(string key, int fallback) => a.TryGetProperty(key, out var v) ? v.GetInt32() : fallback;
             var found = query.Find(handle.GetString()!, selector, within, Limit("maxDepth", 24), Limit("maxNodes", 3000), Limit("maxResults", 30),
-                GetBoolArgument(arguments, "includeOwned"), includeBounds: GetBoolArgument(arguments, "includeBounds"));
+                GetBoolArgument(arguments, "includeOwned"), includeBounds: GetBoolArgument(arguments, "includeBounds"), describeMisses: true);
             object response = GetBoolArgument(arguments, "ancestry")
                 ? new { result = found, ancestors = found.Elements.Select(e => new { e.Ref, chain = query.Ancestors(e.Ref) }) }
                 : found;
