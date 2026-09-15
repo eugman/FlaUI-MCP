@@ -1013,11 +1013,35 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     {
         if (path.Length == 0) throw new ArgumentException("Node path required");
         await CollapseObjectTree();
-        for (var i = 0; i < path.Length; i++)
+        await SelectFirstRow(path[0]);
+        foreach (var child in path.Skip(1))
         {
-            await SelectFirstRow(path[i]);
-            if (i < path.Length - 1) await ExpandSelected();
+            await ExpandSelected();
+            await SelectRowByKeys(child);
         }
+    }
+
+    /// <summary>
+    /// Moves the TOM Explorer selection down until the selected row has the value. The tree only exposes rows in view,
+    /// and keyboard selection keeps the selected row in view, so this reaches children a physical click cannot.
+    /// </summary>
+    public async Task SelectRowByKeys(string value, int maxSteps = 100)
+    {
+        var tree = TomExplorerTarget();
+        for (var step = 0; step < maxSteps; step++)
+        {
+            await Keys("Down", tree);
+            var rows = await Task.Run(() => query.Find(handle, new(ControlType: "DataItem", Value: value), tree.Selector, maxResults: 5,
+                register: false, budget: new SearchBudget(2000, TimeSpan.FromSeconds(2)))).WaitAsync(TimeSpan.FromSeconds(4));
+            if (rows.Elements.Any(row => row.Selected == true)) return;
+        }
+        throw new InvalidOperationException($"No TOM Explorer row with value {value} within {maxSteps} rows");
+    }
+
+    public async Task SearchTom(string text)
+    {
+        await Fill(SearchTarget(), text);
+        await Task.Delay(500);
     }
 
     /// <summary>
@@ -1026,8 +1050,7 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     /// </summary>
     public async Task SelectBySearch(string name)
     {
-        await Fill(SearchTarget(), name);
-        await Task.Delay(500);
+        await SearchTom(name);
         await SelectFirstRow(name);
         await ResetSearch();
     }
@@ -1074,12 +1097,13 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
     public async Task CancelDialog(Dialog dialog)
     {
         await SendKeysTo(dialog.Handle, "Escape");
-        foreach (var button in new[] { "Cancel", "Close" })
+        // "Close" also names other controls (Layouts has more than one), so that fallback is scoped to the title bar.
+        foreach (var (button, within) in new (string, ElementSelector?)[] { ("Cancel", null), ("Close", new(ControlType: "TitleBar")) })
         {
             try { await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(2)); return; }
             catch (TimeoutException) { }
-            try { await invoke("windows_click", new { @ref = await DialogRef(dialog, button, "Button") }); }
-            catch (Exception error) when (error is InvalidOperationException or TimeoutException) { }
+            try { await invoke("windows_click", new { @ref = await DialogRef(dialog, button, "Button", within) }); }
+            catch (Exception error) when (error is InvalidOperationException or TimeoutException or System.Reflection.AmbiguousMatchException) { }
         }
         await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(5));
     }
@@ -1092,10 +1116,10 @@ public sealed class Te3Page(AutomationHost host, string handle, Func<string, obj
 
     public Task MapDialog(Dialog dialog, string path) => MapWindow(dialog.Handle, path);
 
-    private async Task<string> DialogRef(Dialog dialog, string name, string controlType)
+    private async Task<string> DialogRef(Dialog dialog, string name, string controlType, ElementSelector? within = null)
     {
         reportStep?.Invoke($"Find {controlType} '{name}' in {dialog.Title}");
-        var element = await Task.Run(() => query.Resolve(dialog.Handle, new(Name: name, ControlType: controlType), null, false,
+        var element = await Task.Run(() => query.Resolve(dialog.Handle, new(Name: name, ControlType: controlType), within, false,
             budget: new SearchBudget(2000, TimeSpan.FromSeconds(3)))).WaitAsync(TimeSpan.FromSeconds(5));
         return host.Elements.Register(dialog.Handle, element);
     }

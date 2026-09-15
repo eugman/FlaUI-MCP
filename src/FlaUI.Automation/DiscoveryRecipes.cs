@@ -33,7 +33,7 @@ public static partial class DiscoveryRecipes
     {
         var page = c.Page;
         var errors = new List<string>();
-        var probe = Prober(page, errors);
+        var probe = Prober(page, errors, c);
 
         await c.Unchanged(async () =>
         {
@@ -116,11 +116,24 @@ public static partial class DiscoveryRecipes
     {
         var page = c.Page;
         var errors = new List<string>();
-        var probe = Prober(page, errors);
+        var probe = Prober(page, errors, c);
 
         await c.Unchanged(async () =>
         {
             await probe("TOM tab", page.OpenTom);
+            // Maps of what the tree exposes after expanding Tables and after filtering, whatever the probes below do.
+            await probe("tree after expanding Tables", async () =>
+            {
+                await page.SelectNodePath("Tables");
+                await page.ExpandSelected();
+                await c.MapControls("tom-tree-tables", new(AutomationId: "treeList"));
+            });
+            await probe("tree after searching Invoices", async () =>
+            {
+                await page.SearchTom("Invoices");
+                await c.MapControls("tom-tree-search-invoices", new(AutomationId: "treeList"));
+                await page.ResetSearch();
+            });
             // Two ways to reach a table row that may be scrolled out of view; the errors file says which works.
             await probe("Invoices by node path", async () =>
             {
@@ -157,7 +170,7 @@ public static partial class DiscoveryRecipes
         WriteErrors(c, errors);
     }
 
-    private static Func<string, Func<Task>, Task> Prober(Te3Page page, List<string> errors)
+    private static Func<string, Func<Task>, Task> Prober(Te3Page page, List<string> errors, RecipeContext c)
     {
         var main = page.TitledWindows().Select(w => w.Hwnd).ToArray();
         return async (name, action) =>
@@ -165,7 +178,9 @@ public static partial class DiscoveryRecipes
             try { await action(); }
             catch (Exception error) when (error is not OperationCanceledException)
             {
-                errors.Add($"{name}: {error.Message}");
+                errors.Add($"{name}: {error.GetType().Name}: {error.Message}");
+                // Written after every failure, so a later stop cannot lose the reasons.
+                WriteErrors(c, errors);
                 // Escape out of whatever the probe left open; never confirm anything.
                 foreach (var extra in page.TitledWindows().Where(w => !main.Contains(w.Hwnd)))
                     try { await page.SendKeysTo(page.Register(extra), "Escape"); } catch { }
