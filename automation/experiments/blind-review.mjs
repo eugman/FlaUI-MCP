@@ -35,7 +35,7 @@ export const rubrics = {
     'Properties are readable with Name Total Amount',
     'The TOM Explorer search box is empty'
   ],
-  table: ['The Sales table is selected', 'Properties are readable with Name Sales', 'Object Type shows Table', 'The TOM Explorer search box is empty'],
+  table: ['The Sales table is selected', 'Properties are readable with Name Sales', 'Object Type shows a table type (Table or Calculated Table)', 'The TOM Explorer search box is empty'],
   'tom-tree': ['Sales is expanded showing Amount and Total Amount', 'Comparison is expanded showing Amount', 'The TOM Explorer search box is empty'],
   'script-run': outputDialog,
   'dax-general': preferences('DAX Editor General'),
