@@ -16,7 +16,6 @@ Locators from TE3 3.26.3. Read only the topic for your task, plus `capture` for 
 - `rootOnly: true` searches only the root, never its descendants.
 - A selected row doesn't prove its pane is showing. Check the pane's controls.
 - After a timeout, observe again before any input. Never replay input blindly.
-- The Preferences search steps below are only for Auto Formatting and Code Actions; reach any other Preferences page by navigating the tree, without searching.
 
 # Preferences: Auto Formatting
 
