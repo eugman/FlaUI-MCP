@@ -5,9 +5,11 @@
   </Configurations>
   <Folder Name="/src/">
     <Project Path="src/FlaUI.Mcp/FlaUI.Mcp.csproj" />
+    <Project Path="src/FlaUI.Mcp.Te3/FlaUI.Mcp.Te3.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FlaUI.Mcp.Tests/FlaUI.Mcp.Tests.csproj" />
+    <Project Path="tests/FlaUI.Mcp.Te3.Tests/FlaUI.Mcp.Te3.Tests.csproj" />
     <Project Path="tests/FlaUI.Mcp.IntegrationTests/FlaUI.Mcp.IntegrationTests.csproj" />
     <Project Path="tests/TestApps/WinFormsTestApp/WinFormsTestApp.csproj" />
     <Project Path="tests/TestApps/WpfTestApp/WpfTestApp.csproj" />

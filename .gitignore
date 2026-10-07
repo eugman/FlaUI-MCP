@@ -27,3 +27,13 @@ __pycache__/
 /CLAUDE.local.md
 /.mcp.json
 /.claude/settings.local.json
+
+# Tabular Editor 3
+!automation/*.csx
+# Friction logs and handoffs name internal paths, a customer model and unreleased builds.
+/automation/FlaUI.md
+/automation/FlaUI-improvements-handoff.md
+/automation/FlaUI-capability-gaps.md
+# Model files can carry licensed metadata (SpaceParts) and the saving machine's name and account.
+# Build them locally; never commit one.
+*.bim

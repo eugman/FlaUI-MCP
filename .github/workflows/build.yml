@@ -16,7 +16,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # the known-debt check compares with DEBT_BASE
+        fetch-depth: 0
+    # Lets scripts/check.ps1 confirm this repo has not edited files owned by the shared core.
+    - name: Fetch the shared core
+      run: |
+        git remote add core https://github.com/eugman/FlaUI-MCP-Core.git
+        git fetch --quiet core main
     - uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x  # test runtime
@@ -62,28 +67,32 @@ jobs:
         echo "NuGetVersion: ${{ steps.gitversion.outputs.nuGetVersion }}"
 
     - name: Restore dependencies
-      run: dotnet restore src/FlaUI.Mcp/FlaUI.Mcp.csproj
+      run: dotnet restore FlaUI.Mcp.slnx
 
     - name: Build
       run: |
-        dotnet build src/FlaUI.Mcp/FlaUI.Mcp.csproj `
+        dotnet build src/FlaUI.Mcp.Te3/FlaUI.Mcp.Te3.csproj `
           --configuration Release `
           --no-restore `
           -p:Version=${{ steps.gitversion.outputs.semVer }}
 
     - name: Publish
       run: |
-        dotnet publish src/FlaUI.Mcp/FlaUI.Mcp.csproj `
-          --configuration Release `
-          --runtime ${{ matrix.runtime }} `
-          --self-contained true `
-          --output ./publish/${{ matrix.runtime }} `
-          -p:Version=${{ steps.gitversion.outputs.semVer }} `
-          -p:PublishSingleFile=true `
-          -p:IncludeNativeLibrariesForSelfExtract=true
+        # The generic server and the TE3 tools ship together.
+        foreach ($project in 'src/FlaUI.Mcp/FlaUI.Mcp.csproj', 'src/FlaUI.Mcp.Te3/FlaUI.Mcp.Te3.csproj') {
+          dotnet publish $project `
+            --configuration Release `
+            --runtime ${{ matrix.runtime }} `
+            --self-contained true `
+            --output ./publish/${{ matrix.runtime }} `
+            -p:Version=${{ steps.gitversion.outputs.semVer }} `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: FlaUI-MCP-${{ matrix.runtime }}
+        name: FlaUI-MCP-Te3-${{ matrix.runtime }}
         path: ./publish/${{ matrix.runtime }}/

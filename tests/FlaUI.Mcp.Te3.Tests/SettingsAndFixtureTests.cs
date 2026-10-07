@@ -1,0 +1,77 @@
+using System.Text.Json;
+using Xunit;
+
+namespace FlaUI.Mcp.Te3.Tests;
+
+public sealed class SettingsAndFixtureTests : IDisposable
+{
+    private readonly string root = Path.Combine(
+        Path.GetTempPath(),
+        "fla_settings_fixture_" + Guid.NewGuid().ToString("N")
+    );
+
+    public SettingsAndFixtureTests() => Directory.CreateDirectory(root);
+
+    public void Dispose() => Directory.Delete(root, true);
+
+    [Fact]
+    public void NormalizationAndRestorePreserveOriginalBytesAndAbsence()
+    {
+        var preferences = Path.Combine(root, "UiPreferences.json");
+        File.WriteAllText(preferences, """{"Skin":"user","MainWindowState":"Normal"}""");
+        var original = File.ReadAllBytes(preferences);
+        var lease = new SettingsLease(root, Path.Combine(root, "backup"));
+        lease.Normalize(true);
+        using (var document = JsonDocument.Parse(File.ReadAllText(preferences)))
+        {
+            Assert.Equal("Maximized", document.RootElement.GetProperty("MainWindowState").GetString());
+        }
+
+        File.WriteAllText(Path.Combine(root, "RecentFiles.json"), "new");
+        lease.Restore();
+        Assert.Equal(original, File.ReadAllBytes(preferences));
+        Assert.False(File.Exists(Path.Combine(root, "RecentFiles.json")));
+    }
+
+    [Fact]
+    public void AcquiredSettingsPersistRecoveryNeedBeforeNormalization()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var manifest = new RunManifest();
+        RunManifest? saved = null;
+        RunExecutor.AcquireSettings(
+            manifest,
+            () => saved = JsonSerializer.Deserialize<RunManifest>(JsonSerializer.Serialize(manifest)),
+            () => new SettingsLease(root, Path.Combine(root, "backup"))
+        );
+        Assert.True(saved!.NeedsRecovery);
+        Assert.False(saved.SettingsRestored);
+        Assert.Equal(Path.Combine(root, "backup"), saved.SettingsBackup);
+    }
+
+    [Fact]
+    public void TamperedBackupCannotOverwritePreferences()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var lease = new SettingsLease(root, Path.Combine(root, "backup"));
+        File.WriteAllText(Path.Combine(root, "backup", "UiPreferences.json"), "tampered");
+        Assert.ThrowsAny<Exception>(lease.Restore);
+        Assert.Equal("{}", File.ReadAllText(Path.Combine(root, "UiPreferences.json")));
+    }
+
+    [Fact]
+    public void RestorePreservesPreExistingRecentFiles()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var recentFiles = Path.Combine(root, "RecentFiles.json");
+        File.WriteAllText(recentFiles, "[\"user-model.bim\"]\r\n");
+        var original = File.ReadAllBytes(recentFiles);
+        var lease = new SettingsLease(root, Path.Combine(root, "backup"));
+        lease.Normalize(true);
+        File.WriteAllText(recentFiles, "[\"fla_test.bim\"]");
+
+        lease.Restore();
+
+        Assert.Equal(original, File.ReadAllBytes(recentFiles));
+    }
+}

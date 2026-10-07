@@ -8,29 +8,29 @@ You need Windows 10 or 11, the .NET 9 SDK (9.0.300 or later; see `global.json`),
 pwsh scripts/setup.ps1
 ```
 
-This installs CSharpier and turns on the git hooks. The pre-commit hook checks formatting; the pre-push hook runs `pwsh scripts/check.ps1`, the same gate CI runs. The rules are described in [docs/code-quality.md](docs/code-quality.md).
+This installs CSharpier, turns on the git hooks and adds the shared core as a fetch-only `core` remote. The pre-commit hook checks formatting; the pre-push hook runs `pwsh scripts/check.ps1`, the same gate CI runs. The rules are described in [docs/code-quality.md](docs/code-quality.md).
 
 ## Tests
 
 | Project | Needs the desktop |
 |---|---|
 | `tests/FlaUI.Mcp.Tests` | No |
+| `tests/FlaUI.Mcp.Te3.Tests` | No |
 | `tests/FlaUI.Mcp.IntegrationTests` | Yes: launches the WinForms and WPF apps in `tests/TestApps` and takes focus |
 
-## The core and the product repos
+`FlaUI.Mcp.Te3.exe run` and the `te3_navigate` tool also take the desktop. Run them only when the person at the machine agrees.
 
-This repository is the generic server. Product repos, such as the Tabular Editor 3 one, contain this repository's history and add their own host project. They take core changes by merging:
+## Where changes go
 
-```powershell
-git remote add core https://github.com/eugman/FlaUI-MCP-Core.git   # once
-git fetch core
-git merge core/main
-```
+| Change | Where |
+|---|---|
+| TE3 tools, runner, smoke recipes | `src/FlaUI.Mcp.Te3`, `tests/FlaUI.Mcp.Te3.Tests` |
+| TE3 docs, skill, example config, test model | `automation/` |
+| Your own recipes, configs and notes | `local/` (gitignored) |
+| The generic server, scripts and analyzer settings | [FlaUI-MCP-Core](https://github.com/eugman/FlaUI-MCP-Core), then `git fetch core; git merge core/main` here |
 
-A product repo never edits core-owned files (listed in `scripts/core-paths.txt`). `scripts/check-core-untouched.ps1` enforces this in its hooks and CI. Make the change here first, then merge it.
-
-Keep this repository free of product-specific code and wording.
+Files owned by the core are listed in `scripts/core-paths.txt`; the hooks and CI refuse changes to them that didn't come from a core merge.
 
 ## Releases
 
-The **Release** workflow builds x64 and ARM64 ZIPs. Push a version tag such as `v0.2.0`, or run the workflow by hand with a tag name; manual runs create a draft release.
+The **Release** workflow builds x64 and ARM64 ZIPs containing `FlaUI.Mcp.exe` and `FlaUI.Mcp.Te3.exe`. Push a version tag such as `v0.2.0`, or run the workflow by hand with a tag name; manual runs create a draft release.

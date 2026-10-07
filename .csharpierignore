@@ -1,0 +1,2 @@
+# Scripts run inside Tabular Editor keep their own layout.
+**/*.csx

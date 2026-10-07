@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LocalRoot>$(MSBuildThisFileDirectory)../../local/</LocalRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../FlaUI.Mcp/FlaUI.Mcp.csproj" />
+  </ItemGroup>
+
+  <!-- Your own recipes and their inputs live in the gitignored local/ folder. See automation/README.md. -->
+  <ItemGroup Condition="Exists('$(LocalRoot)recipes')">
+    <Compile
+      Include="$(LocalRoot)recipes/**/*.cs"
+      Link="local/recipes/%(RecursiveDir)%(Filename)%(Extension)"
+    />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('$(LocalRoot)replica-inputs')">
+    <Content
+      Include="$(LocalRoot)replica-inputs/**/*"
+      Link="replica-inputs/%(RecursiveDir)%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+</Project>

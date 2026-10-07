@@ -1,0 +1,44 @@
+# Known debt for the TE3 host: files that already break a size or complexity limit (see
+# docs/code-quality.md). Fixing a file means deleting its section here; never add one.
+
+[CaptureAnnotations.cs]
+dotnet_diagnostic.S1067.severity = suggestion
+dotnet_diagnostic.S3776.severity = suggestion
+
+[CaptureComposition.cs]
+dotnet_diagnostic.S1067.severity = suggestion
+dotnet_diagnostic.S134.severity = suggestion
+dotnet_diagnostic.S138.severity = suggestion
+dotnet_diagnostic.S3776.severity = suggestion
+
+[Program.cs]
+dotnet_diagnostic.S1067.severity = suggestion
+dotnet_diagnostic.S134.severity = suggestion
+dotnet_diagnostic.S138.severity = suggestion
+dotnet_diagnostic.S3776.severity = suggestion
+
+[QueryAssertions.cs]
+dotnet_diagnostic.S1067.severity = suggestion
+
+[RunExecutor.cs]
+dotnet_diagnostic.S1200.severity = suggestion
+dotnet_diagnostic.S138.severity = suggestion
+dotnet_diagnostic.S3776.severity = suggestion
+
+[Te3Companion.cs]
+dotnet_diagnostic.S138.severity = suggestion
+dotnet_diagnostic.S3358.severity = suggestion
+
+[Te3ModelState.cs]
+dotnet_diagnostic.S1067.severity = suggestion
+dotnet_diagnostic.S3358.severity = suggestion
+
+[Te3Page.cs]
+dotnet_diagnostic.S104.severity = suggestion
+dotnet_diagnostic.S1067.severity = suggestion
+dotnet_diagnostic.S1200.severity = suggestion
+dotnet_diagnostic.S134.severity = suggestion
+dotnet_diagnostic.S138.severity = suggestion
+dotnet_diagnostic.S3358.severity = suggestion
+dotnet_diagnostic.S3776.severity = suggestion
+
