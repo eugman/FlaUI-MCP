@@ -2424,7 +2424,8 @@ public sealed class Te3Page(
     }
 
     public static string ObjectNotFoundMessage(string table, string objectName) =>
-        $"'{objectName}' is not directly under table '{table}'; if it is in a display folder, pass folder (e.g. Smoke tests).";
+        $"'{objectName}' is not directly under table '{table}'. If it is in a display folder, pass folder (e.g. Smoke tests); "
+        + "if it should be there, the model may have changed since it was loaded.";
 
     /// <summary>Read-only arrival checks shared by companion navigation and capture.</summary>
     public async Task VerifyCompanionDestination(

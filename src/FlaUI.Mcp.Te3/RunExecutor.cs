@@ -15,6 +15,43 @@ public static class RunExecutor
             FileShare.None
         );
 
+    // Engine recipes save into the shared database, so each one starts from the test model again:
+    // the same steps as automation/reset-engine.ps1.
+    private static async Task ResetEngine(RunConfig config, string database)
+    {
+        var cli = new CliRunner();
+        try
+        {
+            await cli.Run(
+                config.Te,
+                ["script", "-s", config.Server, "-d", database, "--file", config.FixtureScript, "--save", "--force"]
+            );
+            await cli.Run(
+                config.Te,
+                [
+                    "refresh",
+                    "-s",
+                    config.Server,
+                    "-d",
+                    database,
+                    "--type",
+                    "calculate",
+                    "--execute",
+                    "--force",
+                    "--no-progress",
+                ]
+            );
+        }
+        catch (InvalidOperationException error)
+        {
+            throw new InvalidOperationException(
+                $"Could not reset {database} on {config.Server} to the test model. If it doesn't exist yet, run "
+                    + $"pwsh automation/reset-engine.ps1 -Create -Server {config.Server} -DatabaseName {database}. {error.Message}",
+                error
+            );
+        }
+    }
+
     public static async Task<string> CreateModel(RunConfig config, string directory, string name)
     {
         var path = Path.Combine(directory, name + ".bim");
@@ -92,6 +129,10 @@ public static class RunExecutor
             {
                 manifest.SourceHashes["fixture.bim"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(model)));
                 OfflineModelOptions.Create(model, output, Environment.UserName);
+            }
+            else
+            {
+                await ResetEngine(config, manifest.Database);
             }
 
             cancellationToken.ThrowIfCancellationRequested();

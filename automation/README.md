@@ -86,11 +86,11 @@ Config paths are relative to the config file and expand environment variables.
 
 Recipes run against a small synthetic model that `automation/fixture.csx` builds: a `Sales` table with three amounts and the measures `Total Amount` and `UI Revenue`, a `Comparison` table, and one pinned Best Practice Analyzer rule. Offline recipes build it fresh each time.
 
-Engine recipes (`measure-edit`, `dax-query`, `expression-recovery`, `bpa-correction`, `properties`, `csharp-preview`) need it deployed to SSAS, and they save changes into it. Create it once, then reset it before each engine run:
+Engine recipes (`measure-edit`, `dax-query`, `expression-recovery`, `bpa-correction`, `properties`, `csharp-preview`) need it deployed to SSAS, and they save changes into it. Create it once. The runner then resets it to the test model before each engine recipe, with the same steps as `reset-engine.ps1`:
 
 ```powershell
 pwsh automation/reset-engine.ps1 -Create     # deploys fla_te3_small to localhost
-pwsh automation/reset-engine.ps1             # puts the test objects back after a run
+pwsh automation/reset-engine.ps1             # puts the test objects back by hand, e.g. after using the companion tools
 ```
 
 ### Run

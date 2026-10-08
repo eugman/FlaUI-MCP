@@ -48,7 +48,7 @@ else {
         Invoke-Te 'apply fixture' @('script', '-s', $Server, '-d', $DatabaseName, '--file', $fixture, '--save', '--force')
     }
     catch {
-        throw "$($_.Exception.Message). If $DatabaseName doesn't exist yet, run this script with -Create first."
+        throw "$($_.Exception.Message). If $DatabaseName doesn't exist yet, run this script with -Create first; otherwise check the server and the te path."
     }
 }
 

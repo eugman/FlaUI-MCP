@@ -121,6 +121,8 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
                 // status bar, and this reads without touching anything.
                 phase = "observe";
                 lastStep = "read status bar";
+                RequireRestored(hwnd);
+
                 // Assessment(false): no scene was matched. This read a status bar, and claiming a
                 // matched scene would assert a verification that never happened.
                 return Json(
@@ -348,6 +350,17 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
             docsApproved = false,
         };
 
+    private static void RequireRestored(nint hwnd)
+    {
+        if (Win32Desktop.IsMinimized(hwnd))
+        {
+            throw new InvalidOperationException(
+                "TE3 is minimized, so its status bar is not exposed to UI Automation. "
+                    + "Ask the user to restore the window; this tool will not restore it, because that takes focus."
+            );
+        }
+    }
+
     internal static nint MainWindow(IReadOnlyList<Win32WindowInfo> windows)
     {
         // Process.MainWindowHandle can select an untitled popup after tree navigation.
@@ -358,7 +371,9 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
             .ToArray();
         if (main.Length != 1)
         {
-            throw new InvalidOperationException("Expected one TE3 document window; no launch or activation attempted.");
+            throw new InvalidOperationException(
+                $"Expected one visible TE3 document window titled 'Tabular Editor 3', found {main.Length}; no launch or activation attempted."
+            );
         }
 
         return main[0].Hwnd;

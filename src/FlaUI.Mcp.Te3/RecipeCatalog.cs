@@ -52,6 +52,14 @@ public static partial class RecipeCatalog
             new("csharp-preview", CSharpPage, true, Preview),
         };
         AddLocal(recipes);
+        var duplicate = recipes.GroupBy(r => r.Id).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate != null)
+        {
+            throw new InvalidOperationException(
+                "Two recipes use the id " + duplicate.Key + "; rename one in local/recipes."
+            );
+        }
+
         return recipes;
     }
 

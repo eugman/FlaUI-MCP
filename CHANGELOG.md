@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Engine recipes reset `fixedSlot` to the test model before each recipe. They save into the shared database, so a run of several recipes (or `--repeat`) failed from the second recipe on with a misleading "pass folder" error.
+- `te3_model_state` reports a minimized TE3 instead of "Expected one element; found 0": a minimized TE3 leaves its status bar out of the UI Automation tree.
+- A local recipe that reuses a recipe id is reported by name.
+- The object-not-found message no longer implies the object is in a display folder.
+
 ### Changed
 - The repo builds on the shared FlaUI-MCP-Core and takes its changes by merge. The host project is now `FlaUI.Mcp.Te3` (was `FlaUI.Automation`).
 - Personal documentation recipes, run configs, the screenshot backlog, the SpaceParts fixture and the agent study live in a gitignored `local/` folder. The runner compiles `local/recipes` when it exists; the repo ships the eight smoke recipes.
