@@ -109,7 +109,8 @@ public sealed class ProcessPolicy
 
         try
         {
-            return System.Diagnostics.Process.GetProcessById(processId).ProcessName;
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return process.ProcessName;
         }
         catch
         {
