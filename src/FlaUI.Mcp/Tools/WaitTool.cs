@@ -153,9 +153,13 @@ public sealed class WaitTool(ElementQuery query) : ToolBase
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return ErrorResult("windows_wait: " + ex.Message + " No input sent.");
+            return ErrorResult(FailureText(ex.Message, ex.GetType().Name));
         }
     }
+
+    // Some COM/provider exceptions carry no message; name the type so the failure is never blank.
+    internal static string FailureText(string message, string exceptionType) =>
+        $"windows_wait: {(string.IsNullOrWhiteSpace(message) ? exceptionType : message.Trim())} No input sent.";
 
     internal static void ValidateExpectation(string state, JsonElement expected)
     {

@@ -16,7 +16,9 @@ public sealed record ElementSelector(
     bool RootOnly = false,
     // Keep new fields last: callers build selectors positionally and compare them by record
     // equality, so inserting a field earlier would silently change both.
-    string? Text = null
+    string? Text = null,
+    // Case-insensitive substring of Name, for labels an agent knows only in part.
+    string? NameContains = null
 );
 
 public sealed record ElementInfo(
@@ -484,6 +486,10 @@ public sealed class ElementQuery(SessionManager sessions, ElementRegistry refs, 
         )
         && (s.AutomationId == null || e.Properties.AutomationId.ValueOrDefault == s.AutomationId)
         && (s.Name == null || e.Properties.Name.ValueOrDefault == s.Name)
+        && (
+            s.NameContains == null
+            || (e.Properties.Name.ValueOrDefault ?? "").Contains(s.NameContains, StringComparison.OrdinalIgnoreCase)
+        )
         && (s.ControlType == null || e.Properties.ControlType.ValueOrDefault.ToString() == s.ControlType)
         && (s.ClassName == null || e.Properties.ClassName.ValueOrDefault == s.ClassName)
         && (s.Visible == null || !e.Properties.IsOffscreen.ValueOrDefault == s.Visible)
