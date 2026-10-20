@@ -4,7 +4,7 @@ Everything here builds on the generic FlaUI MCP server and adds what is specific
 
 | Piece | What it is |
 |---|---|
-| `FlaUI.Mcp.Te3 mcp` | The MCP server: the generic `windows_*` tools plus three TE3 tools, `te3_navigate`, `te3_model_state` and `te3_layout`, sharing one set of refs and handles. Limited to TE3. |
+| `FlaUI.Mcp.Te3 mcp` | The MCP server: the generic `windows_*` tools plus the TE3 tools `te3_navigate`, `te3_model_state`, `te3_layout` and the `te3_interaction_begin`/`te3_interaction_end` grant, sharing one set of refs and handles. Limited to TE3. |
 | `FlaUI.Mcp.Te3 run` | A runner that launches its own TE3, stages a disposable model, runs typed C# recipes and saves screenshots. |
 | [skills/te3-ui](skills/te3-ui/SKILL.md) | Agent guidance for driving TE3 with the MCP tools. |
 | [UI-MAP.md](UI-MAP.md) | Locators and behaviour observed in TE3 3.26 and 3.27. |
@@ -33,9 +33,10 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 
 | Tool | Does |
 |---|---|
-| `te3_navigate` | Moves to a destination and checks it arrived. Takes focus. |
+| `te3_interaction_begin` / `te3_interaction_end` | Start and end the user's grant for the tools that take focus. Begin only after the user says the machine is clear; their own keyboard or mouse input ends it. |
+| `te3_navigate` | Moves to a destination and checks it arrived. Takes focus; needs the grant. |
 | `te3_model_state` | Reads the status bar: whether a model is loaded, its connection, the BPA count, the selected object. Sends no input. |
-| `te3_layout` | Lists docked panes and document tabs; hides, maximizes, restores and resizes docked panes for a screenshot. Takes focus; no model edits. |
+| `te3_layout` | Lists docked panes and document tabs; hides, maximizes, restores and resizes docked panes for a screenshot. Those changes take focus and need the grant; no model edits. |
 
 Destinations: `native-mcp-server` (opens and verifies the native MCP Server dialog without starting it), `tom-explorer`, `tom-explorer/changes` (turns on the TOM Explorer Show changes view filter), `expression-editor`, `object` (with `table`, `objectName`, `objectType` Table/Column/Measure and optional `folder`), `preferences/auto-formatting`, `preferences/code-actions`, `preferences/ai-provider`, `preferences/ai-assistant`, `preferences/mcp-server`, `preferences/permissions`.
 

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Drawing;
 using System.Text.Json;
 using FlaUI.Core.AutomationElements;
@@ -18,6 +17,9 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
 
     private const int MaxCloses = 30;
 
+    // Never approved when none is passed, so a tool built without one refuses input.
+    private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
+
     public override string Name => ToolName;
     public override string Description =>
         "Arrange TE3 for a screenshot. list: docked panes and document tabs with window-relative bounds. "
@@ -28,7 +30,8 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         + "maximize-pane / restore-pane: the pane's own Maximize or Restore button (TE3 remembers a maximized "
         + "pane across restarts, so restore it when done). Pane titles match with or without TE3's \"(Changed)\" "
         + "suffix. resize: drag the splitter a pane shares with its "
-        + "neighbour until the pane is `width` or `height` physical pixels. Takes desktop focus; no model edits.";
+        + "neighbour until the pane is `width` or `height` physical pixels. Changes take desktop focus and need an active "
+        + "te3_interaction_begin grant; list, plan-preset and show-pane send no input. No model edits.";
     public override object InputSchema =>
         new
         {
@@ -101,9 +104,10 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
                 return TextResult(JsonSerializer.Serialize(plan, McpProtocol.JsonOptions));
             }
 
-            using var process = Process.GetProcessById(Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3));
-            var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(process.Id));
-            var handle = Bind(host, hwnd, process.Id);
+            using var guard = GetStringArgument(a, "action") is "list" or "show-pane" ? null : grant.Guard();
+            var processId = Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3);
+            var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(processId));
+            var handle = Bind(host, hwnd, processId);
             var window =
                 host.Sessions.GetWindow(handle) ?? throw new InvalidOperationException("TE3 window not readable.");
             object result = GetStringArgument(a, "action") switch

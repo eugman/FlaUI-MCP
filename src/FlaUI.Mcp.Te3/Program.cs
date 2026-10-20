@@ -30,20 +30,7 @@ public static class RunnerCommands
                     throw new ArgumentException(Usage);
                 }
 
-                DpiUtility.EnablePerMonitorV2();
-                // One server for everything: the generic windows_* tools (with the window-management
-                // extensions) and the TE3 tools share one registry, so refs and handles carry across.
-                using var host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]), includeDesktopTools: true);
-                var registry = host.Tools;
-                foreach (var name in Te3Companion.Names)
-                {
-                    registry.RegisterTool(new Te3Companion(host, name));
-                }
-
-                registry.RegisterTool(new Te3Layout(host));
-                registry.RegisterTool(FlaUI.Mcp.Te3.Te3NativePreflightTool.Create());
-
-                await new FlaUI.Mcp.McpServer(registry).RunAsync();
+                await Te3McpServer.Run();
                 return 0;
             }
 

@@ -7,6 +7,9 @@ using FlaUI.Mcp.Core;
 public sealed class Te3Companion(AutomationHost host, string name, Te3Interaction? interaction = null) : ToolBase
 {
     public const string Navigate = "te3_navigate";
+
+    // Never approved when none is passed, so a tool built without one refuses input.
+    private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
     public const string ModelState = "te3_model_state";
     public static readonly string[] Names = [Navigate, ModelState];
     public override string Name => name;
@@ -14,7 +17,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         name switch
         {
             Navigate =>
-                "Navigate TE3 to a supported destination and verify arrival. Takes desktop focus; requires user handoff permission. No model edits, script execution, or dialog dismissal.",
+                "Navigate TE3 to a supported destination and verify arrival. Takes desktop focus; requires an active te3_interaction_begin grant, which the user's own keyboard or mouse input revokes. No model edits, script execution, or dialog dismissal.",
             // Spells out that it takes no focus: te3_navigate's description says it does, and an operator
             // reading only the tool names would otherwise gate both behind the same desktop handoff.
             ModelState =>
@@ -86,6 +89,9 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         {
             var a = arguments ?? JsonSerializer.SerializeToElement(new { });
             Validate(a, name);
+            phase = "permission";
+            // Navigation takes the desktop; a status-bar read sends no input and needs no grant.
+            using var guard = name == Navigate ? grant.Guard() : null;
             phase = "attach";
             using var process = Process.GetProcessById(ResolveProcessId(a, RunningTe3));
             if (!string.Equals(process.ProcessName, "TabularEditor3", StringComparison.OrdinalIgnoreCase))
@@ -139,21 +145,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             // Validate has already confirmed the id is in the registry.
             var destination = Te3Destinations.Find(GetStringArgument(a, "destination"))!;
             var hasPreferences = windows.Any(w => w.Title == "Preferences");
-            var allowedDialog = destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences";
-            var unexpected = windows
-                .Where(w => w.Hwnd != hwnd && w.Title.Length > 0 && w.Title != allowedDialog)
-                .ToArray();
-            if (unexpected.Length > 0)
-            {
-                throw new InvalidOperationException(
-                    "An additional TE3 window is open: "
-                        + string.Join(
-                            "; ",
-                            unexpected.Select(w => $"{w.Title} (HWND {w.Hwnd}, tool window: {w.IsToolWindow})")
-                        )
-                        + ". Inspect it; no dialog was dismissed."
-                );
-            }
+            RequireNoOtherWindow(windows, hwnd, destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences");
 
             if (hasPreferences && destination.Section == null)
             {
@@ -220,6 +212,22 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         catch (Exception ex)
         {
             return Failure(phase, lastStep, ex.Message);
+        }
+    }
+
+    private static void RequireNoOtherWindow(IReadOnlyList<Win32WindowInfo> windows, nint main, string allowedDialog)
+    {
+        var unexpected = windows.Where(w => w.Hwnd != main && w.Title.Length > 0 && w.Title != allowedDialog).ToArray();
+        if (unexpected.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "An additional TE3 window is open: "
+                    + string.Join(
+                        "; ",
+                        unexpected.Select(w => $"{w.Title} (HWND {w.Hwnd}, tool window: {w.IsToolWindow})")
+                    )
+                    + ". Inspect it; no dialog was dismissed."
+            );
         }
     }
 
