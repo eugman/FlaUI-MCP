@@ -58,6 +58,37 @@ public sealed class ProtocolCancellationTests
     }
 
     [Fact]
+    public async Task CancelledToolKeepsLaterCallsSerializedUntilItReturns()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        registry.RegisterTool(new FakeTool(entered, release, ended));
+        registry.RegisterTool(new ImmediateTool());
+        var server = new McpServer(registry);
+        var first = server.HandleRequestAsync(
+            Request("{\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"fake\"}}")
+        );
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await server.HandleRequestAsync(
+            Request("{\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":7}}")
+        );
+        Assert.Null(await first.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // The cancelled tool has not returned yet, so the next call must wait for the serial slot.
+        var second = server.HandleRequestAsync(
+            Request("{\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"immediate\"}}")
+        );
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+        Assert.False(second.IsCompleted);
+
+        release.SetResult();
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.NotNull(await second.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task SuccessfulCallsHaveStableOperationIdentityWithoutClaimingVerification()
     {
         var registry = new ToolRegistry();
