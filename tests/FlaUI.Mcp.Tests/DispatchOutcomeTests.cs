@@ -114,6 +114,32 @@ public sealed class DispatchOutcomeTests
         Assert.Contains("activation-denied", result.Content[0].Text);
         Assert.Equal(0, desktop.Dispatched);
         AssertDispatch(result, "partial", 1);
+        // The fallback sent nothing, but the call as a whole did: the Select went out first.
+        var failure = Outcome(result).GetProperty("failure");
+        Assert.Equal("activation-denied", failure.GetProperty("code").GetString());
+        Assert.True(failure.GetProperty("actionDispatched").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RefusedActivationIsAStructuredFailureOnTheOutcome()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd, ActivationAllowed = false };
+        using var installed = desktop.Install();
+        var (sessions, handle) = Window();
+        using var _ = sessions;
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new SendKeysTool(new ElementRegistry(), sessions: sessions));
+
+        var result = await registry.ExecuteToolAsync("windows_send_keys", Args(new { handle, chord = "Enter" }));
+
+        Assert.True(result.IsError);
+        Assert.Contains("activation-denied: Windows kept", result.Content[0].Text);
+        AssertDispatch(result, "not-dispatched", 0);
+        var failure = Outcome(result).GetProperty("failure");
+        Assert.Equal("activation-denied", failure.GetProperty("code").GetString());
+        Assert.Equal(FakeDesktop.OtherPid, failure.GetProperty("foregroundProcess").GetProperty("pid").GetInt32());
+        Assert.Equal(FakeDesktop.TargetPid, failure.GetProperty("target").GetProperty("pid").GetInt32());
+        Assert.False(failure.GetProperty("actionDispatched").GetBoolean());
     }
 
     [Fact]

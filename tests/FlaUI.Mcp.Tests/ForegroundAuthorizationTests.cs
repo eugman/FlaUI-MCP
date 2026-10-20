@@ -106,16 +106,40 @@ public sealed class ForegroundAuthorizationTests
     [Fact]
     public void ActivationFailureDistinguishesRefusedActivationFromMissingDesktop()
     {
-        var wrongWindow = GuardedInput.DescribeActivationFailure(42, 100, 42, "TargetApp")!;
-        Assert.StartsWith("activation-denied:", wrongWindow);
-        Assert.Contains("another window", wrongWindow);
+        var wrongWindow = GuardedInput.DescribeActivationFailure(42, 100, 42, "TargetApp");
+        Assert.StartsWith("activation-denied:", wrongWindow.Message);
+        Assert.Contains("another window", wrongWindow.Message);
 
-        var denied = GuardedInput.DescribeActivationFailure(42, 100, 7, "WindowsTerminal")!;
-        Assert.StartsWith("activation-denied:", denied);
-        Assert.Contains("'WindowsTerminal' (PID 7)", denied);
-        Assert.Contains("title bar", denied);
+        var denied = GuardedInput.DescribeActivationFailure(42, 100, 7, "WindowsTerminal");
+        Assert.StartsWith("activation-denied:", denied.Message);
+        Assert.Contains("'WindowsTerminal' (PID 7)", denied.Message);
+        Assert.Contains("title bar", denied.Message);
 
-        Assert.StartsWith("desktop-unavailable:", GuardedInput.DescribeActivationFailure(42, 0, 0, null));
+        var unavailable = GuardedInput.DescribeActivationFailure(42, 0, 0, null);
+        Assert.StartsWith("desktop-unavailable:", unavailable.Message);
+    }
+
+    [Fact]
+    public void ActivationFailureCarriesItsReasonAsFields()
+    {
+        var denied = GuardedInput.DescribeActivationFailure(42, 100, 7, "WindowsTerminal");
+        Assert.Equal("activation-denied", denied.Code);
+        Assert.Equal(new ProcessRef("WindowsTerminal", 7), denied.ForegroundProcess);
+        Assert.Equal(42, denied.Target?.Pid);
+
+        var wrongWindow = GuardedInput.DescribeActivationFailure(42, 100, 42, "TargetApp");
+        Assert.Equal("activation-denied", wrongWindow.Code);
+        Assert.Equal(new ProcessRef("TargetApp", 42), wrongWindow.ForegroundProcess);
+
+        var unavailable = GuardedInput.DescribeActivationFailure(42, 0, 0, null);
+        Assert.Equal("desktop-unavailable", unavailable.Code);
+        Assert.Null(unavailable.ForegroundProcess);
+
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(denied);
+        Assert.Equal("activation-denied", json.GetProperty("code").GetString());
+        Assert.Equal(7, json.GetProperty("foregroundProcess").GetProperty("pid").GetInt32());
+        Assert.Equal("WindowsTerminal", json.GetProperty("foregroundProcess").GetProperty("name").GetString());
+        Assert.Equal(denied.Message, json.GetProperty("message").GetString());
     }
 
     [Fact]
