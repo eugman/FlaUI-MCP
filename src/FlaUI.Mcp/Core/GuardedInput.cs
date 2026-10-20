@@ -6,7 +6,9 @@ namespace FlaUI.Mcp.Core;
 
 public sealed record InputTarget(nint Hwnd, int ProcessId, long StartedTicks, nint HitHwnd = 0)
 {
-    public void EnsureAlive()
+    public void EnsureAlive() => InputDesktop.Current.EnsureAlive(this);
+
+    internal void EnsureAliveOnWindows()
     {
         using var process = Process.GetProcessById(ProcessId);
         if (process.StartTime.ToUniversalTime().Ticks != StartedTicks || Win32Desktop.GetProcessId(Hwnd) != ProcessId)
@@ -32,6 +34,7 @@ public sealed class GuardedInput : IDisposable
 {
     private readonly IDisposable lease;
     private readonly InputTarget target;
+    private readonly InputDesktop desktop = InputDesktop.Current;
 
     public GuardedInput(InputTarget target, AutomationElement? element = null, bool verifyFocus = false)
     {
@@ -42,26 +45,21 @@ public sealed class GuardedInput : IDisposable
         {
             target.EnsureAlive();
             MutationGuard.CheckPermission();
-            if (!IsTargetWindow(Win32Desktop.GetForegroundWindow(), target))
+            if (!IsTargetWindow(desktop.Foreground(), target))
             {
                 // While a modal dialog disables the target, activate the dialog: a disabled window
                 // cannot take input, so focusing it would only fail verification.
-                Win32Desktop.FocusWindow(
-                    Win32Desktop.IsWindowEnabled(target.Hwnd) ? target.Hwnd : Win32Desktop.LastActivePopup(target.Hwnd)
-                );
+                desktop.Focus(desktop.IsEnabled(target.Hwnd) ? target.Hwnd : desktop.LastActivePopup(target.Hwnd));
             }
 
             if (element != null)
             {
-                element.Focus();
+                desktop.FocusElement(element);
             }
 
             RequireActivated(target);
             Verify();
-            if (
-                verifyFocus
-                && (element == null || !element.Properties.HasKeyboardFocus.TryGetValue(out var focused) || !focused)
-            )
+            if (verifyFocus && (element == null || !desktop.HasKeyboardFocus(element)))
             {
                 throw new InvalidOperationException(
                     "Intended control did not receive verified keyboard focus; no input sent."
@@ -123,15 +121,15 @@ public sealed class GuardedInput : IDisposable
         return captured;
     }
 
-    private static void RequireActivated(InputTarget target)
+    private void RequireActivated(InputTarget target)
     {
-        var foreground = Win32Desktop.GetForegroundWindow();
+        var foreground = desktop.Foreground();
         if (IsTargetWindow(foreground, target))
         {
             return;
         }
 
-        var foregroundPid = foreground == 0 ? 0 : Win32Desktop.GetProcessId(foreground);
+        var foregroundPid = foreground == 0 ? 0 : desktop.ProcessOf(foreground);
         throw new InvalidOperationException(
             DescribeActivationFailure(
                 target.ProcessId,
@@ -171,15 +169,15 @@ public sealed class GuardedInput : IDisposable
     {
         OperationContext.Check();
         MutationGuard.CheckPermission();
-        var foreground = Win32Desktop.GetForegroundWindow();
+        var foreground = desktop.Foreground();
         if (
             !ForegroundAcceptable(
                 target,
                 foreground,
-                Win32Desktop.GetProcessId,
-                Win32Desktop.BelongsTo,
-                Win32Desktop.IsWindowEnabled,
-                Win32Desktop.HasOwner
+                desktop.ProcessOf,
+                desktop.BelongsTo,
+                desktop.IsEnabled,
+                desktop.HasOwner
             )
         )
         {
@@ -209,14 +207,14 @@ public sealed class GuardedInput : IDisposable
         return belongsTo(foreground, target.Hwnd) || !enabled(target.Hwnd) && ownedBy(foreground, target.Hwnd);
     }
 
-    private static bool IsTargetWindow(nint foreground, InputTarget target) =>
-        Win32Desktop.BelongsTo(foreground, target.Hwnd)
-        || !Win32Desktop.IsWindowEnabled(target.Hwnd) && Win32Desktop.HasOwner(foreground, target.Hwnd);
+    private bool IsTargetWindow(nint foreground, InputTarget target) =>
+        desktop.BelongsTo(foreground, target.Hwnd)
+        || !desktop.IsEnabled(target.Hwnd) && desktop.HasOwner(foreground, target.Hwnd);
 
     public void Send(Action input)
     {
         Verify();
-        input();
+        desktop.Dispatch(input);
     }
 
     public void Type(string text)
@@ -246,7 +244,7 @@ public sealed class GuardedInput : IDisposable
         var point = element.GetClickablePoint();
         Verify();
         var clickRoot = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
-        if (Win32Desktop.GetProcessId(clickRoot) != target.ProcessId || Win32Desktop.WindowAt(point) != clickRoot)
+        if (desktop.ProcessOf(clickRoot) != target.ProcessId || desktop.WindowAt(point) != clickRoot)
         {
             throw new InvalidOperationException("Click point is obscured by another window.");
         }

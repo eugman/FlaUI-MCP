@@ -53,10 +53,11 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
 
         OperationContext.Check();
         var target = reference == null ? sessions!.GetInputTarget(handle!) : refs.InputForRef(reference);
-        var before = Win32Desktop.GetWindowState(target.Hwnd);
+        var desktop = InputDesktop.Current;
+        var before = desktop.WindowState(target.Hwnd);
         using (GuardedInput.AcquireLease())
         {
-            MutationGuard.Execute(target.EnsureAlive, () => Win32Desktop.SetWindowState(target.Hwnd, requested));
+            MutationGuard.Execute(target.EnsureAlive, () => desktop.SetWindowState(target.Hwnd, requested));
         }
 
         var after = WaitForState(target.Hwnd, requested);
@@ -86,12 +87,12 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
     private static string WaitForState(nint hwnd, string requested)
     {
         var clock = Stopwatch.StartNew();
-        var observed = Win32Desktop.GetWindowState(hwnd);
+        var observed = InputDesktop.Current.WindowState(hwnd);
         while (observed != requested && clock.Elapsed < SettleTimeout)
         {
             OperationContext.Check();
             Thread.Sleep(SettlePoll);
-            observed = Win32Desktop.GetWindowState(hwnd);
+            observed = InputDesktop.Current.WindowState(hwnd);
         }
 
         return observed;

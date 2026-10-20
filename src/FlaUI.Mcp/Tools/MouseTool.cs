@@ -266,7 +266,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     internal static void RequireHit(InputTarget target, Point point, Func<Point, nint>? windowAt = null)
     {
         var root = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
-        if ((windowAt ?? Win32Desktop.WindowAt)(point) != root)
+        if ((windowAt ?? InputDesktop.Current.WindowAt)(point) != root)
         {
             throw new InvalidOperationException(
                 "Point is not on the target window (off-window or covered); no input sent."
