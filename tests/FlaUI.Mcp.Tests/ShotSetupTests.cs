@@ -35,6 +35,56 @@ public sealed class ShotSetupTests
     }
 
     [Fact]
+    public void CoordinateClickIsInMouseSchema()
+    {
+        var tool = new MouseTool(new ElementRegistry(), new PendingInvokeTracker(), new SessionManager());
+        var schema = JsonSerializer.SerializeToElement(tool.InputSchema);
+        var actions = schema.GetProperty("properties").GetProperty("action").GetProperty("enum");
+        Assert.Contains(actions.EnumerateArray(), value => value.GetString() == "click");
+        Assert.Contains("left-click", tool.Description);
+    }
+
+    [Fact]
+    public async Task CoordinateClickWithoutTargetReturnsBeforeInput()
+    {
+        var tool = new MouseTool(new ElementRegistry(), new PendingInvokeTracker(), new SessionManager());
+        var result = await tool.ExecuteAsync(
+            JsonSerializer.SerializeToElement(new { action = "click", to = new { x = 10, y = 20 } })
+        );
+        Assert.True(result.IsError);
+        Assert.Contains("handle or ref required", result.Content[0].Text);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(99)]
+    public void CoordinateClickRejectsOffWindowOrOccludedPoint(int hit)
+    {
+        var target = new InputTarget(42, 1, 1);
+        Assert.Throws<InvalidOperationException>(() => MouseTool.RequireHit(target, new Point(10, 20), _ => (nint)hit));
+    }
+
+    [Fact]
+    public void CoordinateClickDoesNotReplayAfterHitFailure()
+    {
+        var target = new InputTarget(42, 1, 1);
+        var clicks = 0;
+        Assert.Throws<InvalidOperationException>(() =>
+            MouseTool.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 99)
+        );
+        Assert.Equal(0, clicks);
+        MouseTool.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 42);
+        Assert.Equal(1, clicks);
+    }
+
+    [Fact]
+    public void CoordinateClickAcceptsTheCapturedWindowHit()
+    {
+        var target = new InputTarget(42, 1, 1, 43);
+        Assert.Null(Record.Exception(() => MouseTool.RequireHit(target, new Point(10, 20), _ => 43)));
+    }
+
+    [Fact]
     public void DragPathEndsExactlyOnTarget()
     {
         var path = PointerPlan.DragPath(new Point(100, 200), new Point(403, 187), 7);

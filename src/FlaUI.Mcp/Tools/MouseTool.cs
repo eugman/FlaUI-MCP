@@ -5,7 +5,7 @@ using FlaUI.Mcp.Core;
 
 namespace FlaUI.Mcp.Tools;
 
-/// <summary>Pointer moves that windows_click cannot express: park, move, hover, scroll and drag.</summary>
+/// <summary>Guarded pointer actions by window-relative pixel or element reference.</summary>
 public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending, SessionManager sessions) : ToolBase
 {
     private const int DefaultHoverMs = 600;
@@ -15,9 +15,9 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
 
     public override string Name => "windows_mouse";
     public override string Description =>
-        "Move the pointer without clicking. park: move it off the window so no tooltip or hover state "
+        "Move the pointer or click a captured window point. park: move it off the window so no tooltip or hover state "
         + "lands in a screenshot. move/hover: to a point or ref. scroll: wheel ticks over a point or ref "
-        + "(positive scrolls up). drag: press at `from` (or ref, or ref's fromEdge), move in steps, release at `to`, toRef/toEdge, "
+        + "(positive scrolls up). click: left-click at a point or ref. drag: press at `from` (or ref, or ref's fromEdge), move in steps, release at `to`, toRef/toEdge, "
         + "or wherever resizeTo makes ref that size (a column header: ref + fromEdge right + resizeTo 250). Use it for "
         + "splitters and other targets UI Automation does not expose. Points are pixels in a windows_screenshot "
         + "of the same window (handle), so read them straight off a capture.";
@@ -27,11 +27,11 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             type = "object",
             properties = new
             {
-                action = new { type = "string", @enum = new[] { "park", "move", "hover", "scroll", "drag" } },
+                action = new { type = "string", @enum = new[] { "park", "move", "hover", "scroll", "drag", "click" } },
                 handle = new { type = "string", description = "Window handle; points are relative to its capture." },
                 @ref = new { type = "string", description = "Element to move to, hover, scroll over, or drag from." },
                 from = PointSchema("Drag start in window pixels (alternative to ref)."),
-                to = PointSchema("Target in window pixels: move/hover/scroll point, or drag end."),
+                to = PointSchema("Target in window pixels: move/hover/scroll/click point, or drag end."),
                 ticks = new { type = "integer", description = "scroll: wheel ticks, positive is up." },
                 durationMs = new { type = "integer", description = "hover: how long to rest (default 600)." },
                 steps = new { type = "integer", description = "drag: intermediate moves (default 12)." },
@@ -91,8 +91,9 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             "move" => Move(target, ResolvePoint(arguments, "to", reference, origin), hoverMs: 0),
             "hover" => Move(target, ResolvePoint(arguments, "to", reference, origin), HoverMs(arguments)),
             "scroll" => Scroll(target, ResolvePoint(arguments, "to", reference, origin), Ticks(arguments)),
+            "click" => Click(target, ResolvePoint(arguments, "to", reference, origin)),
             "drag" => DragFromArguments(arguments, target, reference, origin),
-            _ => throw new ArgumentException("action must be park, move, hover, scroll or drag"),
+            _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
         };
         return Task.FromResult(
             TextResult(
@@ -218,6 +219,24 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         return Mouse.Position;
     }
 
+    private static Point Click(InputTarget target, Point point)
+    {
+        using var input = new GuardedInput(target);
+        ClickGuarded(target, point, clicked => input.Send(() => Mouse.Click(clicked, MouseButton.Left)));
+        return Mouse.Position;
+    }
+
+    internal static void ClickGuarded(
+        InputTarget target,
+        Point point,
+        Action<Point> click,
+        Func<Point, nint>? windowAt = null
+    )
+    {
+        RequireHit(target, point, windowAt);
+        click(point);
+    }
+
     private static Point Drag(InputTarget target, Point from, Point to, int steps)
     {
         var path = PointerPlan.DragPath(from, to, steps);
@@ -244,10 +263,10 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         return Mouse.Position;
     }
 
-    private static void RequireHit(InputTarget target, Point point)
+    internal static void RequireHit(InputTarget target, Point point, Func<Point, nint>? windowAt = null)
     {
         var root = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
-        if (Win32Desktop.WindowAt(point) != root)
+        if ((windowAt ?? Win32Desktop.WindowAt)(point) != root)
         {
             throw new InvalidOperationException(
                 "Point is not on the target window (off-window or covered); no input sent."
