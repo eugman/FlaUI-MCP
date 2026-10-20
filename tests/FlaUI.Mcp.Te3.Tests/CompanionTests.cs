@@ -162,13 +162,30 @@ public sealed class CompanionTests
         Assert.Contains("no uncertain input", response.GetProperty("next").GetString());
     }
 
+    // Core's own wording, not a copy: the classifier has to keep matching it when Core rewords it.
+    private static string CoreActivationFailure(int targetPid, nint foreground, int foregroundPid, string? name) =>
+        (string)
+            typeof(FlaUI.Mcp.Core.GuardedInput)
+                .GetMethod(
+                    "DescribeActivationFailure",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+                )!
+                .Invoke(null, [targetPid, foreground, foregroundPid, name])!;
+
+    public static TheoryData<string, string, string> CoreActivationFailures() =>
+        new()
+        {
+            {
+                "Failed to click w1e5: " + CoreActivationFailure(7, 42, 9, "WindowsTerminal"),
+                "activation-denied",
+                "title bar"
+            },
+            { CoreActivationFailure(7, 42, 7, null), "activation-denied", "title bar" },
+            { "Failed to type w1e2: " + CoreActivationFailure(7, 0, 0, null), "desktop-unavailable", "locked" },
+        };
+
     [Theory]
-    [InlineData(
-        "Failed to click: activation-denied: Windows kept 'WindowsTerminal' (PID 7) in the foreground.",
-        "activation-denied",
-        "title bar"
-    )]
-    [InlineData("desktop-unavailable: Windows reports no foreground window.", "desktop-unavailable", "locked")]
+    [MemberData(nameof(CoreActivationFailures))]
     public void ActivationBlockersNameTheBlockerInsteadOfSuggestingReplay(string error, string blocker, string guidance)
     {
         var response = JsonDocument
@@ -177,6 +194,17 @@ public sealed class CompanionTests
         Assert.Equal(blocker, response.GetProperty("blocker").GetString());
         Assert.Contains(guidance, response.GetProperty("next").GetString());
         Assert.Contains("earlier steps may have", response.GetProperty("next").GetString());
+    }
+
+    [Theory]
+    [InlineData("TE3 target {Value=activation-denied: x}: no element matched")]
+    [InlineData("Search text 'desktop-unavailable:' was not found")]
+    public void TextThatOnlyMentionsABlockerIsNotClassifiedAsOne(string error)
+    {
+        var response = JsonDocument
+            .Parse(Te3Companion.Failure("navigate", "search", error).Content[0].Text!)
+            .RootElement;
+        Assert.Equal(JsonValueKind.Null, response.GetProperty("blocker").ValueKind);
     }
 
     [Fact]
