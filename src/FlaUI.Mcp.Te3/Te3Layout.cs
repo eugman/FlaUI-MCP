@@ -128,8 +128,15 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
     }
 
     /// <summary>Registers the TE3 window for the raw descendant refs this tool clicks.</summary>
-    internal static string Bind(AutomationHost host, nint hwnd, int processId) =>
-        host.Sessions.RegisterNativeWindow(hwnd, processId);
+    internal static string Bind(AutomationHost host, nint hwnd, int processId)
+    {
+        var handle = host.Sessions.RegisterNativeWindow(hwnd, processId);
+        // Parts come from FindAllDescendants, which bypasses ElementQuery, the step that otherwise
+        // records this identity before refs reach GuardedInput and the pending-provider check.
+        // TODO(core): ElementRegistry.Register should refuse a handle with no identity.
+        host.Elements.SetWindowIdentity(handle, processId, hwnd);
+        return handle;
+    }
 
     private static object ShowPane(Window window, string title)
     {
