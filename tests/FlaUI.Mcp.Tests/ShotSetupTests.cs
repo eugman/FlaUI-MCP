@@ -200,6 +200,24 @@ public sealed class ShotSetupTests
     public void WaitFailuresAlwaysNameAReason(string message, string type, string expected) =>
         Assert.Equal(expected, WaitTool.FailureText(message, type));
 
+    private static Win32WindowInfo Top(nint hwnd) =>
+        new(hwnd, "Tabular Editor 3.27.1", 1, IsEnabled: true, IsToolWindow: false, IsCloaked: false);
+
+    [Fact]
+    public void LaunchWaitsForTheSameWindowOnTwoPolls()
+    {
+        Assert.Null(SessionManager.StableLaunchWindow(0, [Top(7)]));
+        Assert.Equal((nint)7, SessionManager.StableLaunchWindow(7, [Top(7)]));
+    }
+
+    [Fact]
+    public void LaunchIgnoresNoWindowOrSeveral()
+    {
+        Assert.Null(SessionManager.StableLaunchWindow(7, []));
+        Assert.Null(SessionManager.StableLaunchWindow(7, [Top(7), Top(8)]));
+        Assert.Null(SessionManager.StableLaunchWindow(7, [Top(8)]));
+    }
+
     [Fact]
     public void AnInvalidHwndCountsAsClosed()
     {

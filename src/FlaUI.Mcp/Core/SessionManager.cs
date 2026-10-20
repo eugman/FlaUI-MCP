@@ -104,13 +104,38 @@ public class SessionManager : IDisposable
         }
 
         Thread.Sleep(1000); // Extra wait for window to appear
-        Window? window = null;
-        var timeouts = 0;
         IReadOnlyList<Win32WindowInfo> Candidates() =>
             Win32Desktop.GetTopLevelWindows(process.Id).Where(w => !w.IsToolWindow && !w.IsCloaked).ToArray();
-        // A title or an unregistered window is not proof of launch ownership.
-        // Brokered/single-instance launches must be attached explicitly by the caller.
-        for (var attempt = 0; attempt < 10 && window == null && timeouts < 2; attempt++)
+        var (window, timeouts) = WaitForLaunchWindow(process, Candidates);
+
+        if (window == null)
+        {
+            var exited = process.HasExited;
+            var titles =
+                exited || !_processPolicy.IsProcessAllowed(process.Id)
+                    ? Array.Empty<string>()
+                    : Candidates().Select(w => w.Title).Where(t => t.Length > 0).ToArray();
+            throw new Exception(LaunchFailure(appPath, process.Id, exited, titles, timeouts > 0));
+        }
+
+        var windowHandle = RegisterWindow(window);
+        return (windowHandle, window);
+    }
+
+    internal const int LaunchPolls = 40;
+
+    // A title or an unregistered window is not proof of launch ownership.
+    // Brokered/single-instance launches must be attached explicitly by the caller.
+    // Apps with a splash screen (TE3) show no window, or two, for several seconds; wait up to ~20s.
+    private (Window? window, int timeouts) WaitForLaunchWindow(
+        System.Diagnostics.Process process,
+        Func<IReadOnlyList<Win32WindowInfo>> candidatesOf
+    )
+    {
+        Window? window = null;
+        var timeouts = 0;
+        nint previous = 0;
+        for (var attempt = 0; attempt < LaunchPolls && window == null && timeouts < 2; attempt++)
         {
             OperationContext.Check();
             if (process.HasExited)
@@ -118,13 +143,15 @@ public class SessionManager : IDisposable
                 break;
             }
 
-            var candidates = Candidates();
-            if (candidates.Count == 1)
+            var candidates = candidatesOf();
+            var stable = StableLaunchWindow(previous, candidates);
+            previous = candidates.Count == 1 ? candidates[0].Hwnd : 0;
+            if (stable is { } hwnd)
             {
                 // A provider still starting up can time out; each timeout already waited, so stop after two.
                 try
                 {
-                    window = Automation.FromHandle(candidates[0].Hwnd)?.AsWindow();
+                    window = Automation.FromHandle(hwnd)?.AsWindow();
                 }
                 catch (TimeoutException)
                 {
@@ -140,19 +167,15 @@ public class SessionManager : IDisposable
             }
         }
 
-        if (window == null)
-        {
-            var exited = process.HasExited;
-            var titles =
-                exited || !_processPolicy.IsProcessAllowed(process.Id)
-                    ? Array.Empty<string>()
-                    : Candidates().Select(w => w.Title).Where(t => t.Length > 0).ToArray();
-            throw new Exception(LaunchFailure(appPath, process.Id, exited, titles, timeouts > 0));
-        }
-
-        var windowHandle = RegisterWindow(window);
-        return (windowHandle, window);
+        return (window, timeouts);
     }
+
+    /// <summary>
+    /// The launched app's window once it is the only candidate on two polls in a row, so a splash that is
+    /// briefly alone is not taken for the main window.
+    /// </summary>
+    internal static nint? StableLaunchWindow(nint previous, IReadOnlyList<Win32WindowInfo> candidates) =>
+        candidates.Count == 1 && candidates[0].Hwnd == previous ? candidates[0].Hwnd : null;
 
     internal static string LaunchFailure(
         string appPath,
