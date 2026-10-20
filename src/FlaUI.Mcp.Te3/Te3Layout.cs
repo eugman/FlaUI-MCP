@@ -127,19 +127,7 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         }
     }
 
-    internal static McpToolResult Failure(Exception ex) => ErrorResult($"{ToolName}: {ex.Message}");
-
-    /// <summary>Runs step until it returns null and collects what each step did.</summary>
-    internal static async Task<List<object>> Progress(string name, Func<Task<object?>> step)
-    {
-        var completed = new List<object>();
-        while (await step() is { } result)
-        {
-            completed.Add(result);
-        }
-
-        return completed;
-    }
+    internal static McpToolResult Failure(Exception ex) => ErrorResult(LayoutSteps.Describe(ToolName, ex));
 
     /// <summary>Registers the TE3 window for the raw descendant refs this tool clicks.</summary>
     internal static string Bind(AutomationHost host, nint hwnd, int processId)
@@ -219,13 +207,21 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
             }
         }
 
-        var changes = new List<object>();
-        foreach (var size in sizes)
-        {
-            var args = JsonSerializer.SerializeToElement(new { width = size.Width, height = size.Height });
-            changes.Add(await Resize(handle, window, size.Pane, args, strict: true));
-        }
+        var next = 0;
+        var changes = await LayoutSteps.Progress(
+            "changes",
+            async () =>
+            {
+                if (next == sizes.Length)
+                {
+                    return null;
+                }
 
+                var size = sizes[next++];
+                var args = JsonSerializer.SerializeToElement(new { width = size.Width, height = size.Height });
+                return await Resize(handle, window, size.Pane, args, strict: true);
+            }
+        );
         return new { preset, changes };
     }
 
@@ -298,23 +294,26 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
 
     private async Task<object> Close(string handle, Window window, string[] titles, bool keep)
     {
-        var closed = new List<string>();
         var attempted = new HashSet<string>();
-        for (var i = 0; i < MaxCloses; i++)
-        {
-            var next = Parts(window)
-                .FirstOrDefault(p =>
-                    CanCloseKind(p.Kind) && titles.Any(t => TitleMatches(p.Title, t)) != keep && attempted.Add(p.Title)
-                );
-            if (next == null)
+        var closes = 0;
+        var closed = await LayoutSteps.Progress(
+            "closed",
+            async () =>
             {
-                break;
-            }
+                var next =
+                    closes++ < MaxCloses
+                        ? Parts(window).FirstOrDefault(p => ShouldClose(p, titles, keep) && attempted.Add(p.Title))
+                        : null;
+                if (next == null)
+                {
+                    return null;
+                }
 
-            await Click(handle, next.Close);
-            await RequireNoDialog(window, next.Title);
-            closed.Add(next.Title);
-        }
+                await Click(handle, next.Close);
+                await RequireNoDialog(window, next.Title);
+                return next.Title;
+            }
+        );
 
         var remaining = Parts(window).Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
         var unresolved = titles.Where(t => remaining.Any(r => TitleMatches(r, t)) != keep).ToList();
@@ -327,6 +326,9 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
     }
 
     internal static bool CanCloseKind(string kind) => kind == "pane";
+
+    private static bool ShouldClose(Part part, string[] titles, bool keep) =>
+        CanCloseKind(part.Kind) && titles.Any(t => TitleMatches(part.Title, t)) != keep;
 
     // Closing a pane can open a dialog on an unfamiliar build. Watch for ~1s and
     // stop there: answering it is the caller's decision.
@@ -349,7 +351,7 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
     }
 
     internal static string DialogOpened(string closing, string dialog) =>
-        $"Closing '{closing}' opened \"{dialog}\"; nothing else was closed. Answer it, then run keep/close again.";
+        $"Closing '{closing}' opened \"{dialog}\". Answer it, then run keep/close again.";
 
     // TE3 retitles a pane while its Show changes filter is on ("TOM Explorer (Changed)").
     private const string ChangedSuffix = " (Changed)";

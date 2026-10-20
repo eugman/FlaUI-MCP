@@ -89,7 +89,7 @@ public sealed class Te3LayoutTests
         // first from the reply and claim nothing else was closed.
         var panes = new Queue<string>(["Properties", "TOM Explorer", "Messages"]);
         var error = await Record.ExceptionAsync(() =>
-            Te3Layout.Progress(
+            LayoutSteps.Progress(
                 "closed",
                 () =>
                 {
