@@ -105,7 +105,13 @@ public sealed class NativeMcpPreflightTests
         Assert.Equal(4, handler.Calls.Count);
     }
 
-    private sealed class WorkspaceHandler(bool wrongDescription = false, bool structured = false) : HttpMessageHandler
+    private const string Te3ServerInfo = """{"name":"TE3","version":"3.27.1"}""";
+
+    private sealed class WorkspaceHandler(
+        bool wrongDescription = false,
+        bool structured = false,
+        string serverInfo = Te3ServerInfo
+    ) : HttpMessageHandler
     {
         private int step;
         public int Calls => step;
@@ -117,7 +123,7 @@ public sealed class NativeMcpPreflightTests
             var body = step++ switch
             {
                 0 =>
-                    """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"TE3","version":"3.27.1"}}}""",
+                    $$$"""{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{{{serverInfo}}}}}""",
                 1 => "",
                 2 => System.Text.Json.JsonSerializer.Serialize(
                     new
@@ -191,6 +197,31 @@ public sealed class NativeMcpPreflightTests
         );
         Assert.Contains("TE3/3.27.1", error.Message);
         Assert.Equal(3, handler.Calls);
+    }
+
+    [Theory]
+    [InlineData("""{"name":"TE3"}""", "TE3/")]
+    [InlineData("""{"name":"TE3","version":""}""", "TE3/")]
+    [InlineData("""{"name":"Other","version":"9.9"}""", "Other/9.9")]
+    [InlineData("""{"name":"TE3","version":"3.28.0"}""", "TE3/3.28.0")]
+    [InlineData("""{"name":"Other","version":"3.27.1"}""", "Other/3.27.1")]
+    public async Task EchoingTheReportedServerBackIsNotEnoughOutsideTheAllowlist(string serverInfo, string echoed)
+    {
+        var handler = new WorkspaceHandler(serverInfo: serverInfo);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(Workspace(compatibleServer: echoed))
+        );
+        Assert.Equal(3, handler.Calls);
+    }
+
+    [Fact]
+    public async Task TheRefusalNamesOnlyTheAllowlistedServerNotTheReportedOne()
+    {
+        var handler = new WorkspaceHandler(serverInfo: """{"name":"Other","version":"9.9"}""");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(Workspace(compatibleServer: null))
+        );
+        Assert.DoesNotContain("Other/9.9", error.Message);
     }
 
     [Theory]
