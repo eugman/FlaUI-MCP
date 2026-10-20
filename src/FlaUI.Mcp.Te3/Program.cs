@@ -31,8 +31,10 @@ public static class RunnerCommands
                 }
 
                 DpiUtility.EnablePerMonitorV2();
-                using var host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]));
-                var registry = new FlaUI.Mcp.ToolRegistry();
+                // One server for everything: the generic windows_* tools (with the window-management
+                // extensions) and the TE3 tools share one registry, so refs and handles carry across.
+                using var host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]), includeDesktopTools: true);
+                var registry = host.Tools;
                 foreach (var name in Te3Companion.Names)
                 {
                     registry.RegisterTool(new Te3Companion(host, name));

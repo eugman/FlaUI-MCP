@@ -4,7 +4,7 @@ Everything here builds on the generic FlaUI MCP server and adds what is specific
 
 | Piece | What it is |
 |---|---|
-| `FlaUI.Mcp.Te3 mcp` | A small MCP server with three TE3 tools, `te3_navigate`, `te3_model_state` and `te3_layout`. Run it next to the generic server. |
+| `FlaUI.Mcp.Te3 mcp` | The MCP server: the generic `windows_*` tools plus three TE3 tools, `te3_navigate`, `te3_model_state` and `te3_layout`, sharing one set of refs and handles. Limited to TE3. |
 | `FlaUI.Mcp.Te3 run` | A runner that launches its own TE3, stages a disposable model, runs typed C# recipes and saves screenshots. |
 | [skills/te3-ui](skills/te3-ui/SKILL.md) | Agent guidance for driving TE3 with the MCP tools. |
 | [UI-MAP.md](UI-MAP.md) | Locators and behaviour observed in TE3 3.26 and 3.27. |
@@ -45,8 +45,8 @@ Destinations: `tom-explorer`, `expression-editor`, `object` (with `table`, `obje
 
 Rules:
 - The tools attach to the running TE3. Pass `processId` only when more than one TE3 is open. They never launch or close TE3, change preferences, touch databases or run scripts.
-- Their handles are private to this server. Don't pass refs from the generic server into them.
-- Capture with the generic `windows_screenshot`, and look at the image: arrival is not visual proof.
+- They take a `processId`, not a window handle or element ref. The `windows_*` tools on the same server share refs and handles with each other.
+- Capture with `windows_screenshot`, and look at the image: arrival is not visual proof.
 - Only one agent should drive the desktop at a time.
 - If Windows refuses to activate TE3, the result says `blocker: activation-denied`. Click the TE3 title bar and retry.
 

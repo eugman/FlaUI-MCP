@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- `FlaUI.Mcp.Te3 mcp` is now the one server to configure. It serves the generic `windows_*` tools (including the window-management extensions) alongside the TE3 tools from one registry, so element refs and window handles work across both. Running `FlaUI.Mcp.exe` next to it is no longer needed.
+
 ### Added
 - `te3_layout` on the TE3 companion server arranges TE3 for a screenshot. `list` shows docked panes and document tabs with bounds. `close` and `keep` close panes or tabs by title, and stop at a save prompt. `maximize-pane` and `restore-pane` use the pane's own buttons. `resize` drags the dock splitter until a pane is a given width or height, and reports the size reached. Pane titles match with or without TE3's " (Changed)" suffix.
 
