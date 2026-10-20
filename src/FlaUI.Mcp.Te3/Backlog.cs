@@ -21,13 +21,14 @@ public static partial class Backlog
 {
     public static bool IsItemId(string checkpoint) => ItemId().IsMatch(checkpoint);
 
-    public static string DefaultPath()
+    public const string EnvironmentVariable = "FLAUI_TE3_BACKLOG";
+
+    public static string DefaultPath() =>
+        DefaultPath(Environment.GetEnvironmentVariable(EnvironmentVariable), AppContext.BaseDirectory);
+
+    internal static string DefaultPath(string? configured, string start)
     {
-        for (
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            directory != null;
-            directory = directory.Parent
-        )
+        for (var directory = new DirectoryInfo(start); directory != null; directory = directory.Parent)
         {
             var candidate = Path.Combine(directory.FullName, "local", "screenshot-backlog.json");
             if (File.Exists(candidate))

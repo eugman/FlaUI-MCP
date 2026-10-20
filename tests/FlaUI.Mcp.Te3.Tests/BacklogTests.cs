@@ -192,4 +192,29 @@ public sealed class BacklogTests : IDisposable
         Assert.Equal("keep this local edit", File.ReadAllText(spec));
         Assert.False(File.Exists(image));
     }
+
+    [Fact]
+    public void TheBacklogPathCanBeConfigured()
+    {
+        // A worktree has no local/ of its own; the backlog lives in the main checkout.
+        Assert.Equal(backlog, Backlog.DefaultPath(backlog, root));
+        var missing = Assert.Throws<FileNotFoundException>(() =>
+            Backlog.DefaultPath(Path.Combine(root, "absent.json"), root)
+        );
+        Assert.Contains(Backlog.EnvironmentVariable, missing.Message);
+    }
+
+    [Fact]
+    public void TheSearchStopsAtAWorktreeRoot()
+    {
+        // In a worktree .git is a file; the search must not climb past it into an unrelated local/.
+        var worktree = Path.Combine(root, "worktree");
+        var bin = Path.Combine(worktree, "bin");
+        Directory.CreateDirectory(bin);
+        File.WriteAllText(Path.Combine(worktree, ".git"), "gitdir: ../main/.git/worktrees/x");
+        Directory.CreateDirectory(Path.Combine(root, "local"));
+        File.Copy(backlog, Path.Combine(root, "local", "screenshot-backlog.json"));
+
+        Assert.Throws<FileNotFoundException>(() => Backlog.DefaultPath(null, bin));
+    }
 }
