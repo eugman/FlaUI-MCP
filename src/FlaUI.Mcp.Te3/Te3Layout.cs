@@ -123,8 +123,22 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or TimeoutException)
         {
-            return ErrorResult($"{ToolName}: {ex.Message}");
+            return Failure(ex);
         }
+    }
+
+    internal static McpToolResult Failure(Exception ex) => ErrorResult($"{ToolName}: {ex.Message}");
+
+    /// <summary>Runs step until it returns null and collects what each step did.</summary>
+    internal static async Task<List<object>> Progress(string name, Func<Task<object?>> step)
+    {
+        var completed = new List<object>();
+        while (await step() is { } result)
+        {
+            completed.Add(result);
+        }
+
+        return completed;
     }
 
     /// <summary>Registers the TE3 window for the raw descendant refs this tool clicks.</summary>
@@ -327,14 +341,15 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
                 .FirstOrDefault(w => w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow);
             if (dialog != null)
             {
-                throw new InvalidOperationException(
-                    $"Closing '{closing}' opened \"{dialog.Title}\"; nothing else was closed. Answer it, then run keep/close again."
-                );
+                throw new InvalidOperationException(DialogOpened(closing, dialog.Title));
             }
 
             await Task.Delay(200);
         }
     }
+
+    internal static string DialogOpened(string closing, string dialog) =>
+        $"Closing '{closing}' opened \"{dialog}\"; nothing else was closed. Answer it, then run keep/close again.";
 
     // TE3 retitles a pane while its Show changes filter is on ("TOM Explorer (Changed)").
     private const string ChangedSuffix = " (Changed)";

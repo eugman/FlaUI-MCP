@@ -81,4 +81,31 @@ public sealed class Te3LayoutTests
         var reference = host.Elements.Register(handle, null!);
         Assert.Equal(Environment.ProcessId, host.Elements.GetProcessIdForRef(reference));
     }
+
+    [Fact]
+    public async Task AFailedStepReportsTheStepsAlreadyDone()
+    {
+        // keep/close and apply-preset loop over panes; a dialog on the second close used to drop the
+        // first from the reply and claim nothing else was closed.
+        var panes = new Queue<string>(["Properties", "TOM Explorer", "Messages"]);
+        var error = await Record.ExceptionAsync(() =>
+            Te3Layout.Progress(
+                "closed",
+                () =>
+                {
+                    var pane = panes.Dequeue();
+                    return pane == "TOM Explorer"
+                        ? throw new InvalidOperationException(Te3Layout.DialogOpened(pane, "Save changes?"))
+                        : Task.FromResult<object?>(pane);
+                }
+            )
+        );
+        var result = Te3Layout.Failure(Assert.IsAssignableFrom<InvalidOperationException>(error));
+        Assert.True(result.IsError);
+        var payload = System.Text.Json.JsonDocument.Parse(result.Content[0].Text!).RootElement;
+        Assert.Equal("Properties", Assert.Single(payload.GetProperty("closed").EnumerateArray()).GetString());
+        Assert.Contains("Save changes?", payload.GetProperty("error").GetString());
+        Assert.DoesNotContain("nothing else", payload.GetProperty("error").GetString());
+        Assert.Equal("Messages", Assert.Single(panes));
+    }
 }
