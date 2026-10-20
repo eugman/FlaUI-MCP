@@ -65,10 +65,12 @@ public class ListWindowsTool : ToolBase
 public class FocusWindowTool : ToolBase
 {
     private readonly SessionManager _sessionManager;
+    private readonly PendingInvokeTracker? _pending;
 
-    public FocusWindowTool(SessionManager sessionManager)
+    public FocusWindowTool(SessionManager sessionManager, PendingInvokeTracker? pending = null)
     {
         _sessionManager = sessionManager;
+        _pending = pending;
     }
 
     public override string Name => "windows_focus";
@@ -101,13 +103,13 @@ public class FocusWindowTool : ToolBase
         {
             if (!string.IsNullOrEmpty(handle))
             {
-                _sessionManager.FocusWindow(handle);
+                _sessionManager.FocusWindow(handle, _pending);
                 return Task.FromResult(FocusResult(handle, _sessionManager.GetWindowHwnd(handle)));
             }
             else if (!string.IsNullOrEmpty(title))
             {
                 var (windowHandle, window) = _sessionManager.AttachToWindow(title);
-                _sessionManager.FocusWindow(windowHandle);
+                _sessionManager.FocusWindow(windowHandle, _pending);
                 return Task.FromResult(FocusResult(windowHandle, _sessionManager.GetWindowHwnd(windowHandle)));
             }
             else
@@ -135,10 +137,12 @@ public class FocusWindowTool : ToolBase
 public class CloseWindowTool : ToolBase
 {
     private readonly SessionManager _sessionManager;
+    private readonly PendingInvokeTracker? _pending;
 
-    public CloseWindowTool(SessionManager sessionManager)
+    public CloseWindowTool(SessionManager sessionManager, PendingInvokeTracker? pending = null)
     {
         _sessionManager = sessionManager;
+        _pending = pending;
     }
 
     public override string Name => "windows_close";
@@ -165,7 +169,7 @@ public class CloseWindowTool : ToolBase
 
         try
         {
-            _sessionManager.CloseWindow(handle);
+            _sessionManager.CloseWindow(handle, _pending);
             return Task.FromResult(
                 TextResult(
                     $"Close requested for window {handle}. A save prompt may keep it open; use windows_list_windows to verify before continuing."

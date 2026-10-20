@@ -5,6 +5,16 @@ using FlaUI.Mcp.Core;
 namespace FlaUI.Mcp.Tests;
 
 /// <summary>
+/// Tests that take the process-wide input lease, some on purpose for seconds. They run alone so they
+/// never make another test's input wait for the lease.
+/// </summary>
+[Xunit.CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class InputLeaseCollection
+{
+    public const string Name = "Input lease";
+}
+
+/// <summary>
 /// A desktop with one target window and one other window. Input is counted, never sent. Install it
 /// for the duration of a test; it applies to the installing flow and the tasks it starts.
 /// </summary>

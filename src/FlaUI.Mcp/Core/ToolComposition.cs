@@ -38,8 +38,8 @@ internal static class ToolComposition
             registry.RegisterTool(new LaunchTool(sessions));
             registry.RegisterTool(new GetTextTool(elements, pending));
             registry.RegisterTool(new ListWindowsTool(sessions, policy));
-            registry.RegisterTool(new FocusWindowTool(sessions));
-            registry.RegisterTool(new CloseWindowTool(sessions));
+            registry.RegisterTool(new FocusWindowTool(sessions, pending));
+            registry.RegisterTool(new CloseWindowTool(sessions, pending));
             registry.RegisterTool(new BatchTool(registry));
         }
     }

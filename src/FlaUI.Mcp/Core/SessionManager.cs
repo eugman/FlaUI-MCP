@@ -87,8 +87,7 @@ public class SessionManager : IDisposable
         // Use Process.Start for more reliable launching
         var psi = LaunchStartInfo(appPath, args);
 
-        OperationContext.Check();
-        using var process = System.Diagnostics.Process.Start(psi);
+        using var process = WindowMutation.Start(psi);
         if (process == null)
         {
             throw new Exception($"Failed to start process: {appPath}");
@@ -492,20 +491,12 @@ public class SessionManager : IDisposable
         var hwnd = GetWindowHwnd(handle);
         if (hwnd != 0)
         {
-            GetInputTarget(handle);
-            InputDesktop.Current.Focus(hwnd);
+            WindowMutation.Focus(GetInputTarget(handle), hwnd);
             return;
         }
 
-        var window = GetWindow(handle);
-        if (window == null)
-        {
-            throw new Exception($"Window not found: {handle}");
-        }
-
-        EnsureProcessAllowed(window.Properties.ProcessId.Value);
-        OperationContext.Check();
-        window.Focus();
+        var window = AttachedForFallback(handle, pending);
+        WindowMutation.Uia(window.Properties.ProcessId.Value, $"Focus on {handle}", window.Focus, pending);
     }
 
     public void CloseWindow(string handle, PendingInvokeTracker? pending = null)
@@ -513,33 +504,30 @@ public class SessionManager : IDisposable
         OperationContext.Check();
         // Prefer a Win32 WM_CLOSE (never blocks); fall back to UIA.
         var hwnd = GetWindowHwnd(handle);
-        if (hwnd != 0)
+        if (hwnd == 0)
         {
-            GetInputTarget(handle);
-            InputDesktop.Current.PostClose(hwnd);
-            // WM_CLOSE is asynchronous and may open a save prompt. Retain the
-            // handle while the native window still exists so recovery can use it.
-            if (InputDesktop.Current.ProcessOf(hwnd) != 0)
-            {
-                return;
-            }
-        }
-        else
-        {
-            var window = GetWindow(handle);
-            if (window == null)
-            {
-                throw new Exception($"Window not found: {handle}");
-            }
-
-            EnsureProcessAllowed(window.Properties.ProcessId.Value);
-            OperationContext.Check();
-            window.Close();
+            var window = AttachedForFallback(handle, pending);
             // UIA Close is also a request, not proof of disappearance.
+            WindowMutation.Uia(window.Properties.ProcessId.Value, $"Close on {handle}", window.Close, pending);
             return;
         }
 
-        ForgetWindow(handle);
+        // WM_CLOSE is asynchronous and may open a save prompt. Retain the
+        // handle while the native window still exists so recovery can use it.
+        if (!WindowMutation.Close(GetInputTarget(handle), hwnd, handle))
+        {
+            ForgetWindow(handle);
+        }
+    }
+
+    /// <summary>The UIA window behind a handle with no native HWND, once its provider is known to be free.</summary>
+    private Window AttachedForFallback(string handle, PendingInvokeTracker? pending)
+    {
+        WindowMutation.RefuseIfBlocked(GetWindowProcessId(handle), pending);
+        var window = GetWindow(handle) ?? throw new ArgumentException($"Window not found: {handle}");
+        EnsureProcessAllowed(window.Properties.ProcessId.Value);
+        OperationContext.Check();
+        return window;
     }
 
     internal void ForgetWindow(string handle)

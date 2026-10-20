@@ -10,6 +10,7 @@ namespace FlaUI.Mcp.Tests;
 /// Windows (UIPI) silently drops input and messages from a lower-integrity process to an elevated or
 /// UIAccess window, and SendInput gives no sign. Guarded input must refuse before sending.
 /// </summary>
+[Collection(InputLeaseCollection.Name)]
 public sealed class IntegrityGuardTests
 {
     private static readonly ProcessIntegrity Medium = new(ProcessIntegrity.Medium, false);

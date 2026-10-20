@@ -10,6 +10,7 @@ namespace FlaUI.Mcp.Tests;
 /// A tool that fails after some of its input went out must say so: a broker that reads
 /// "not dispatched" may replay input that already reached the app.
 /// </summary>
+[Collection(InputLeaseCollection.Name)]
 public sealed class DispatchOutcomeTests
 {
     private static JsonElement Args(object value) => JsonSerializer.SerializeToElement(value);

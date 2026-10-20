@@ -10,6 +10,7 @@ using Xunit;
 namespace FlaUI.Mcp.Tests;
 
 /// <summary>Focus, close and pointer parking are mutations: they take the same guards as input.</summary>
+[Collection(InputLeaseCollection.Name)]
 public sealed class WindowMutationGuardTests
 {
     private static SessionManager Sessions(out string handle)
@@ -120,6 +121,7 @@ public sealed class WindowMutationGuardTests
         Assert.True(result.IsError);
         Assert.Contains("not posted", result.Content[0].Text);
         Assert.Equal(1, desktop.CloseRequests);
+        Assert.Equal("not-dispatched", result.Outcome!.Dispatch);
     }
 
     [Fact]

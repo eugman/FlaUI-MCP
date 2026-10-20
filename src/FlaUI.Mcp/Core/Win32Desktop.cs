@@ -348,7 +348,7 @@ public static partial class Win32Desktop
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(nint hWnd, int nCmdShow);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
 
     [DllImport("user32.dll")]
