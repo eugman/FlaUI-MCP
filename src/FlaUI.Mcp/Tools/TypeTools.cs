@@ -304,49 +304,65 @@ public class FillTool : ToolBase
                 element,
                 GetBoolArgument(arguments, "verifyFocus")
             );
-            ReplaceByKeyboard(
-                value,
-                () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A)),
-                () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.BACK)),
-                input.Type
-            );
-
-            TextObservation keyboardObservation;
-            keyboardObservation = ControlText.WaitForExpected(
-                value,
-                () =>
-                {
-                    try
-                    {
-                        return ControlText.Read(element);
-                    }
-                    catch
-                    {
-                        return new(null, "unavailable");
-                    }
-                },
-                () =>
-                {
-                    OperationContext.Check();
-                    _elementRegistry.ValidateReference(refId, handle);
-                    input.Verify();
-                },
-                () => Thread.Sleep(50)
-            );
             return Task.FromResult(
-                TextResult($"Filled {elementName} with \"{value}\"") with
-                {
-                    Outcome = new ToolOutcome("completed", "returned")
+                FillByKeyboard(
+                    input,
+                    value,
+                    elementName,
+                    () =>
                     {
-                        Verification = keyboardObservation.Verify(value),
+                        try
+                        {
+                            return ControlText.Read(element);
+                        }
+                        catch
+                        {
+                            return new(null, "unavailable");
+                        }
                     },
-                }
+                    () =>
+                    {
+                        OperationContext.Check();
+                        _elementRegistry.ValidateReference(refId, handle);
+                    }
+                )
             );
         }
         catch (Exception ex)
         {
             return Task.FromResult(ErrorResult($"Failed to fill {refId}: {ex.Message}"));
         }
+    }
+
+    /// <summary>Select all, replace by typing, then observe the text without retyping.</summary>
+    internal static McpToolResult FillByKeyboard(
+        GuardedInput input,
+        string value,
+        string elementName,
+        Func<TextObservation> read,
+        Action validate
+    )
+    {
+        ReplaceByKeyboard(
+            value,
+            () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A)),
+            () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.BACK)),
+            input.Type
+        );
+        var observation = ControlText.WaitForExpected(
+            value,
+            read,
+            () =>
+            {
+                validate();
+                input.Verify();
+            },
+            () => Thread.Sleep(50)
+        );
+        return TextResult($"Filled {elementName} with \"{value}\"") with
+        {
+            Outcome = new ToolOutcome("completed", "returned") { Verification = observation.Verify(value) },
+        };
     }
 
     internal static string FillMismatch(string expected, string? observed, FlaUI.Core.Definitions.ControlType type) =>
