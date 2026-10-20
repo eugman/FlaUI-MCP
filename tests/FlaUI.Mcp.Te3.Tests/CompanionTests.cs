@@ -84,6 +84,52 @@ public sealed class CompanionTests
         );
 
     [Fact]
+    public void ShowChangesTargetsTheObservedTomExplorerToggle()
+    {
+        var target = Te3Page.TomChangesTarget();
+        Assert.Equal("Show changes", target.Selector.Name);
+        Assert.Equal("CheckBox", target.Selector.ControlType);
+        Assert.Equal("Toggle", target.Selector.Pattern);
+        Assert.Equal("TabularExplorerView", target.Within?.AutomationId);
+        Assert.Contains("tom-explorer/changes", Te3Destinations.Ids);
+    }
+
+    [Fact]
+    public void ObservedAiPreferencesUseDialogLocalPaneMarkers()
+    {
+        var provider = Te3Destinations.Find("preferences/ai-provider");
+        var assistant = Te3Destinations.Find("preferences/ai-assistant");
+        var mcp = Te3Destinations.Find("preferences/mcp-server");
+        var permissions = Te3Destinations.Find("preferences/permissions");
+        Assert.Equal(
+            ("AI Provider", "AI Assistant.AI Provider", "Choose provider", "ComboBox"),
+            (provider?.Section, provider?.PaneAutomationId, provider?.PaneMarker, provider?.PaneMarkerControlType)
+        );
+        Assert.Equal(
+            ("Preferences", "AI Assistant.Preferences", "Allow AI assistant to run C# scripts directly", "CheckBox"),
+            (assistant?.Section, assistant?.PaneAutomationId, assistant?.PaneMarker, assistant?.PaneMarkerControlType)
+        );
+        Assert.Equal(
+            ("MCP Server", "AI Features.MCP Server", "Enable MCP Server", "CheckBox"),
+            (mcp?.Section, mcp?.PaneAutomationId, mcp?.PaneMarker, mcp?.PaneMarkerControlType)
+        );
+        Assert.Equal(
+            ("Permissions", "AI Features.Permissions", "Model metadata:", "ComboBox"),
+            (
+                permissions?.Section,
+                permissions?.PaneAutomationId,
+                permissions?.PaneMarker,
+                permissions?.PaneMarkerControlType
+            )
+        );
+        Assert.True(
+            Te3Page.IsPreferencesLookup(
+                new(new(AutomationId: "AI Features.Permissions"), Te3Page.PreferencesTarget().Selector, true)
+            )
+        );
+    }
+
+    [Fact]
     public void MatchedSceneDoesNotClaimVisualCompleteness()
     {
         var assessment = JsonSerializer.SerializeToElement(Te3Companion.Assessment(true));

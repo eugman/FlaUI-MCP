@@ -18,6 +18,7 @@ Locators and behaviour observed in TE3 3.26.3 and 3.27.0. Treat every label as a
 |---|---|---|
 | Main menu | MenuBar `Main menu` | MenuItems File … Help. Popup entries are Buttons; only submenu parents are MenuItems. |
 | TOM Explorer | `treeList` in `TabularExplorerView` | Rows expose names as Value. Qualify the table. |
+| TOM Explorer Show changes | CheckBox `Show changes` in `TabularExplorerView` > ToolBar `TOM Explorer` | Observed 3.27.1 with Toggle pattern; the companion only turns it on and verifies it is on. |
 | Properties | `PropertyGridView` | Categories are TreeItems, properties DataItems with values. |
 | Expression editor | `DaxEditor` / `daxscilla` in `QuickEditorView` | A Property ComboBox picks which DAX property is edited. |
 | DAX query | `daxEditor` / `daxscilla` | Result cell: DataItem `[Value] row 1`. |
@@ -28,7 +29,12 @@ Locators and behaviour observed in TE3 3.26.3 and 3.27.0. Treat every label as a
 | Auto-rollback | CheckBox `Auto-rollback` | Toggle pattern. Assert it; don't click it. |
 | BPA | `treeBpa` in `BestPracticeAnalyzerView` | Refresh first; match the exact rule Value. |
 | Open File | owned Window `Open File` | Filename is Edit `1148`. A ComboBox shares that ID, so keep the Edit constraint. |
-| Preferences | Window `Preferences` (rootOnly, includeOwned) | `searchPreferences`, `treePreferences`. |
+| Preferences | Native window `Preferences` | `searchPreferences`, `treePreferences`. The UIA root lookup timed out in 3.27.1; register the native window and query controls on that handle. |
+
+| AI Assistant > AI Provider | Pane `AI Assistant.AI Provider` | Observed 3.27.1: ComboBoxes `Choose provider` and `Model name`. Do not capture or print API key controls. |
+| AI Assistant > Preferences | Pane `AI Assistant.Preferences` | Observed 3.27.1: CheckBoxes `Allow AI assistant to run C# scripts directly` and `Preview changes`. |
+| AI Features > MCP Server | Pane `AI Features.MCP Server` | Observed 3.27.1: CheckBoxes `Enable MCP Server`, `Start MCP server automatically`, `Require access token`; Spinner `Port`. |
+| AI Features > Permissions | Pane `AI Features.Permissions` | Observed 3.27.1: ComboBoxes `Model metadata:`, `Model data:`, `Best Practice Analyzer:`, `Documents:`, `Macros:`. |
 
 ## Menus
 
@@ -99,3 +105,17 @@ A dialog can disappear between window enumeration and a UIA read. Treat `Element
 - Preferences UIA bounds exclude the title bar, but the background PNG includes it. Use native window bounds as the origin.
 - After resizing a DevExpress dialog, wait about 500 ms before capturing: the native bounds settle before the pixels do.
 - TE3 adds untitled same-process shadow windows: 7 px around menus and 10 px around lists. The capture guards allow exactly these and nothing else.
+
+## AI and change review map (3.27.1)
+
+| Route | Evidence | Companion status |
+| --- | --- | --- |
+| Preferences > AI Features > MCP Server | Live UIA tree and pane controls | `preferences/mcp-server` |
+| Preferences > AI Features > Permissions | Live UIA tree and pane controls | `preferences/permissions` |
+| Preferences > AI Features > AI Assistant > AI Provider | Live UIA tree and pane controls | `preferences/ai-provider` |
+| Preferences > AI Features > AI Assistant > Preferences | Live UIA tree and pane controls | `preferences/ai-assistant` |
+| View > AI Assistant | [Official AI Assistant docs](https://docs.tabulareditor.com/en/features/ai-assistant.html) | Menu and pane locators still need live observation |
+| TOM Explorer > Show changes | Live UIA CheckBox with Toggle pattern; [official behavior](https://docs.tabulareditor.com/en/features/unsaved-changes.html) | `tom-explorer/changes` |
+| Properties > Show changes | [Official unsaved changes docs](https://docs.tabulareditor.com/en/features/unsaved-changes.html) | Toolbar control still needs live observation |
+
+The MCP Server and Permissions routes inspect settings only. They do not change grants or start the MCP server.

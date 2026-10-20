@@ -123,6 +123,13 @@ public sealed class Te3Page(
 
     // The tree inside TOM Explorer's view, which exists whether TOM Explorer is a tab or a docked pane
     // (observed on 3.27.1: Pane "TOM Explorer" > TabularExplorerView > treeList).
+    public static Target TomChangesTarget() =>
+        new(
+            new(Name: "Show changes", ControlType: "CheckBox", Pattern: "Toggle", Visible: true),
+            new(AutomationId: "TabularExplorerView"),
+            false
+        );
+
     public static Target TomTreeTarget() =>
         new(new(AutomationId: "treeList"), new(AutomationId: "TabularExplorerView"), false);
 
@@ -278,7 +285,11 @@ public sealed class Te3Page(
         || target.Selector.AutomationId == "treePreferences"
         || target.Within?.AutomationId == "treePreferences"
         || target.Selector.AutomationId?.StartsWith("DAX Editor.", StringComparison.Ordinal) == true
-        || target.Within?.AutomationId?.StartsWith("DAX Editor.", StringComparison.Ordinal) == true;
+        || target.Within?.AutomationId?.StartsWith("DAX Editor.", StringComparison.Ordinal) == true
+        || target.Selector.AutomationId?.StartsWith("AI Features.", StringComparison.Ordinal) == true
+        || target.Within?.AutomationId?.StartsWith("AI Features.", StringComparison.Ordinal) == true
+        || target.Selector.AutomationId?.StartsWith("AI Assistant.", StringComparison.Ordinal) == true
+        || target.Within?.AutomationId?.StartsWith("AI Assistant.", StringComparison.Ordinal) == true;
 
     public async Task OpenPreferences()
     {
@@ -308,7 +319,7 @@ public sealed class Te3Page(
             throw new TimeoutException("Preferences did not finish initializing");
         }
 
-        await Expect(PreferencesTarget());
+        _ = PreferencesHandle();
     }
 
     public async Task CancelPreferences()
@@ -1604,6 +1615,34 @@ public sealed class Te3Page(
         await Click(TomTabTarget());
     }
 
+    public async Task OpenTomChanges()
+    {
+        await OpenTom();
+        if (await TomChangesOn())
+        {
+            return;
+        }
+
+        await Click(TomChangesTarget());
+        if (!await TomChangesOn())
+        {
+            throw new InvalidOperationException("Show changes did not turn on in TOM Explorer.");
+        }
+    }
+
+    private async Task<bool> TomChangesOn()
+    {
+        var control = await Resolve(TomChangesTarget());
+        if (!control.Patterns.Toggle.IsSupported)
+        {
+            throw new InvalidOperationException("TOM Explorer Show changes has no Toggle pattern.");
+        }
+
+        var state = await Task.Run(() => control.Patterns.Toggle.Pattern.ToggleState.Value)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        return state == ToggleState.On;
+    }
+
     /// <summary>One lookup, no retries: whether the target exists and is not offscreen.</summary>
     private async Task<bool> IsOnScreen(Target target) =>
         await Task.Run(() =>
@@ -2578,12 +2617,23 @@ public sealed class Te3Page(
                     throw new InvalidOperationException("Expected Preferences row is not selected.");
                 }
 
-                var paneId = destination.PaneAutomationId ?? "DAX Editor." + section;
+                var paneId =
+                    destination.PaneAutomationId
+                    ?? throw new InvalidOperationException("Preferences pane locator is not configured.");
                 var control = await Resolve(
-                    new(new(Name: marker, ControlType: "CheckBox", Visible: true), new(AutomationId: paneId), true)
+                    new(
+                        new(Name: marker, ControlType: destination.PaneMarkerControlType, Visible: true),
+                        new(AutomationId: paneId),
+                        true
+                    )
                 );
-                var dialog = await Resolve(PreferencesTarget());
-                if (control.BoundingRectangle.IsEmpty || !dialog.BoundingRectangle.Contains(control.BoundingRectangle))
+                var dialog = host.Sessions.GetInputTarget(PreferencesHandle());
+                var dialogBounds =
+                    Win32Desktop.GetWindowBounds(dialog.Hwnd)
+                    ?? throw new InvalidOperationException("Preferences window disappeared.");
+                var rect = control.BoundingRectangle;
+                var controlBounds = System.Drawing.Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
+                if (rect.IsEmpty || !dialogBounds.Contains(controlBounds))
                 {
                     throw new InvalidOperationException(
                         "Expected pane content is not inside the visible Preferences dialog."
@@ -2600,6 +2650,13 @@ public sealed class Te3Page(
                 if (!await IsOnScreen(TomTreeTarget()))
                 {
                     await RequireSelectedTab(TomTabTarget());
+                }
+
+                break;
+            case { Id: "tom-explorer/changes" }:
+                if (!await IsOnScreen(TomTreeTarget()) || !await TomChangesOn())
+                {
+                    throw new InvalidOperationException("TOM Explorer Show changes is not visible and on.");
                 }
 
                 break;

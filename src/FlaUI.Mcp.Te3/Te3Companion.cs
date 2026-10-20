@@ -184,6 +184,9 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
                 case { Id: "tom-explorer" }:
                     await page.OpenTom();
                     break;
+                case { Id: "tom-explorer/changes" }:
+                    await page.OpenTomChanges();
+                    break;
                 case { Id: "expression-editor" }:
                     await page.SelectDocument("Expression Editor");
                     break;
