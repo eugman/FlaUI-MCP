@@ -75,4 +75,66 @@ public sealed class SettingsAndFixtureTests : IDisposable
 
         Assert.Equal(original, File.ReadAllBytes(recentFiles));
     }
+
+    [Fact]
+    public void RecoverRefusesSettingsChangedSinceTheRunNormalizedThem()
+    {
+        // An old backup must not silently overwrite changes the user made after the interrupted run.
+        var preferences = Path.Combine(root, "UiPreferences.json");
+        File.WriteAllText(preferences, """{"Skin":"user"}""");
+        var original = File.ReadAllBytes(preferences);
+        var backup = Path.Combine(root, "backup");
+        new SettingsLease(root, backup).Normalize();
+        File.WriteAllText(preferences, """{"Skin":"changed later"}""");
+
+        var error = Assert.Throws<InvalidOperationException>(() => SettingsLease.Recover(backup, false, root));
+
+        Assert.Contains("UiPreferences.json", error.Message);
+        Assert.Contains("--force", error.Message);
+        Assert.Equal("""{"Skin":"changed later"}""", File.ReadAllText(preferences));
+        SettingsLease.Recover(backup, true, root);
+        Assert.Equal(original, File.ReadAllBytes(preferences));
+    }
+
+    [Fact]
+    public void RecoverRestoresSettingsTheRunLeftNormalized()
+    {
+        var preferences = Path.Combine(root, "UiPreferences.json");
+        File.WriteAllText(preferences, """{"Skin":"user"}""");
+        var original = File.ReadAllBytes(preferences);
+        var backup = Path.Combine(root, "backup");
+        new SettingsLease(root, backup).Normalize(true);
+
+        SettingsLease.Recover(backup, false, root);
+
+        Assert.Equal(original, File.ReadAllBytes(preferences));
+        Assert.Empty(Directory.GetFiles(root, "*.tmp"));
+    }
+
+    [Fact]
+    public void RecoverMarksTheInterruptedRunRecovered()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var manifestPath = Path.Combine(root, "manifest.json");
+        File.WriteAllText(
+            manifestPath,
+            JsonSerializer.Serialize(
+                new RunManifest
+                {
+                    SettingsBackup = backup,
+                    SettingsRestored = false,
+                    NeedsRecovery = true,
+                },
+                RunConfig.Json
+            )
+        );
+        new SettingsLease(root, backup, manifestPath).Normalize();
+
+        Assert.True(SettingsLease.Recover(backup, false, root));
+
+        var manifest = ArtifactFiles.ReadManifest(manifestPath);
+        Assert.True(manifest.SettingsRestored);
+        Assert.False(manifest.NeedsRecovery);
+    }
 }

@@ -42,7 +42,7 @@ public sealed class SettingsLease
         }
     }
 
-    public SettingsLease(string? directory = null, string? backupDirectory = null)
+    public SettingsLease(string? directory = null, string? backupDirectory = null, string? manifestPath = null)
     {
         this.directory = directory ?? DefaultDirectory;
         Validate(this.directory);
@@ -87,6 +87,14 @@ public sealed class SettingsLease
     }
 
     public void Restore() => RestoreBackup(BackupDirectory, directory);
+
+    /// <summary>The recover command: restores an interrupted run's backup.</summary>
+    /// <returns>True when the run's manifest was marked recovered.</returns>
+    public static bool Recover(string backup, bool force, string? expectedDirectory = null)
+    {
+        RestoreBackup(backup, expectedDirectory);
+        return false;
+    }
 
     public static void RestoreBackup(string backup, string? expectedDirectory = null)
     {
