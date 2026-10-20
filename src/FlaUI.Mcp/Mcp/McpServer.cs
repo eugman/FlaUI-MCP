@@ -212,13 +212,15 @@ public class McpServer
                 await serialRequests.WaitAsync(stop.Token);
             }
 
+            Task? stranded = null;
             try
             {
                 var result = await _toolRegistry.ExecuteToolAsync(
                     callParams.Name,
                     callParams.Arguments,
                     stop.Token,
-                    key
+                    key,
+                    settled => stranded = settled
                 );
                 return stop.IsCancellationRequested ? null : result;
             }
@@ -226,7 +228,7 @@ public class McpServer
             {
                 if (!_concurrentRequests)
                 {
-                    serialRequests.Release();
+                    ReleaseSerialSlot(stranded);
                 }
             }
         }
@@ -245,6 +247,21 @@ public class McpServer
         {
             cancellations.TryRemove(key, out _);
         }
+    }
+
+    /// <summary>
+    /// A cancelled tool may still be sending input. Keep tool calls serialized until it returns or its
+    /// timeout expires; only then may the next queued call run.
+    /// </summary>
+    private void ReleaseSerialSlot(Task? stranded)
+    {
+        if (stranded == null)
+        {
+            serialRequests.Release();
+            return;
+        }
+
+        _ = stranded.ContinueWith(_ => serialRequests.Release(), TaskScheduler.Default);
     }
 
     private object RequestStatus(JsonRpcRequest request)

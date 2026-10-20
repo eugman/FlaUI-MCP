@@ -28,10 +28,31 @@ if ($Staged) {
     # --no-renames: a file moved out of a core folder must count as a change to the core.
     $changed = git diff --cached --name-only --no-renames
 }
+elseif ($CoreRevision -eq 'core/main') {
+    git rev-parse -q --verify core/main *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host 'core/main is not fetched. Run: git fetch core' -ForegroundColor Red
+        exit 1
+    }
+
+    # Compare with the point this branch last took from core/main, so a core release that is not merged
+    # yet does not fail a branch that touched no core file.
+    $base = git merge-base HEAD core/main
+    $changed = git diff --name-only --no-renames $base HEAD
+}
 else {
+    # An explicit revision (CORE_REVISION) is a local Core commit that is not on core/main yet.
     git rev-parse -q --verify "$CoreRevision^{commit}" *> $null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Core revision $CoreRevision is not available. Fetch the intended core commit." -ForegroundColor Red
+        exit 1
+    }
+
+    # It must be a Core commit: a product commit (such as HEAD) contains its src/FlaUI.Mcp.<Product> host,
+    # and comparing HEAD with itself would pass any change.
+    $productHosts = git ls-tree --name-only "$CoreRevision" src/ | Where-Object { $_ -like 'src/FlaUI.Mcp.?*' }
+    if ($productHosts) {
+        Write-Host "Core revision $CoreRevision contains product code ($($productHosts -join ', ')); it is not a Core commit." -ForegroundColor Red
         exit 1
     }
 

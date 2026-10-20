@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using FlaUI.Mcp.Core;
 
@@ -36,11 +37,17 @@ public class ToolRegistry
         return _tools.Values.Select(t => t.GetDefinition()).ToList();
     }
 
+    /// <param name="whenStranded">
+    /// Called when the call returns before its tool task ended because the caller cancelled. It receives a
+    /// task that completes when the tool returns or its timeout would have expired; a serialized caller
+    /// holds its slot until then, so a cancel never lets the next tool run beside a still-running one.
+    /// </param>
     public async Task<McpToolResult> ExecuteToolAsync(
         string name,
         JsonElement? arguments,
         CancellationToken cancellationToken = default,
-        string? requestKey = null
+        string? requestKey = null,
+        Action<Task>? whenStranded = null
     )
     {
         if (!_tools.TryGetValue(name, out var tool))
@@ -99,6 +106,7 @@ public class ToolRegistry
                     OperationContext.Current.Value = null;
                 }
             });
+            var started = Stopwatch.GetTimestamp();
             using var timer = new CancellationTokenSource();
             var timeoutTask = Task.Delay(_toolTimeout, timer.Token);
             var cancelledTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
@@ -107,31 +115,9 @@ public class ToolRegistry
             await timer.CancelAsync();
             if (finished != toolTask)
             {
-                operation.Stop.Cancel();
-                // A stranded call can still hold this app's UIA provider. Fail later ref tools fast until it returns.
-                if (Pending != null && operation.ProcessId != 0)
-                {
-                    var stranded = Pending.Begin(operation.ProcessId, $"timed-out {name}");
-                    _ = toolTask.ContinueWith(_ => Pending.Complete(stranded), TaskScheduler.Default);
-                }
-
-                _ = toolTask.ContinueWith(
-                    task =>
-                    {
-                        _ = task.Exception;
-                    },
-                    TaskContinuationOptions.OnlyOnFaulted
-                );
-
-                return new McpToolResult
-                {
-                    Content = new List<McpContent>
-                    {
-                        new() { Type = "text", Text = PendingMessage(name, cancellationToken.IsCancellationRequested) },
-                    },
-                    Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id),
-                    IsError = true,
-                };
+                var settled =
+                    finished == cancelledTask ? SettledOrTimedOut(toolTask, Stopwatch.GetElapsedTime(started)) : null;
+                return Strand(name, operation, toolTask, settled, whenStranded);
             }
 
             return CompleteResult(await toolTask, operation);
@@ -147,6 +133,57 @@ public class ToolRegistry
                 IsError = true,
             };
         }
+    }
+
+    /// <summary>
+    /// Result for a call that returned before its tool task ended: the caller cancelled (<paramref name="settled"/>
+    /// is set) or the tool timed out. The tool may still be running and may have partially executed.
+    /// </summary>
+    private McpToolResult Strand(
+        string name,
+        OperationContext operation,
+        Task<McpToolResult> toolTask,
+        Task? settled,
+        Action<Task>? whenStranded
+    )
+    {
+        operation.Stop.Cancel();
+        if (settled != null)
+        {
+            whenStranded?.Invoke(settled);
+        }
+
+        // A stranded call can still hold this app's UIA provider. Fail later ref tools fast until it returns.
+        if (Pending != null && operation.ProcessId != 0)
+        {
+            var stranded = Pending.Begin(operation.ProcessId, $"timed-out {name}");
+            _ = toolTask.ContinueWith(_ => Pending.Complete(stranded), TaskScheduler.Default);
+        }
+
+        _ = toolTask.ContinueWith(
+            task =>
+            {
+                _ = task.Exception;
+            },
+            TaskContinuationOptions.OnlyOnFaulted
+        );
+
+        return new McpToolResult
+        {
+            Content = new List<McpContent>
+            {
+                new() { Type = "text", Text = PendingMessage(name, settled != null) },
+            },
+            Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id),
+            IsError = true,
+        };
+    }
+
+    /// <summary>Completes when the tool returns, or when its timeout would have expired had it not been cancelled.</summary>
+    private Task SettledOrTimedOut(Task toolTask, TimeSpan elapsed)
+    {
+        var remaining = _toolTimeout - elapsed;
+        return Task.WhenAny(toolTask, Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero));
     }
 
     private string PendingMessage(string name, bool cancelled) =>
