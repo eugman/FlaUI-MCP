@@ -128,4 +128,48 @@ public sealed class InteractionTests
         Assert.Contains(Te3InteractionTool.Begin, new Te3Layout(null!).Description);
         Assert.DoesNotContain("handoff", new Te3Companion(null!, Te3Companion.Navigate).Description);
     }
+
+    [Fact]
+    public void ASecondBatchIsRefusedWhileOneIsHeld()
+    {
+        using var interaction = Grant();
+        interaction.Begin("Open Preferences", userApproved: true);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            interaction.Begin("Resize panes", userApproved: true)
+        );
+
+        Assert.Contains("End the current batch", error.Message);
+        Assert.True(interaction.Active);
+    }
+
+    [Fact]
+    public void AnObserverThatStoppedRevokesTheGrant()
+    {
+        var stopped = false;
+        using var interaction = new Te3Interaction(() =>
+            stopped ? throw new InvalidOperationException("hook gone") : input
+        );
+        interaction.Begin("Open Preferences", userApproved: true);
+        interaction.Require();
+
+        stopped = true;
+
+        Assert.Throws<InvalidOperationException>(interaction.Require);
+        Assert.False(interaction.Active);
+    }
+
+    [Fact]
+    public async Task BeginWithoutAnExplicitApprovalIsRefused()
+    {
+        using var interaction = Grant();
+
+        var result = await new Te3InteractionTool(interaction, Te3InteractionTool.Begin).ExecuteAsync(
+            JsonSerializer.SerializeToElement(new { batch = "Open Preferences" })
+        );
+
+        Assert.True(result.IsError);
+        Assert.Contains(Te3InteractionTool.Begin, result.Content[0].Text);
+        Assert.False(interaction.Active);
+    }
 }

@@ -125,4 +125,24 @@ public sealed class CheckpointRetryTests : IDisposable
 
         Assert.Throws<InvalidDataException>(() => ArtifactFiles.ReadManifest(manifestPath));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ARetryFindingAnotherEntryForTheCheckpointIsRefused(bool samePath)
+    {
+        // Same checkpoint, but another path or other pixels: not this command's interrupted attempt.
+        var manifest = ArtifactFiles.ReadManifest(manifestPath);
+        manifest.Screenshots[spec.Checkpoint] = samePath ? output : Path.Combine(root, "other.png");
+        manifest.ScreenshotHashes[spec.Checkpoint] = "00";
+        File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, RunConfig.Json));
+        var before = File.ReadAllText(manifestPath);
+
+        var error = Assert.Throws<IOException>(() => CaptureAnnotations.Create(manifestPath, specPath));
+
+        Assert.Contains(spec.Checkpoint, error.Message);
+        Assert.False(File.Exists(output));
+        Assert.Equal(before, File.ReadAllText(manifestPath));
+        Assert.Empty(Directory.GetFiles(root, "*.partial"));
+    }
 }

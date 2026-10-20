@@ -135,4 +135,17 @@ public sealed class PathWalkerTests
         Assert.False(walk.Found);
         Assert.Contains("end of the tree", walk.Reason);
     }
+
+    [Fact]
+    public async Task AChildWalkStopsAtTheRowLimitWithoutPressingPastIt()
+    {
+        var tree = new FakeTree(new("Sales", "Table"), new("Amount", "Data Column"), new("Total", "Measure"));
+
+        var walk = await PathWalker.FindRow(tree, "Date", maxRows: 2);
+
+        Assert.False(walk.Found);
+        Assert.Equal(2, walk.RowsVisited);
+        Assert.Contains("Stopped after 2 rows", walk.Reason);
+        Assert.Equal(1, tree.Downs);
+    }
 }
