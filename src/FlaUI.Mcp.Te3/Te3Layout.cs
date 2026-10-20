@@ -12,7 +12,7 @@ using FlaUI.Mcp.Te3;
 /// by dragging the splitter it shares with its neighbour. Every action goes through the guarded
 /// core tools; nothing here edits the model.
 /// </summary>
-public sealed class Te3Layout(AutomationHost host) : ToolBase
+public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction = null) : ToolBase
 {
     public const string ToolName = "te3_layout";
 

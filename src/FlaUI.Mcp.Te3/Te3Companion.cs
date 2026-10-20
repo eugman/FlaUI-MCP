@@ -4,7 +4,7 @@ using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 
 /// <summary>Attach-only TE3 navigation. The generic server remains application-independent and owns capture.</summary>
-public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
+public sealed class Te3Companion(AutomationHost host, string name, Te3Interaction? interaction = null) : ToolBase
 {
     public const string Navigate = "te3_navigate";
     public const string ModelState = "te3_model_state";
