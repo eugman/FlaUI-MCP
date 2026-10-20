@@ -130,13 +130,13 @@ public sealed class GuardedInput : IDisposable
         }
 
         var foregroundPid = foreground == 0 ? 0 : desktop.ProcessOf(foreground);
-        throw new InvalidOperationException(
+        throw InputRefusedException.Record(
             DescribeActivationFailure(
                 target.ProcessId,
                 foreground,
                 foregroundPid,
                 foregroundPid == 0 ? null : ProcessPolicy.TryGetProcessName(foregroundPid)
-            ).Message
+            )
         );
     }
 
@@ -149,29 +149,42 @@ public sealed class GuardedInput : IDisposable
         string? foregroundName
     )
     {
+        var target = new ProcessRef(null, targetPid);
         if (foreground == 0)
         {
-            return new(
-                "",
+            return new InputRefusal(
+                "desktop-unavailable",
                 "desktop-unavailable: Windows reports no foreground window; the session may be locked, disconnected or non-interactive. "
                     + "No input sent. Observe again; unattended runs need an unlocked interactive session."
-            );
+            )
+            {
+                Target = target,
+            };
         }
 
+        var blocker = new ProcessRef(foregroundName, foregroundPid);
         if (foregroundPid != targetPid)
         {
-            return new(
-                "",
+            return new InputRefusal(
+                "activation-denied",
                 $"activation-denied: Windows kept '{foregroundName ?? "unknown"}' (PID {foregroundPid}) in the foreground instead of target PID {targetPid}. "
                     + "No input sent. Attended: ask the user to click the target window's title bar, then observe before retrying. Unattended: activation cannot be forced."
-            );
+            )
+            {
+                ForegroundProcess = blocker,
+                Target = target,
+            };
         }
 
-        return new(
-            "",
+        return new InputRefusal(
+            "activation-denied",
             $"activation-denied: Windows kept another window (hwnd={foreground}) of target PID {targetPid} in the foreground. "
                 + "No input sent. Focus the intended target window, then observe before retrying."
-        );
+        )
+        {
+            ForegroundProcess = blocker,
+            Target = target,
+        };
     }
 
     public void Verify()

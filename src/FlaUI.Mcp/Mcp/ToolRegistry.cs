@@ -107,15 +107,20 @@ public class ToolRegistry
     private static async Task<McpToolResult> RunNested(ITool tool, JsonElement? arguments, OperationContext parent)
     {
         var sentBefore = parent.InputsSent;
+        var refusalBefore = parent.Refusal;
+        McpToolResult result;
         try
         {
             OperationContext.Check();
-            return WithDispatch(await tool.ExecuteAsync(arguments), parent.InputsSent - sentBefore);
+            result = await tool.ExecuteAsync(arguments);
         }
         catch (Exception ex)
         {
-            return WithDispatch(ErrorText($"Error: {ex.Message}"), parent.InputsSent - sentBefore);
+            result = ErrorText($"Error: {ex.Message}");
         }
+
+        var refusal = ReferenceEquals(parent.Refusal, refusalBefore) ? null : parent.Refusal;
+        return WithDispatch(result, parent.InputsSent - sentBefore, refusal);
     }
 
     private async Task<McpToolResult> RunOperation(ITool tool, JsonElement? arguments, OperationContext operation)
@@ -130,12 +135,12 @@ public class ToolRegistry
             operation.ProcessId = target?.ProcessId ?? 0;
             operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
             OperationContext.Check();
-            result = WithDispatch(await tool.ExecuteAsync(arguments), operation.InputsSent);
+            result = WithDispatch(await tool.ExecuteAsync(arguments), operation.InputsSent, operation.Refusal);
         }
         catch (Exception ex)
         {
             // A tool that throws still reports how much of its input went out first.
-            result = WithDispatch(ErrorText($"Error: {ex.Message}"), operation.InputsSent);
+            result = WithDispatch(ErrorText($"Error: {ex.Message}"), operation.InputsSent, operation.Refusal);
         }
         finally
         {
@@ -155,9 +160,10 @@ public class ToolRegistry
 
     /// <summary>
     /// Every result, errors included, says whether the tool failed (status) and how much of its input
-    /// went out (inputsSent, and dispatch when the tool did not report its own).
+    /// went out (inputsSent, and dispatch when the tool did not report its own). A failed call carries the
+    /// refusal guarded input raised during it, so clients read its fields instead of parsing the text.
     /// </summary>
-    internal static McpToolResult WithDispatch(McpToolResult result, int inputsSent)
+    internal static McpToolResult WithDispatch(McpToolResult result, int inputsSent, InputRefusal? refusal = null)
     {
         var failed = result.IsError == true || result.Outcome?.Status == "failed";
         var outcome =
@@ -166,7 +172,16 @@ public class ToolRegistry
             {
                 Verification = "not-established",
             };
-        return result with { Outcome = outcome with { Status = failed ? "failed" : "ok", InputsSent = inputsSent } };
+        return result with
+        {
+            Outcome = outcome with
+            {
+                Status = failed ? "failed" : "ok",
+                InputsSent = inputsSent,
+                Failure =
+                    failed && refusal != null ? refusal with { ActionDispatched = inputsSent > 0 } : outcome.Failure,
+            },
+        };
     }
 
     private static McpToolResult ErrorText(string message) =>

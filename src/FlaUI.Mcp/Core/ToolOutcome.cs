@@ -24,6 +24,10 @@ public sealed record ToolOutcome(
     [JsonPropertyName("inputsSent"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? InputsSent { get; init; }
 
+    /// <summary>Why guarded input refused, as fields (code, foregroundProcess, target), when it did.</summary>
+    [JsonPropertyName("failure"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public InputRefusal? Failure { get; init; }
+
     /// <summary>The tool's text result, repeated here for clients that only show structuredContent.</summary>
     [JsonPropertyName("message"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; init; }

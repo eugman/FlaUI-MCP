@@ -17,6 +17,9 @@ public sealed class OperationContext
     public volatile bool Finished;
     public string? Error { get; set; }
     public ToolOutcome? ResultOutcome { get; set; }
+
+    /// <summary>The last refusal guarded input raised in this operation.</summary>
+    public InputRefusal? Refusal { get; set; }
     private int inputsSent;
 
     /// <summary>Inputs and mutations this operation has sent so far, nested steps included.</summary>

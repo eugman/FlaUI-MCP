@@ -18,6 +18,13 @@ public sealed record InputRefusal(
     /// <summary>The process the input was meant for.</summary>
     [JsonPropertyName("target"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ProcessRef? Target { get; init; }
+
+    /// <summary>
+    /// Whether the call that hit this refusal had already sent other input (set on a tool outcome). The
+    /// refused step itself never sends anything.
+    /// </summary>
+    [JsonPropertyName("actionDispatched"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ActionDispatched { get; init; }
 }
 
 public sealed record ProcessRef(
@@ -29,4 +36,18 @@ public sealed record ProcessRef(
 public sealed class InputRefusedException(InputRefusal refusal) : InvalidOperationException(refusal.Message)
 {
     public InputRefusal Refusal { get; } = refusal;
+
+    /// <summary>
+    /// The exception to throw for <paramref name="refusal"/>, also noted on the running operation: tools
+    /// turn exceptions into text, and the registry puts the noted refusal back on their outcome.
+    /// </summary>
+    public static InputRefusedException Record(InputRefusal refusal)
+    {
+        if (OperationContext.Current.Value is { } operation)
+        {
+            operation.Refusal = refusal;
+        }
+
+        return new InputRefusedException(refusal);
+    }
 }
