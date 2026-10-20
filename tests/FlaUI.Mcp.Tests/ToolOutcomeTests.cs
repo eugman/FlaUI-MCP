@@ -46,7 +46,7 @@ public sealed class ToolOutcomeTests
             Assert.Equal(456, pattern.GetProperty("ProcessStartedTicks").GetInt64());
             var status = JsonSerializer.SerializeToElement(registry.Operations.Status(parent, tracker))[0];
             Assert.Equal("completed", status.GetProperty("dispatch").GetString());
-            Assert.Equal("provider_pending", status.GetProperty("status").GetString());
+            Assert.Equal("ok", status.GetProperty("status").GetString());
             Assert.Equal("pending", status.GetProperty("provider").GetString());
             Assert.Equal(result.Outcome.PendingPatternId, status.GetProperty("pendingPatternIds")[0].GetString());
             // Provider guards still decide which real operations are safe. The coordinator
@@ -56,7 +56,7 @@ public sealed class ToolOutcomeTests
             Assert.True(SpinWait.SpinUntil(() => !tracker.TryGetPending(123, out _), TimeSpan.FromSeconds(3)));
             status = JsonSerializer.SerializeToElement(registry.Operations.Status(parent, tracker))[0];
             Assert.Equal("idle", status.GetProperty("provider").GetString());
-            Assert.Equal("completed", status.GetProperty("status").GetString());
+            Assert.Equal("ok", status.GetProperty("status").GetString());
             Assert.Empty(status.GetProperty("pendingPatternIds").EnumerateArray());
         }
         finally
@@ -66,7 +66,7 @@ public sealed class ToolOutcomeTests
     }
 
     [Fact]
-    public async Task StructuredBatchFailureMarksRegistryOperationAsFailedWithoutChangingBatchContract()
+    public async Task StructuredBatchFailureMarksRegistryOperationAsFailedWithoutClaimingDispatch()
     {
         var registry = new ToolRegistry();
         registry.RegisterTool(new StructuredBatchFailureTool());
@@ -74,10 +74,11 @@ public sealed class ToolOutcomeTests
         var result = await registry.ExecuteToolAsync("structured-batch-failure", null);
 
         Assert.NotEqual(true, result.IsError);
-        Assert.Equal("failed", result.Outcome!.Dispatch);
+        Assert.Equal("not-dispatched", result.Outcome!.Dispatch);
         Assert.Contains("1. click: failed", result.Content[0].Text);
         var status = JsonSerializer.SerializeToElement(registry.Operations.Status())[0];
-        Assert.Equal("failed", status.GetProperty("dispatch").GetString());
+        Assert.Equal("failed", status.GetProperty("status").GetString());
+        Assert.Equal("not-dispatched", status.GetProperty("dispatch").GetString());
         Assert.Contains("1. click: failed", status.GetProperty("Error").GetString());
     }
 
