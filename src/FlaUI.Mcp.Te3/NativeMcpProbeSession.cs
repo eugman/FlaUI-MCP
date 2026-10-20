@@ -248,13 +248,9 @@ internal sealed class NativeMcpProbeSession(
     {
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;
-        if (
-            !root.TryGetProperty("id", out var responseId)
-            || responseId.ValueKind != JsonValueKind.Number
-            || responseId.GetInt32() != id
-        )
+        result = default;
+        if (!IsResponseTo(root, id))
         {
-            result = default;
             return false;
         }
 
@@ -263,7 +259,29 @@ internal sealed class NativeMcpProbeSession(
             throw new InvalidOperationException("Native MCP error: " + error);
         }
 
-        result = root.GetProperty("result").Clone();
+        if (!root.TryGetProperty("result", out var value))
+        {
+            throw new InvalidOperationException("Native MCP response has neither result nor error.");
+        }
+
+        result = value.Clone();
         return true;
+    }
+
+    /// <summary>
+    /// JSON-RPC ids are per direction: a server request (it has a method) may reuse our id and is never our
+    /// response. Non-integer ids are not ours either.
+    /// </summary>
+    private static bool IsResponseTo(JsonElement root, int id)
+    {
+        if (root.ValueKind != JsonValueKind.Object || root.TryGetProperty("method", out _))
+        {
+            return false;
+        }
+
+        return root.TryGetProperty("id", out var responseId)
+            && responseId.ValueKind == JsonValueKind.Number
+            && responseId.TryGetInt32(out var value)
+            && value == id;
     }
 }
