@@ -41,6 +41,11 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
                     type = "string",
                     description = "Optional environment variable name for bearer token.",
                 },
+                compatibleServer = new
+                {
+                    type = "string",
+                    description = "Optional serverInfo \"name/version\" observed for TE3 3.27.1; required before its unannotated get_workspace_info is called.",
+                },
             },
             required = new[] { "endpoint", "identityTool", "identityProperty", "expectedIdentity" },
             additionalProperties = false,
@@ -68,7 +73,8 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
                     Required(a, "identityTool"),
                     Required(a, "identityProperty"),
                     Required(a, "expectedIdentity"),
-                    bearerToken
+                    bearerToken,
+                    Optional(a, "compatibleServer")
                 ),
                 OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None
             );
@@ -99,6 +105,9 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
             return ErrorResult($"{ToolName}: {error.Message}");
         }
     }
+
+    private static string? Optional(JsonElement a, string name) =>
+        a.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static string? BearerToken(JsonElement a)
     {

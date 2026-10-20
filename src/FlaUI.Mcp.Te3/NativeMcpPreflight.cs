@@ -6,21 +6,50 @@ using System.Text.Json;
 namespace FlaUI.Mcp.Te3;
 
 /// <summary>Read-only probe of an already running TE3 native MCP server. Never starts TE3 or changes a model.</summary>
-public sealed class NativeMcpPreflight(HttpClient client)
+public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeout = null)
 {
+    /// <summary>Whole inspection budget (four requests). Stays under the 30 s tool timeout, so a slow server
+    /// is reported as an expired preflight deadline rather than as an unknown, still-running tool call.</summary>
+    public static readonly TimeSpan DefaultOverallTimeout = TimeSpan.FromSeconds(25);
+
+    /// <param name="CompatibleServer">
+    /// "name/version" exactly as the server reports serverInfo. Required before the unannotated TE3 3.27.1
+    /// workspace identity tool may be called; a different server or build is refused.
+    /// </param>
     public sealed record Request(
         Uri Endpoint,
         string IdentityTool,
         string IdentityProperty,
         string ExpectedIdentity,
-        string? BearerToken = null
+        string? BearerToken = null,
+        string? CompatibleServer = null
     );
 
-    public sealed record Result(string ProtocolVersion, string ServerName, string ModelIdentity, string[] Tools);
+    public sealed record Result(
+        string ProtocolVersion,
+        string ServerName,
+        string ModelIdentity,
+        string[] Tools,
+        string? ServerVersion = null
+    );
 
     public async Task<Result> Inspect(Request request, CancellationToken token = default)
     {
         Validate(request);
+        using var overall = CancellationTokenSource.CreateLinkedTokenSource(token);
+        overall.CancelAfter(overallTimeout ?? DefaultOverallTimeout);
+        try
+        {
+            return await InspectWithin(request, overall.Token);
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            throw new TimeoutException("Native MCP preflight overall deadline expired.");
+        }
+    }
+
+    private async Task<Result> InspectWithin(Request request, CancellationToken token)
+    {
         var session = new NativeMcpProbeSession(client, request.Endpoint, request.BearerToken);
 
         var initialization = await session.Send(
@@ -36,9 +65,15 @@ public sealed class NativeMcpPreflight(HttpClient client)
         var version =
             initialization.GetProperty("protocolVersion").GetString()
             ?? throw new InvalidOperationException("Native MCP did not report a protocol version.");
+        var serverInfo = initialization.GetProperty("serverInfo");
         var server =
-            initialization.GetProperty("serverInfo").GetProperty("name").GetString()
+            serverInfo.GetProperty("name").GetString()
             ?? throw new InvalidOperationException("Native MCP did not report server identity.");
+        var serverVersion =
+            serverInfo.TryGetProperty("version", out var reported) && reported.ValueKind == JsonValueKind.String
+                ? reported.GetString()
+                : null;
+        var serverIdentity = server + "/" + serverVersion;
 
         session.SetProtocolVersion(version);
         await session.NotifyInitialized(token);
@@ -58,11 +93,9 @@ public sealed class NativeMcpPreflight(HttpClient client)
             );
         }
 
-        if (!IsReadOnlyIdentityTool(identityTool))
+        if (!IsDeclaredReadOnly(identityTool))
         {
-            throw new InvalidOperationException(
-                "Native MCP identity tool is not declared read-only or on the exact TE3 workspace compatibility allowlist."
-            );
+            RequireWorkspaceCompatibility(identityTool, request.CompatibleServer, serverIdentity);
         }
 
         var identityResult = await session.Send(
@@ -81,7 +114,7 @@ public sealed class NativeMcpPreflight(HttpClient client)
             throw new InvalidOperationException("Native MCP model identity does not match the expected model.");
         }
 
-        return new(version, server, identity, tools);
+        return new(version, server, identity, tools, serverVersion);
     }
 
     // TE3 3.27.1 advertises no tool annotations. This exact, empty-argument workspace
@@ -89,11 +122,38 @@ public sealed class NativeMcpPreflight(HttpClient client)
     private const string WorkspaceDescription =
         "Identifies this Tabular Editor instance and the semantic model it currently has open: model name, how the model is loaded (file/folder/connected), unsaved-changes state and compatibility level. Call this first to confirm which instance and model you are talking to.";
 
-    private static bool IsReadOnlyIdentityTool(JsonElement tool)
+    private static bool IsDeclaredReadOnly(JsonElement tool) =>
+        tool.TryGetProperty("annotations", out var annotations)
+        && annotations.TryGetProperty("readOnlyHint", out var hint)
+        && hint.ValueKind == JsonValueKind.True;
+
+    /// <summary>
+    /// The only unannotated tool ever called: TE3 3.27.1's exact workspace tool, and only on the server
+    /// build the caller named after observing it. The error reports the server identity to name.
+    /// </summary>
+    private static void RequireWorkspaceCompatibility(JsonElement tool, string? compatibleServer, string serverIdentity)
     {
-        if (tool.TryGetProperty("annotations", out var annotations))
+        if (!IsKnownWorkspaceTool(tool))
         {
-            return annotations.TryGetProperty("readOnlyHint", out var hint) && hint.ValueKind == JsonValueKind.True;
+            throw new InvalidOperationException(
+                "Native MCP identity tool is not declared read-only or on the exact TE3 workspace compatibility allowlist."
+            );
+        }
+
+        if (!string.Equals(compatibleServer, serverIdentity, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Native MCP identity tool lacks readOnlyHint. The TE3 3.27.1 workspace exception applies only when "
+                    + $"compatibleServer names this server exactly; it reports \"{serverIdentity}\"."
+            );
+        }
+    }
+
+    private static bool IsKnownWorkspaceTool(JsonElement tool)
+    {
+        if (tool.TryGetProperty("annotations", out _))
+        {
+            return false;
         }
 
         if (
@@ -189,7 +249,7 @@ public sealed class NativeMcpPreflight(HttpClient client)
     {
         if (
             request.Endpoint.Scheme != Uri.UriSchemeHttp
-            || request.Endpoint.Host is not ("127.0.0.1" or "localhost" or "::1")
+            || request.Endpoint.Host is not ("127.0.0.1" or "localhost" or "[::1]")
             || request.Endpoint.UserInfo.Length > 0
             || request.Endpoint.Fragment.Length > 0
         )

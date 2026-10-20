@@ -117,7 +117,7 @@ public sealed class NativeMcpPreflightTests
             var body = step++ switch
             {
                 0 =>
-                    """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"TE3"}}}""",
+                    """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"TE3","version":"3.27.1"}}}""",
                 1 => "",
                 2 => System.Text.Json.JsonSerializer.Serialize(
                     new
@@ -163,7 +163,7 @@ public sealed class NativeMcpPreflightTests
     {
         var handler = new WorkspaceHandler(structured: structured);
         var result = await new NativeMcpPreflight(new HttpClient(handler)).Inspect(
-            new(new("http://localhost:42100/mcp"), "get_workspace_info", "model.name", "scratch-model")
+            Workspace(compatibleServer: "TE3/3.27.1")
         );
         Assert.Equal("scratch-model", result.ModelIdentity);
         Assert.Equal(4, handler.Calls);
@@ -174,10 +174,88 @@ public sealed class NativeMcpPreflightTests
     {
         var handler = new WorkspaceHandler(wrongDescription: true);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new NativeMcpPreflight(new HttpClient(handler)).Inspect(
-                new(new("http://localhost:42100/mcp"), "get_workspace_info", "model.name", "scratch-model")
-            )
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(Workspace(compatibleServer: "TE3/3.27.1"))
         );
         Assert.Equal(3, handler.Calls);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("TE3/3.28.0")]
+    [InlineData("Other/3.27.1")]
+    public async Task UnannotatedWorkspaceToolIsNeverCalledWithoutTheObservedServerIdentity(string? compatibleServer)
+    {
+        var handler = new WorkspaceHandler();
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(Workspace(compatibleServer))
+        );
+        Assert.Contains("TE3/3.27.1", error.Message);
+        Assert.Equal(3, handler.Calls);
+    }
+
+    [Theory]
+    [InlineData("http://[::1]:42100/mcp")]
+    [InlineData("http://127.0.0.1:42100/mcp")]
+    [InlineData("http://localhost:42100/mcp")]
+    public async Task LoopbackEndpointsIncludingIpv6AreAccepted(string endpoint)
+    {
+        var handler = new FakeHandler();
+        var result = await new NativeMcpPreflight(new HttpClient(handler)).Inspect(
+            new(new(endpoint), "model_identity", "model.name", "scratch-model")
+        );
+        Assert.Equal("scratch-model", result.ModelIdentity);
+    }
+
+    [Theory]
+    [InlineData("http://localhost.example.com:42100/mcp")]
+    [InlineData("http://127.0.0.1.nip.io:42100/mcp")]
+    [InlineData("http://user:secret@localhost:42100/mcp")]
+    [InlineData("https://localhost:42100/mcp")]
+    [InlineData("http://[::2]:42100/mcp")]
+    public async Task LookalikeOrCredentialedEndpointsAreRefusedBeforeAnyRequest(string endpoint)
+    {
+        var handler = new FakeHandler();
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(
+                new(new(endpoint), "model_identity", "model.name", "scratch-model")
+            )
+        );
+        Assert.Empty(handler.Calls);
+    }
+
+    [Fact]
+    public async Task OneOverallDeadlineBoundsTheWholeInspection()
+    {
+        var handler = new SilentHandler();
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var error = await Assert.ThrowsAsync<TimeoutException>(() =>
+            new NativeMcpPreflight(new HttpClient(handler), TimeSpan.FromMilliseconds(200)).Inspect(
+                new(new("http://localhost:42100/mcp"), "model_identity", "model.name", "scratch-model")
+            )
+        );
+        Assert.Contains("overall", error.Message);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(5));
+        Assert.True(NativeMcpPreflight.DefaultOverallTimeout < TimeSpan.FromSeconds(30));
+    }
+
+    private static NativeMcpPreflight.Request Workspace(string? compatibleServer) =>
+        new(
+            new("http://localhost:42100/mcp"),
+            "get_workspace_info",
+            "model.name",
+            "scratch-model",
+            CompatibleServer: compatibleServer
+        );
+
+    private sealed class SilentHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken token
+        )
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
     }
 }

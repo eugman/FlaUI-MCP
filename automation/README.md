@@ -162,11 +162,11 @@ Neither suite touches the desktop. `tests/FlaUI.Mcp.IntegrationTests` launches t
 
 `te3_native_preflight` exposes `NativeMcpPreflight` through the MCP server. Supply an explicit
 loopback `endpoint`, `identityTool`, `identityProperty`, and `expectedIdentity`; optional `tokenEnv` names an environment variable holding the bearer token. It performs initialize, tools/list, and exactly one configured identity
-tool call. The identity tool must advertise `annotations.readOnlyHint=true`, except TE3 3.27.1's exact `get_workspace_info` definition (empty argument schema and saved read-only description), which lacks annotations. Other unannotated tools are rejected. Its
+tool call. The identity tool must advertise `annotations.readOnlyHint=true`, except TE3 3.27.1's exact `get_workspace_info` definition (empty argument schema and saved read-only description), which lacks annotations. That exception also requires `compatibleServer`: the server's `serverInfo` as `name/version`, exactly as observed live (the refusal message reports what the server sent, so one call shows the value to pass). Other unannotated tools, and that tool on any other server identity, are rejected. Its
 configured response property must equal the expected disposable model identity.
 A missing server, denied token, missing tool, unannotated tool, or model mismatch
 fails before any follow-on work. Each inspection uses a fresh session; there is no
-automatic replay. The streamable HTTP reader matches JSON-RPC response IDs, bounds the stream and response deadline, sends the negotiated protocol version, and rejects redirects. The adapter does not start the server, alter permissions, save,
+automatic replay. The streamable HTTP reader matches JSON-RPC response IDs, bounds the stream and response deadline, sends the negotiated protocol version, and rejects redirects. Only JSON-RPC responses match a request: a server-initiated request that reuses our id is skipped. One overall deadline (25 s, under the 30 s tool timeout) bounds the whole inspection. Endpoints may be `127.0.0.1`, `localhost` or `[::1]`. The adapter does not start the server, alter permissions, save,
 or run a model script. Native TE3 tool names and response properties remain
 version-dependent, so configure them from the running server's tools/list result
 and verify live behavior separately under a machine grant. The saved 3.27.1 tool list did not include a workspace response; the adapter accepts a configured identity property from direct JSON, `structuredContent`, or one JSON text content block, while the live response shape remains unverified.
