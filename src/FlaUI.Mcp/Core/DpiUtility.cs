@@ -16,6 +16,8 @@ public static class DpiUtility
         SetProcessDpiAwarenessContext(PerMonitorV2);
     }
 
+    internal static void EnablePerMonitorV2(Func<bool> set, Func<bool> isPerMonitorV2) => set();
+
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
