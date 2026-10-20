@@ -7,7 +7,7 @@ What you get:
 | Piece | Use it to |
 |---|---|
 | `FlaUI.Mcp.exe` | Give an agent the generic `windows_*` tools: snapshot, find, click, type, screenshot and so on. |
-| `FlaUI.Mcp.Te3.exe mcp` | Add `te3_navigate` and `te3_model_state`, which know TE3's layout. |
+| `FlaUI.Mcp.Te3.exe mcp` | Add `te3_navigate`, `te3_model_state` and `te3_layout`, which know TE3's layout. |
 | `FlaUI.Mcp.Te3.exe run` | Script repeatable TE3 screenshots with typed C# recipes. |
 | `automation/skills/te3-ui` | Agent guidance for driving TE3. |
 

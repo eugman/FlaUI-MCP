@@ -7,7 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- `te3_layout` on the TE3 companion server arranges TE3 for a screenshot. `list` shows docked panes and document tabs with bounds. `close` and `keep` close panes or tabs by title, and stop at a save prompt. `maximize-pane` and `restore-pane` use the pane's own buttons. `resize` drags the dock splitter until a pane is a given width or height, and reports the size reached. Pane titles match with or without TE3's " (Changed)" suffix.
+
 ### Fixed
+- `te3_navigate` works when TOM Explorer is a docked pane rather than a tab.
+- `te3_navigate` destination `object` picks among rows that share a name (a table, a column and a hierarchy level all called "Date") by the property grid's Object Type. It selects candidates through `windows_click`'s select path, so it never clicks a row that is already selected, which would start an inline rename.
 - Engine recipes reset `fixedSlot` to the test model before each recipe. They save into the shared database, so a run of several recipes (or `--repeat`) failed from the second recipe on with a misleading "pass folder" error.
 - `te3_model_state` reports a minimized TE3 instead of "Expected one element; found 0": a minimized TE3 leaves its status bar out of the UI Automation tree.
 - A local recipe that reuses a recipe id is reported by name.

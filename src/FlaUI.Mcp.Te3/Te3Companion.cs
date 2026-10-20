@@ -319,7 +319,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
         };
     }
 
-    private static int[] RunningTe3()
+    internal static int[] RunningTe3()
     {
         // Only this Windows session: another user's TE3 (fast user switching, RDP) is not ours to drive.
         using var current = Process.GetCurrentProcess();

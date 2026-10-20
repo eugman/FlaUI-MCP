@@ -120,6 +120,11 @@ public sealed class Te3Page(
 
     public static Target TomTabTarget() => new(new(Name: "TOM Explorer", ControlType: "TabItem"), null, false);
 
+    // The tree inside TOM Explorer's view, which exists whether TOM Explorer is a tab or a docked pane
+    // (observed on 3.27.1: Pane "TOM Explorer" > TabularExplorerView > treeList).
+    public static Target TomTreeTarget() =>
+        new(new(AutomationId: "treeList"), new(AutomationId: "TabularExplorerView"), false);
+
     public static Target PropertyTarget(string property) =>
         new(new(Name: $"{property}", ControlType: "DataItem"), new(AutomationId: "PropertyGridView"), false);
 
@@ -1589,8 +1594,35 @@ public sealed class Te3Page(
 
     public async Task OpenTom()
     {
+        // A docked TOM Explorer pane has no tab to click; its tree being on screen is enough.
+        if (await IsOnScreen(TomTreeTarget()))
+        {
+            return;
+        }
+
         await Click(TomTabTarget());
     }
+
+    /// <summary>One lookup, no retries: whether the target exists and is not offscreen.</summary>
+    private async Task<bool> IsOnScreen(Target target) =>
+        await Task.Run(() =>
+        {
+            try
+            {
+                var element = query.Resolve(
+                    handle,
+                    target.Selector,
+                    target.Within,
+                    target.IncludeOwned,
+                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
+                );
+                return !element.Properties.IsOffscreen.ValueOrDefault;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return false;
+            }
+        });
 
     public async Task SetProperty(string property, string value)
     {
@@ -1643,6 +1675,78 @@ public sealed class Te3Page(
         await Click(ObjectTarget(objectName));
     }
 
+    /// <summary>
+    /// Select the row named <paramref name="objectName"/> that is a <paramref name="objectType"/>. A model
+    /// can hold several rows with one name (SpaceParts' Date table, its Date column and a Date hierarchy
+    /// level), so with more than one match each is selected in turn until the property grid shows the
+    /// requested Object Type.
+    /// </summary>
+    public async Task SelectObjectOfType(string objectName, string objectType)
+    {
+        var target = ObjectTarget(objectName);
+        var rows = await Task.Run(() =>
+                query.Find(
+                    handle,
+                    target.Selector,
+                    target.Within,
+                    maxResults: 20,
+                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
+                )
+            )
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        if (rows.Elements.Count <= 1)
+        {
+            // windows_click's select path refuses to click a row that is already selected, which a
+            // physical click would turn into an inline rename.
+            await Click(target, physical: false);
+            return;
+        }
+
+        var seen = new List<string?>();
+        foreach (var row in rows.Elements)
+        {
+            reportStep?.Invoke($"Try row {row.Ref} named '{objectName}' as {objectType}");
+            // physical:false goes through windows_click's select path: it skips an already-selected row
+            // and falls back to a mouse click only when Select changes nothing (usual for TE3 rows).
+            await invoke("windows_click", new { @ref = row.Ref, physical = false });
+            var type = await SettledGridValue("Object Type");
+            if (ObjectTypeMatches(objectType, type))
+            {
+                return;
+            }
+
+            seen.Add(type);
+        }
+
+        throw new InvalidOperationException(
+            $"{rows.Elements.Count} rows are named '{objectName}', and none is a {objectType} (saw {string.Join(", ", seen.Select(t => t ?? "(none)"))})."
+        );
+    }
+
+    /// <summary>
+    /// A property grid value once two reads 200ms apart agree, after a short wait (up to ~1.5s). The
+    /// candidates in <see cref="SelectObjectOfType"/> share one Name, so a stale grid can't be told
+    /// apart by name; waiting for it to settle is the only guard.
+    /// </summary>
+    private async Task<string?> SettledGridValue(string property)
+    {
+        await Task.Delay(250);
+        string? last = null;
+        for (var read = 0; read < 7; read++)
+        {
+            var value = (await Resolve(PropertyTarget(property))).Patterns.Value.Pattern.Value.ValueOrDefault;
+            if (read > 0 && value == last)
+            {
+                return value;
+            }
+
+            last = value;
+            await Task.Delay(200);
+        }
+
+        return last;
+    }
+
     public async Task SelectTable(string table)
     {
         // The DevExpress tree virtualizes rows in large models. Filtering makes an off-screen table
@@ -1650,9 +1754,9 @@ public sealed class Te3Page(
         // to the end of the filtered tree, where alphabetized table rows are materialized.
         await Fill(SearchTarget(), table);
         await Keys("Ctrl+End", TomExplorerTarget());
-        await SelectObject(table);
+        await SelectObjectOfType(table, "Table");
         await ResetSearch();
-        await SelectObject(table);
+        await SelectObjectOfType(table, "Table");
         await AssertProperty("Name", table);
     }
 
@@ -2417,7 +2521,7 @@ public sealed class Te3Page(
                 }
             }
 
-            await SelectObject(objectName);
+            await SelectObjectOfType(objectName, objectType);
         }
 
         await AssertProperty("Name", objectType == "Table" ? table : objectName);
@@ -2482,7 +2586,11 @@ public sealed class Te3Page(
                 VerifyObjectIdentity(table!, objectName!, objectType!, name, type, dax);
                 break;
             case { Id: "tom-explorer" }:
-                await RequireSelectedTab(TomTabTarget());
+                if (!await IsOnScreen(TomTreeTarget()))
+                {
+                    await RequireSelectedTab(TomTabTarget());
+                }
+
                 break;
             case { Id: "expression-editor" }:
                 await RequireSelectedTab(ExpressionTabTarget());
@@ -2501,6 +2609,16 @@ public sealed class Te3Page(
         }
     }
 
+    /// <summary>Whether the property grid's Object Type is the kind of object that was asked for.</summary>
+    internal static bool ObjectTypeMatches(string objectType, string? observed)
+    {
+        var actualType = observed?.Replace(" ", "", StringComparison.Ordinal);
+        return objectType == "Column"
+                ? actualType is "Column" or "DataColumn" or "CalculatedColumn" or "CalculatedTableColumn"
+            : objectType == "Table" ? actualType is "Table" or "CalculatedTable"
+            : actualType == "Measure";
+    }
+
     internal static void VerifyObjectIdentity(
         string table,
         string objectName,
@@ -2510,12 +2628,7 @@ public sealed class Te3Page(
         string? dax
     )
     {
-        var actualType = type?.Replace(" ", "", StringComparison.Ordinal);
-        var typeMatches =
-            objectType == "Column"
-                ? actualType is "Column" or "DataColumn" or "CalculatedColumn" or "CalculatedTableColumn"
-            : objectType == "Table" ? actualType is "Table" or "CalculatedTable"
-            : actualType == "Measure";
+        var typeMatches = ObjectTypeMatches(objectType, type);
         var qualified =
             "'"
             + table.Replace("'", "''", StringComparison.Ordinal)

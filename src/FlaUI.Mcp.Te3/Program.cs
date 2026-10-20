@@ -38,6 +38,8 @@ public static class RunnerCommands
                     registry.RegisterTool(new Te3Companion(host, name));
                 }
 
+                registry.RegisterTool(new Te3Layout(host));
+
                 await new FlaUI.Mcp.McpServer(registry).RunAsync();
                 return 0;
             }
