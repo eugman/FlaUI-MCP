@@ -45,6 +45,7 @@ public sealed class GuardedInput : IDisposable
         {
             target.EnsureAlive();
             MutationGuard.CheckPermission();
+            RequireDrivable(target.ProcessId, desktop);
             if (!IsTargetWindow(desktop.Foreground(), target))
             {
                 // While a modal dialog disables the target, activate the dialog: a disabled window
@@ -119,6 +120,23 @@ public sealed class GuardedInput : IDisposable
         }
 
         return captured;
+    }
+
+    /// <summary>
+    /// Refuse before any focus, input or window message when Windows would silently drop them: the
+    /// target runs at a higher integrity level, or with UIAccess, than this server.
+    /// </summary>
+    internal static void RequireDrivable(int processId, InputDesktop desktop)
+    {
+        var self = desktop.SelfIntegrity();
+        var target = desktop.Integrity(processId);
+        if (ProcessIntegrity.DescribeBlocked(self, target, processId, null) == null)
+        {
+            return;
+        }
+
+        var name = ProcessPolicy.TryGetProcessName(processId);
+        throw InputRefusedException.Record(ProcessIntegrity.DescribeBlocked(self, target, processId, name)!);
     }
 
     private void RequireActivated(InputTarget target)
