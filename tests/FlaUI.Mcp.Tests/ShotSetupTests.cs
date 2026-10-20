@@ -142,4 +142,26 @@ public sealed class ShotSetupTests
     [Fact]
     public void ResizeNeedsAnEdge() =>
         Assert.Throws<ArgumentException>(() => PointerPlan.ResizeTarget(new Rectangle(0, 0, 10, 10), "center", 5));
+
+    [Fact]
+    public void StructuredContentCarriesTheToolMessage()
+    {
+        var result = new McpToolResult
+        {
+            Content = [new McpContent { Text = "Selected Node8" }],
+            Outcome = new ToolOutcome("completed", "returned"),
+        };
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("\"structuredContent\"", json);
+        Assert.Contains("\"message\":\"Selected Node8\"", json);
+    }
+
+    [Fact]
+    public void AnInvalidHwndCountsAsClosed()
+    {
+        // 0x7FFFFFF0 is not a live window handle; 0 means "not cached" and is handled elsewhere.
+        Assert.True(ScreenshotTool.WindowIsGone(0x7FFFFFF0));
+        Assert.False(ScreenshotTool.WindowIsGone(0));
+        Assert.Contains("has closed", ScreenshotTool.ClosedWindowMessage("w6"));
+    }
 }

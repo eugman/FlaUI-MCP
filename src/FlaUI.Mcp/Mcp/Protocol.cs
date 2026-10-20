@@ -123,9 +123,20 @@ public record McpToolCallParams
 
 public record McpToolResult
 {
+    [JsonIgnore]
+    public Core.ToolOutcome? Outcome { get; init; }
+
+    // Clients that show structuredContent instead of content (Claude Code does) would otherwise
+    // never see the tool's own message, such as "Selected X" or why a click fell back.
     [JsonPropertyName("structuredContent")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Core.ToolOutcome? Outcome { get; init; }
+    public Core.ToolOutcome? StructuredContent =>
+        Outcome is null
+            ? null
+            : Outcome with
+            {
+                Message = string.Join('\n', Content.Select(c => c.Text).OfType<string>()),
+            };
 
     [JsonPropertyName("content")]
     public List<McpContent> Content { get; init; } = new();

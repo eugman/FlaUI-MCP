@@ -44,4 +44,17 @@ public sealed class KeySequenceValidationTests
         Assert.Equal(2, sequence[0].Keys.Count);
         Assert.Single(sequence[1].Keys);
     }
+
+    [Theory]
+    [InlineData("Multiply")]
+    [InlineData("NumPad Add")]
+    [InlineData("Ctrl+OemPlus")]
+    [InlineData("Ctrl+Minus")]
+    [InlineData("Shift+Slash")]
+    public void NumpadAndPunctuationKeysResolve(string chord)
+    {
+        var tool = new SendKeysTool(new ElementRegistry());
+        var sequence = tool.PrepareSequence([chord]);
+        Assert.Equal(chord.Split('+').Length, sequence[0].Keys.Count);
+    }
 }
