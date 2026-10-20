@@ -17,6 +17,12 @@ public sealed class OperationContext
     public volatile bool Finished;
     public string? Error { get; set; }
     public ToolOutcome? ResultOutcome { get; set; }
+    private int inputsSent;
+
+    /// <summary>Inputs and mutations this operation has sent so far, nested steps included.</summary>
+    public int InputsSent => Volatile.Read(ref inputsSent);
+
+    public void RecordInput() => Interlocked.Increment(ref inputsSent);
 
     public static void Check() => Current.Value?.Stop.Token.ThrowIfCancellationRequested();
 }
@@ -53,9 +59,7 @@ public sealed class OperationCoordinator
             .OrderByDescending(o => o.StartedUtc)
             .Select(o =>
             {
-                var dispatch = o.Finished
-                    ? (o.Error == null ? "completed" : "failed")
-                    : (o.Stop.IsCancellationRequested ? "timed_out_pending" : "running");
+                var dispatch = o.ResultOutcome?.Dispatch ?? DispatchSoFar(o);
                 var patterns = pending?.ForOperation(o.Id) ?? [];
                 // A returned dispatch whose pattern call still holds the provider is not done for the caller.
                 return new
@@ -67,8 +71,9 @@ public sealed class OperationCoordinator
                     o.ProcessStartedTicks,
                     o.Tool,
                     o.StartedUtc,
-                    status = patterns.Length > 0 ? "provider_pending" : dispatch,
+                    status = StatusOf(o),
                     dispatch,
+                    inputsSent = o.InputsSent,
                     provider = pending == null ? "not-tracked"
                     : patterns.Length > 0 ? "pending"
                     : "idle",
@@ -78,4 +83,18 @@ public sealed class OperationCoordinator
                 };
             })
             .ToArray();
+
+    /// <summary>ok or failed once finished: the tool's own verdict, not whether input went out.</summary>
+    private static string StatusOf(OperationContext o)
+    {
+        if (o.Finished)
+        {
+            return o.Error == null ? "ok" : "failed";
+        }
+
+        return o.Stop.IsCancellationRequested ? "timed_out_pending" : "running";
+    }
+
+    /// <summary>An operation with no result yet: partial once any input went out, otherwise unknown.</summary>
+    private static string DispatchSoFar(OperationContext o) => o.InputsSent > 0 ? "partial" : "unknown";
 }

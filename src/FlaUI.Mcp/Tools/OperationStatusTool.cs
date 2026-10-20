@@ -7,7 +7,9 @@ public sealed class OperationStatusTool(OperationCoordinator operations, Pending
 {
     public override string Name => "windows_operation_status";
     public override string Description =>
-        "Read-only status for running, timed-out, and completed operations. status is provider_pending while a click it started still blocks UI Automation on that app (usually an open menu or dialog). No UI Automation calls.";
+        "Read-only status for running, timed-out, and completed operations. status is ok or failed once finished (running or timed_out_pending before); "
+        + "dispatch says how much input went out: completed, partial, not-dispatched or unknown, with inputsSent. "
+        + "provider is pending while a click it started still blocks UI Automation on that app (usually an open menu or dialog). No UI Automation calls.";
     public override object InputSchema =>
         new { type = "object", properties = new { operationId = new { type = "string" } } };
 

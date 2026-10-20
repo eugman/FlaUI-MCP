@@ -214,6 +214,7 @@ public sealed class GuardedInput : IDisposable
     public void Send(Action input)
     {
         Verify();
+        MutationGuard.RecordDispatch();
         desktop.Dispatch(input);
     }
 

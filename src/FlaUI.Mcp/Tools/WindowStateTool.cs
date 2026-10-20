@@ -80,7 +80,13 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
             }
         );
         return Task.FromResult(
-            after == requested ? TextResult(result) : ErrorResult($"State did not settle: {result}")
+            after == requested
+                ? TextResult(result)
+                : ErrorResult($"State did not settle: {result}") with
+                {
+                    // The request went out in full; only its effect was not observed.
+                    Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "not-settled" },
+                }
         );
     }
 

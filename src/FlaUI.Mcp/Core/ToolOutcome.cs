@@ -16,12 +16,31 @@ public sealed record ToolOutcome(
     [JsonPropertyName("verification"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Verification { get; init; }
 
+    /// <summary>ok or failed: whether the tool did what was asked, separate from how much input went out.</summary>
+    [JsonPropertyName("status"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Status { get; init; }
+
+    /// <summary>Inputs and mutations this call sent: keyboard and mouse input, pattern calls, window changes.</summary>
+    [JsonPropertyName("inputsSent"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? InputsSent { get; init; }
+
     /// <summary>The tool's text result, repeated here for clients that only show structuredContent.</summary>
     [JsonPropertyName("message"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; init; }
 
     [JsonIgnore]
     public bool IsPending => Provider == "pending" || Dispatch == "timed_out_pending";
+
+    /// <summary>completed; partial when it failed after some input went out; otherwise not-dispatched.</summary>
+    public static string DispatchFor(bool failed, int inputsSent)
+    {
+        if (!failed)
+        {
+            return "completed";
+        }
+
+        return inputsSent > 0 ? "partial" : "not-dispatched";
+    }
 
     public static ToolOutcome FromPattern(PatternCallResult result) =>
         new(

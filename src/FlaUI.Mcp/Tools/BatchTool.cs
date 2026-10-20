@@ -144,7 +144,7 @@ public sealed class BatchTool : ToolBase
             catch (Exception ex)
             {
                 trace.Add($"{index + 1}. ERROR: {ex.Message}");
-                steps.Add(new(index + 1, null, true, new("failed", "unknown")));
+                steps.Add(new(index + 1, null, true, new("not-dispatched", "unknown")));
                 if (!stopOnError)
                 {
                     continue;
@@ -156,15 +156,13 @@ public sealed class BatchTool : ToolBase
         }
         // Preserve the legacy numbered text and IsError contract. Structured
         // outcomes expose failures/pending state without interpreting UI text.
+        // A step that fails after completed ones makes the batch partial: earlier input reached the app.
+        var failed = steps.Any(s => s.IsError);
+        var sent = steps.Sum(s => s.Outcome?.InputsSent ?? 0);
+        var outcome = pending ?? new(ToolOutcome.DispatchFor(failed, sent), "returned");
         return TextResult(string.Join("\n", trace)) with
         {
-            Outcome =
-                pending != null
-                    ? pending with
-                    {
-                        Steps = steps,
-                    }
-                    : new(steps.Any(s => s.IsError) ? "failed" : "completed", "returned", Steps: steps),
+            Outcome = outcome with { Steps = steps, InputsSent = sent, Status = failed ? "failed" : null },
         };
     }
 }

@@ -66,46 +66,14 @@ public class ToolRegistry
         try
         {
             _onToolActivity?.Invoke();
-            if (OperationContext.Current.Value != null)
+            if (OperationContext.Current.Value is { } parent)
             {
-                OperationContext.Check();
-                return await tool.ExecuteAsync(arguments);
+                return await RunNested(tool, arguments, parent);
             }
 
             var operation = Operations.Begin(name, requestKey);
             using var cancellation = cancellationToken.Register(() => operation.Stop.Cancel());
-            var toolTask = Task.Run(async () =>
-            {
-                OperationContext.Current.Value = operation;
-                try
-                {
-                    // Metadata collection is inside the timeout. Target validation
-                    // belongs to the tool, preserving its specific error contract.
-                    var target = ResolveTarget?.Invoke(arguments);
-                    operation.ProcessId = target?.ProcessId ?? 0;
-                    operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
-                    OperationContext.Check();
-                    var result = await tool.ExecuteAsync(arguments);
-                    operation.ResultOutcome = result.Outcome;
-                    if (result.IsError == true || result.Outcome?.Dispatch == "failed")
-                    {
-                        var error = string.Join("; ", result.Content.Select(c => c.Text));
-                        operation.Error = string.IsNullOrWhiteSpace(error) ? "Tool reported a failed dispatch." : error;
-                    }
-
-                    return result;
-                }
-                catch (Exception ex)
-                {
-                    operation.Error = ex.Message;
-                    throw;
-                }
-                finally
-                {
-                    operation.Finished = true;
-                    OperationContext.Current.Value = null;
-                }
-            });
+            var toolTask = Task.Run(() => RunOperation(tool, arguments, operation));
             var started = Stopwatch.GetTimestamp();
             using var timer = new CancellationTokenSource();
             var timeoutTask = Task.Delay(_toolTimeout, timer.Token);
@@ -134,6 +102,82 @@ public class ToolRegistry
             };
         }
     }
+
+    /// <summary>A step of a composite tool shares its parent's operation but reports only its own input.</summary>
+    private static async Task<McpToolResult> RunNested(ITool tool, JsonElement? arguments, OperationContext parent)
+    {
+        var sentBefore = parent.InputsSent;
+        try
+        {
+            OperationContext.Check();
+            return WithDispatch(await tool.ExecuteAsync(arguments), parent.InputsSent - sentBefore);
+        }
+        catch (Exception ex)
+        {
+            return WithDispatch(ErrorText($"Error: {ex.Message}"), parent.InputsSent - sentBefore);
+        }
+    }
+
+    private async Task<McpToolResult> RunOperation(ITool tool, JsonElement? arguments, OperationContext operation)
+    {
+        OperationContext.Current.Value = operation;
+        McpToolResult result;
+        try
+        {
+            // Metadata collection is inside the timeout. Target validation
+            // belongs to the tool, preserving its specific error contract.
+            var target = ResolveTarget?.Invoke(arguments);
+            operation.ProcessId = target?.ProcessId ?? 0;
+            operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
+            OperationContext.Check();
+            result = WithDispatch(await tool.ExecuteAsync(arguments), operation.InputsSent);
+        }
+        catch (Exception ex)
+        {
+            // A tool that throws still reports how much of its input went out first.
+            result = WithDispatch(ErrorText($"Error: {ex.Message}"), operation.InputsSent);
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+
+        operation.ResultOutcome = result.Outcome;
+        if (result.Outcome!.Status == "failed")
+        {
+            var error = string.Join("; ", result.Content.Select(c => c.Text));
+            operation.Error = string.IsNullOrWhiteSpace(error) ? "Tool reported a failure." : error;
+        }
+
+        operation.Finished = true;
+        return result;
+    }
+
+    /// <summary>
+    /// Every result, errors included, says whether the tool failed (status) and how much of its input
+    /// went out (inputsSent, and dispatch when the tool did not report its own).
+    /// </summary>
+    internal static McpToolResult WithDispatch(McpToolResult result, int inputsSent)
+    {
+        var failed = result.IsError == true || result.Outcome?.Status == "failed";
+        var outcome =
+            result.Outcome
+            ?? new ToolOutcome(ToolOutcome.DispatchFor(failed, inputsSent), "not-tracked")
+            {
+                Verification = "not-established",
+            };
+        return result with { Outcome = outcome with { Status = failed ? "failed" : "ok", InputsSent = inputsSent } };
+    }
+
+    private static McpToolResult ErrorText(string message) =>
+        new()
+        {
+            Content = new List<McpContent>
+            {
+                new() { Type = "text", Text = message },
+            },
+            IsError = true,
+        };
 
     /// <summary>
     /// Result for a call that returned before its tool task ended: the caller cancelled (<paramref name="settled"/>
@@ -177,7 +221,10 @@ public class ToolRegistry
             {
                 new() { Type = "text", Text = PendingMessage(name, settled != null) },
             },
-            Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id),
+            Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id)
+            {
+                InputsSent = operation.InputsSent,
+            },
             IsError = true,
         };
     }
@@ -198,22 +245,11 @@ public class ToolRegistry
         + "A modal dialog or blocked UI Automation provider may still be running in the background. "
         + "Inspect the target and operation status before continuing. The request may have partially executed; do not blindly replay it.";
 
-    private static McpToolResult CompleteResult(McpToolResult result, OperationContext operation)
-    {
-        var outcome = result.Outcome;
-        if (outcome == null)
+    private static McpToolResult CompleteResult(McpToolResult result, OperationContext operation) =>
+        result with
         {
-            outcome = new ToolOutcome(result.IsError == true ? "failed" : "completed", "not-tracked")
-            {
-                Verification = "not-established",
-            };
-        }
-
-        return result with
-        {
-            Outcome = outcome with { OperationId = outcome.OperationId ?? operation.Id },
+            Outcome = result.Outcome! with { OperationId = result.Outcome.OperationId ?? operation.Id },
         };
-    }
 }
 
 /// <summary>
@@ -268,7 +304,7 @@ public abstract class ToolBase : ITool
         ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)) with
         {
             Outcome = new ToolOutcome(
-                "failed",
+                "not-dispatched",
                 "pending",
                 pending.OperationId,
                 pending.ModalTitle,
