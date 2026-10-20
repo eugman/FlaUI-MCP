@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using FlaUI.Mcp.Core;
 
 /// <summary>Typed TE3 interactions. Locators come from successful 3.26.3 runs.</summary>
@@ -1675,89 +1676,16 @@ public sealed class Te3Page(
         await Click(ObjectTarget(objectName));
     }
 
-    /// <summary>
-    /// Select the row named <paramref name="objectName"/> that is a <paramref name="objectType"/>. A model
-    /// can hold several rows with one name (SpaceParts' Date table, its Date column and a Date hierarchy
-    /// level), so with more than one match each is selected in turn until the property grid shows the
-    /// requested Object Type.
-    /// </summary>
-    public async Task SelectObjectOfType(string objectName, string objectType)
+    /// <summary>The type prefix of a status-bar selection: <c>Measure "Gross Sales"</c> gives "Measure".</summary>
+    internal static string? SelectionType(string? selection)
     {
-        var target = ObjectTarget(objectName);
-        var rows = await Task.Run(() =>
-                query.Find(
-                    handle,
-                    target.Selector,
-                    target.Within,
-                    maxResults: 20,
-                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
-                )
-            )
-            .WaitAsync(TimeSpan.FromSeconds(5));
-        if (rows.Elements.Count <= 1)
-        {
-            // windows_click's select path refuses to click a row that is already selected, which a
-            // physical click would turn into an inline rename.
-            await Click(target, physical: false);
-            return;
-        }
-
-        var seen = new List<string?>();
-        foreach (var row in rows.Elements)
-        {
-            reportStep?.Invoke($"Try row {row.Ref} named '{objectName}' as {objectType}");
-            // physical:false goes through windows_click's select path: it skips an already-selected row
-            // and falls back to a mouse click only when Select changes nothing (usual for TE3 rows).
-            await invoke("windows_click", new { @ref = row.Ref, physical = false });
-            var type = await SettledGridValue("Object Type");
-            if (ObjectTypeMatches(objectType, type))
-            {
-                return;
-            }
-
-            seen.Add(type);
-        }
-
-        throw new InvalidOperationException(
-            $"{rows.Elements.Count} rows are named '{objectName}', and none is a {objectType} (saw {string.Join(", ", seen.Select(t => t ?? "(none)"))})."
-        );
-    }
-
-    /// <summary>
-    /// A property grid value once two reads 200ms apart agree, after a short wait (up to ~1.5s). The
-    /// candidates in <see cref="SelectObjectOfType"/> share one Name, so a stale grid can't be told
-    /// apart by name; waiting for it to settle is the only guard.
-    /// </summary>
-    private async Task<string?> SettledGridValue(string property)
-    {
-        await Task.Delay(250);
-        string? last = null;
-        for (var read = 0; read < 7; read++)
-        {
-            var value = (await Resolve(PropertyTarget(property))).Patterns.Value.Pattern.Value.ValueOrDefault;
-            if (read > 0 && value == last)
-            {
-                return value;
-            }
-
-            last = value;
-            await Task.Delay(200);
-        }
-
-        return last;
+        var quote = selection?.IndexOf('"', StringComparison.Ordinal) ?? -1;
+        return quote > 0 ? selection![..quote].Trim() : null;
     }
 
     public async Task SelectTable(string table)
     {
-        // The DevExpress tree virtualizes rows in large models. Filtering makes an off-screen table
-        // eligible, but substring matches at the top can still keep the exact row unrealized. Move
-        // to the end of the filtered tree, where alphabetized table rows are materialized.
-        await Fill(SearchTarget(), table);
-        await Keys("Ctrl+End", TomExplorerTarget());
-        await SelectObjectOfType(table, "Table");
-        await ResetSearch();
-        await SelectObjectOfType(table, "Table");
-        await AssertProperty("Name", table);
+        await SelectObjectPath(table, table, "Table");
     }
 
     public async Task ExpandSelected()
@@ -2470,6 +2398,12 @@ public sealed class Te3Page(
         await Expect(ObjectTarget(objectName), objectName);
     }
 
+    /// <summary>
+    /// Selects an object in TOM Explorer by name, type and table. The object name is typed into the search box, then the
+    /// selection walks down the filtered tree (see <see cref="PathWalker"/>), so table groups, display folders and rows
+    /// that share a name (a Date table, a Date column, a Date level) need no path. <paramref name="folder"/> is accepted
+    /// for compatibility and not needed. The search is cleared afterwards and the selection is checked again.
+    /// </summary>
     public async Task SelectObjectPath(string table, string objectName, string objectType, string folder = "")
     {
         if (objectType is not ("Table" or "Column" or "Measure"))
@@ -2477,54 +2411,135 @@ public sealed class Te3Page(
             throw new ArgumentException("Unsupported object type");
         }
 
-        await OpenTom();
-        await ResetSearch();
-        await CollapseObjectTree();
-        await SelectObject("Tables");
-        await ExpandSelected();
-        await SelectTable(table);
-        if (objectType != "Table")
+        _ = folder;
+        Exception? first = null;
+        // Navigation edits nothing, so one clean retry is safe when a check fails on a slow redraw.
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            await ExpandSelected();
-            foreach (var segment in folder.Split('\\', StringSplitOptions.RemoveEmptyEntries))
+            try
             {
-                await SelectObject(segment);
-                await ExpandSelected();
+                await WalkToObject(table, objectName, objectType);
+                return;
             }
-            // Without a folder, an object inside a display folder is simply absent; say so instead of a bare lookup miss.
-            if (folder.Length == 0)
+            catch (InvalidOperationException ex) when (attempt == 0)
             {
-                var row = ObjectTarget(objectName);
-                var present = false;
-                for (var attempt = 0; attempt < 4 && !present; attempt++)
-                {
-                    if (attempt > 0)
-                    {
-                        await Task.Delay(500);
-                    }
-
-                    present = await Task.Run(() =>
-                            query.IsPresent(
-                                handle,
-                                row.Selector,
-                                row.Within,
-                                row.IncludeOwned,
-                                new SearchBudget(1000, TimeSpan.FromSeconds(2))
-                            )
-                        )
-                        .WaitAsync(TimeSpan.FromSeconds(5));
-                }
-
-                if (!present)
-                {
-                    throw new InvalidOperationException(ObjectNotFoundMessage(table, objectName));
-                }
+                first = ex;
+                reportStep?.Invoke($"Retrying from a clean tree after: {ex.Message}");
             }
-
-            await SelectObjectOfType(objectName, objectType);
         }
 
-        await AssertProperty("Name", objectType == "Table" ? table : objectName);
+        throw first!;
+    }
+
+    // Where the last walk ended; the arrival check compares it with the request.
+    private WalkResult? lastWalk;
+
+    private async Task WalkToObject(string table, string objectName, string objectType)
+    {
+        await OpenTom();
+        await SearchTomTyped(objectName);
+        await Keys("Home", TomExplorerTarget());
+        var cursor = new TomCursor(this);
+        var walk = await PathWalker.Find(cursor, table, objectName, objectType);
+        if (!walk.Found)
+        {
+            await ClearTomSearchTyped();
+            throw new InvalidOperationException(
+                $"No {objectType} '{objectName}' under table '{table}' in TOM Explorer. {walk.Reason}"
+            );
+        }
+
+        reportStep?.Invoke($"Found {objectType} '{objectName}' under '{walk.Table}' after {walk.RowsVisited} rows");
+        await ClearTomSearchTyped();
+        // Clearing the filter keeps the selection; check it really did before reporting arrival.
+        var after = await cursor.Current();
+        if (!PathWalker.Matches(after, walk.Table, table, objectName, objectType))
+        {
+            throw new InvalidOperationException(
+                $"Selection moved when the search was cleared: now '{after.Value}' ({after.Type ?? "unknown type"})."
+            );
+        }
+
+        lastWalk = walk;
+    }
+
+    /// <summary>Types into the TOM Explorer search box; setting its value does not apply TE3's filter.</summary>
+    private async Task SearchTomTyped(string text)
+    {
+        await ClearTomSearchTyped();
+        var reference = await Reference(SearchTarget());
+        reportStep?.Invoke($"Type TOM Explorer search {text}");
+        await invoke("windows_type", new { @ref = reference, text });
+        await Task.Delay(800);
+    }
+
+    private async Task ClearTomSearchTyped()
+    {
+        var reference = await Reference(SearchTarget());
+        reportStep?.Invoke("Clear TOM Explorer search");
+        await invoke("windows_send_keys", new { @ref = reference, keys = new[] { "Ctrl+A", "Backspace" } });
+        await Task.Delay(600);
+    }
+
+    /// <summary>
+    /// The selected TOM Explorer row and the status bar's type for it; nothing is clicked. Each step reads every realized
+    /// row and the status bar through the generic query: correct, but about 0.5s a row, so a long filtered tree can
+    /// exceed the 30s tool timeout. A version that cached the tree element timed out live; speed this up with care.
+    /// </summary>
+    private sealed class TomCursor(Te3Page page) : ITreeCursor
+    {
+        private const int PollMs = 60;
+        private const int MoveTimeoutMs = 1500;
+
+        public async Task<RowObservation> Current() => (await page.ObserveSelection()).Row;
+
+        public async Task<RowObservation?> Down()
+        {
+            var before = await page.ObserveSelection();
+            await page.Keys("Down", TomExplorerTarget());
+            for (var waited = 0; waited < MoveTimeoutMs; waited += PollMs)
+            {
+                await Task.Delay(PollMs);
+                var now = await page.ObserveSelection();
+                if (now.Equals(before))
+                {
+                    continue;
+                }
+
+                // Moved; take it once a second read agrees, so a half-updated status bar is not trusted.
+                await Task.Delay(PollMs * 2);
+                var settled = await page.ObserveSelection();
+                if (settled.Equals(now))
+                {
+                    return settled.Row;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>One observation of the selection: the row, plus the raw bar text and row position to detect movement.</summary>
+    private sealed record SelectionSnapshot(RowObservation Row, string? BarText, double? RowTop);
+
+    private async Task<SelectionSnapshot> ObserveSelection()
+    {
+        var tree = TomExplorerTarget();
+        var rows = await Task.Run(() =>
+                query.Find(
+                    handle,
+                    new(ControlType: "TreeItem"),
+                    tree.Selector,
+                    maxResults: 200,
+                    register: false,
+                    includeBounds: true,
+                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(3))
+                )
+            )
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        var selected = rows.Elements.FirstOrDefault(r => r.Selected == true);
+        var bar = await Task.Run(() => ObserveModelState().Selection);
+        return new(new(selected?.Value, SelectionType(bar)), bar, selected?.Bounds?.Y);
     }
 
     public static string ObjectNotFoundMessage(string table, string objectName) =>
@@ -2577,13 +2592,9 @@ public sealed class Te3Page(
 
                 break;
             case { Id: "object" }:
-                var name = (await Resolve(PropertyTarget("Name"))).Patterns.Value.Pattern.Value.Value;
-                var type = (await Resolve(PropertyTarget("Object Type"))).Patterns.Value.Pattern.Value.Value;
-                var dax =
-                    objectType == "Table"
-                        ? null
-                        : (await Resolve(PropertyTarget("DAX identifier"))).Patterns.Value.Pattern.Value.Value;
-                VerifyObjectIdentity(table!, objectName!, objectType!, name, type, dax);
+                // Proof from the tree and status bar, not the property grid: grid rows below the fold of a short
+                // Properties pane are not exposed to UI Automation.
+                VerifyArrival(table!, objectName!, objectType!, (await ObserveSelection()).Row, lastWalk?.Table);
                 break;
             case { Id: "tom-explorer" }:
                 if (!await IsOnScreen(TomTreeTarget()))
@@ -2619,31 +2630,24 @@ public sealed class Te3Page(
             : actualType == "Measure";
     }
 
-    internal static void VerifyObjectIdentity(
+    /// <summary>
+    /// The object is where it was asked for: the selected row has its name, the status bar has its type, and the walk
+    /// that reached it passed through the requested table.
+    /// </summary>
+    internal static void VerifyArrival(
         string table,
         string objectName,
         string objectType,
-        string? name,
-        string? type,
-        string? dax
+        RowObservation selected,
+        string? walkedTable
     )
     {
-        var typeMatches = ObjectTypeMatches(objectType, type);
-        var qualified =
-            "'"
-            + table.Replace("'", "''", StringComparison.Ordinal)
-            + "'["
-            + objectName.Replace("]", "]]", StringComparison.Ordinal)
-            + "]";
-        var unquoted = table + "[" + objectName.Replace("]", "]]", StringComparison.Ordinal) + "]";
-        if (
-            !typeMatches
-            || name != (objectType == "Table" ? table : objectName)
-            || objectType != "Table" && dax != qualified && dax != unquoted
-        )
+        var expectedName = objectType == "Table" ? table : objectName;
+        if (selected.Value != expectedName || !ObjectTypeMatches(objectType, selected.Type) || walkedTable != table)
         {
             throw new InvalidOperationException(
-                $"Object identity unverified: expected {table}/{objectName} ({objectType}), observed {name}, {type}, {dax}. Inspect the property grid; no fallback guess was made."
+                $"Object identity unverified: expected {table}/{expectedName} ({objectType}), observed row '{selected.Value}' "
+                    + $"({selected.Type ?? "unknown type"}) reached through table '{walkedTable ?? "none"}'. No fallback guess was made."
             );
         }
     }

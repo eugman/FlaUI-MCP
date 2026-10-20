@@ -163,12 +163,14 @@ public sealed class CompanionTests
         );
 
     [Theory]
-    [InlineData("Column", "'Comparison'[Amount]")]
-    [InlineData("Measure", "'Sales'[Amount]")]
-    [InlineData("Column", null)]
-    public void WrongOrUnprovenObjectIdentityRejected(string type, string? dax) =>
+    [InlineData("Amount", "Data Column", "Comparison")]
+    [InlineData("Amount", "Measure", "Sales")]
+    [InlineData("Amount", null, "Sales")]
+    [InlineData("Total", "Data Column", "Sales")]
+    [InlineData("Amount", "Data Column", null)]
+    public void WrongOrUnprovenArrivalRejected(string value, string? type, string? walkedTable) =>
         Assert.Throws<InvalidOperationException>(() =>
-            Te3Page.VerifyObjectIdentity("Sales", "Amount", "Column", "Amount", type, dax)
+            Te3Page.VerifyArrival("Sales", "Amount", "Column", new(value, type), walkedTable)
         );
 
     [Theory]
@@ -181,13 +183,22 @@ public sealed class CompanionTests
     public void SameNamedRowsArePickedByObjectType(string requested, string? observed, bool expected) =>
         Assert.Equal(expected, Te3Page.ObjectTypeMatches(requested, observed));
 
-    [Fact]
-    public void QualifiedColumnIdentityAccepted() =>
-        Te3Page.VerifyObjectIdentity("Sales", "Amount", "Column", "Amount", "Data Column", "'Sales'[Amount]");
+    [Theory]
+    [InlineData("Calculated Table \"Date\"", "Calculated Table")]
+    [InlineData("Calculated Table Column \"Calenc", "Calculated Table Column")]
+    [InlineData("Hierarchy \"Date Hierarchy\"", "Hierarchy")]
+    [InlineData("(Nothing selected)", null)]
+    [InlineData(null, null)]
+    public void StatusBarSelectionGivesTheObjectType(string? selection, string? expected) =>
+        Assert.Equal(expected, Te3Page.SelectionType(selection));
 
     [Fact]
-    public void EscapedIdentifiersAreComparedExactly() =>
-        Te3Page.VerifyObjectIdentity("O'Brien", "A]B", "Measure", "A]B", "Measure", "'O''Brien'[A]]B]");
+    public void ColumnArrivalAccepted() =>
+        Te3Page.VerifyArrival("Sales", "Amount", "Column", new("Amount", "Data Column"), "Sales");
+
+    [Fact]
+    public void TableArrivalUsesTheTableName() =>
+        Te3Page.VerifyArrival("Date", "Date", "Table", new("Date", "Calculated Table"), "Date");
 
     [Fact]
     public void ProcessIdIsOptionalWhenOneTe3IsRunning()
