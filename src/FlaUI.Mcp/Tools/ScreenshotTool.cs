@@ -463,6 +463,11 @@ public class ScreenshotTool : ToolBase
             else if (!string.IsNullOrEmpty(handle))
             {
                 targetHwnd = _sessionManager.GetWindowHwnd(handle);
+                if (WindowIsGone(targetHwnd))
+                {
+                    return Task.FromResult(ErrorResult(ClosedWindowMessage(handle)));
+                }
+
                 if (!_processPolicy.IsProcessAllowed(_sessionManager.GetWindowProcessId(handle)))
                 {
                     return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Screenshot target")));
@@ -640,6 +645,13 @@ public class ScreenshotTool : ToolBase
             return $"parkPointer: {ex.Message} No screenshot was taken.";
         }
     }
+
+    // A cached handle can outlive its window (a dialog that closed, an app that exited). Report that,
+    // not the allowlist refusal its dead process would otherwise produce.
+    internal static bool WindowIsGone(nint hwnd) => hwnd != 0 && Win32Desktop.GetProcessId(hwnd) == 0;
+
+    internal static string ClosedWindowMessage(string handle) =>
+        $"Window {handle} has closed. Get a current handle from windows_list_windows; no screenshot was taken.";
 
     /// <summary>An element's rectangle as measured in the image that was returned.</summary>
     /// <param name="Ref">The element ref this describes.</param>
