@@ -84,6 +84,19 @@ public sealed class CompositionTests
                 Assert.Equal(Color.Red.ToArgb(), actual.GetPixel(0, 0).ToArgb());
             }
 
+            // Rerunning the same spec is a retry and changes nothing; another crop for the checkpoint is refused.
+            CaptureComposition.Create(manifestPath, specPath, output);
+            Assert.Equal(recorded.ScreenshotHashes["crop"], ArtifactFiles.Sha256(output));
+            File.WriteAllText(
+                specPath,
+                JsonSerializer.Serialize(
+                    spec with
+                    {
+                        Panels = [new("source", "unused label", 10, 10, 1, 1, 4, 5)],
+                    },
+                    RunConfig.Json
+                )
+            );
             Assert.Throws<IOException>(() => CaptureComposition.Create(manifestPath, specPath, output));
         }
         finally
