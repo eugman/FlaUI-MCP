@@ -223,6 +223,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         var path = PointerPlan.DragPath(from, to, steps);
         using var input = new GuardedInput(target);
         RequireHit(target, from);
+        // The release lands at `to`; refuse a drag that would drop onto another window or the desktop.
+        RequireHit(target, to);
         input.Send(() => Mouse.MoveTo(from));
         input.Send(() => Mouse.Down(MouseButton.Left));
         try

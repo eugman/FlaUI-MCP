@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `windows_set_window_state` maximizes, restores or minimizes a window and reports the state it reached.
+- `windows_mouse` parks, moves, hovers, scrolls and drags the pointer. A drag can start on an element's edge (`fromEdge`), end on another element (`toRef`, `toEdge`), or resize an element to a given size (`resizeTo`). Both ends of a drag must be on the target window.
+- `windows_screenshot parkPointer` moves the pointer off the window before capturing, so no tooltip or hover state lands in the image.
+- `windows_click action` picks the pattern (invoke, select, expand, collapse, toggle) or forces a mouse click. Toggle reports the state it reached.
+- `windows_find` and the other selectors accept `nameContains`, a case-insensitive part of the name.
+- Numpad and named punctuation keys for `windows_send_keys` (`Multiply`, `NumPad0`, `semicolon`, ...). The punctuation names map to the US-layout OEM keys.
+
 ### Changed
+- Unknown selector keys are now an error instead of being ignored.
+- A left click on a tree or list row defaults to Select instead of Invoke (Invoke usually toggles expansion). When Select changes nothing, the tool falls back to a mouse click. It never clicks a tree row that is already selected, because some trees start an inline rename on that click.
+- `structuredContent` carries the tool's text as `message`, for clients that show it instead of `content`.
+- The screenshot occlusion check covers only the area a `frame` keeps.
+- `windows_launch` waits up to about 20 seconds for a window that stays the only candidate across two polls.
 - This repository is now the shared core. Product automation (Tabular Editor 3, and others) lives in separate repos that merge from here.
 - The namespace is `FlaUI.Mcp` (was `PlaywrightWindows.Mcp`), and the server reports itself to MCP clients as `flaui-mcp`.
 - Added a clipboard lease (`Win32Desktop.PreserveAndSetClipboardText`) for hosts that can confirm a paste landed: it saves the user's text, writes ours, and restores theirs on dispose. `windows_paste` does not use it and still leaves the pasted text on the clipboard.
@@ -17,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Formatting, size and complexity limits are enforced by CSharpier, analyzers, git hooks and CI (see docs/code-quality.md).
 
 ### Fixed
+- A screenshot of a window that has closed says so, instead of reporting the allowlist refusal.
+- `windows_wait` failures always name a reason, using the exception type when the message is empty.
+- `windows_set_window_state restore` reaches the normal state from a window that was minimized while maximized.
 - Guarded input accepts a modal dialog that disables the target even when the dialog is an owned overlapped window (WinForms `ShowDialog`), which `GA_ROOTOWNER` does not follow. A modeless owned window is still treated as a separate window. When the target is disabled by a modal, activation goes to the dialog rather than the disabled window.
 - `windows_wait` rejects `settleMs` equal to `timeoutMs`, which could never succeed.
 - The tool timeout timer is cancelled when a tool returns.

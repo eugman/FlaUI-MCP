@@ -126,7 +126,9 @@ public class SessionManager : IDisposable
 
     // A title or an unregistered window is not proof of launch ownership.
     // Brokered/single-instance launches must be attached explicitly by the caller.
-    // Apps with a splash screen (TE3) show no window, or two, for several seconds; wait up to ~20s.
+    // Some apps show no window, or two, for several seconds while they start; wait up to ~20s. Requiring
+    // the same single window on two polls (500ms apart) only filters a window that is briefly alone; a
+    // splash screen that stays alone longer is still taken, so attach explicitly when that matters.
     private (Window? window, int timeouts) WaitForLaunchWindow(
         System.Diagnostics.Process process,
         Func<IReadOnlyList<Win32WindowInfo>> candidatesOf

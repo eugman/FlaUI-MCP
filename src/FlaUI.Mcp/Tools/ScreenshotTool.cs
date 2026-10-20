@@ -161,11 +161,6 @@ public class ScreenshotTool : ToolBase
                 ? f.Deserialize<CaptureFrame>()
                 : null;
         frame?.Validate();
-        if (GetBoolArgument(arguments, "parkPointer", false) && ParkPointer(handle, refId) is { } parkError)
-        {
-            return Task.FromResult(ErrorResult(parkError));
-        }
-
         if (!includeImage && string.IsNullOrWhiteSpace(savePath))
         {
             return Task.FromResult(ErrorResult("includeImage=false requires savePath"));
@@ -217,6 +212,12 @@ public class ScreenshotTool : ToolBase
         if (!TryNormalizeSavePath(savePath, overwrite, out var normalizedSavePath, out var pathError))
         {
             return Task.FromResult(ErrorResult(pathError));
+        }
+
+        // Park only once the call is known to be valid, so a refused call never moves the real mouse.
+        if (GetBoolArgument(arguments, "parkPointer", false) && ParkPointer(handle, refId) is { } parkError)
+        {
+            return Task.FromResult(ErrorResult(parkError));
         }
 
         try
@@ -630,6 +631,16 @@ public class ScreenshotTool : ToolBase
     {
         var window = handle ?? (refId == null ? null : _elementRegistry.WindowForRef(refId));
         var hwnd = window == null ? Win32Desktop.GetForegroundWindow() : _sessionManager.GetWindowHwnd(window);
+        if (window != null && WindowIsGone(hwnd))
+        {
+            return ClosedWindowMessage(window);
+        }
+
+        if (!_processPolicy.IsProcessAllowed(Win32Desktop.GetProcessId(hwnd)))
+        {
+            return _processPolicy.DescribeDenied("parkPointer target");
+        }
+
         if (Win32Desktop.GetWindowBounds(hwnd) is not { } bounds)
         {
             return "parkPointer: window bounds unavailable; no screenshot was taken.";
