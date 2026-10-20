@@ -373,7 +373,9 @@ public static class RunExecutor
 
     internal static SettingsLease AcquireSettings(RunManifest manifest, Action save, Func<SettingsLease>? create = null)
     {
-        var settings = (create ?? (() => new SettingsLease()))();
+        var settings = (
+            create ?? (() => new SettingsLease(manifestPath: Path.Combine(manifest.Output, "manifest.json")))
+        )();
         // Persist before normalization so a hard-killed run still reads as needing recovery.
         manifest.SettingsBackup = settings.BackupDirectory;
         manifest.SettingsRestored = false;

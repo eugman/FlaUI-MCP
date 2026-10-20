@@ -110,7 +110,7 @@ pwsh automation/reset-engine.ps1             # puts the test objects back by han
 | `compose MANIFEST SPEC OUT.png` | Crop and arrange checkpoints from a run into one image. |
 | `annotate MANIFEST SPEC` | Add boxes and arrows to a checkpoint. |
 | `promote RUN_DIR CHECKPOINT DEST.png [--overwrite]` | Copy an approved checkpoint into `docsRoot`. |
-| `recover BACKUP_DIR` | Restore TE3 settings after an interrupted run. |
+| `recover BACKUP_DIR [--force]` | Restore TE3 settings after an interrupted run and mark its manifest recovered. Refuses settings changed since the run without `--force`. |
 | `mcp` | Start the TE3 MCP tools. |
 
 A passing run is not visual approval. Look at every PNG before using it.
@@ -145,7 +145,7 @@ Tests in `local/tests/*.cs` are compiled into the runner test project in the sam
 
 ### Safety
 
-- Settings backups are kept under `%LOCALAPPDATA%/FlaUI-MCP/settings-backups`. If a run can't restore them, it prints the backup path; run `recover` on it with TE3 closed before the next run.
+- Settings backups are kept under `%LOCALAPPDATA%/FlaUI-MCP/settings-backups`. If a run can't restore them, it prints the backup path; run `recover` on it with TE3 closed before the next run. `recover` refuses when a settings file is neither its pre-run original nor what the run wrote, because restoring would discard later changes; the run's own TE3 can also cause this. Check the files, then pass `--force`.
 - On a CLI timeout the runner kills the process tree it launched. If it can't confirm the exit, check the reported PID before retrying.
 - `promote` only copies into the configured `docsRoot`. Overwriting needs `--overwrite` and a clean destination.
 

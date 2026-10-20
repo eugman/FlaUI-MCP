@@ -13,7 +13,7 @@ public static class RunnerCommands
         FlaUI.Mcp.Te3 promote RUN_DIR CHECKPOINT DEST.png [--overwrite]
         FlaUI.Mcp.Te3 promote RUN_DIR --item ITEM_ID [--overwrite]
         FlaUI.Mcp.Te3 mcp
-        FlaUI.Mcp.Te3 recover BACKUP_DIR
+        FlaUI.Mcp.Te3 recover BACKUP_DIR [--force]
         --no-focus rejects run.
         """;
 
@@ -103,15 +103,17 @@ public static class RunnerCommands
 
             if (command == "recover")
             {
-                if (args.Length != 2)
+                var force = args.Length == 3 && args[2] == "--force";
+                if (args.Length != 2 && !force)
                 {
                     throw new ArgumentException(Usage);
                 }
                 // Restores an interrupted run's exact backup; hashes are checked before and after copying.
+                // Without --force it refuses settings changed since the run normalized them.
                 var backup = Path.GetFullPath(args[1]);
                 using var recoveryGate = RunExecutor.AcquireRunnerLock();
                 RunSafety.RequireExclusiveTe3();
-                SettingsLease.RestoreBackup(backup);
+                var manifestMarked = SettingsLease.Recover(backup, force);
                 Console.WriteLine(
                     JsonSerializer.Serialize(
                         new
@@ -119,6 +121,7 @@ public static class RunnerCommands
                             restored = backup,
                             verified = "sha256",
                             backupRetained = true,
+                            manifestMarked,
                         }
                     )
                 );
