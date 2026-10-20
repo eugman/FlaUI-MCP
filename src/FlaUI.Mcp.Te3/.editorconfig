@@ -27,7 +27,6 @@ dotnet_diagnostic.S3776.severity = suggestion
 
 [Te3Companion.cs]
 dotnet_diagnostic.S138.severity = suggestion
-dotnet_diagnostic.S3358.severity = suggestion
 
 [Te3ModelState.cs]
 dotnet_diagnostic.S1067.severity = suggestion
