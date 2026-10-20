@@ -12,6 +12,9 @@ public class RunManifest
     public string Te3Path { get; set; } = "";
     public string Output { get; set; } = "";
     public string? DocsRoot { get; set; }
+
+    /// <summary>UTC ticks when the runner was about to start TE3; with ProcessId 0, a TE3 may be running unrecorded.</summary>
+    public long LaunchRequestedTicks { get; set; }
     public int ProcessId { get; set; }
     public long ProcessStartedTicks { get; set; }
     public string? Te3Version { get; set; }

@@ -153,10 +153,7 @@ public static class RunExecutor
                 start.ArgumentList.Add(model);
             }
 
-            app = Process.Start(start) ?? throw new InvalidOperationException("TE3 did not start");
-            manifest.ProcessId = app.Id;
-            manifest.ProcessStartedTicks = app.StartTime.ToUniversalTime().Ticks;
-            Save();
+            app = RunJournal.Launch(manifest, Save, start, Process.Start);
             manifest.Te3Version = app.MainModule?.FileVersionInfo.ProductVersion;
             var startup = Stopwatch.StartNew();
             while (startup.Elapsed < TimeSpan.FromSeconds(90))
@@ -328,17 +325,11 @@ public static class RunExecutor
         {
             cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3(manifest.ProcessId);
-            var result = await host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(arguments));
-            File.AppendAllText(
+            var result = await RunJournal.Tool(
                 Path.Combine(output, "actions.jsonl"),
-                JsonSerializer.Serialize(
-                    new
-                    {
-                        tool,
-                        arguments,
-                        result,
-                    }
-                ) + Environment.NewLine
+                tool,
+                arguments,
+                () => host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(arguments))
             );
             if (result.IsError == true || result.Outcome?.IsPending == true)
             {

@@ -354,4 +354,65 @@ public sealed class RunnerTests : IDisposable
         File.WriteAllText(Path.Combine(root, "manifest.json"), JsonSerializer.Serialize(manifest, RunConfig.Json));
         await Assert.ThrowsAsync<ArgumentException>(() => ArtifactFiles.Promote(root, "test", "test.png", false));
     }
+
+    [Fact]
+    public async Task ToolIntentIsJournaledBeforeTheToolRuns()
+    {
+        // A run killed mid-call must still show which input it was sending.
+        var journal = Path.Combine(root, "actions.jsonl");
+        string[]? seen = null;
+        await RunJournal.Tool(
+            journal,
+            "windows_click",
+            new { @ref = "w1e3" },
+            () =>
+            {
+                seen = File.Exists(journal) ? File.ReadAllLines(journal) : [];
+                return Task.FromResult(new FlaUI.Mcp.McpToolResult());
+            }
+        );
+        var intent = JsonDocument.Parse(Assert.Single(seen!)).RootElement;
+        Assert.Equal("intent", intent.GetProperty("phase").GetString());
+        Assert.Equal("w1e3", intent.GetProperty("arguments").GetProperty("ref").GetString());
+        Assert.Equal(2, File.ReadAllLines(journal).Length);
+    }
+
+    [Fact]
+    public async Task AFailedToolCallIsJournaledAsAnError()
+    {
+        var journal = Path.Combine(root, "actions.jsonl");
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            RunJournal.Tool(
+                journal,
+                "windows_click",
+                new { },
+                () => Task.FromException<FlaUI.Mcp.McpToolResult>(new TimeoutException("provider hung"))
+            )
+        );
+        var last = JsonDocument.Parse(File.ReadAllLines(journal)[^1]).RootElement;
+        Assert.Equal("error", last.GetProperty("phase").GetString());
+        Assert.Contains("provider hung", last.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public void LaunchIntentIsPersistedBeforeTe3Starts()
+    {
+        // A runner killed between Process.Start and the PID save must still read as "a TE3 may be running".
+        var manifest = new RunManifest();
+        RunManifest? atStart = null;
+        using var app = RunJournal.Launch(
+            manifest,
+            () => { },
+            new System.Diagnostics.ProcessStartInfo("TabularEditor3.exe"),
+            _ =>
+            {
+                atStart = JsonSerializer.Deserialize<RunManifest>(JsonSerializer.Serialize(manifest));
+                // Stands in for the started TE3; nothing is launched.
+                return System.Diagnostics.Process.GetCurrentProcess();
+            }
+        );
+        Assert.NotEqual(0, atStart!.LaunchRequestedTicks);
+        Assert.Equal(0, atStart.ProcessId);
+        Assert.Equal(Environment.ProcessId, manifest.ProcessId);
+    }
 }
