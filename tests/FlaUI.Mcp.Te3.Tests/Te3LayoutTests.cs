@@ -68,4 +68,17 @@ public sealed class Te3LayoutTests
         var result = await tool.ExecuteAsync(args);
         Assert.NotEqual(true, result.IsError);
     }
+
+    [Fact]
+    public void LayoutRefsCarryTheWindowIdentity()
+    {
+        // Parts are found with FindAllDescendants, not ElementQuery, so nothing else records the
+        // owner. Without it pattern actions skip PID/start-time checks and the pending-provider and
+        // modal guards see PID 0. The form is created but never shown.
+        using var host = new FlaUI.Mcp.Core.AutomationHost(FlaUI.Mcp.Core.ProcessPolicy.AllowAll);
+        using var form = new System.Windows.Forms.Form();
+        var handle = Te3Layout.Bind(host, form.Handle, Environment.ProcessId);
+        var reference = host.Elements.Register(handle, null!);
+        Assert.Equal(Environment.ProcessId, host.Elements.GetProcessIdForRef(reference));
+    }
 }

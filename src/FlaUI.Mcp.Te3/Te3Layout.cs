@@ -103,7 +103,7 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
 
             using var process = Process.GetProcessById(Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3));
             var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(process.Id));
-            var handle = host.Sessions.RegisterNativeWindow(hwnd, process.Id);
+            var handle = Bind(host, hwnd, process.Id);
             var window =
                 host.Sessions.GetWindow(handle) ?? throw new InvalidOperationException("TE3 window not readable.");
             object result = GetStringArgument(a, "action") switch
@@ -126,6 +126,10 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
             return ErrorResult($"{ToolName}: {ex.Message}");
         }
     }
+
+    /// <summary>Registers the TE3 window for the raw descendant refs this tool clicks.</summary>
+    internal static string Bind(AutomationHost host, nint hwnd, int processId) =>
+        host.Sessions.RegisterNativeWindow(hwnd, processId);
 
     private static object ShowPane(Window window, string title)
     {
