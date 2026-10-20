@@ -17,10 +17,24 @@ public sealed class Te3LayoutTests
         Assert.Equal(680, sizes.Single(s => s.Pane == "AI Assistant").Width);
         Assert.Equal(480, sizes.Single(s => s.Pane == "TOM Explorer").Width);
         Assert.Equal(320, sizes.Single(s => s.Pane == "Properties").Height);
-        Assert.True(1800 - sizes.Where(s => s.Width.HasValue).Sum(s => s.Width!.Value) - 40 >= 600);
         Assert.Throws<ArgumentException>(() =>
             FlaUI.Mcp.Te3.Te3PanePlan.Resolve(FlaUI.Mcp.Te3.Te3PanePlan.AssistantModelReview, 1600, 900)
         );
+    }
+
+    [Fact]
+    public void PresetGuardAlwaysLeavesTheMinimumEditorWidth()
+    {
+        // Calls the real guard: the narrowest accepted window, minus every side pane and the chrome reserve,
+        // is exactly the minimum editor width, and one pixel less is refused.
+        var preset = FlaUI.Mcp.Te3.Te3PanePlan.AssistantModelReview;
+        var probe = FlaUI.Mcp.Te3.Te3PanePlan.Resolve(preset, 1920, 1080);
+        var narrowest = FlaUI.Mcp.Te3.Te3PanePlan.MinimumWindowWidth(probe);
+        var sizes = FlaUI.Mcp.Te3.Te3PanePlan.Resolve(preset, narrowest, 900);
+        var editor = narrowest - sizes.Sum(s => s.Width ?? 0) - FlaUI.Mcp.Te3.Te3PanePlan.ChromeReserve;
+        Assert.Equal(FlaUI.Mcp.Te3.Te3PanePlan.MinimumEditorWidth, editor);
+        Assert.Throws<ArgumentException>(() => FlaUI.Mcp.Te3.Te3PanePlan.Resolve(preset, narrowest - 1, 900));
+        Assert.Throws<ArgumentException>(() => FlaUI.Mcp.Te3.Te3PanePlan.Resolve(preset, narrowest, 899));
     }
 
     [Theory]
