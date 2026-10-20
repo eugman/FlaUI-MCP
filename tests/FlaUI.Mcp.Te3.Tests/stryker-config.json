@@ -1,0 +1,29 @@
+{
+  "stryker-config": {
+    "project": "FlaUI.Mcp.Te3.csproj",
+    "test-projects": ["FlaUI.Mcp.Te3.Tests.csproj"],
+    "mutate": [
+      "**/Te3Interaction.cs",
+      "**/Te3InteractionTool.cs",
+      "**/Te3Companion.cs",
+      "**/Te3Layout.cs",
+      "**/LayoutSteps.cs",
+      "**/Te3NativePreflightTool.cs",
+      "**/NativeMcpPreflight.cs",
+      "**/NativeMcpProbeSession.cs",
+      "**/RunJournal.cs",
+      "**/CheckpointOutput.cs",
+      "**/SettingsLease.cs",
+      "**/PathWalker.cs",
+      "**/Te3Page.cs",
+      "!**/obj/**",
+      "!**/local/**",
+      "!**/*.g.cs",
+      "!**/AssemblyInfo.cs"
+    ],
+    "concurrency": 1,
+    "coverage-analysis": "perTest",
+    "reporters": ["html", "json", "progress"],
+    "thresholds": { "high": 80, "low": 60, "break": 0 }
+  }
+}

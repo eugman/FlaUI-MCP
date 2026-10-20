@@ -37,3 +37,6 @@ __pycache__/
 # Model files can carry licensed metadata (SpaceParts) and the saving machine's name and account.
 # Build them locally; never commit one.
 *.bim
+
+# Mutation testing reports
+StrykerOutput/

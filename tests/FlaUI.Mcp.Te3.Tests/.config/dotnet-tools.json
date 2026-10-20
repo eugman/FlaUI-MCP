@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": false,
+  "tools": {
+    "dotnet-stryker": {
+      "version": "4.16.0",
+      "commands": [
+        "dotnet-stryker"
+      ],
+      "rollForward": false
+    }
+  }
+}
