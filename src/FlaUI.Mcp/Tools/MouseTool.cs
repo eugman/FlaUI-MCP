@@ -17,7 +17,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     public override string Description =>
         "Move the pointer without clicking. park: move it off the window so no tooltip or hover state "
         + "lands in a screenshot. move/hover: to a point or ref. scroll: wheel ticks over a point or ref "
-        + "(positive scrolls up). drag: press at `from` (or ref), move in steps, release at `to`; use it for "
+        + "(positive scrolls up). drag: press at `from` (or ref, or ref's fromEdge), move in steps, release at `to`, toRef/toEdge, "
+        + "or wherever resizeTo makes ref that size (a column header: ref + fromEdge right + resizeTo 250). Use it for "
         + "splitters and other targets UI Automation does not expose. Points are pixels in a windows_screenshot "
         + "of the same window (handle), so read them straight off a capture.";
     public override object InputSchema =>
@@ -34,6 +35,24 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 ticks = new { type = "integer", description = "scroll: wheel ticks, positive is up." },
                 durationMs = new { type = "integer", description = "hover: how long to rest (default 600)." },
                 steps = new { type = "integer", description = "drag: intermediate moves (default 12)." },
+                fromEdge = new
+                {
+                    type = "string",
+                    @enum = PointerPlan.Edges,
+                    description = "drag: grab this edge of ref instead of its centre (e.g. right for a column header's divider).",
+                },
+                toRef = new { type = "string", description = "drag: release on this element instead of a `to` point." },
+                toEdge = new
+                {
+                    type = "string",
+                    @enum = PointerPlan.Edges,
+                    description = "drag: which part of toRef to release on (default center; left drops a column header before it).",
+                },
+                resizeTo = new
+                {
+                    type = "integer",
+                    description = "drag with ref + fromEdge: release where ref becomes this many pixels wide (left/right) or tall (top/bottom). One call, no screenshot needed.",
+                },
             },
             required = new[] { "action" },
         };
@@ -72,12 +91,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             "move" => Move(target, ResolvePoint(arguments, "to", reference, origin), hoverMs: 0),
             "hover" => Move(target, ResolvePoint(arguments, "to", reference, origin), HoverMs(arguments)),
             "scroll" => Scroll(target, ResolvePoint(arguments, "to", reference, origin), Ticks(arguments)),
-            "drag" => Drag(
-                target,
-                ResolvePoint(arguments, "from", reference, origin),
-                ResolvePoint(arguments, "to", null, origin),
-                GetArgument<int?>(arguments, "steps") ?? PointerPlan.DefaultDragSteps
-            ),
+            "drag" => DragFromArguments(arguments, target, reference, origin),
             _ => throw new ArgumentException("action must be park, move, hover, scroll or drag"),
         };
         return Task.FromResult(
@@ -92,6 +106,41 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 )
             )
         );
+    }
+
+    private Point DragFromArguments(JsonElement? arguments, InputTarget target, string? reference, Rectangle origin)
+    {
+        var fromEdge = GetStringArgument(arguments, "fromEdge");
+        var resizeTo = GetArgument<int?>(arguments, "resizeTo");
+        var toRef = GetStringArgument(arguments, "toRef");
+        Point from;
+        Point to;
+        if (fromEdge != null || resizeTo != null)
+        {
+            var bounds = refs.ResolveRef(
+                reference ?? throw new ArgumentException("fromEdge and resizeTo need ref")
+            ).BoundingRectangle;
+            from = PointerPlan.EdgePoint(bounds, fromEdge ?? "center");
+            to = resizeTo is { } size ? PointerPlan.ResizeTarget(bounds, fromEdge ?? "right", size) : default;
+        }
+        else
+        {
+            from = ResolvePoint(arguments, "from", reference, origin);
+            to = default;
+        }
+
+        if (resizeTo == null)
+        {
+            to =
+                toRef != null
+                    ? PointerPlan.EdgePoint(
+                        refs.ResolveRef(toRef).BoundingRectangle,
+                        GetStringArgument(arguments, "toEdge") ?? "center"
+                    )
+                    : ResolvePoint(arguments, "to", null, origin);
+        }
+
+        return Drag(target, from, to, GetArgument<int?>(arguments, "steps") ?? PointerPlan.DefaultDragSteps);
     }
 
     private Rectangle WindowOrigin(string handle, nint hwnd)
