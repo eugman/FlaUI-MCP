@@ -10,7 +10,9 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
     public const string ToolName = "te3_native_preflight";
 
     public static Te3NativePreflightTool Create() =>
-        new(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(10) });
+        new(new HttpClient(CreateHandler()) { Timeout = TimeSpan.FromSeconds(10) });
+
+    internal static HttpClientHandler CreateHandler() => new() { AllowAutoRedirect = false };
 
     public override string Name => ToolName;
     public override string Description =>
