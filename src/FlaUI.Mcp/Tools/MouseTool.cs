@@ -120,10 +120,11 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         Point to;
         if (fromEdge != null || resizeTo != null)
         {
-            var bounds = refs.ResolveRef(
-                reference ?? throw new ArgumentException("fromEdge and resizeTo need ref")
-            ).BoundingRectangle;
-            from = PointerPlan.EdgePoint(bounds, fromEdge ?? "center");
+            var geometry = ClickGeometry.Read(
+                refs.ResolveRef(reference ?? throw new ArgumentException("fromEdge and resizeTo need ref"))
+            );
+            var bounds = geometry.Bounds;
+            from = ClickPoint.Choose(geometry, PointerPlan.EdgePoint(bounds, fromEdge ?? "center"));
             to = resizeTo is { } size ? PointerPlan.ResizeTarget(bounds, fromEdge ?? "right", size) : default;
         }
         else
@@ -136,10 +137,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         {
             to =
                 toRef != null
-                    ? PointerPlan.EdgePoint(
-                        refs.ResolveRef(toRef).BoundingRectangle,
-                        GetStringArgument(arguments, "toEdge") ?? "center"
-                    )
+                    ? EdgeOf(toRef, GetStringArgument(arguments, "toEdge") ?? "center")
                     : ResolvePoint(arguments, "to", null, origin);
         }
 
@@ -178,14 +176,14 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             throw new ArgumentException($"{name} point or ref required");
         }
 
-        var element = refs.ResolveRef(reference);
-        if (element.TryGetClickablePoint(out var clickable))
-        {
-            return clickable;
-        }
+        // Never the centre of the bounds: for an offscreen element that is (0,0), a maximized window's caption.
+        return ClickPoint.Choose(ClickGeometry.Read(refs.ResolveRef(reference)));
+    }
 
-        var bounds = element.BoundingRectangle;
-        return new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+    private Point EdgeOf(string reference, string edge)
+    {
+        var geometry = ClickGeometry.Read(refs.ResolveRef(reference));
+        return ClickPoint.Choose(geometry, PointerPlan.EdgePoint(geometry.Bounds, edge));
     }
 
     private int HoverMs(JsonElement? arguments) =>

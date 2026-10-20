@@ -1,4 +1,6 @@
 using System.Drawing;
+using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 
 namespace FlaUI.Mcp.Core;
 
@@ -12,14 +14,74 @@ public sealed record ClickGeometry(
     Point? Clickable,
     Rectangle Bounds,
     IReadOnlyList<Rectangle> ScrollableAncestors
-);
+)
+{
+    private const int MaxAncestors = 50;
 
+    /// <summary>Scroll the element into view when it supports that, then read its geometry.</summary>
+    public static ClickGeometry Read(AutomationElement element)
+    {
+        OperationContext.Check();
+        if (element.Patterns.ScrollItem.TryGetPattern(out var scrollItem))
+        {
+            scrollItem.ScrollIntoView();
+        }
+
+        var scrollers = new List<Rectangle>();
+        var ancestor = element.Parent;
+        for (var depth = 0; ancestor != null && depth < MaxAncestors; depth++)
+        {
+            if (ancestor.Patterns.Scroll.IsSupported)
+            {
+                scrollers.Add(ancestor.BoundingRectangle);
+            }
+
+            if (ancestor.Properties.ControlType.ValueOrDefault == ControlType.Window)
+            {
+                break;
+            }
+
+            ancestor = ancestor.Parent;
+        }
+
+        Point? clickable = element.TryGetClickablePoint(out var point) ? point : null;
+        return new(element.Properties.IsOffscreen.ValueOrDefault, clickable, element.BoundingRectangle, scrollers);
+    }
+}
+
+/// <summary>Where a pointer action may press on an element: only where the element is visible.</summary>
 public static class ClickPoint
 {
-    /// <summary>The point to press for an element, or the requested point on it.</summary>
+    /// <summary>
+    /// The element's clickable point, or <paramref name="requested"/> (such as an edge), checked to lie inside
+    /// the element and every scrolling ancestor. Never guesses the centre of an element it cannot see.
+    /// </summary>
     public static Point Choose(ClickGeometry geometry, Point? requested = null)
     {
-        var bounds = geometry.Bounds;
-        return requested ?? geometry.Clickable ?? new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+        if (geometry.IsOffscreen)
+        {
+            throw Refuse("The element is offscreen (scrolled away or hidden)");
+        }
+
+        if (geometry.Bounds.IsEmpty)
+        {
+            throw Refuse("The element has no on-screen bounds");
+        }
+
+        var point = requested ?? geometry.Clickable ?? throw Refuse("The element reports no clickable point");
+        if (!geometry.Bounds.Contains(point))
+        {
+            throw Refuse($"The point ({point.X},{point.Y}) is outside the element's bounds");
+        }
+
+        if (geometry.ScrollableAncestors.Any(viewport => !viewport.Contains(point)))
+        {
+            throw Refuse($"The point ({point.X},{point.Y}) is scrolled out of view of a containing list or pane");
+        }
+
+        return point;
     }
+
+    private static InvalidOperationException Refuse(string reason) =>
+        new($"{reason}; no input sent. Scroll it into view, then observe again.");
 }

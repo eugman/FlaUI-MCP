@@ -282,7 +282,7 @@ public sealed class GuardedInput : IDisposable
 
     public void Click(AutomationElement element, MouseButton button = MouseButton.Left, bool doubleClick = false)
     {
-        var point = element.GetClickablePoint();
+        var point = ClickPoint.Choose(ClickGeometry.Read(element));
         Verify();
         var clickRoot = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
         if (desktop.ProcessOf(clickRoot) != target.ProcessId || desktop.WindowAt(point) != clickRoot)
