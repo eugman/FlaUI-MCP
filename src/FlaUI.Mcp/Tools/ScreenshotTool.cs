@@ -115,6 +115,12 @@ public class ScreenshotTool : ToolBase
                         + "go stale when the layout moves, and the offset between the two is not constant across DPI "
                         + "states. Implies includeMetadata. Refused when the capture cannot be trusted to map 1:1.",
                 },
+                parkPointer = new
+                {
+                    type = "boolean",
+                    description = "Move the pointer off the window first, so no tooltip or hover highlight lands in the "
+                        + "image (default false). Use it for any capture that will be published.",
+                },
                 allowOccludedPixels = new
                 {
                     type = "boolean",
@@ -155,6 +161,11 @@ public class ScreenshotTool : ToolBase
                 ? f.Deserialize<CaptureFrame>()
                 : null;
         frame?.Validate();
+        if (GetBoolArgument(arguments, "parkPointer", false) && ParkPointer(handle, refId) is { } parkError)
+        {
+            return Task.FromResult(ErrorResult(parkError));
+        }
+
         if (!includeImage && string.IsNullOrWhiteSpace(savePath))
         {
             return Task.FromResult(ErrorResult("includeImage=false requires savePath"));
@@ -607,6 +618,26 @@ public class ScreenshotTool : ToolBase
         catch (Exception ex)
         {
             return Task.FromResult(ErrorResult($"Failed to capture screenshot: {ex.Message}"));
+        }
+    }
+
+    private string? ParkPointer(string? handle, string? refId)
+    {
+        var window = handle ?? (refId == null ? null : _elementRegistry.WindowForRef(refId));
+        var hwnd = window == null ? Win32Desktop.GetForegroundWindow() : _sessionManager.GetWindowHwnd(window);
+        if (Win32Desktop.GetWindowBounds(hwnd) is not { } bounds)
+        {
+            return "parkPointer: window bounds unavailable; no screenshot was taken.";
+        }
+
+        try
+        {
+            PointerParking.Park(bounds);
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            return $"parkPointer: {ex.Message} No screenshot was taken.";
         }
     }
 

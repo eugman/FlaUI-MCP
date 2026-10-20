@@ -31,6 +31,8 @@ internal static class ToolComposition
         registry.RegisterTool(new SendKeysTool(elements, pending, policy, sessions));
         registry.RegisterTool(new ScreenshotTool(sessions, elements, pending, policy));
         registry.RegisterTool(new WindowPlacementTool(elements, pending, sessions));
+        registry.RegisterTool(new WindowStateTool(elements, pending, sessions));
+        registry.RegisterTool(new MouseTool(elements, pending, sessions));
         if (includeDesktopTools)
         {
             registry.RegisterTool(new LaunchTool(sessions));
