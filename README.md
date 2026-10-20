@@ -50,17 +50,19 @@ Then add the server to your MCP client:
 | `windows_focus` | Bring a window to the foreground. |
 | `windows_close` | Ask a window to close. |
 | `windows_place_window` | Move or resize a window. |
+| `windows_set_window_state` | Maximize, restore or minimize a window, and report the state reached. |
 | `windows_snapshot` | Read a window's accessibility tree with element refs. |
-| `windows_find` | Find elements by selector without reading the whole tree. |
+| `windows_find` | Find elements by selector without reading the whole tree. `nameContains` matches part of a name. |
 | `windows_wait` | Wait until a selector matches, or stops matching. |
 | `windows_get_text` | Read an element's text. |
-| `windows_click` | Click or invoke an element. |
+| `windows_click` | Click or invoke an element. `action` picks invoke, select, expand, collapse, toggle or a mouse click; toggle reports the state it reached. |
 | `windows_fill` | Replace a field's value. |
 | `windows_type` | Type text into an element or the focused control. |
 | `windows_paste` | Paste text through the clipboard, which autocomplete can't rewrite. The pasted text stays on the clipboard. |
 | `windows_send_keys` | Send keys or chords such as `Ctrl+A`. |
 | `windows_get_clipboard` | Read the clipboard, for editors that hide their text from UI Automation. |
-| `windows_screenshot` | Capture a window, element or screen region as PNG. |
+| `windows_screenshot` | Capture a window, element or screen region as PNG. `parkPointer` moves the mouse off the window first. |
+| `windows_mouse` | Park, move, hover, scroll or drag the pointer; drags can start on an element's edge and resize it to a given size. |
 | `windows_batch` | Run several actions in one call. |
 | `windows_operation_status` | Check on an action that is still running (for example, one blocked by a modal dialog). |
 

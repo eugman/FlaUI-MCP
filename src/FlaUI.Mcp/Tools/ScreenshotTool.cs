@@ -115,6 +115,12 @@ public class ScreenshotTool : ToolBase
                         + "go stale when the layout moves, and the offset between the two is not constant across DPI "
                         + "states. Implies includeMetadata. Refused when the capture cannot be trusted to map 1:1.",
                 },
+                parkPointer = new
+                {
+                    type = "boolean",
+                    description = "Move the pointer off the window first, so no tooltip or hover highlight lands in the "
+                        + "image (default false). Use it for any capture that will be published.",
+                },
                 allowOccludedPixels = new
                 {
                     type = "boolean",
@@ -208,6 +214,12 @@ public class ScreenshotTool : ToolBase
             return Task.FromResult(ErrorResult(pathError));
         }
 
+        // Park only once the call is known to be valid, so a refused call never moves the real mouse.
+        if (GetBoolArgument(arguments, "parkPointer", false) && ParkPointer(handle, refId) is { } parkError)
+        {
+            return Task.FromResult(ErrorResult(parkError));
+        }
+
         try
         {
             OperationContext.Check();
@@ -244,7 +256,7 @@ public class ScreenshotTool : ToolBase
                         Win32Desktop.ObserveZOrder(),
                         guardTarget,
                         Win32Desktop.GetProcessId(guardTarget),
-                        captured
+                        GuardRect(captured, frame)
                     );
                 }
 
@@ -452,6 +464,11 @@ public class ScreenshotTool : ToolBase
             else if (!string.IsNullOrEmpty(handle))
             {
                 targetHwnd = _sessionManager.GetWindowHwnd(handle);
+                if (WindowIsGone(targetHwnd))
+                {
+                    return Task.FromResult(ErrorResult(ClosedWindowMessage(handle)));
+                }
+
                 if (!_processPolicy.IsProcessAllowed(_sessionManager.GetWindowProcessId(handle)))
                 {
                     return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Screenshot target")));
@@ -610,6 +627,43 @@ public class ScreenshotTool : ToolBase
         }
     }
 
+    private string? ParkPointer(string? handle, string? refId)
+    {
+        var window = handle ?? (refId == null ? null : _elementRegistry.WindowForRef(refId));
+        var hwnd = window == null ? Win32Desktop.GetForegroundWindow() : _sessionManager.GetWindowHwnd(window);
+        if (window != null && WindowIsGone(hwnd))
+        {
+            return ClosedWindowMessage(window);
+        }
+
+        if (!_processPolicy.IsProcessAllowed(Win32Desktop.GetProcessId(hwnd)))
+        {
+            return _processPolicy.DescribeDenied("parkPointer target");
+        }
+
+        if (Win32Desktop.GetWindowBounds(hwnd) is not { } bounds)
+        {
+            return "parkPointer: window bounds unavailable; no screenshot was taken.";
+        }
+
+        try
+        {
+            PointerParking.Park(bounds);
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            return $"parkPointer: {ex.Message} No screenshot was taken.";
+        }
+    }
+
+    // A cached handle can outlive its window (a dialog that closed, an app that exited). Report that,
+    // not the allowlist refusal its dead process would otherwise produce.
+    internal static bool WindowIsGone(nint hwnd) => hwnd != 0 && Win32Desktop.GetProcessId(hwnd) == 0;
+
+    internal static string ClosedWindowMessage(string handle) =>
+        $"Window {handle} has closed. Get a current handle from windows_list_windows; no screenshot was taken.";
+
     /// <summary>An element's rectangle as measured in the image that was returned.</summary>
     /// <param name="Ref">The element ref this describes.</param>
     /// <param name="X">Left edge in image pixels; negative when the element starts outside the crop.</param>
@@ -649,6 +703,30 @@ public class ScreenshotTool : ToolBase
         var visible = new System.Drawing.Rectangle(0, 0, frame?.Width ?? imageWidth, frame?.Height ?? imageHeight);
         var located = new System.Drawing.Rectangle(x, y, element.Width, element.Height);
         return new(reference, x, y, element.Width, element.Height, !visible.Contains(located));
+    }
+
+    /// <summary>
+    /// The screen rectangle the occlusion guard checks: the part of the capture a crop keeps. A window
+    /// over pixels the frame throws away cannot reach the returned image, so it must not refuse it.
+    /// </summary>
+    /// <param name="sourceBounds">Screen rectangle the capture covers; its origin is image pixel (0,0).</param>
+    /// <param name="frame">The crop applied to the capture, if any.</param>
+    /// <returns>The kept region in screen coordinates.</returns>
+    internal static System.Drawing.Rectangle GuardRect(System.Drawing.Rectangle sourceBounds, CaptureFrame? frame)
+    {
+        if (frame == null)
+        {
+            return sourceBounds;
+        }
+
+        var kept = new System.Drawing.Rectangle(
+            sourceBounds.X + frame.X,
+            sourceBounds.Y + frame.Y,
+            frame.Width,
+            frame.Height
+        );
+        kept.Intersect(sourceBounds);
+        return kept;
     }
 
     /// <summary>Whether a capture method reads pixels off the screen rather than the window's own surface.</summary>

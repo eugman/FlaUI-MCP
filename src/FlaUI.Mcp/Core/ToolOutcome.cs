@@ -16,6 +16,10 @@ public sealed record ToolOutcome(
     [JsonPropertyName("verification"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Verification { get; init; }
 
+    /// <summary>The tool's text result, repeated here for clients that only show structuredContent.</summary>
+    [JsonPropertyName("message"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; init; }
+
     [JsonIgnore]
     public bool IsPending => Provider == "pending" || Dispatch == "timed_out_pending";
 

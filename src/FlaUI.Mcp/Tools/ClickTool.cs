@@ -23,7 +23,7 @@ public class ClickTool : ToolBase
     public override string Name => "windows_click";
 
     public override string Description =>
-        "Click an element by its ref (from windows_snapshot). Prefers Invoke pattern for reliability, "
+        "Click an element by its ref (from windows_snapshot). Prefers Invoke pattern for reliability (tree and list rows: select), "
         + "falls back to mouse click if needed. Menu items and controls whose name ends in \"...\" get a physical click "
         + "by default, because an Invoke that opens a menu or dialog blocks UI Automation until it closes; pass physical=false to force Invoke. "
         + "If the click opens a modal dialog, returns immediately with the dialog title instead of waiting for the dialog to close. "
@@ -53,6 +53,12 @@ public class ClickTool : ToolBase
                     description = "Mouse button to click (default: left)",
                 },
                 doubleClick = new { type = "boolean", description = "Whether to double-click (default: false)" },
+                action = new
+                {
+                    type = "string",
+                    @enum = new[] { "invoke", "select", "expand", "collapse", "toggle", "click" },
+                    description = "Pattern to use instead of the default choice. Tree and list rows default to select, because Invoke on a tree row toggles its expansion; expand/collapse open or close a tree node without selecting it; click forces a mouse click.",
+                },
             },
             required = new[] { "ref" },
         };
@@ -90,53 +96,39 @@ public class ClickTool : ToolBase
             var physical =
                 requestedPhysical ?? PrefersPhysical(element.Properties.ControlType.ValueOrDefault, elementName);
 
-            // Try Invoke pattern first (most reliable for buttons)
-            if (!physical && button == "left" && !doubleClick && element.Patterns.Invoke.IsSupported)
+            var action = ChooseAction(
+                GetStringArgument(arguments, "action"),
+                physical || button != "left" || doubleClick,
+                element.Properties.ControlType.ValueOrDefault,
+                pattern => Supports(element, pattern)
+            );
+            var fallbackNote = "";
+            if (action != null)
             {
-                // Pattern mutations share the input lease so they cannot interleave with physical input.
-                using var lease = GuardedInput.AcquireLease();
-                var invokePattern = element.Patterns.Invoke.Pattern;
-                var result = ModalAwareInvoker.Execute(
-                    processId,
-                    $"Invoke on '{elementName}'",
-                    () => MutationGuard.Execute(Validate, () => invokePattern.Invoke()),
-                    _invokeTracker
-                );
-                return Task.FromResult(PatternResult(result, $"Invoked {elementName}"));
-            }
+                // In some tree controls, clicking a row that is already selected starts inline rename, and the
+                // next keystroke then renames the object; selecting it again is never needed.
+                if (
+                    action == "select"
+                    && element.Properties.ControlType.ValueOrDefault == ControlType.TreeItem
+                    && IsSelected(element)
+                )
+                {
+                    return Task.FromResult(TextResult($"{elementName} is already selected; nothing was clicked"));
+                }
 
-            // Try Toggle pattern for checkboxes
-            if (!physical && button == "left" && !doubleClick && element.Patterns.Toggle.IsSupported)
-            {
-                using var lease = GuardedInput.AcquireLease();
-                var togglePattern = element.Patterns.Toggle.Pattern;
-                var result = ModalAwareInvoker.Execute(
-                    processId,
-                    $"Toggle on '{elementName}'",
-                    () => MutationGuard.Execute(Validate, () => togglePattern.Toggle()),
-                    _invokeTracker
-                );
-                // Providers may update asynchronously or return a cached pre-toggle value.
-                return Task.FromResult(
-                    PatternResult(
-                        result,
-                        $"Sent toggle request to {elementName}; inspect fresh state to verify the result"
-                    )
-                );
-            }
+                var patternResult = RunPattern(element, action, processId, elementName, Validate);
+                if (
+                    action != "select"
+                    || patternResult.IsError == true
+                    || patternResult.Outcome?.IsPending == true
+                    || Settled(() => IsSelected(element), 300)
+                )
+                {
+                    return Task.FromResult(patternResult);
+                }
 
-            // Try SelectionItem pattern for list items
-            if (!physical && button == "left" && !doubleClick && element.Patterns.SelectionItem.IsSupported)
-            {
-                using var lease = GuardedInput.AcquireLease();
-                var selectionPattern = element.Patterns.SelectionItem.Pattern;
-                var result = ModalAwareInvoker.Execute(
-                    processId,
-                    $"Select on '{elementName}'",
-                    () => MutationGuard.Execute(Validate, () => selectionPattern.Select()),
-                    _invokeTracker
-                );
-                return Task.FromResult(PatternResult(result, $"Selected {elementName}"));
+                // Some tree providers accept Select() and change nothing; a real click selects.
+                fallbackNote = " (Select changed nothing, so it was clicked instead)";
             }
 
             // Fall back to mouse click
@@ -161,7 +153,7 @@ public class ClickTool : ToolBase
                 input.Click(element, mouseButton);
                 if (!opensDialog)
                 {
-                    return Task.FromResult(TextResult($"Clicked {elementName}"));
+                    return Task.FromResult(TextResult($"Clicked {elementName}{fallbackNote}"));
                 }
                 // A physical click returns before its dialog exists; report the window so agents don't list too early.
                 for (var waited = 0; waited < 2000; waited += 100)
@@ -198,6 +190,144 @@ public class ClickTool : ToolBase
                 ErrorResult($"Failed to click {refId}: {ClickFailure(ex.Message, ex.GetType().Name, windows)}")
             );
         }
+    }
+
+    internal static readonly string[] PatternActions = ["invoke", "select", "expand", "collapse", "toggle"];
+
+    /// <summary>
+    /// The pattern a left click uses, or null for a mouse click. Tree and list rows select: their
+    /// Invoke usually toggles expansion or opens the item, which is rarely what "click" meant.
+    /// </summary>
+    internal static string? ChooseAction(
+        string? requested,
+        bool mouseOnly,
+        ControlType type,
+        Func<string, bool> supports
+    )
+    {
+        if (requested != null)
+        {
+            if (requested == "click")
+            {
+                return null;
+            }
+
+            if (!PatternActions.Contains(requested))
+            {
+                throw new ArgumentException("action must be invoke, select, expand, collapse, toggle or click");
+            }
+
+            return supports(requested)
+                ? requested
+                : throw new InvalidOperationException($"This control does not support '{requested}'.");
+        }
+
+        if (mouseOnly)
+        {
+            return null;
+        }
+
+        if (type is ControlType.TreeItem or ControlType.ListItem && supports("select"))
+        {
+            return "select";
+        }
+
+        return new[] { "invoke", "toggle", "select" }.FirstOrDefault(supports);
+    }
+
+    private static bool IsSelected(AutomationElement element) =>
+        element.Patterns.SelectionItem.TryGetPattern(out var selection)
+        && selection.IsSelected.TryGetValue(out var selected)
+        && selected;
+
+    /// <summary>Polls a condition until it holds or the time runs out; providers update state asynchronously.</summary>
+    private static bool Settled(Func<bool> condition, int timeoutMs)
+    {
+        var held = condition();
+        for (var waited = 0; !held && waited < timeoutMs; waited += 50)
+        {
+            Thread.Sleep(50);
+            held = condition();
+        }
+
+        return held;
+    }
+
+    private static ToggleState? ReadToggle(AutomationElement element) =>
+        element.Patterns.Toggle.TryGetPattern(out var toggle) && toggle.ToggleState.TryGetValue(out var state)
+            ? state
+            : null;
+
+    /// <summary>What a toggle did, from the state read before and after it.</summary>
+    internal static string ToggleOutcome(string name, ToggleState? before, ToggleState? after) =>
+        (before, after) switch
+        {
+            (null, _) or (_, null) => $"Sent toggle request to {name}; its state could not be read",
+            var (b, a) when b == a => $"Toggled {name}, but it is still {b}",
+            var (b, a) => $"{name}: {b} -> {a}",
+        };
+
+    private static bool Supports(AutomationElement element, string action) =>
+        action switch
+        {
+            "invoke" => element.Patterns.Invoke.IsSupported,
+            "toggle" => element.Patterns.Toggle.IsSupported,
+            "select" => element.Patterns.SelectionItem.IsSupported,
+            "expand" or "collapse" => element.Patterns.ExpandCollapse.IsSupported,
+            _ => false,
+        };
+
+    private McpToolResult RunPattern(
+        AutomationElement element,
+        string action,
+        int processId,
+        string elementName,
+        Action validate
+    )
+    {
+        (string verb, Action call) = action switch
+        {
+            "invoke" => ("Invoke", (Action)(() => element.Patterns.Invoke.Pattern.Invoke())),
+            "toggle" => ("Toggle", () => element.Patterns.Toggle.Pattern.Toggle()),
+            "select" => ("Select", () => element.Patterns.SelectionItem.Pattern.Select()),
+            "expand" => ("Expand", () => element.Patterns.ExpandCollapse.Pattern.Expand()),
+            _ => ("Collapse", () => element.Patterns.ExpandCollapse.Pattern.Collapse()),
+        };
+
+        var toggleBefore = action == "toggle" ? ReadToggle(element) : null;
+        // Pattern mutations share the input lease so they cannot interleave with physical input.
+        using var lease = GuardedInput.AcquireLease();
+        var result = ModalAwareInvoker.Execute(
+            processId,
+            $"{verb} on '{elementName}'",
+            () => MutationGuard.Execute(validate, call),
+            _invokeTracker
+        );
+        // Providers may update toggle state asynchronously, so wait briefly for it to move.
+        ToggleState? toggleAfter = null;
+        if (action == "toggle" && result.Outcome == PatternCallOutcome.Completed)
+        {
+            Settled(
+                () =>
+                {
+                    toggleAfter = ReadToggle(element);
+                    return toggleAfter != toggleBefore;
+                },
+                500
+            );
+        }
+
+        var message = action switch
+        {
+            "toggle" => result.Outcome == PatternCallOutcome.Completed
+                ? ToggleOutcome(elementName, toggleBefore, toggleAfter)
+                : $"Sent toggle request to {elementName}",
+            "invoke" => $"Invoked {elementName}",
+            "select" => $"Selected {elementName}",
+            "expand" => $"Expanded {elementName}",
+            _ => $"Collapsed {elementName}",
+        };
+        return PatternResult(result, message);
     }
 
     // An empty reason invites a blind retry; name the exception and any dialog that seems to block input.
