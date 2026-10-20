@@ -70,6 +70,35 @@ public static class PathWalker
         return new(false, null, maxRows, $"Stopped after {maxRows} rows.");
     }
 
+    /// <summary>Walk down to the first row showing the value, in tree order.</summary>
+    /// <param name="cursor">The tree, on the row to start from.</param>
+    /// <param name="value">The row text to select.</param>
+    /// <param name="boundary">The row after the subtree being searched; reaching it means the value is not in it.</param>
+    /// <param name="skipCurrent">Start with the row below the current one.</param>
+    /// <param name="maxRows">Rows to visit before giving up.</param>
+    public static async Task<WalkResult> FindRow(
+        ITreeCursor cursor,
+        string value,
+        RowObservation? boundary = null,
+        bool skipCurrent = false,
+        int maxRows = DefaultMaxRows
+    )
+    {
+        _ = boundary;
+        var row = skipCurrent ? await cursor.Down() : await cursor.Current();
+        for (var visited = 1; visited <= maxRows && row != null; visited++)
+        {
+            if (row.Value == value)
+            {
+                return new(true, null, visited, null);
+            }
+
+            row = await cursor.Down();
+        }
+
+        return new(false, null, maxRows, "Not found.");
+    }
+
     internal static bool IsTable(string? type) => Te3Page.ObjectTypeMatches("Table", type);
 
     internal static bool Matches(

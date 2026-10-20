@@ -85,4 +85,54 @@ public sealed class PathWalkerTests
         Assert.False(walk.Found);
         Assert.Equal(2, tree.Downs);
     }
+
+    [Fact]
+    public async Task AChildWalkStopsAtTheRowAfterTheExpandedParent()
+    {
+        // Sales is expanded and has no Date child; the next table is Date. Pressing Down until any
+        // "Date" row is selected used to select that table, outside the parent.
+        var tree = new FakeTree(
+            new("Sales", "Table"),
+            new("Amount", "Data Column"),
+            new("Total", "Measure"),
+            new("Date", "Calculated Table"),
+            new("Date", "Calculated Table Column")
+        );
+        var walk = await PathWalker.FindRow(tree, "Date", boundary: new("Date", "Calculated Table"), skipCurrent: true);
+        Assert.False(walk.Found);
+        Assert.Contains("'Date'", walk.Reason);
+        Assert.Equal(3, tree.Downs);
+    }
+
+    [Fact]
+    public async Task AChildNamedLikeTheNextTableIsStillFound()
+    {
+        // The boundary is the row itself (text and status-bar type), not just its text.
+        var walk = await PathWalker.FindRow(
+            new FakeTree(new("Sales", "Table"), new("Date", "Data Column"), new("Date", "Calculated Table")),
+            "Date",
+            boundary: new("Date", "Calculated Table"),
+            skipCurrent: true
+        );
+        Assert.True(walk.Found);
+        Assert.Equal(1, walk.RowsVisited);
+    }
+
+    [Fact]
+    public async Task AFilteredRowIsTheFirstMatchInTreeOrder()
+    {
+        // A search can show a table and its partition with the same text; the table comes first.
+        var tree = new FakeTree(new("Invoices", "Table"), new("Invoices", "Partition"));
+        var walk = await PathWalker.FindRow(tree, "Invoices");
+        Assert.True(walk.Found);
+        Assert.Equal(0, tree.Downs);
+    }
+
+    [Fact]
+    public async Task AWalkPastTheLastRowSaysSo()
+    {
+        var walk = await PathWalker.FindRow(new FakeTree(new RowObservation("Tables", "Tables")), "Roles");
+        Assert.False(walk.Found);
+        Assert.Contains("end of the tree", walk.Reason);
+    }
 }
