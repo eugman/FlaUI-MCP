@@ -44,7 +44,7 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
                 compatibleServer = new
                 {
                     type = "string",
-                    description = "Optional serverInfo \"name/version\" observed for TE3 3.27.1; required before its unannotated get_workspace_info is called.",
+                    description = "Optional serverInfo \"name/version\" observed for TE3 3.27.1 (\"TE3/3.27.1\"); required before its unannotated get_workspace_info is called, and only that allowlisted server qualifies.",
                 },
             },
             required = new[] { "endpoint", "identityTool", "identityProperty", "expectedIdentity" },

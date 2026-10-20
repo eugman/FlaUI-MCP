@@ -162,7 +162,7 @@ Neither suite touches the desktop. `tests/FlaUI.Mcp.IntegrationTests` launches t
 
 `te3_native_preflight` exposes `NativeMcpPreflight` through the MCP server. Supply an explicit
 loopback `endpoint`, `identityTool`, `identityProperty`, and `expectedIdentity`; optional `tokenEnv` names an environment variable holding the bearer token. It performs initialize, tools/list, and exactly one configured identity
-tool call. The identity tool must advertise `annotations.readOnlyHint=true`, except TE3 3.27.1's exact `get_workspace_info` definition (empty argument schema and saved read-only description), which lacks annotations. That exception also requires `compatibleServer`: the server's `serverInfo` as `name/version`, exactly as observed live (the refusal message reports what the server sent, so one call shows the value to pass). Other unannotated tools, and that tool on any other server identity, are rejected. Its
+tool call. The identity tool must advertise `annotations.readOnlyHint=true`, except TE3 3.27.1's exact `get_workspace_info` definition (empty argument schema and saved read-only description), which lacks annotations. That exception applies only when the server reports the hard-coded allowlisted `serverInfo` `TE3/3.27.1` (a missing version never matches), and it also requires `compatibleServer: "TE3/3.27.1"` as a second factor the caller observed. Echoing whatever another server reports does not enable it. Other unannotated tools, and that tool on any other server identity, are rejected. Its
 configured response property must equal the expected disposable model identity.
 A missing server, denied token, missing tool, unannotated tool, or model mismatch
 fails before any follow-on work. Each inspection uses a fresh session; there is no

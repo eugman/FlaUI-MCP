@@ -13,8 +13,9 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
     public static readonly TimeSpan DefaultOverallTimeout = TimeSpan.FromSeconds(25);
 
     /// <param name="CompatibleServer">
-    /// "name/version" exactly as the server reports serverInfo. Required before the unannotated TE3 3.27.1
-    /// workspace identity tool may be called; a different server or build is refused.
+    /// "name/version" the caller observed in serverInfo. Required, as a second factor, before the unannotated
+    /// TE3 3.27.1 workspace identity tool may be called; it must equal the hard-coded allowlisted server, and the
+    /// server must report that same identity. Any other server or build is refused.
     /// </param>
     public sealed record Request(
         Uri Endpoint,
@@ -73,7 +74,6 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
             serverInfo.TryGetProperty("version", out var reported) && reported.ValueKind == JsonValueKind.String
                 ? reported.GetString()
                 : null;
-        var serverIdentity = server + "/" + serverVersion;
 
         session.SetProtocolVersion(version);
         await session.NotifyInitialized(token);
@@ -95,7 +95,7 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
 
         if (!IsDeclaredReadOnly(identityTool))
         {
-            RequireWorkspaceCompatibility(identityTool, request.CompatibleServer, serverIdentity);
+            RequireWorkspaceCompatibility(identityTool, request.CompatibleServer, server, serverVersion);
         }
 
         var identityResult = await session.Send(
@@ -119,6 +119,10 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
 
     // TE3 3.27.1 advertises no tool annotations. This exact, empty-argument workspace
     // identity tool is the only compatibility exception; every other tool requires readOnlyHint=true.
+    private const string WorkspaceServerName = "TE3";
+    private const string WorkspaceServerVersion = "3.27.1";
+    private const string WorkspaceServer = WorkspaceServerName + "/" + WorkspaceServerVersion;
+
     private const string WorkspaceDescription =
         "Identifies this Tabular Editor instance and the semantic model it currently has open: model name, how the model is loaded (file/folder/connected), unsaved-changes state and compatibility level. Call this first to confirm which instance and model you are talking to.";
 
@@ -128,10 +132,15 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
         && hint.ValueKind == JsonValueKind.True;
 
     /// <summary>
-    /// The only unannotated tool ever called: TE3 3.27.1's exact workspace tool, and only on the server
-    /// build the caller named after observing it. The error reports the server identity to name.
+    /// The only unannotated tool ever called: TE3 3.27.1's exact workspace tool, only when the server reports
+    /// the allowlisted name and version (a missing version never matches) and the caller named that same server.
     /// </summary>
-    private static void RequireWorkspaceCompatibility(JsonElement tool, string? compatibleServer, string serverIdentity)
+    private static void RequireWorkspaceCompatibility(
+        JsonElement tool,
+        string? compatibleServer,
+        string server,
+        string? serverVersion
+    )
     {
         if (!IsKnownWorkspaceTool(tool))
         {
@@ -140,11 +149,22 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
             );
         }
 
-        if (!string.Equals(compatibleServer, serverIdentity, StringComparison.Ordinal))
+        if (
+            !string.Equals(server, WorkspaceServerName, StringComparison.Ordinal)
+            || !string.Equals(serverVersion, WorkspaceServerVersion, StringComparison.Ordinal)
+        )
         {
             throw new InvalidOperationException(
-                $"Native MCP identity tool lacks readOnlyHint. The TE3 3.27.1 workspace exception applies only when "
-                    + $"compatibleServer names this server exactly; it reports \"{serverIdentity}\"."
+                "Native MCP identity tool lacks readOnlyHint, and the workspace exception applies only to a server "
+                    + $"reporting \"{WorkspaceServer}\"."
+            );
+        }
+
+        if (!string.Equals(compatibleServer, WorkspaceServer, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Native MCP identity tool lacks readOnlyHint. The TE3 3.27.1 workspace exception also requires "
+                    + $"compatibleServer \"{WorkspaceServer}\", as observed in serverInfo."
             );
         }
     }
