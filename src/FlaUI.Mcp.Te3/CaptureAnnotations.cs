@@ -175,6 +175,7 @@ public static class CaptureAnnotations
     /// <summary>Writes SOURCE-annotated.png next to the clean checkpoint and records it in the manifest.</summary>
     public static void Create(string manifestPath, string specPath)
     {
+        using var gate = CheckpointOutput.Lock(manifestPath);
         var manifest = ArtifactFiles.ReadManifest(manifestPath);
         var spec =
             JsonSerializer.Deserialize<AnnotationSpec>(File.ReadAllText(specPath), RunConfig.Json)
@@ -200,24 +201,15 @@ public static class CaptureAnnotations
             throw new IOException("Clean checkpoint changed since capture");
         }
 
-        var output = Path.Combine(runDirectory, spec.Checkpoint + ".png");
-        if (manifest.Screenshots.ContainsKey(spec.Checkpoint) || File.Exists(output))
-        {
-            throw new IOException("Annotated checkpoint already exists");
-        }
-
-        using (var source = new Bitmap(sourcePath))
-        using (var annotated = Render(source, spec))
-        using (var file = new FileStream(output, FileMode.CreateNew, FileAccess.Write))
-        {
-            annotated.Save(file, ImageFormat.Png);
-        }
-
-        manifest.Screenshots.Add(spec.Checkpoint, output);
-        manifest.ScreenshotHashes.Add(spec.Checkpoint, ArtifactFiles.Sha256(output));
-        manifest.Annotations.Add(spec.Checkpoint, spec);
-        AtomicJournal.Write(manifestPath, manifest, RunConfig.Json);
-        manifest.Output = runDirectory;
-        ArtifactFiles.WriteIndex(manifest);
+        using var source = new Bitmap(sourcePath);
+        using var annotated = Render(source, spec);
+        CheckpointOutput.Publish(
+            manifestPath,
+            manifest,
+            spec.Checkpoint,
+            Path.Combine(runDirectory, spec.Checkpoint + ".png"),
+            file => annotated.Save(file, ImageFormat.Png),
+            () => manifest.Annotations.Add(spec.Checkpoint, spec)
+        );
     }
 }

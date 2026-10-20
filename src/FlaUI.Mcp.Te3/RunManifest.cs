@@ -39,4 +39,8 @@ public class RunManifest
     public Dictionary<string, AnnotationSpec> Annotations { get; set; } = [];
     public Dictionary<string, string> SourceHashes { get; set; } = [];
     public Dictionary<string, string> ModelChecks { get; set; } = [];
+
+    /// <summary>Fields this version does not know, kept so rewriting a newer runner's manifest loses nothing.</summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? Unknown { get; set; }
 }

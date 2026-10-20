@@ -206,9 +206,26 @@ public static class ArtifactFiles
     public static string Sha256(string path) =>
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
 
-    public static RunManifest ReadManifest(string path) =>
-        JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(path), RunConfig.Json)
-        ?? throw new ArgumentException("Missing manifest");
+    public static RunManifest ReadManifest(string path)
+    {
+        var json = File.ReadAllText(path);
+        // SchemaVersion defaults to the current version, so a manifest without one would silently claim it.
+        using (var document = JsonDocument.Parse(json))
+        {
+            if (
+                document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.EnumerateObject().Any(p => p.NameEquals("schemaVersion"))
+            )
+            {
+                throw new InvalidDataException(
+                    $"{path} has no schemaVersion; refusing to guess which runner wrote it."
+                );
+            }
+        }
+
+        return JsonSerializer.Deserialize<RunManifest>(json, RunConfig.Json)
+            ?? throw new ArgumentException("Missing manifest");
+    }
 
     public static Task Promote(
         string runDirectory,

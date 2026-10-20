@@ -32,6 +32,7 @@ public static class CaptureComposition
 {
     public static void Create(string manifestPath, string specPath, string output)
     {
+        using var gate = CheckpointOutput.Lock(manifestPath);
         var manifest = ArtifactFiles.ReadManifest(manifestPath);
         var spec =
             JsonSerializer.Deserialize<CompositionSpec>(File.ReadAllText(specPath), RunConfig.Json)
@@ -49,21 +50,15 @@ public static class CaptureComposition
             throw new ArgumentException("Composition output must be PNG");
         }
 
-        if (manifest.Screenshots.ContainsKey(spec.Checkpoint) || File.Exists(output))
-        {
-            throw new IOException("Composition checkpoint or output already exists");
-        }
-
-        void RegisterOutput()
-        {
-            manifest.Screenshots.Add(spec.Checkpoint, output);
-            manifest.ScreenshotHashes.Add(spec.Checkpoint, ArtifactFiles.Sha256(output));
-            manifest.Compositions.Add(spec.Checkpoint, spec);
-            AtomicJournal.Write(manifestPath, manifest, RunConfig.Json);
-            // Index rendering uses the actual manifest location, never a stale output path.
-            manifest.Output = runDirectory;
-            ArtifactFiles.WriteIndex(manifest);
-        }
+        void Publish(Image image) =>
+            CheckpointOutput.Publish(
+                manifestPath,
+                manifest,
+                spec.Checkpoint,
+                output,
+                file => image.Save(file, ImageFormat.Png),
+                () => manifest.Compositions.Add(spec.Checkpoint, spec)
+            );
 
         var images = new List<Bitmap>();
         try
@@ -128,12 +123,7 @@ public static class CaptureComposition
                     }
                 }
 
-                using (var cropFile = new FileStream(output, FileMode.CreateNew, FileAccess.Write))
-                {
-                    images[0].Save(cropFile, ImageFormat.Png);
-                }
-
-                RegisterOutput();
+                Publish(images[0]);
                 return;
             }
 
@@ -158,12 +148,7 @@ public static class CaptureComposition
                 }
             }
 
-            using (var file = new FileStream(output, FileMode.CreateNew, FileAccess.Write))
-            {
-                canvas.Save(file, ImageFormat.Png);
-            }
-
-            RegisterOutput();
+            Publish(canvas);
         }
         finally
         {
