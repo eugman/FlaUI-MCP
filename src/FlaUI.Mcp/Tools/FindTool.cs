@@ -5,11 +5,16 @@ namespace FlaUI.Mcp.Tools;
 
 public sealed class FindTool(ElementQuery query) : ToolBase
 {
-    internal static readonly JsonSerializerOptions SelectorOptions = new() { PropertyNameCaseInsensitive = true };
+    // Unknown keys are errors: a dropped key would leave an empty selector that matches everything.
+    internal static readonly JsonSerializerOptions SelectorOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow,
+    };
 
     public override string Name => "windows_find";
     public override string Description =>
-        "Find controls with exact UIA selectors and optional ancestor scope; returns compact properties, patterns and fresh refs. Omit selector for bounded raw-tree inspection. An absent state field means unknown. Does not invalidate snapshot refs.";
+        "Find controls with exact UIA selectors (nameContains for a partial name) and optional ancestor scope (within, e.g. a pane's TitleBar to tell identical Close buttons apart; ancestry:true shows each match's parents); returns compact properties, patterns and fresh refs. Omit selector for bounded raw-tree inspection. An absent state field means unknown. Does not invalidate snapshot refs.";
     internal static object SelectorSchema =>
         new
         {
@@ -18,6 +23,11 @@ public sealed class FindTool(ElementQuery query) : ToolBase
             {
                 automationId = new { type = "string" },
                 name = new { type = "string" },
+                nameContains = new
+                {
+                    type = "string",
+                    description = "Case-insensitive substring of name. Use it when you know only part of a label.",
+                },
                 rootOnly = new { type = "boolean", description = "Match only the search root, not descendants." },
                 controlType = new { type = "string", description = "UIA type, e.g. Button, Edit, Tree, MenuItem" },
                 className = new { type = "string" },
@@ -162,7 +172,8 @@ public sealed class FindTool(ElementQuery query) : ToolBase
     {
         if (
             found.Elements.Count > 0
-            || (selector.Name ?? selector.ControlType ?? selector.Value ?? selector.Text) == null
+            || (selector.Name ?? selector.NameContains ?? selector.ControlType ?? selector.Value ?? selector.Text)
+                == null
         )
         {
             return null;

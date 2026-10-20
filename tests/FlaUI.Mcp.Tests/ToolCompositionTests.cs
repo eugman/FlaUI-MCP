@@ -21,9 +21,10 @@ public sealed class ToolCompositionTests
         using var mcp = new AutomationHost(new ProcessPolicy(["test-app"]), includeDesktopTools: true);
         var shared = runner.Tools.GetToolDefinitions().ToDictionary(tool => tool.Name);
         var all = mcp.Tools.GetToolDefinitions().ToDictionary(tool => tool.Name);
-        // 12: the original eleven plus windows_get_clipboard, which the runner needs
-        // because a Scintilla editor exposes no text to read back any other way.
-        Assert.Equal(12, shared.Count);
+        // 14: the original eleven plus windows_get_clipboard, which the runner needs
+        // because a Scintilla editor exposes no text to read back any other way, and
+        // windows_set_window_state and windows_mouse, which shot setup needs.
+        Assert.Equal(14, shared.Count);
         Assert.Contains("windows_paste", shared.Keys);
         foreach (var (name, definition) in shared)
         {
