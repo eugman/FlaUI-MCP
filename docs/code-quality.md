@@ -16,6 +16,17 @@ Run `pwsh scripts/setup.ps1` once after cloning. It installs CSharpier and turns
 
 `pwsh scripts/format.ps1` fixes everything a tool can fix: braces, blank lines and layout.
 
+## Coverage and mutation testing
+
+Both use only the no-focus tests in `tests/FlaUI.Mcp.Tests`, and build into `local/build-background` (gitignored).
+
+| Command | What it does |
+|---|---|
+| `pwsh scripts/coverage.ps1` | Runs the tests with coverlet and renders line and branch coverage to `local/build-background/coverage/index.html`. Needs the `reportgenerator` global tool. |
+| `pwsh scripts/mutation.ps1` or `pwsh scripts/check.ps1 -Mutation` | Runs Stryker (local tool in `.config/dotnet-tools.json`) on a worktree of `HEAD`, so commit first. `stryker-config.json` limits mutation to the guard and protocol files, with concurrency 2. The run stops after 45 minutes (`-Minutes`). The report goes to `local/build-background/StrykerOutput`. |
+
+`check.ps1` runs mutation testing only with `-Mutation`; it is off by default. Each surviving mutant gets a test that kills it, or a line in [mutation.md](mutation.md) saying why it is equivalent.
+
 ## Limits
 
 The build fails when new code breaks these. They are set in `.editorconfig` and `SonarLint.xml`.

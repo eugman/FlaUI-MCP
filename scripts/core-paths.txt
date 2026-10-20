@@ -18,3 +18,7 @@ docs/code-quality.md
 .gitattributes
 Directory.Build.props
 SonarLint.xml
+scripts/coverage.ps1
+scripts/mutation.ps1
+stryker-config.json
+docs/mutation.md
