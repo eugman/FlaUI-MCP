@@ -74,6 +74,32 @@ public sealed class GenericHardeningTests
     }
 
     [Fact]
+    public async Task ClientCancelQuarantinesUnderACancelledLabel()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tracker = new PendingInvokeTracker(_ => 456);
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10))
+        {
+            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            Pending = tracker,
+        };
+        registry.RegisterTool(new AwaitingTool(release.Task));
+        using var cancel = new CancellationTokenSource();
+        try
+        {
+            var call = registry.ExecuteToolAsync("awaiting", null, cancel.Token);
+            await cancel.CancelAsync();
+            await call.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(tracker.TryGetPending(123, out var stranded));
+            Assert.Equal("cancelled awaiting", stranded.Description);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [Fact]
     public async Task TimeoutWithoutAKnownProcessQuarantinesNothing()
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
