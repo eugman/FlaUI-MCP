@@ -36,7 +36,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
                         {
                             type = "integer",
                             minimum = 1,
-                            description = "TabularEditor3 process ID. Optional when exactly one TE3 is running. Handles and refs from other MCP servers are not accepted.",
+                            description = "TabularEditor3 process ID. Optional when exactly one TE3 is running. Takes a process ID, not a window handle or element ref.",
                         },
                     },
                     additionalProperties = false,
@@ -49,7 +49,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
                 {
                     type = "integer",
                     minimum = 1,
-                    description = "TabularEditor3 process ID. Optional when exactly one TE3 is running. Handles and refs from other MCP servers are not accepted.",
+                    description = "TabularEditor3 process ID. Optional when exactly one TE3 is running. Takes a process ID, not a window handle or element ref.",
                 },
                 ["destination"] = new { type = "string", @enum = Te3Destinations.Ids },
             };

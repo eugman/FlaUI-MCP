@@ -6,8 +6,8 @@ What you get:
 
 | Piece | Use it to |
 |---|---|
-| `FlaUI.Mcp.exe` | Give an agent the generic `windows_*` tools: snapshot, find, click, type, screenshot and so on. |
-| `FlaUI.Mcp.Te3.exe mcp` | Add `te3_navigate`, `te3_model_state` and `te3_layout`, which know TE3's layout. |
+| `FlaUI.Mcp.Te3.exe mcp` | One MCP server with the generic `windows_*` tools (snapshot, find, click, type, screenshot and so on) plus `te3_navigate`, `te3_model_state` and `te3_layout`, which know TE3's layout. Refs and handles are shared across all of them. |
+| `FlaUI.Mcp.exe` | The generic `windows_*` server on its own, for apps other than TE3. |
 | `FlaUI.Mcp.Te3.exe run` | Script repeatable TE3 screenshots with typed C# recipes. |
 | `automation/skills/te3-ui` | Agent guidance for driving TE3. |
 
@@ -27,15 +27,11 @@ pwsh scripts/setup.ps1
 dotnet build FlaUI.Mcp.slnx -c Release
 ```
 
-Add both servers to your MCP client:
+Add the server to your MCP client:
 
 ```json
 {
   "mcpServers": {
-    "windows": {
-      "command": "C:/path/to/FlaUI-MCP/src/FlaUI.Mcp/bin/Release/net8.0-windows/FlaUI.Mcp.exe",
-      "env": { "FLAUI_MCP_ALLOWED_APPS": "TabularEditor3" }
-    },
     "te3": {
       "command": "C:/path/to/FlaUI-MCP/src/FlaUI.Mcp.Te3/bin/Release/net8.0-windows/FlaUI.Mcp.Te3.exe",
       "args": ["mcp"]
@@ -44,7 +40,7 @@ Add both servers to your MCP client:
 }
 ```
 
-`FLAUI_MCP_ALLOWED_APPS` keeps the generic server from touching anything except TE3.
+It only touches TE3: the app allowlist is built in.
 
 ## Documentation
 
