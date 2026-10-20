@@ -493,7 +493,7 @@ public class SessionManager : IDisposable
         if (hwnd != 0)
         {
             GetInputTarget(handle);
-            Win32Desktop.FocusWindow(hwnd);
+            InputDesktop.Current.Focus(hwnd);
             return;
         }
 
@@ -516,10 +516,10 @@ public class SessionManager : IDisposable
         if (hwnd != 0)
         {
             GetInputTarget(handle);
-            Win32Desktop.CloseWindow(hwnd);
+            InputDesktop.Current.PostClose(hwnd);
             // WM_CLOSE is asynchronous and may open a save prompt. Retain the
             // handle while the native window still exists so recovery can use it.
-            if (Win32Desktop.GetProcessId(hwnd) != 0)
+            if (InputDesktop.Current.ProcessOf(hwnd) != 0)
             {
                 return;
             }

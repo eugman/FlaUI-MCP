@@ -117,7 +117,7 @@ public static class PointerParking
         using (GuardedInput.AcquireLease())
         {
             OperationContext.Check();
-            FlaUI.Core.Input.Mouse.MoveTo(point);
+            InputDesktop.Current.Dispatch(() => FlaUI.Core.Input.Mouse.MoveTo(point));
         }
 
         Thread.Sleep(Settle);

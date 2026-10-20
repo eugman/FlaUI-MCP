@@ -510,12 +510,9 @@ public static partial class Win32Desktop
     }
 
     /// <summary>
-    /// Request a window to close by posting WM_CLOSE (non-blocking).
+    /// Request a window to close by posting WM_CLOSE (non-blocking). False when the message was not posted.
     /// </summary>
-    public static void CloseWindow(nint hwnd)
-    {
-        PostMessage(hwnd, WM_CLOSE, 0, 0);
-    }
+    public static bool CloseWindow(nint hwnd) => PostMessage(hwnd, WM_CLOSE, 0, 0);
 
     /// <summary>
     /// Get the process id owning the current foreground window, or 0 if there
