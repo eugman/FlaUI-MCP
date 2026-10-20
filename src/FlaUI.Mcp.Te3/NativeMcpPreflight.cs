@@ -40,6 +40,7 @@ public sealed class NativeMcpPreflight(HttpClient client)
             initialization.GetProperty("serverInfo").GetProperty("name").GetString()
             ?? throw new InvalidOperationException("Native MCP did not report server identity.");
 
+        session.SetProtocolVersion(version);
         await session.NotifyInitialized(token);
 
         var definitions = (await session.Send("tools/list", new { }, token))
@@ -57,13 +58,11 @@ public sealed class NativeMcpPreflight(HttpClient client)
             );
         }
 
-        if (
-            !identityTool.TryGetProperty("annotations", out var annotations)
-            || !annotations.TryGetProperty("readOnlyHint", out var readOnly)
-            || readOnly.ValueKind != JsonValueKind.True
-        )
+        if (!IsReadOnlyIdentityTool(identityTool))
         {
-            throw new InvalidOperationException("Native MCP identity tool is not declared read-only.");
+            throw new InvalidOperationException(
+                "Native MCP identity tool is not declared read-only or on the exact TE3 workspace compatibility allowlist."
+            );
         }
 
         var identityResult = await session.Send(
@@ -85,17 +84,105 @@ public sealed class NativeMcpPreflight(HttpClient client)
         return new(version, server, identity, tools);
     }
 
-    private static string Property(JsonElement element, string path)
+    // TE3 3.27.1 advertises no tool annotations. This exact, empty-argument workspace
+    // identity tool is the only compatibility exception; every other tool requires readOnlyHint=true.
+    private const string WorkspaceDescription =
+        "Identifies this Tabular Editor instance and the semantic model it currently has open: model name, how the model is loaded (file/folder/connected), unsaved-changes state and compatibility level. Call this first to confirm which instance and model you are talking to.";
+
+    private static bool IsReadOnlyIdentityTool(JsonElement tool)
+    {
+        if (tool.TryGetProperty("annotations", out var annotations))
+        {
+            return annotations.TryGetProperty("readOnlyHint", out var hint) && hint.ValueKind == JsonValueKind.True;
+        }
+
+        if (
+            tool.GetProperty("name").GetString() != "get_workspace_info"
+            || !tool.TryGetProperty("description", out var description)
+            || description.GetString() != WorkspaceDescription
+        )
+        {
+            return false;
+        }
+
+        if (
+            !tool.TryGetProperty("inputSchema", out var schema)
+            || !schema.TryGetProperty("type", out var type)
+            || type.GetString() != "object"
+        )
+        {
+            return false;
+        }
+
+        if (
+            !schema.TryGetProperty("properties", out var properties)
+            || properties.ValueKind != JsonValueKind.Object
+            || properties.EnumerateObject().Any()
+        )
+        {
+            return false;
+        }
+
+        return schema.TryGetProperty("required", out var required)
+            && required.ValueKind == JsonValueKind.Array
+            && !required.EnumerateArray().Any();
+    }
+
+    private static string Property(JsonElement result, string path)
+    {
+        if (TryProperty(result, path, out var value))
+        {
+            return value;
+        }
+
+        if (result.TryGetProperty("structuredContent", out var structured) && TryProperty(structured, path, out value))
+        {
+            return value;
+        }
+
+        if (result.TryGetProperty("content", out var content) && TryTextProperty(content, path, out value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException("Native MCP identity response does not contain " + path);
+    }
+
+    private static bool TryTextProperty(JsonElement content, string path, out string value)
+    {
+        value = "";
+        if (content.ValueKind != JsonValueKind.Array || content.GetArrayLength() != 1)
+        {
+            return false;
+        }
+
+        var block = content[0];
+        if (
+            !block.TryGetProperty("type", out var type)
+            || type.GetString() != "text"
+            || !block.TryGetProperty("text", out var text)
+        )
+        {
+            return false;
+        }
+
+        using var payload = JsonDocument.Parse(text.GetString() ?? "");
+        return TryProperty(payload.RootElement, path, out value);
+    }
+
+    private static bool TryProperty(JsonElement element, string path, out string value)
     {
         foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries))
         {
             if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(part, out element))
             {
-                throw new InvalidOperationException("Native MCP identity response does not contain " + path);
+                value = "";
+                return false;
             }
         }
 
-        return element.GetString() ?? throw new InvalidOperationException("Native MCP identity is not text.");
+        value = element.ValueKind == JsonValueKind.String ? element.GetString() ?? "" : "";
+        return value.Length > 0;
     }
 
     private static void Validate(Request request)

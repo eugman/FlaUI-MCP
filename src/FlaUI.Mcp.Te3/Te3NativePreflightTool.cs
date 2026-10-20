@@ -9,7 +9,8 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
 {
     public const string ToolName = "te3_native_preflight";
 
-    public static Te3NativePreflightTool Create() => new(new HttpClient { Timeout = TimeSpan.FromSeconds(10) });
+    public static Te3NativePreflightTool Create() =>
+        new(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(10) });
 
     public override string Name => ToolName;
     public override string Description =>
@@ -59,21 +60,7 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
                 throw new ArgumentException("endpoint must be an absolute URL.");
             }
 
-            var tokenEnv =
-                a.TryGetProperty("tokenEnv", out var variable) && variable.ValueKind == JsonValueKind.String
-                    ? variable.GetString()
-                    : null;
-            string? bearerToken = null;
-            if (tokenEnv != null)
-            {
-                if (tokenEnv.Length == 0 || tokenEnv.Any(c => !(char.IsAsciiLetterOrDigit(c) || c == '_')))
-                {
-                    throw new ArgumentException("tokenEnv must be an environment variable name.");
-                }
-
-                bearerToken =
-                    Environment.GetEnvironmentVariable(tokenEnv) ?? throw new ArgumentException("tokenEnv is not set.");
-            }
+            var bearerToken = BearerToken(a);
 
             var result = await new NativeMcpPreflight(client).Inspect(
                 new(
@@ -82,7 +69,8 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
                     Required(a, "identityProperty"),
                     Required(a, "expectedIdentity"),
                     bearerToken
-                )
+                ),
+                OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None
             );
             return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
         }
@@ -94,11 +82,15 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
         {
             return ErrorResult($"{ToolName}: {error.Message}");
         }
+        catch (TimeoutException error)
+        {
+            return ErrorResult($"{ToolName}: {error.Message}");
+        }
         catch (HttpRequestException error)
         {
             return ErrorResult($"{ToolName}: {error.Message}");
         }
-        catch (TaskCanceledException error)
+        catch (TaskCanceledException error) when (OperationContext.Current.Value?.Stop.IsCancellationRequested != true)
         {
             return ErrorResult($"{ToolName}: {error.Message}");
         }
@@ -106,5 +98,24 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
         {
             return ErrorResult($"{ToolName}: {error.Message}");
         }
+    }
+
+    private static string? BearerToken(JsonElement a)
+    {
+        var tokenEnv =
+            a.TryGetProperty("tokenEnv", out var variable) && variable.ValueKind == JsonValueKind.String
+                ? variable.GetString()
+                : null;
+        if (tokenEnv == null)
+        {
+            return null;
+        }
+
+        if (tokenEnv.Length == 0 || tokenEnv.Any(c => !(char.IsAsciiLetterOrDigit(c) || c == '_')))
+        {
+            throw new ArgumentException("tokenEnv must be an environment variable name.");
+        }
+
+        return Environment.GetEnvironmentVariable(tokenEnv) ?? throw new ArgumentException("tokenEnv is not set.");
     }
 }

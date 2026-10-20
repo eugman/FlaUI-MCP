@@ -104,4 +104,80 @@ public sealed class NativeMcpPreflightTests
         Assert.NotEqual(true, result.IsError);
         Assert.Equal(4, handler.Calls.Count);
     }
+
+    private sealed class WorkspaceHandler(bool wrongDescription = false, bool structured = false) : HttpMessageHandler
+    {
+        private int step;
+        public int Calls => step;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            const string description =
+                "Identifies this Tabular Editor instance and the semantic model it currently has open: model name, how the model is loaded (file/folder/connected), unsaved-changes state and compatibility level. Call this first to confirm which instance and model you are talking to.";
+            var body = step++ switch
+            {
+                0 =>
+                    """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"TE3"}}}""",
+                1 => "",
+                2 => System.Text.Json.JsonSerializer.Serialize(
+                    new
+                    {
+                        jsonrpc = "2.0",
+                        id = 2,
+                        result = new
+                        {
+                            tools = new[]
+                            {
+                                new
+                                {
+                                    name = "get_workspace_info",
+                                    description = wrongDescription ? "unknown" : description,
+                                    inputSchema = new
+                                    {
+                                        type = "object",
+                                        properties = new { },
+                                        required = Array.Empty<string>(),
+                                    },
+                                },
+                            },
+                        },
+                    }
+                ),
+                _ => structured
+                    ? """{"jsonrpc":"2.0","id":3,"result":{"structuredContent":{"model":{"name":"scratch-model"}}}}"""
+                    : """{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\"model\":{\"name\":\"scratch-model\"}}"}]}}""",
+            };
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, "application/json"),
+                }
+            );
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task KnownUnannotatedWorkspaceIdentityAcceptsJsonResultWrappers(bool structured)
+    {
+        var handler = new WorkspaceHandler(structured: structured);
+        var result = await new NativeMcpPreflight(new HttpClient(handler)).Inspect(
+            new(new("http://localhost:42100/mcp"), "get_workspace_info", "model.name", "scratch-model")
+        );
+        Assert.Equal("scratch-model", result.ModelIdentity);
+        Assert.Equal(4, handler.Calls);
+    }
+
+    [Fact]
+    public async Task ChangedUnannotatedWorkspaceDescriptionIsNotAllowed()
+    {
+        var handler = new WorkspaceHandler(wrongDescription: true);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(
+                new(new("http://localhost:42100/mcp"), "get_workspace_info", "model.name", "scratch-model")
+            )
+        );
+        Assert.Equal(3, handler.Calls);
+    }
 }
