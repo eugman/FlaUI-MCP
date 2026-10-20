@@ -35,7 +35,7 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 |---|---|
 | `te3_navigate` | Moves to a destination and checks it arrived. Takes focus. |
 | `te3_model_state` | Reads the status bar: whether a model is loaded, its connection, the BPA count, the selected object. Sends no input. |
-| `te3_layout` | Lists, closes, maximizes, restores and resizes docked panes and document tabs for a screenshot. Takes focus; no model edits. |
+| `te3_layout` | Lists docked panes and document tabs; hides, maximizes, restores and resizes docked panes for a screenshot. Takes focus; no model edits. |
 
 Destinations: `native-mcp-server` (opens and verifies the native MCP Server dialog without starting it), `tom-explorer`, `tom-explorer/changes` (turns on the TOM Explorer Show changes view filter), `expression-editor`, `object` (with `table`, `objectName`, `objectType` Table/Column/Measure and optional `folder`), `preferences/auto-formatting`, `preferences/code-actions`, `preferences/ai-provider`, `preferences/ai-assistant`, `preferences/mcp-server`, `preferences/permissions`.
 
@@ -157,3 +157,25 @@ dotnet test tests/FlaUI.Mcp.Te3.Tests
 ```
 
 Neither suite touches the desktop. `tests/FlaUI.Mcp.IntegrationTests` launches test apps and takes focus.
+
+## Native MCP read-only preflight
+
+`NativeMcpPreflight` probes an already-running TE3 native MCP endpoint using an explicit
+loopback URL. It performs initialize, tools/list, and exactly one configured identity
+tool call. The identity tool must advertise `annotations.readOnlyHint=true`; its
+configured response property must equal the expected disposable model identity.
+A missing server, denied token, missing tool, unannotated tool, or model mismatch
+fails before any follow-on work. Each inspection uses a fresh session; there is no
+automatic replay. The adapter does not start the server, alter permissions, save,
+or run a model script. Native TE3 tool names and response properties remain
+version-dependent, so configure them from the running server's tools/list result
+and verify live behavior separately under a machine grant.
+
+`te3_layout` now distinguishes docked pane hiding from document closing. Its
+close/keep actions preserve document tabs. Named show/hide accepts AI Assistant,
+TOM Explorer, and Properties. Showing an absent pane currently refuses input
+because the View-menu reopen locator has not been live-verified. The
+`assistant-model-review` preset targets a 1920x1080 window: AI Assistant width
+1000, TOM Explorer width 700, and Properties height 300 physical pixels. Plan
+and apply routes have offline tests; live geometry and the editor's remaining
+width are unverified.

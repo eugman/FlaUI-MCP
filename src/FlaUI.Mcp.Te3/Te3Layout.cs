@@ -5,9 +5,10 @@ using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
+using FlaUI.Mcp.Te3;
 
 /// <summary>
-/// Shot layout for TE3: list, close and maximize docked panes and document tabs, and resize a pane
+/// Shot layout for TE3: list panes and document tabs, hide docked panes, and resize a pane
 /// by dragging the splitter it shares with its neighbour. Every action goes through the guarded
 /// core tools; nothing here edits the model.
 /// </summary>
@@ -19,8 +20,10 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
     public override string Name => ToolName;
     public override string Description =>
         "Arrange TE3 for a screenshot. list: docked panes and document tabs with window-relative bounds. "
-        + "close: close panes or tabs by title. keep: close every pane and tab except these titles (closing a "
+        + "close: hide named docked panes by title; document tabs are never closed. keep: hide every docked pane except these titles (closing a "
         + "tab-group pane surfaces the next tab, so this repeats until only the kept ones remain). "
+        + "show-pane / hide-pane: named AI Assistant, TOM Explorer, or Properties dock surfaces; show refuses absent panes until their reopen locator is verified. "
+        + "plan-preset / apply-preset: assistant-model-review 1920x1080 layout. "
         + "maximize-pane / restore-pane: the pane's own Maximize or Restore button (TE3 remembers a maximized "
         + "pane across restarts, so restore it when done). Pane titles match with or without TE3's \"(Changed)\" "
         + "suffix. resize: drag the splitter a pane shares with its "
@@ -35,15 +38,32 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
                 action = new
                 {
                     type = "string",
-                    @enum = new[] { "list", "close", "keep", "maximize-pane", "restore-pane", "resize" },
+                    @enum = new[]
+                    {
+                        "list",
+                        "close",
+                        "keep",
+                        "show-pane",
+                        "hide-pane",
+                        "plan-preset",
+                        "apply-preset",
+                        "maximize-pane",
+                        "restore-pane",
+                        "resize",
+                    },
                 },
                 titles = new
                 {
                     type = "array",
                     items = new { type = "string" },
-                    description = "close/keep: pane titles or document tab names, exactly as list shows them.",
+                    description = "close/keep: docked pane titles, exactly as list shows them; document tabs are preserved.",
                 },
-                title = new { type = "string", description = "maximize-pane/restore-pane/resize: the pane title." },
+                title = new
+                {
+                    type = "string",
+                    description = "show-pane/hide-pane/maximize-pane/restore-pane/resize: the pane title.",
+                },
+                preset = new { type = "string", @enum = new[] { Te3PanePlan.AssistantModelReview } },
                 width = new { type = "integer", description = "resize: target width in physical pixels." },
                 height = new { type = "integer", description = "resize: target height in physical pixels." },
             },
@@ -68,12 +88,18 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
                 "list" => List(window),
                 "close" => await Close(handle, window, Titles(a), keep: false),
                 "keep" => await Close(handle, window, Titles(a), keep: true),
+                "show-pane" => ShowPane(window, Required(a, "title")),
+                "hide-pane" => await HidePane(handle, window, Required(a, "title")),
+                "plan-preset" => Te3PanePlan.Resolve(
+                    Required(a, "preset"),
+                    window.BoundingRectangle.Width,
+                    window.BoundingRectangle.Height
+                ),
+                "apply-preset" => await ApplyPreset(handle, window, Required(a, "preset")),
                 "maximize-pane" => await PaneButton(handle, window, Required(a, "title"), "Maximize"),
                 "restore-pane" => await PaneButton(handle, window, Required(a, "title"), "Restore"),
                 "resize" => await Resize(handle, window, Required(a, "title"), a),
-                _ => throw new ArgumentException(
-                    "action must be list, close, keep, maximize-pane, restore-pane or resize"
-                ),
+                _ => throw new ArgumentException("Unsupported TE3 layout action"),
             };
             return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
         }
@@ -81,6 +107,83 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         {
             return ErrorResult($"{ToolName}: {ex.Message}");
         }
+    }
+
+    private static object ShowPane(Window window, string title)
+    {
+        if (!Te3PanePlan.IsNamedPane(title))
+        {
+            throw new ArgumentException("show-pane accepts AI Assistant, TOM Explorer or Properties.");
+        }
+
+        if (Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title)))
+        {
+            return new
+            {
+                pane = title,
+                visible = true,
+                changed = false,
+            };
+        }
+
+        throw new InvalidOperationException(
+            "Pane is hidden. Its reopen menu locator is not verified for this TE3 build; no input sent."
+        );
+    }
+
+    private async Task<object> HidePane(string handle, Window window, string title)
+    {
+        if (!Te3PanePlan.IsNamedPane(title))
+        {
+            throw new ArgumentException("hide-pane accepts AI Assistant, TOM Explorer or Properties.");
+        }
+
+        var pane = Parts(window).FirstOrDefault(part => part.Kind == "pane" && TitleMatches(part.Title, title));
+        if (pane == null)
+        {
+            return new
+            {
+                pane = title,
+                visible = false,
+                changed = false,
+            };
+        }
+
+        await Click(handle, pane.Close);
+        await RequireNoDialog(window, pane.Title);
+        if (Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title)))
+        {
+            throw new InvalidOperationException("Pane remained visible after Close; inspect before retrying.");
+        }
+
+        return new
+        {
+            pane = title,
+            visible = false,
+            changed = true,
+        };
+    }
+
+    private async Task<object> ApplyPreset(string handle, Window window, string preset)
+    {
+        var sizes = Te3PanePlan.Resolve(preset, window.BoundingRectangle.Width, window.BoundingRectangle.Height);
+        var parts = Parts(window);
+        foreach (var size in sizes)
+        {
+            if (!parts.Any(part => part.Kind == "pane" && TitleMatches(part.Title, size.Pane)))
+            {
+                throw new InvalidOperationException("Preset needs visible pane '" + size.Pane + "'; no resize sent.");
+            }
+        }
+
+        var changes = new List<object>();
+        foreach (var size in sizes)
+        {
+            var args = JsonSerializer.SerializeToElement(new { width = size.Width, height = size.Height });
+            changes.Add(await Resize(handle, window, size.Pane, args, strict: true));
+        }
+
+        return new { preset, changes };
     }
 
     private string Required(JsonElement a, string name) =>
@@ -157,7 +260,9 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         for (var i = 0; i < MaxCloses; i++)
         {
             var next = Parts(window)
-                .FirstOrDefault(p => titles.Any(t => TitleMatches(p.Title, t)) != keep && attempted.Add(p.Title));
+                .FirstOrDefault(p =>
+                    CanCloseKind(p.Kind) && titles.Any(t => TitleMatches(p.Title, t)) != keep && attempted.Add(p.Title)
+                );
             if (next == null)
             {
                 break;
@@ -168,7 +273,7 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
             closed.Add(next.Title);
         }
 
-        var remaining = Parts(window).Select(p => p.Title).ToList();
+        var remaining = Parts(window).Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
         var unresolved = titles.Where(t => remaining.Any(r => TitleMatches(r, t)) != keep).ToList();
         return new
         {
@@ -178,7 +283,9 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         };
     }
 
-    // Closing an unsaved document asks to save, sometimes a moment after the click. Watch for ~1s and
+    internal static bool CanCloseKind(string kind) => kind == "pane";
+
+    // Closing a pane can open a dialog on an unfamiliar build. Watch for ~1s and
     // stop there: answering it is the caller's decision.
     private static async Task RequireNoDialog(Window window, string closing)
     {
@@ -229,7 +336,7 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         return button == "Maximize" ? new { maximized = pane.Title } : (object)new { restored = pane.Title };
     }
 
-    private async Task<object> Resize(string handle, Window window, string title, JsonElement a)
+    private async Task<object> Resize(string handle, Window window, string title, JsonElement a, bool strict = false)
     {
         var parts = Parts(window);
         var pane = FindPane(window, title);
@@ -257,6 +364,13 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         var after = FindPane(window, title).Container.BoundingRectangle;
         var requested = GetArgument<int?>(a, "width") ?? GetArgument<int?>(a, "height");
         var reached = GetArgument<int?>(a, "width") is null ? after.Height : after.Width;
+        if (strict && Math.Abs(reached - requested!.Value) > 4)
+        {
+            throw new InvalidOperationException(
+                "Preset resize did not reach the requested size; inspect before retrying."
+            );
+        }
+
         return new
         {
             title,
