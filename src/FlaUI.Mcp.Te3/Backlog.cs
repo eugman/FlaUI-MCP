@@ -16,7 +16,10 @@ public sealed record BacklogItem(
     bool RequiresRedaction = false
 );
 
-/// <summary>Reads local/screenshot-backlog.json so checkpoints named after an item id can find their original.</summary>
+/// <summary>
+/// Reads the screenshot backlog (local/screenshot-backlog.json, or the file FLAUI_TE3_BACKLOG names) so checkpoints
+/// named after an item id can find their original.
+/// </summary>
 public static partial class Backlog
 {
     public static bool IsItemId(string checkpoint) => ItemId().IsMatch(checkpoint);
@@ -28,6 +31,13 @@ public static partial class Backlog
 
     internal static string DefaultPath(string? configured, string start)
     {
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return File.Exists(configured)
+                ? Path.GetFullPath(configured)
+                : throw new FileNotFoundException($"{EnvironmentVariable} names {configured}, which does not exist.");
+        }
+
         for (var directory = new DirectoryInfo(start); directory != null; directory = directory.Parent)
         {
             var candidate = Path.Combine(directory.FullName, "local", "screenshot-backlog.json");
@@ -37,13 +47,17 @@ public static partial class Backlog
             }
 
             // Stop at the repository root rather than picking up an unrelated folder above it.
-            if (Directory.Exists(Path.Combine(directory.FullName, ".git")))
+            // In a worktree .git is a file pointing at the main checkout.
+            var git = Path.Combine(directory.FullName, ".git");
+            if (Directory.Exists(git) || File.Exists(git))
             {
                 break;
             }
         }
 
-        throw new FileNotFoundException("local/screenshot-backlog.json not found in this repository");
+        throw new FileNotFoundException(
+            $"local/screenshot-backlog.json not found in this repository; set {EnvironmentVariable} to its path."
+        );
     }
 
     public static BacklogItem Find(string id, string? path = null)

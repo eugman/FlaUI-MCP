@@ -110,6 +110,7 @@ pwsh automation/reset-engine.ps1             # puts the test objects back by han
 | `compose MANIFEST SPEC OUT.png` | Crop and arrange checkpoints from a run into one image. |
 | `annotate MANIFEST SPEC` | Add boxes and arrows to a checkpoint. |
 | `promote RUN_DIR CHECKPOINT DEST.png [--overwrite]` | Copy an approved checkpoint into `docsRoot`. |
+| `promote RUN_DIR --item ITEM_ID [--overwrite]` | Copy a backlog item's checkpoint to the docs image it replaces. |
 | `recover BACKUP_DIR [--force]` | Restore TE3 settings after an interrupted run and mark its manifest recovered. Refuses settings changed since the run without `--force`. |
 | `mcp` | Start the TE3 MCP tools. |
 
@@ -148,6 +149,7 @@ Tests in `local/tests/*.cs` are compiled into the runner test project in the sam
 - Settings backups are kept under `%LOCALAPPDATA%/FlaUI-MCP/settings-backups`. If a run can't restore them, it prints the backup path; run `recover` on it with TE3 closed before the next run. `recover` refuses when a settings file is neither its pre-run original nor what the run wrote, because restoring would discard later changes; the run's own TE3 can also cause this. Check the files, then pass `--force`.
 - On a CLI timeout the runner kills the process tree it launched. If it can't confirm the exit, check the reported PID before retrying.
 - `promote` only copies into the configured `docsRoot`. Overwriting needs `--overwrite` and a clean destination.
+- Checkpoints named after a backlog item (`L026`, `R013`) are checked against the docs screenshot backlog, `local/screenshot-backlog.json`, found by searching up from the runner to the repository root. It is gitignored, so a worktree has none: set `FLAUI_TE3_BACKLOG` to the main checkout's copy (for this repo, `FlaUI-MCP/local/screenshot-backlog.json`) instead of copying it.
 
 ## Tests
 
