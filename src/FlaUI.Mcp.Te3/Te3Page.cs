@@ -2016,7 +2016,8 @@ public sealed class Te3Page(
 
     /// <summary>
     /// Selects a TOM Explorer row by the values along its path, e.g. ("Tables", "Invoices"). The tree is collapsed first so
-    /// top-level folders are in view; each parent is expanded and the child is the first matching row below it.
+    /// top-level folders are in view; each parent is expanded and its child is found with the keyboard, failing rather
+    /// than selecting a same-named row outside the parent.
     /// </summary>
     public async Task SelectNodePath(params string[] path)
     {
@@ -2027,42 +2028,33 @@ public sealed class Te3Page(
 
         await CollapseObjectTree();
         await SelectFirstRow(path[0]);
+        var cursor = new TomCursor(this);
         foreach (var child in path.Skip(1))
         {
-            await ExpandSelected();
-            await SelectRowByKeys(child);
+            await SelectChild(cursor, child);
         }
     }
 
-    /// <summary>
-    /// Moves the TOM Explorer selection down until the selected row has the value. The tree only exposes rows in view,
-    /// and keyboard selection keeps the selected row in view, so this reaches children a physical click cannot.
-    /// </summary>
-    public async Task SelectRowByKeys(string value, int maxSteps = 100)
+    // Expanding the selected row inserts its children between it and the row below it, so reaching that row
+    // means the child is not there. Down then Up reads it first; at the end of the tree there is none.
+    private async Task SelectChild(TomCursor cursor, string child)
     {
-        var tree = TomExplorerTarget();
-        for (var step = 0; step < maxSteps; step++)
+        var parent = await cursor.Current();
+        var after = await cursor.Down();
+        if (after != null && await cursor.Up() != parent)
         {
-            await Keys("Down", tree);
-            // Only the TreeItem reports selection; the DataItem cell with the same value does not.
-            var rows = await Task.Run(() =>
-                    query.Find(
-                        handle,
-                        new(ControlType: "TreeItem", Value: value),
-                        tree.Selector,
-                        maxResults: 5,
-                        register: false,
-                        budget: new SearchBudget(2000, TimeSpan.FromSeconds(2))
-                    )
-                )
-                .WaitAsync(TimeSpan.FromSeconds(4));
-            if (rows.Elements.Any(row => row.Selected == true))
-            {
-                return;
-            }
+            throw new InvalidOperationException(
+                $"Could not return to TOM Explorer row '{parent.Value}' after reading the row below it."
+            );
         }
 
-        throw new InvalidOperationException($"No TOM Explorer row with value {value} within {maxSteps} rows");
+        await ExpandSelected();
+        reportStep?.Invoke($"Select TOM Explorer row {child} under {parent.Value}");
+        var walk = await PathWalker.FindRow(cursor, child, after, skipCurrent: true);
+        if (!walk.Found)
+        {
+            throw new InvalidOperationException($"No TOM Explorer row {child} under {parent.Value}: {walk.Reason}");
+        }
     }
 
     // Setting the search box value does not apply TE3's filter; it has to be typed.
@@ -2086,37 +2078,17 @@ public sealed class Te3Page(
         await ResetSearch();
     }
 
-    // Rows are matched by value in tree order; a row scrolled out of view is brought into view before the physical click.
+    // The first row with the value in tree order, selected with the keyboard: only the selected row is trusted, and it
+    // is always in view. A breadth-first search for the row could pick a hidden or deeper match instead.
     private async Task SelectFirstRow(string value)
     {
-        var target = ObjectTarget(value);
         reportStep?.Invoke($"Select first TOM Explorer row with value {value}");
-        var found = await Task.Run(() =>
-                query.Find(
-                    handle,
-                    target.Selector,
-                    target.Within,
-                    maxResults: 10,
-                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(3))
-                )
-            )
-            .WaitAsync(TimeSpan.FromSeconds(5));
-        var first =
-            found.Elements.FirstOrDefault()
-            ?? throw new InvalidOperationException($"No TOM Explorer row with value {value}");
-        var element =
-            host.Elements.GetElement(first.Ref)
-            ?? throw new InvalidOperationException($"TOM Explorer row reference expired: {first.Ref}");
-        await Task.Run(() =>
-            {
-                if (element.Patterns.ScrollItem.IsSupported)
-                {
-                    element.Patterns.ScrollItem.Pattern!.ScrollIntoView();
-                }
-            })
-            .WaitAsync(TimeSpan.FromSeconds(5));
-        await invoke("windows_click", new { @ref = first.Ref, physical = true });
-        await ParkPointer();
+        await Keys("Home", TomExplorerTarget());
+        var walk = await PathWalker.FindRow(new TomCursor(this), value);
+        if (!walk.Found)
+        {
+            throw new InvalidOperationException($"No TOM Explorer row with value {value}: {walk.Reason}");
+        }
     }
 
     /// <summary>
@@ -2600,10 +2572,15 @@ public sealed class Te3Page(
 
         public async Task<RowObservation> Current() => (await page.ObserveSelection()).Row;
 
-        public async Task<RowObservation?> Down()
+        public Task<RowObservation?> Down() => Move("Down");
+
+        /// <summary>Press Up and return the row above once it has settled; null at the top.</summary>
+        public Task<RowObservation?> Up() => Move("Up");
+
+        private async Task<RowObservation?> Move(string key)
         {
             var before = await page.ObserveSelection();
-            await page.Keys("Down", TomExplorerTarget());
+            await page.Keys(key, TomExplorerTarget());
             for (var waited = 0; waited < MoveTimeoutMs; waited += PollMs)
             {
                 await Task.Delay(PollMs);

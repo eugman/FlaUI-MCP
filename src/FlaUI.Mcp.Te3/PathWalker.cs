@@ -84,19 +84,34 @@ public static class PathWalker
         int maxRows = DefaultMaxRows
     )
     {
-        _ = boundary;
         var row = skipCurrent ? await cursor.Down() : await cursor.Current();
-        for (var visited = 1; visited <= maxRows && row != null; visited++)
+        for (var visited = 1; visited <= maxRows; visited++)
         {
+            if (row == null)
+            {
+                return new(false, null, visited - 1, $"Reached the end of the tree after {visited - 1} rows.");
+            }
+
+            // The whole row, text and status-bar type: a child may share the next table's name.
+            if (boundary != null && row == boundary)
+            {
+                return new(
+                    false,
+                    null,
+                    visited,
+                    $"Reached '{boundary.Value}', the row after the expanded parent, so '{value}' is not under it."
+                );
+            }
+
             if (row.Value == value)
             {
                 return new(true, null, visited, null);
             }
 
-            row = await cursor.Down();
+            row = visited < maxRows ? await cursor.Down() : null;
         }
 
-        return new(false, null, maxRows, "Not found.");
+        return new(false, null, maxRows, $"Stopped after {maxRows} rows.");
     }
 
     internal static bool IsTable(string? type) => Te3Page.ObjectTypeMatches("Table", type);

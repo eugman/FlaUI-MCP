@@ -74,7 +74,7 @@ More notes:
 
 - Top-level rows are folders: Data Sources, Functions, Perspectives, Relationships, Roles, Shared Expressions, Tables. Tables appear only after Tables is expanded.
 - Only rows in view are exposed, and only TreeItems report selection (the DataItem cell with the same value doesn't).
-- To reach a table, collapse the tree, click Tables, press Right, then press Down until the TreeItem with that value is selected.
+- To reach a table, collapse the tree, select Tables with Home and Down, note the row below it, press Right, then press Down until the TreeItem with that value is selected. Reaching the noted row means the value is not under Tables.
 - A typed search also matches relationships, partitions and role permissions with the same name. Don't assume the first match is the table.
 - Don't Invoke rows: it starts inline editing. Click physically, then move the pointer away so a tooltip doesn't cover the next capture.
 - Shift+F10 opens a row's context menu. Its Create cascade opens with a physical click.
