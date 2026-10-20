@@ -56,6 +56,46 @@ public static class PointerPlan
         return candidates.Where(p => own.Any(m => m.Contains(p))).Select(p => (Point?)p).FirstOrDefault();
     }
 
+    public static readonly string[] Edges = ["center", "left", "right", "top", "bottom"];
+
+    /// <summary>The middle of one edge of <paramref name="r"/>, one pixel inside it, or its centre.</summary>
+    public static Point EdgePoint(Rectangle r, string edge)
+    {
+        var midX = r.X + r.Width / 2;
+        var midY = r.Y + r.Height / 2;
+        return edge switch
+        {
+            "left" => new Point(r.Left, midY),
+            "right" => new Point(r.Right - 1, midY),
+            "top" => new Point(midX, r.Top),
+            "bottom" => new Point(midX, r.Bottom - 1),
+            "center" => new Point(midX, midY),
+            _ => throw new ArgumentException("edge must be center, left, right, top or bottom"),
+        };
+    }
+
+    /// <summary>
+    /// Where to release an edge drag so <paramref name="r"/> ends up <paramref name="size"/> pixels
+    /// wide (left/right edge) or tall (top/bottom edge), with the opposite edge fixed.
+    /// </summary>
+    public static Point ResizeTarget(Rectangle r, string edge, int size)
+    {
+        if (size < 1)
+        {
+            throw new ArgumentException("resizeTo must be at least 1 pixel");
+        }
+
+        var start = EdgePoint(r, edge);
+        return edge switch
+        {
+            "right" => start with { X = r.Left + size - 1 },
+            "left" => start with { X = r.Right - size },
+            "bottom" => start with { Y = r.Top + size - 1 },
+            "top" => start with { Y = r.Bottom - size },
+            _ => throw new ArgumentException("resizeTo needs fromEdge left, right, top or bottom"),
+        };
+    }
+
     /// <summary>Window-relative image pixels to screen pixels; the origin is what windows_screenshot captures.</summary>
     public static Point ToScreen(Rectangle origin, Point relative) => new(origin.X + relative.X, origin.Y + relative.Y);
 }

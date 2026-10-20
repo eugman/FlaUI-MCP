@@ -126,4 +126,20 @@ public sealed class ShotSetupTests
         Assert.Equal("close", selector!.NameContains);
         Assert.Equal("Button", selector.ControlType);
     }
+
+    [Fact]
+    public void ColumnDividerIsTheRightEdge() =>
+        Assert.Equal(new Point(519, 25), PointerPlan.EdgePoint(new Rectangle(344, 2, 176, 46), "right"));
+
+    [Fact]
+    public void ResizeRightEdgeKeepsTheLeftEdge() =>
+        Assert.Equal(new Point(593, 25), PointerPlan.ResizeTarget(new Rectangle(344, 2, 461, 46), "right", 250));
+
+    [Fact]
+    public void ResizeLeftEdgeKeepsTheRightEdge() =>
+        Assert.Equal(new Point(1220, 400), PointerPlan.ResizeTarget(new Rectangle(849, 0, 1071, 800), "left", 700));
+
+    [Fact]
+    public void ResizeNeedsAnEdge() =>
+        Assert.Throws<ArgumentException>(() => PointerPlan.ResizeTarget(new Rectangle(0, 0, 10, 10), "center", 5));
 }
