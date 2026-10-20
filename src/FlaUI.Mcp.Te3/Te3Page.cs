@@ -120,6 +120,11 @@ public sealed class Te3Page(
 
     public static Target TomTabTarget() => new(new(Name: "TOM Explorer", ControlType: "TabItem"), null, false);
 
+    // The tree inside TOM Explorer's view, which exists whether TOM Explorer is a tab or a docked pane
+    // (observed on 3.27.1: Pane "TOM Explorer" > TabularExplorerView > treeList).
+    public static Target TomTreeTarget() =>
+        new(new(AutomationId: "treeList"), new(AutomationId: "TabularExplorerView"), false);
+
     public static Target PropertyTarget(string property) =>
         new(new(Name: $"{property}", ControlType: "DataItem"), new(AutomationId: "PropertyGridView"), false);
 
@@ -1589,8 +1594,35 @@ public sealed class Te3Page(
 
     public async Task OpenTom()
     {
+        // A docked TOM Explorer pane has no tab to click; its tree being on screen is enough.
+        if (await IsOnScreen(TomTreeTarget()))
+        {
+            return;
+        }
+
         await Click(TomTabTarget());
     }
+
+    /// <summary>One lookup, no retries: whether the target exists and is not offscreen.</summary>
+    private async Task<bool> IsOnScreen(Target target) =>
+        await Task.Run(() =>
+        {
+            try
+            {
+                var element = query.Resolve(
+                    handle,
+                    target.Selector,
+                    target.Within,
+                    target.IncludeOwned,
+                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
+                );
+                return !element.Properties.IsOffscreen.ValueOrDefault;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return false;
+            }
+        });
 
     public async Task SetProperty(string property, string value)
     {
@@ -2482,7 +2514,11 @@ public sealed class Te3Page(
                 VerifyObjectIdentity(table!, objectName!, objectType!, name, type, dax);
                 break;
             case { Id: "tom-explorer" }:
-                await RequireSelectedTab(TomTabTarget());
+                if (!await IsOnScreen(TomTreeTarget()))
+                {
+                    await RequireSelectedTab(TomTabTarget());
+                }
+
                 break;
             case { Id: "expression-editor" }:
                 await RequireSelectedTab(ExpressionTabTarget());

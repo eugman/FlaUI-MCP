@@ -21,7 +21,9 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         "Arrange TE3 for a screenshot. list: docked panes and document tabs with window-relative bounds. "
         + "close: close panes or tabs by title. keep: close every pane and tab except these titles (closing a "
         + "tab-group pane surfaces the next tab, so this repeats until only the kept ones remain). "
-        + "maximize-pane: the pane's own Maximize button. resize: drag the splitter a pane shares with its "
+        + "maximize-pane / restore-pane: the pane's own Maximize or Restore button (TE3 remembers a maximized "
+        + "pane across restarts, so restore it when done). Pane titles match with or without TE3's \"(Changed)\" "
+        + "suffix. resize: drag the splitter a pane shares with its "
         + "neighbour until the pane is `width` or `height` physical pixels. Takes desktop focus; no model edits.";
     public override object InputSchema =>
         new
@@ -30,14 +32,18 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
             properties = new
             {
                 processId = new { type = "integer", minimum = 1 },
-                action = new { type = "string", @enum = new[] { "list", "close", "keep", "maximize-pane", "resize" } },
+                action = new
+                {
+                    type = "string",
+                    @enum = new[] { "list", "close", "keep", "maximize-pane", "restore-pane", "resize" },
+                },
                 titles = new
                 {
                     type = "array",
                     items = new { type = "string" },
                     description = "close/keep: pane titles or document tab names, exactly as list shows them.",
                 },
-                title = new { type = "string", description = "maximize-pane/resize: the pane title." },
+                title = new { type = "string", description = "maximize-pane/restore-pane/resize: the pane title." },
                 width = new { type = "integer", description = "resize: target width in physical pixels." },
                 height = new { type = "integer", description = "resize: target height in physical pixels." },
             },
@@ -62,9 +68,12 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
                 "list" => List(window),
                 "close" => await Close(handle, window, Titles(a), keep: false),
                 "keep" => await Close(handle, window, Titles(a), keep: true),
-                "maximize-pane" => await MaximizePane(handle, window, Required(a, "title")),
+                "maximize-pane" => await PaneButton(handle, window, Required(a, "title"), "Maximize"),
+                "restore-pane" => await PaneButton(handle, window, Required(a, "title"), "Restore"),
                 "resize" => await Resize(handle, window, Required(a, "title"), a),
-                _ => throw new ArgumentException("action must be list, close, keep, maximize-pane or resize"),
+                _ => throw new ArgumentException(
+                    "action must be list, close, keep, maximize-pane, restore-pane or resize"
+                ),
             };
             return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
         }
@@ -142,7 +151,8 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         var attempted = new HashSet<string>();
         for (var i = 0; i < MaxCloses; i++)
         {
-            var next = Parts(window).FirstOrDefault(p => titles.Contains(p.Title) != keep && attempted.Add(p.Title));
+            var next = Parts(window)
+                .FirstOrDefault(p => titles.Any(t => TitleMatches(p.Title, t)) != keep && attempted.Add(p.Title));
             if (next == null)
             {
                 break;
@@ -154,7 +164,7 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         }
 
         var remaining = Parts(window).Select(p => p.Title).ToList();
-        var unresolved = keep ? titles.Except(remaining).ToList() : titles.Intersect(remaining).ToList();
+        var unresolved = titles.Where(t => remaining.Any(r => TitleMatches(r, t)) != keep).ToList();
         return new
         {
             closed,
@@ -179,28 +189,41 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         }
     }
 
-    private async Task<object> MaximizePane(string handle, Window window, string title)
+    // TE3 retitles a pane while its Show changes filter is on ("TOM Explorer (Changed)").
+    private const string ChangedSuffix = " (Changed)";
+
+    /// <summary>A pane title matches the requested one exactly, or once TE3's "(Changed)" suffix is ignored.</summary>
+    internal static bool TitleMatches(string paneTitle, string requested) =>
+        paneTitle == requested || BaseTitle(paneTitle) == BaseTitle(requested);
+
+    private static string BaseTitle(string title) =>
+        title.EndsWith(ChangedSuffix, StringComparison.Ordinal) ? title[..^ChangedSuffix.Length] : title;
+
+    private static Part FindPane(Window window, string title) =>
+        Parts(window).FirstOrDefault(p => p.Kind == "pane" && TitleMatches(p.Title, title))
+        ?? throw new ArgumentException($"No docked pane titled '{title}'; use action list.");
+
+    // A docked pane shows Maximize; once maximized the same button is named Restore (observed on 3.27.1).
+    private async Task<object> PaneButton(string handle, Window window, string title, string button)
     {
-        var pane =
-            Parts(window).FirstOrDefault(p => p.Kind == "pane" && p.Title == title)
-            ?? throw new ArgumentException($"No docked pane titled '{title}'; use action list.");
-        var maximize =
-            pane.Close.Parent?.FindFirstChild(cf => cf.ByControlType(ControlType.Button).And(cf.ByName("Maximize")))
+        var pane = FindPane(window, title);
+        var target =
+            pane.Close.Parent?.FindFirstChild(cf => cf.ByControlType(ControlType.Button).And(cf.ByName(button)))
             ?? throw new InvalidOperationException(
-                $"Pane '{title}' has no Maximize button (a tab-group pane may not)."
+                button == "Maximize"
+                    ? $"Pane '{pane.Title}' has no Maximize button (a tab-group pane may not, or it is already maximized)."
+                    : $"Pane '{pane.Title}' has no Restore button; it is not maximized."
             );
-        await Click(handle, maximize);
-        return new { maximized = title };
+        await Click(handle, target);
+        return button == "Maximize" ? new { maximized = pane.Title } : (object)new { restored = pane.Title };
     }
 
     private async Task<object> Resize(string handle, Window window, string title, JsonElement a)
     {
         var parts = Parts(window);
-        var pane =
-            parts.FirstOrDefault(p => p.Kind == "pane" && p.Title == title)
-            ?? throw new ArgumentException($"No docked pane titled '{title}'; use action list.");
+        var pane = FindPane(window, title);
         var before = pane.Container.BoundingRectangle;
-        var others = parts.Where(p => p != pane).Select(p => p.Container.BoundingRectangle).Distinct();
+        var others = parts.Where(p => p.Title != pane.Title).Select(p => p.Container.BoundingRectangle).Distinct();
         var (from, to) = SplitterPlan.Resize(
             before,
             others,
