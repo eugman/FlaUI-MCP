@@ -102,9 +102,22 @@ public class ClickTool : ToolBase
                 element.Properties.ControlType.ValueOrDefault,
                 pattern => Supports(element, pattern)
             );
+            var fallbackNote = "";
             if (action != null)
             {
-                return Task.FromResult(RunPattern(element, action, processId, elementName, Validate));
+                var patternResult = RunPattern(element, action, processId, elementName, Validate);
+                if (
+                    action != "select"
+                    || patternResult.IsError == true
+                    || patternResult.Outcome?.IsPending == true
+                    || IsSelected(element)
+                )
+                {
+                    return Task.FromResult(patternResult);
+                }
+
+                // Some providers (TE3's tree rows) accept Select() and change nothing; a real click selects.
+                fallbackNote = " (Select changed nothing, so it was clicked instead)";
             }
 
             // Fall back to mouse click
@@ -129,7 +142,7 @@ public class ClickTool : ToolBase
                 input.Click(element, mouseButton);
                 if (!opensDialog)
                 {
-                    return Task.FromResult(TextResult($"Clicked {elementName}"));
+                    return Task.FromResult(TextResult($"Clicked {elementName}{fallbackNote}"));
                 }
                 // A physical click returns before its dialog exists; report the window so agents don't list too early.
                 for (var waited = 0; waited < 2000; waited += 100)
@@ -210,6 +223,11 @@ public class ClickTool : ToolBase
 
         return new[] { "invoke", "toggle", "select" }.FirstOrDefault(supports);
     }
+
+    private static bool IsSelected(AutomationElement element) =>
+        element.Patterns.SelectionItem.TryGetPattern(out var selection)
+        && selection.IsSelected.TryGetValue(out var selected)
+        && selected;
 
     private static bool Supports(AutomationElement element, string action) =>
         action switch
