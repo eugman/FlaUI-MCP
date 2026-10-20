@@ -26,6 +26,8 @@ public class SnapshotTool : ToolBase
 
     public override string Name => "windows_snapshot";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
+
     public override string Description =>
         "Capture accessibility snapshot of a window. Returns a structured tree with element refs "
         + "that can be used with windows_click, windows_type, etc. Prefer windows_find for known "

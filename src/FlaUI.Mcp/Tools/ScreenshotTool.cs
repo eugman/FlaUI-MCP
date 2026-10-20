@@ -30,6 +30,8 @@ public class ScreenshotTool : ToolBase
 
     public override string Name => "windows_screenshot";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
+
     public override string Description =>
         "Capture a window, element or the screen as PNG. Normal capture uses UIA bounds and may omit the title bar; strictNative captures the whole native window. With savePath and includeImage=false only the path is returned; view the saved image before claiming a visual result.";
 

@@ -12,6 +12,8 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
     private static readonly TimeSpan SettlePoll = TimeSpan.FromMilliseconds(50);
 
     public override string Name => "windows_set_window_state";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
     public override string Description =>
         "Maximize, restore (normal) or minimize a top-level window. Use restore before windows_place_window, which only moves normal-state windows. Returns the state and bounds observed afterwards; one attempt, never replayed.";
     public override object InputSchema =>

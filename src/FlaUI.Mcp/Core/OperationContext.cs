@@ -11,6 +11,9 @@ public sealed class OperationContext
     public int ProcessId { get; set; }
     public long ProcessStartedTicks { get; set; }
     public string Tool { get; init; } = "";
+
+    /// <summary>The tool's MCP annotations, echoed by operation status.</summary>
+    public McpToolAnnotations? Annotations { get; init; }
     public string? RequestKey { get; init; }
     public DateTime StartedUtc { get; } = DateTime.UtcNow;
     public CancellationTokenSource Stop { get; } = new();
@@ -35,7 +38,7 @@ public sealed class OperationCoordinator
     private readonly object gate = new();
     private readonly ConcurrentDictionary<string, OperationContext> operations = new();
 
-    public OperationContext Begin(string tool, string? requestKey = null)
+    public OperationContext Begin(string tool, string? requestKey = null, McpToolAnnotations? annotations = null)
     {
         lock (gate)
         {
@@ -50,7 +53,12 @@ public sealed class OperationCoordinator
                 operations.TryRemove(old.Id, out _);
             }
 
-            var op = new OperationContext { Tool = tool, RequestKey = requestKey };
+            var op = new OperationContext
+            {
+                Tool = tool,
+                RequestKey = requestKey,
+                Annotations = annotations,
+            };
             operations[op.Id] = op;
             return op;
         }
@@ -73,6 +81,7 @@ public sealed class OperationCoordinator
                     o.ProcessId,
                     o.ProcessStartedTicks,
                     o.Tool,
+                    annotations = o.Annotations,
                     o.StartedUtc,
                     status = StatusOf(o),
                     dispatch,

@@ -30,6 +30,8 @@ public class TypeTool : ToolBase
 
     public override string Name => "windows_type";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false);
+
     public override string Description =>
         "Type text into an element. The element will be focused first. Line breaks are sent as Enter. "
         + "Code editors can autocomplete typed text; use windows_paste for code. "
@@ -176,6 +178,8 @@ public class FillTool : ToolBase
     }
 
     public override string Name => "windows_fill";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 
     public override string Description =>
         "Clear and fill a text field with new value. Prefers Value pattern for reliability.";

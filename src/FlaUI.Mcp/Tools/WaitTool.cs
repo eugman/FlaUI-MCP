@@ -8,6 +8,8 @@ namespace FlaUI.Mcp.Tools;
 public sealed class WaitTool(ElementQuery query) : ToolBase
 {
     public override string Name => "windows_wait";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
     public override string Description =>
         "Wait for scoped UIA presence, settled absence, or one control's value/selected/toggle state. Does not send input. Incomplete searches cannot prove absence; rootOnly excludes descendants.";
     public override object InputSchema =>

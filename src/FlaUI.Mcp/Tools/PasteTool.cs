@@ -16,6 +16,8 @@ public sealed class PasteTool(
 {
     public override string Name => "windows_paste";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
+
     public override string Description =>
         "Paste text into an element by ref, or the focused element, with the clipboard and Ctrl+V. "
         + "Use it for code and multi-line text, which code editors autocomplete when typed. "

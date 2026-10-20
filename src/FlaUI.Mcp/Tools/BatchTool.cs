@@ -11,6 +11,8 @@ public sealed class BatchTool : ToolBase
     internal BatchTool(ToolRegistry registry) => this.registry = registry;
 
     public override string Name => "windows_batch";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
     public override string Description =>
         "Execute click/type/fill/wait/snapshot actions in order, returning numbered results and structured step outcomes. Stops on errors by default; always stops when an action is still pending. Never replay a pending action.";
     public override object InputSchema =>

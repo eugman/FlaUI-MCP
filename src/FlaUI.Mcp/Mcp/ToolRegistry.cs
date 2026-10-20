@@ -71,7 +71,7 @@ public class ToolRegistry
                 return await RunNested(tool, arguments, parent);
             }
 
-            var operation = Operations.Begin(name, requestKey);
+            var operation = Operations.Begin(name, requestKey, tool.GetDefinition().Annotations);
             using var cancellation = cancellationToken.Register(() => operation.Stop.Cancel());
             var toolTask = Task.Run(() => RunOperation(tool, arguments, operation));
             var started = Stopwatch.GetTimestamp();
@@ -286,12 +286,16 @@ public abstract class ToolBase : ITool
     public abstract string Description { get; }
     public abstract object InputSchema { get; }
 
+    /// <summary>MCP annotations for tools/list; null leaves a client to assume the tool may mutate.</summary>
+    public virtual McpToolAnnotations? Annotations => null;
+
     public McpTool GetDefinition() =>
         new()
         {
             Name = Name,
             Description = Description,
             InputSchema = InputSchema,
+            Annotations = Annotations,
         };
 
     public abstract Task<McpToolResult> ExecuteAsync(JsonElement? arguments);

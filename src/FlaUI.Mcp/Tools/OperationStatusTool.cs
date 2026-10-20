@@ -6,6 +6,8 @@ namespace FlaUI.Mcp.Tools;
 public sealed class OperationStatusTool(OperationCoordinator operations, PendingInvokeTracker pending) : ToolBase
 {
     public override string Name => "windows_operation_status";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
     public override string Description =>
         "Read-only status for running, timed-out, and completed operations. status is ok or failed once finished (running or timed_out_pending before); "
         + "dispatch says how much input went out: completed, partial, not-dispatched or unknown, with inputsSent. "

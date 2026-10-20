@@ -14,6 +14,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     private static readonly TimeSpan StepDelay = TimeSpan.FromMilliseconds(15);
 
     public override string Name => "windows_mouse";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
     public override string Description =>
         "Move the pointer or click a captured window point. park: move it off the window so no tooltip or hover state "
         + "lands in a screenshot. move/hover: to a point or ref. scroll: wheel ticks over a point or ref "

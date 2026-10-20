@@ -54,6 +54,8 @@ public class SendKeysTool : ToolBase
     /// </summary>
     public override string Name => "windows_send_keys";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
+
     /// <summary>
     /// Gets the MCP tool description.
     /// </summary>

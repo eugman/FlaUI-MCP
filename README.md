@@ -66,6 +66,18 @@ Then add the server to your MCP client:
 | `windows_batch` | Run several actions in one call. |
 | `windows_operation_status` | Check on an action that is still running (for example, one blocked by a modal dialog). |
 
+### Tool annotations
+
+Every tool in `tools/list` carries MCP `annotations`, and `flaui/operations/status` echoes them on each operation, so a client can tell a failed observation (safe to repeat) from a failed mutation (inspect before repeating):
+
+| Hint | Core tools |
+|---|---|
+| `readOnlyHint: true` | `operation_status`, `find`, `wait`, `snapshot`, `get_text`, `list_windows`, `get_clipboard`, `screenshot` (its `parkPointer` option moves the mouse, but never sends input to the app) |
+| `readOnlyHint: false`, `destructiveHint: true` | `close`, `fill`, `send_keys`, `click`, `mouse`, `paste`, `batch`: they can remove or overwrite content |
+| `readOnlyHint: false`, `destructiveHint: false` | `type`, `launch`; also `idempotentHint: true` for `focus`, `set_window_state`, `place_window` |
+
+`openWorldHint` is false throughout. A product tool sets its own hints by overriding `ToolBase.Annotations` with `McpToolAnnotations.ReadOnly` or `McpToolAnnotations.Input(destructive: ..., idempotent: ...)`; a tool that does not is listed without annotations, which a client must treat as a possible mutation.
+
 Product hosts embed the core and may expose only some of these. `launch`, `list_windows`, `focus`, `close`, `get_text` and `batch` are the desktop-management tools that a host can leave out.
 
 ## Behaviour worth knowing

@@ -107,6 +107,50 @@ public record McpTool
 
     [JsonPropertyName("inputSchema")]
     public object InputSchema { get; init; } = new { type = "object" };
+
+    [JsonPropertyName("annotations")]
+    public McpToolAnnotations? Annotations { get; init; }
+}
+
+/// <summary>
+/// MCP tool annotations: hints that let a client tell a failed observation (safe to retry) from a
+/// failed mutation (inspect before retrying). Hints, not guarantees.
+/// </summary>
+public record McpToolAnnotations
+{
+    /// <summary>Observes only; never sends input or changes the app.</summary>
+    [JsonPropertyName("readOnlyHint")]
+    public bool? ReadOnlyHint { get; init; }
+
+    /// <summary>Can remove or overwrite existing content (close a window, replace text, arbitrary keys or clicks).</summary>
+    [JsonPropertyName("destructiveHint")]
+    public bool? DestructiveHint { get; init; }
+
+    /// <summary>Repeating the call with the same arguments has no further effect.</summary>
+    [JsonPropertyName("idempotentHint")]
+    public bool? IdempotentHint { get; init; }
+
+    /// <summary>Reaches beyond the local desktop session.</summary>
+    [JsonPropertyName("openWorldHint")]
+    public bool? OpenWorldHint { get; init; }
+
+    public static readonly McpToolAnnotations ReadOnly = new()
+    {
+        ReadOnlyHint = true,
+        DestructiveHint = false,
+        IdempotentHint = true,
+        OpenWorldHint = false,
+    };
+
+    /// <summary>A tool that sends input or changes the app.</summary>
+    public static McpToolAnnotations Input(bool destructive, bool idempotent = false) =>
+        new()
+        {
+            ReadOnlyHint = false,
+            DestructiveHint = destructive,
+            IdempotentHint = idempotent,
+            OpenWorldHint = false,
+        };
 }
 
 public record McpToolsListResult

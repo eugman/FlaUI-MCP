@@ -23,6 +23,8 @@ public class ListWindowsTool : ToolBase
 
     public override string Name => "windows_list_windows";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
+
     public override string Description =>
         "List all open windows with their handles, titles, and process names. "
         + "Use this to find windows to interact with.";
@@ -70,6 +72,8 @@ public class FocusWindowTool : ToolBase
     }
 
     public override string Name => "windows_focus";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
 
     public override string Description => "Bring a window to the foreground and give it focus.";
 
@@ -138,6 +142,8 @@ public class CloseWindowTool : ToolBase
     }
 
     public override string Name => "windows_close";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 
     public override string Description => "Close a window.";
 

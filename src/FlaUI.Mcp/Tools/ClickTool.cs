@@ -22,6 +22,8 @@ public class ClickTool : ToolBase
 
     public override string Name => "windows_click";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
+
     public override string Description =>
         "Click an element by its ref (from windows_snapshot). Prefers Invoke pattern for reliability (tree and list rows: select), "
         + "falls back to mouse click if needed. Menu items and controls whose name ends in \"...\" get a physical click "

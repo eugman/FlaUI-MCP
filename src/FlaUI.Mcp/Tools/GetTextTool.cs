@@ -19,6 +19,8 @@ public class GetTextTool : ToolBase
 
     public override string Name => "windows_get_text";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
+
     public override string Description =>
         "Get the text content of an element. Returns the element's Name property, "
         + "or for text inputs, the current value.";

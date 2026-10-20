@@ -12,6 +12,8 @@ public sealed class WindowPlacementTool(
 ) : ToolBase
 {
     public override string Name => "windows_place_window";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
     public override string Description =>
         "Move or resize an observed normal-state native window in physical screen pixels without activating it. Returns requested and observed bounds; the operating system may constrain size. Rejects clipping and child controls; never replays the move.";
     public override object InputSchema =>
