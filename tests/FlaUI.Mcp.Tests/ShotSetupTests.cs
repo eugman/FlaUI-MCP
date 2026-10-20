@@ -157,6 +157,50 @@ public sealed class ShotSetupTests
     }
 
     [Fact]
+    public void GuardChecksOnlyTheCroppedRegion()
+    {
+        var source = new Rectangle(920, 128, 1000, 892);
+        var frame = new CaptureFrame(null, null, 10, 20, 300, 200);
+        Assert.Equal(new Rectangle(930, 148, 300, 200), ScreenshotTool.GuardRect(source, frame));
+    }
+
+    [Fact]
+    public void GuardWithoutAFrameChecksTheWholeCapture()
+    {
+        var source = new Rectangle(0, 43, 1920, 1073);
+        Assert.Equal(source, ScreenshotTool.GuardRect(source, null));
+    }
+
+    [Fact]
+    public void AWindowOutsideTheCropNoLongerRefuses()
+    {
+        var source = new Rectangle(920, 128, 1000, 892);
+        var crop = ScreenshotTool.GuardRect(source, new CaptureFrame(null, null, 0, 0, 400, 300));
+        Win32Desktop.WindowBounds W(nint h, int pid, Rectangle r) =>
+            new(new Win32WindowInfo(h, "w", pid, IsEnabled: true, IsToolWindow: false, IsCloaked: false), r, true);
+        // A notification over the pane's bottom-right corner, far from the 400x300 crop at its top-left.
+        var zOrder = new[] { W(2, 200, new Rectangle(1600, 800, 300, 200)), W(1, 100, source) };
+        Assert.True(Win32Desktop.FindObstructions(zOrder, 1, 100, crop).IsClean);
+        Assert.False(Win32Desktop.FindObstructions(zOrder, 1, 100, source).IsClean);
+    }
+
+    [Theory]
+    [InlineData(ToggleState.Off, ToggleState.On, "Show changes: Off -> On")]
+    [InlineData(ToggleState.On, ToggleState.On, "Toggled Show changes, but it is still On")]
+    public void ToggleReportsTheStateItReached(ToggleState before, ToggleState after, string expected) =>
+        Assert.Equal(expected, ClickTool.ToggleOutcome("Show changes", before, after));
+
+    [Fact]
+    public void ToggleWithUnreadableStateSaysSo() =>
+        Assert.Contains("could not be read", ClickTool.ToggleOutcome("X", null, ToggleState.On));
+
+    [Theory]
+    [InlineData("", "COMException", "windows_wait: COMException No input sent.")]
+    [InlineData("Element not available.", "X", "windows_wait: Element not available. No input sent.")]
+    public void WaitFailuresAlwaysNameAReason(string message, string type, string expected) =>
+        Assert.Equal(expected, WaitTool.FailureText(message, type));
+
+    [Fact]
     public void AnInvalidHwndCountsAsClosed()
     {
         // 0x7FFFFFF0 is not a live window handle; 0 means "not cached" and is handled elsewhere.

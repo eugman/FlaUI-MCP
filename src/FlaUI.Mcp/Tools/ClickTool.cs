@@ -105,12 +105,19 @@ public class ClickTool : ToolBase
             var fallbackNote = "";
             if (action != null)
             {
+                // Clicking a row that is already selected starts inline rename in TE3's tree, and the
+                // next keystroke then renames the object; selecting it again is never needed.
+                if (action == "select" && IsSelected(element))
+                {
+                    return Task.FromResult(TextResult($"{elementName} is already selected; nothing was clicked"));
+                }
+
                 var patternResult = RunPattern(element, action, processId, elementName, Validate);
                 if (
                     action != "select"
                     || patternResult.IsError == true
                     || patternResult.Outcome?.IsPending == true
-                    || IsSelected(element)
+                    || Settled(() => IsSelected(element), 300)
                 )
                 {
                     return Task.FromResult(patternResult);
@@ -229,6 +236,39 @@ public class ClickTool : ToolBase
         && selection.IsSelected.TryGetValue(out var selected)
         && selected;
 
+    /// <summary>Polls a condition until it holds or the time runs out; providers update state asynchronously.</summary>
+    private static bool Settled(Func<bool> condition, int timeoutMs)
+    {
+        for (var waited = 0; ; waited += 50)
+        {
+            if (condition())
+            {
+                return true;
+            }
+
+            if (waited >= timeoutMs)
+            {
+                return false;
+            }
+
+            Thread.Sleep(50);
+        }
+    }
+
+    private static ToggleState? ReadToggle(AutomationElement element) =>
+        element.Patterns.Toggle.TryGetPattern(out var toggle) && toggle.ToggleState.TryGetValue(out var state)
+            ? state
+            : null;
+
+    /// <summary>What a toggle did, from the state read before and after it.</summary>
+    internal static string ToggleOutcome(string name, ToggleState? before, ToggleState? after) =>
+        (before, after) switch
+        {
+            (null, _) or (_, null) => $"Sent toggle request to {name}; its state could not be read",
+            var (b, a) when b == a => $"Toggled {name}, but it is still {b}",
+            var (b, a) => $"{name}: {b} -> {a}",
+        };
+
     private static bool Supports(AutomationElement element, string action) =>
         action switch
         {
@@ -256,6 +296,7 @@ public class ClickTool : ToolBase
             _ => ("Collapse", () => element.Patterns.ExpandCollapse.Pattern.Collapse()),
         };
 
+        var toggleBefore = action == "toggle" ? ReadToggle(element) : null;
         // Pattern mutations share the input lease so they cannot interleave with physical input.
         using var lease = GuardedInput.AcquireLease();
         var result = ModalAwareInvoker.Execute(
@@ -264,10 +305,18 @@ public class ClickTool : ToolBase
             () => MutationGuard.Execute(validate, call),
             _invokeTracker
         );
-        // Providers may update toggle state asynchronously or return a cached pre-toggle value.
+        // Providers may update toggle state asynchronously, so wait briefly for it to move.
+        ToggleState? toggleAfter = null;
+        if (action == "toggle" && result.Outcome == PatternCallOutcome.Completed)
+        {
+            Settled(() => (toggleAfter = ReadToggle(element)) != toggleBefore, 500);
+        }
+
         var message = action switch
         {
-            "toggle" => $"Sent toggle request to {elementName}; inspect fresh state to verify the result",
+            "toggle" => result.Outcome == PatternCallOutcome.Completed
+                ? ToggleOutcome(elementName, toggleBefore, toggleAfter)
+                : $"Sent toggle request to {elementName}",
             "invoke" => $"Invoked {elementName}",
             "select" => $"Selected {elementName}",
             "expand" => $"Expanded {elementName}",
