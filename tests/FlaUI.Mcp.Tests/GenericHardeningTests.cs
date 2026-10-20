@@ -32,6 +32,21 @@ public sealed class GenericHardeningTests
     }
 
     [Fact]
+    public void PatternActionsRefuseARefWithoutProcessIdentity()
+    {
+        // Registered without SetWindowIdentity: no PID/start-time to revalidate, and no PID for the
+        // pending-provider check or modal detection. Reads may use it; mutations must not.
+        var refs = new ElementRegistry();
+        var element = Element();
+        var reference = refs.Register("w1", element);
+
+        Assert.Same(element, refs.ResolveRef(reference));
+        var error = Assert.Throws<InvalidOperationException>(() => refs.ValidateReference(reference));
+        Assert.Contains("no action dispatched", error.Message);
+        Assert.Equal(0, refs.GetProcessIdForRef(reference));
+    }
+
+    [Fact]
     public void RepeatedObservationsCannotGrowTheRefTableWithoutBound()
     {
         var refs = new ElementRegistry();
