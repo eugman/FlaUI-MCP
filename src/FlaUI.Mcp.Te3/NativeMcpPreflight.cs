@@ -64,24 +64,18 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
             token
         );
         var version =
-            initialization.GetProperty("protocolVersion").GetString()
+            StringProperty(initialization, "protocolVersion")
             ?? throw new InvalidOperationException("Native MCP did not report a protocol version.");
-        var serverInfo = initialization.GetProperty("serverInfo");
+        var serverInfo = initialization.TryGetProperty("serverInfo", out var info) ? info : default;
         var server =
-            serverInfo.GetProperty("name").GetString()
+            StringProperty(serverInfo, "name")
             ?? throw new InvalidOperationException("Native MCP did not report server identity.");
-        var serverVersion =
-            serverInfo.TryGetProperty("version", out var reported) && reported.ValueKind == JsonValueKind.String
-                ? reported.GetString()
-                : null;
+        var serverVersion = StringProperty(serverInfo, "version");
 
         session.SetProtocolVersion(version);
         await session.NotifyInitialized(token);
 
-        var definitions = (await session.Send("tools/list", new { }, token))
-            .GetProperty("tools")
-            .EnumerateArray()
-            .ToArray();
+        var definitions = ToolDefinitions(await session.Send("tools/list", new { }, token));
         var tools = definitions.Select(tool => tool.GetProperty("name").GetString()!).ToArray();
         var identityTool = definitions.SingleOrDefault(tool =>
             tool.GetProperty("name").GetString() == request.IdentityTool
@@ -125,6 +119,37 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
 
     private const string WorkspaceDescription =
         "Identifies this Tabular Editor instance and the semantic model it currently has open: model name, how the model is loaded (file/folder/connected), unsaved-changes state and compatibility level. Call this first to confirm which instance and model you are talking to.";
+
+    /// <summary>A string member of a JSON object, or null when the object or the string is missing.</summary>
+    private static string? StringProperty(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object
+        && element.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    /// <summary>The listed tools; a missing list, or a tool without a string name, is a protocol error.</summary>
+    private static JsonElement[] ToolDefinitions(JsonElement listing)
+    {
+        if (!listing.TryGetProperty("tools", out var tools) || tools.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException("Native MCP did not return a tools list.");
+        }
+
+        var definitions = tools.EnumerateArray().ToArray();
+        if (
+            definitions.Any(tool =>
+                tool.ValueKind != JsonValueKind.Object
+                || !tool.TryGetProperty("name", out var name)
+                || name.ValueKind != JsonValueKind.String
+            )
+        )
+        {
+            throw new InvalidOperationException("Native MCP listed a tool without a name.");
+        }
+
+        return definitions;
+    }
 
     private static bool IsDeclaredReadOnly(JsonElement tool) =>
         tool.TryGetProperty("annotations", out var annotations)

@@ -12,7 +12,8 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
     public static Te3NativePreflightTool Create() =>
         new(new HttpClient(CreateHandler()) { Timeout = TimeSpan.FromSeconds(10) });
 
-    internal static HttpClientHandler CreateHandler() => new() { AllowAutoRedirect = false };
+    /// <summary>No redirects, and no proxy: the endpoint is loopback and the request can carry a bearer token.</summary>
+    internal static HttpClientHandler CreateHandler() => new() { AllowAutoRedirect = false, UseProxy = false };
 
     public override string Name => ToolName;
     public override string Description =>
