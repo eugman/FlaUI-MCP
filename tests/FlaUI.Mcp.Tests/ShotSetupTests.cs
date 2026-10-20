@@ -201,7 +201,7 @@ public sealed class ShotSetupTests
         Assert.Equal(expected, WaitTool.FailureText(message, type));
 
     private static Win32WindowInfo Top(nint hwnd) =>
-        new(hwnd, "Tabular Editor 3.27.1", 1, IsEnabled: true, IsToolWindow: false, IsCloaked: false);
+        new(hwnd, "Main window", 1, IsEnabled: true, IsToolWindow: false, IsCloaked: false);
 
     [Fact]
     public void LaunchWaitsForTheSameWindowOnTwoPolls()

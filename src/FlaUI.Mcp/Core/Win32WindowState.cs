@@ -17,7 +17,7 @@ public static partial class Win32Desktop
         return IsZoomed(hwnd) ? WindowStates.Maximized : WindowStates.Normal;
     }
 
-    /// <summary>One ShowWindow call. The return value is the previous visibility, not success.</summary>
+    /// <summary>ShowWindow for the state (twice for normal from minimized-maximized). ShowWindow returns the previous visibility, not success.</summary>
     public static void SetWindowState(nint hwnd, string requested)
     {
         var command = requested switch
@@ -28,6 +28,11 @@ public static partial class Win32Desktop
             _ => throw new ArgumentException($"Unknown window state '{requested}'"),
         };
         ShowWindow(hwnd, command);
+        // A window minimized from maximized restores to maximized; one more restore reaches normal.
+        if (requested == WindowStates.Normal && IsZoomed(hwnd))
+        {
+            ShowWindow(hwnd, ShowRestore);
+        }
     }
 }
 

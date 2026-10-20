@@ -105,9 +105,13 @@ public class ClickTool : ToolBase
             var fallbackNote = "";
             if (action != null)
             {
-                // Clicking a row that is already selected starts inline rename in TE3's tree, and the
+                // In some tree controls, clicking a row that is already selected starts inline rename, and the
                 // next keystroke then renames the object; selecting it again is never needed.
-                if (action == "select" && IsSelected(element))
+                if (
+                    action == "select"
+                    && element.Properties.ControlType.ValueOrDefault == ControlType.TreeItem
+                    && IsSelected(element)
+                )
                 {
                     return Task.FromResult(TextResult($"{elementName} is already selected; nothing was clicked"));
                 }
@@ -123,7 +127,7 @@ public class ClickTool : ToolBase
                     return Task.FromResult(patternResult);
                 }
 
-                // Some providers (TE3's tree rows) accept Select() and change nothing; a real click selects.
+                // Some tree providers accept Select() and change nothing; a real click selects.
                 fallbackNote = " (Select changed nothing, so it was clicked instead)";
             }
 
@@ -239,20 +243,14 @@ public class ClickTool : ToolBase
     /// <summary>Polls a condition until it holds or the time runs out; providers update state asynchronously.</summary>
     private static bool Settled(Func<bool> condition, int timeoutMs)
     {
-        for (var waited = 0; ; waited += 50)
+        var held = condition();
+        for (var waited = 0; !held && waited < timeoutMs; waited += 50)
         {
-            if (condition())
-            {
-                return true;
-            }
-
-            if (waited >= timeoutMs)
-            {
-                return false;
-            }
-
             Thread.Sleep(50);
+            held = condition();
         }
+
+        return held;
     }
 
     private static ToggleState? ReadToggle(AutomationElement element) =>
@@ -309,7 +307,14 @@ public class ClickTool : ToolBase
         ToggleState? toggleAfter = null;
         if (action == "toggle" && result.Outcome == PatternCallOutcome.Completed)
         {
-            Settled(() => (toggleAfter = ReadToggle(element)) != toggleBefore, 500);
+            Settled(
+                () =>
+                {
+                    toggleAfter = ReadToggle(element);
+                    return toggleAfter != toggleBefore;
+                },
+                500
+            );
         }
 
         var message = action switch
