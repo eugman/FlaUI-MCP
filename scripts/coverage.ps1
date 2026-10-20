@@ -41,9 +41,9 @@ if (-not $Mutation) { return }
 $copy = Join-Path $out 'stryker-te3'
 Remove-Item $copy -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $copy | Out-Null
-$archive = "$copy.tar"
-Run 'Export HEAD for Stryker' { git archive --format=tar -o $archive HEAD }
-Run 'Unpack the export' { tar -xf $archive -C $copy }
+$archive = "$copy.zip"
+Run 'Export HEAD for Stryker' { git archive --format=zip -o $archive HEAD }
+Expand-Archive $archive $copy
 Remove-Item $archive
 $work = Join-Path $copy $tests
 Push-Location $work
