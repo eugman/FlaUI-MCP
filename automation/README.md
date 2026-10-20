@@ -37,7 +37,7 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 | `te3_model_state` | Reads the status bar: whether a model is loaded, its connection, the BPA count, the selected object. Sends no input. |
 | `te3_layout` | Lists, closes, maximizes, restores and resizes docked panes and document tabs for a screenshot. Takes focus; no model edits. |
 
-Destinations: `tom-explorer`, `tom-explorer/changes` (turns on the TOM Explorer Show changes view filter), `expression-editor`, `object` (with `table`, `objectName`, `objectType` Table/Column/Measure and optional `folder`), `preferences/auto-formatting`, `preferences/code-actions`, `preferences/ai-provider`, `preferences/ai-assistant`, `preferences/mcp-server`, `preferences/permissions`.
+Destinations: `native-mcp-server` (opens and verifies the native MCP Server dialog without starting it), `tom-explorer`, `tom-explorer/changes` (turns on the TOM Explorer Show changes view filter), `expression-editor`, `object` (with `table`, `objectName`, `objectType` Table/Column/Measure and optional `folder`), `preferences/auto-formatting`, `preferences/code-actions`, `preferences/ai-provider`, `preferences/ai-assistant`, `preferences/mcp-server`, `preferences/permissions`.
 
 ```json
 {"destination": "object", "table": "Sales", "objectName": "Amount", "objectType": "Column"}

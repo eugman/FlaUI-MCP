@@ -84,6 +84,16 @@ public sealed class CompanionTests
         );
 
     [Fact]
+    public void NativeMcpDialogUsesObservedMarkerWithoutStartControl()
+    {
+        var marker = Te3Page.McpServerMarkerTarget();
+        Assert.Equal("Export configuration", marker.Selector.Name);
+        Assert.Equal("SplitButton", marker.Selector.ControlType);
+        Assert.Equal("McpServerDialog", marker.Within?.AutomationId);
+        Assert.Contains("native-mcp-server", Te3Destinations.Ids);
+    }
+
+    [Fact]
     public void ShowChangesTargetsTheObservedTomExplorerToggle()
     {
         var target = Te3Page.TomChangesTarget();

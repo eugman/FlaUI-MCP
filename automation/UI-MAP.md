@@ -88,7 +88,7 @@ More notes:
 | Layouts | title-bar Close | Escape doesn't close it, and it has no Cancel. |
 | Windows | title-bar Close (`Close`) | Escape doesn't close it. |
 | Manage Best Practice Rules | Escape or Cancel | |
-| Tools > MCP Server (3.27) | Escape or Cancel | Don't start the server unless you mean to. |
+| MCP Server (3.27.1) | OK | Status-bar Button `MCP Stopped` opened this dialog in the live session. Pane `McpServerDialog` contains SplitButton `Export configuration`; `native-mcp-server` only opens and verifies it. Do not click Start server unless separately intended. |
 
 A dialog can disappear between window enumeration and a UIA read. Treat `ElementNotAvailableException` as "observe again", not as proof that it closed.
 
@@ -110,6 +110,7 @@ A dialog can disappear between window enumeration and a UIA read. Treat `Element
 
 | Route | Evidence | Companion status |
 | --- | --- | --- |
+| Native MCP Server dialog | Live status button and dialog pane controls | `native-mcp-server` |
 | Preferences > AI Features > MCP Server | Live UIA tree and pane controls | `preferences/mcp-server` |
 | Preferences > AI Features > Permissions | Live UIA tree and pane controls | `preferences/permissions` |
 | Preferences > AI Features > AI Assistant > AI Provider | Live UIA tree and pane controls | `preferences/ai-provider` |

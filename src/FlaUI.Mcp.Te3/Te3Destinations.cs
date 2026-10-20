@@ -14,6 +14,7 @@ public static class Te3Destinations
     [
         new("tom-explorer"),
         new("tom-explorer/changes"),
+        new("native-mcp-server"),
         new("expression-editor"),
         new("object"),
         // Preferences destinations name a tree section and a pane control that proves the page is showing.

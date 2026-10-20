@@ -139,15 +139,17 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
             // Validate has already confirmed the id is in the registry.
             var destination = Te3Destinations.Find(GetStringArgument(a, "destination"))!;
             var hasPreferences = windows.Any(w => w.Title == "Preferences");
-            if (windows.Any(w => w.Hwnd != hwnd && w.Title.Length > 0 && w.Title != "Preferences"))
+            var allowedDialog = destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences";
+            var unexpected = windows
+                .Where(w => w.Hwnd != hwnd && w.Title.Length > 0 && w.Title != allowedDialog)
+                .ToArray();
+            if (unexpected.Length > 0)
             {
                 throw new InvalidOperationException(
                     "An additional TE3 window is open: "
                         + string.Join(
                             "; ",
-                            windows
-                                .Where(w => w.Hwnd != hwnd && w.Title.Length > 0 && w.Title != "Preferences")
-                                .Select(w => $"{w.Title} (HWND {w.Hwnd}, tool window: {w.IsToolWindow})")
+                            unexpected.Select(w => $"{w.Title} (HWND {w.Hwnd}, tool window: {w.IsToolWindow})")
                         )
                         + ". Inspect it; no dialog was dismissed."
                 );
@@ -186,6 +188,9 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
                     break;
                 case { Id: "tom-explorer/changes" }:
                     await page.OpenTomChanges();
+                    break;
+                case { Id: "native-mcp-server" }:
+                    await page.OpenNativeMcpServer();
                     break;
                 case { Id: "expression-editor" }:
                     await page.SelectDocument("Expression Editor");
