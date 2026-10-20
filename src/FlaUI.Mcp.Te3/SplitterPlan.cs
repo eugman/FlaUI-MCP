@@ -10,7 +10,13 @@ public static class SplitterPlan
     public const int MaxGap = 24;
 
     /// <summary>Drag start and end, in screen pixels, that make <paramref name="pane"/> the requested size.</summary>
-    public static (Point From, Point To) Resize(Rectangle pane, IEnumerable<Rectangle> others, int? width, int? height)
+    public static (Point From, Point To) Resize(
+        Rectangle pane,
+        IEnumerable<Rectangle> others,
+        int? width,
+        int? height,
+        Rectangle? window = null
+    )
     {
         if (width is null == height is null)
         {
@@ -18,6 +24,14 @@ public static class SplitterPlan
         }
 
         var neighbours = others.Where(o => o != pane).ToList();
+        // An empty document area is no pane, so it leaves no neighbour. Its splitter is still there,
+        // just outside the pane edge that faces the window interior.
+        var room = window ?? Rectangle.Empty;
+        if (!room.IsEmpty)
+        {
+            neighbours.AddRange(InteriorGaps(pane, room));
+        }
+
         return width is { } w ? Horizontal(pane, neighbours, w) : Vertical(pane, neighbours, height!.Value);
     }
 
@@ -66,6 +80,33 @@ public static class SplitterPlan
         }
 
         throw new InvalidOperationException("No pane shares a horizontal edge with this one; nothing to drag.");
+    }
+
+    // Pixels between a pane edge and the dock splitter beside it, seen live at 175%.
+    public const int SplitterOffset = 5;
+
+    /// <summary>Stand-in neighbours for the window space beyond each pane edge that faces the interior.</summary>
+    private static IEnumerable<Rectangle> InteriorGaps(Rectangle pane, Rectangle window)
+    {
+        if (pane.Left - window.Left > MaxGap)
+        {
+            yield return Rectangle.FromLTRB(window.Left, pane.Top, pane.Left - 2 * SplitterOffset, pane.Bottom);
+        }
+
+        if (window.Right - pane.Right > MaxGap)
+        {
+            yield return Rectangle.FromLTRB(pane.Right + 2 * SplitterOffset, pane.Top, window.Right, pane.Bottom);
+        }
+
+        if (pane.Top - window.Top > MaxGap)
+        {
+            yield return Rectangle.FromLTRB(pane.Left, window.Top, pane.Right, pane.Top - 2 * SplitterOffset);
+        }
+
+        if (window.Bottom - pane.Bottom > MaxGap)
+        {
+            yield return Rectangle.FromLTRB(pane.Left, pane.Bottom + 2 * SplitterOffset, pane.Right, window.Bottom);
+        }
     }
 
     private static bool Near(int edge, int other) => other - edge is >= 0 and <= MaxGap;

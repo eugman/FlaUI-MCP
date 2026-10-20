@@ -49,4 +49,23 @@ public sealed class SplitterPlanTests
     [Fact]
     public void ExactlyOneDimension() =>
         Assert.Throws<ArgumentException>(() => SplitterPlan.Resize(Explorer, [Documents], 900, 600));
+
+    [Fact]
+    public void WithNoDocumentPaneTheSplitterSitsBesideThePaneEdge()
+    {
+        // Seen live: all document tabs closed, so the right-hand column has no neighbour pane.
+        var properties = new Rectangle(857, 558, 1063, 470);
+        var window = new Rectangle(0, 43, 1920, 1030);
+        var (from, to) = SplitterPlan.Resize(properties, [], width: 820, height: null, window: window);
+        Assert.Equal(857 - SplitterPlan.SplitterOffset, from.X);
+        Assert.Equal(from.X + 243, to.X);
+    }
+
+    [Fact]
+    public void ARealNeighbourWinsOverTheFallback()
+    {
+        var window = new Rectangle(0, 0, 1920, 1030);
+        var (from, _) = SplitterPlan.Resize(Explorer, [Documents], width: 900, height: null, window: window);
+        Assert.Equal(827, from.X);
+    }
 }

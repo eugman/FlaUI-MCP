@@ -205,7 +205,8 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
             before,
             others,
             GetArgument<int?>(a, "width"),
-            GetArgument<int?>(a, "height")
+            GetArgument<int?>(a, "height"),
+            window.BoundingRectangle
         );
         var origin = window.BoundingRectangle;
         await Tool(
