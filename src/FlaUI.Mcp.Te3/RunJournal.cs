@@ -5,7 +5,7 @@ using FlaUI.Mcp;
 /// <summary>What a run records before it acts, so a runner killed mid-step still leaves evidence of it.</summary>
 internal static class RunJournal
 {
-    /// <summary>Starts TE3 and records the owned PID and start time.</summary>
+    /// <summary>Persists the launch intent, starts TE3, then records the owned PID and start time.</summary>
     internal static Process Launch(
         RunManifest manifest,
         Action save,
@@ -13,6 +13,9 @@ internal static class RunJournal
         Func<ProcessStartInfo, Process?> launch
     )
     {
+        // Saved first: a runner killed between Start and the PID save still reads as "a TE3 may be running".
+        manifest.LaunchRequestedTicks = DateTime.UtcNow.Ticks;
+        save();
         var app = launch(start) ?? throw new InvalidOperationException("TE3 did not start");
         manifest.ProcessId = app.Id;
         manifest.ProcessStartedTicks = app.StartTime.ToUniversalTime().Ticks;
@@ -20,7 +23,7 @@ internal static class RunJournal
         return app;
     }
 
-    /// <summary>Runs one tool call and appends it to the run's action journal.</summary>
+    /// <summary>Runs one tool call, journaling its intent before it runs and its result or error after.</summary>
     internal static async Task<McpToolResult> Tool(
         string journal,
         string tool,
@@ -28,18 +31,46 @@ internal static class RunJournal
         Func<Task<McpToolResult>> execute
     )
     {
-        var result = await execute();
-        File.AppendAllText(
+        Append(
             journal,
-            JsonSerializer.Serialize(
+            new
+            {
+                phase = "intent",
+                tool,
+                arguments,
+            }
+        );
+        McpToolResult result;
+        try
+        {
+            result = await execute();
+        }
+        catch (Exception error)
+        {
+            Append(
+                journal,
                 new
                 {
+                    phase = "error",
                     tool,
-                    arguments,
-                    result,
+                    error = error.Message,
                 }
-            ) + Environment.NewLine
+            );
+            throw;
+        }
+
+        Append(
+            journal,
+            new
+            {
+                phase = "result",
+                tool,
+                result,
+            }
         );
         return result;
     }
+
+    private static void Append(string journal, object entry) =>
+        File.AppendAllText(journal, JsonSerializer.Serialize(entry) + Environment.NewLine);
 }
