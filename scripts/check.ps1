@@ -67,8 +67,13 @@ Step 'Known debt does not grow' { CheckDebt }
 # Capped so a check doesn't saturate a shared desktop, and leaves no idle build nodes behind.
 Step 'Build with analyzers' { dotnet build FlaUI.Mcp.slnx -nologo -v q -m:2 -nodeReuse:false }
 
+# Only reviewed no-focus projects may run in the background gate.
+$approvedTests = @('FlaUI.Mcp.Tests', 'FlaUI.Mcp.Te3.Tests', 'FlaUI.Mcp.PowerBi.Tests', 'FlaUI.Mcp.Camtasia.Tests')
 $unitTests = Get-ChildItem tests -Filter *.csproj -Recurse |
-    Where-Object { $_.Name -like '*Tests.csproj' -and $_.Name -notlike '*IntegrationTests*' }
+    Where-Object { $_.BaseName -in $approvedTests }
+$unknownTests = Get-ChildItem tests -Filter '*Tests.csproj' -Recurse |
+    Where-Object { $_.BaseName -notin $approvedTests -and $_.BaseName -notlike '*IntegrationTests*' }
+if ($unknownTests) { throw 'Unclassified test project: review desktop requirements before adding it to the background allowlist.' }
 foreach ($project in $unitTests) {
     Step "Test $($project.BaseName)" { dotnet test $project.FullName --no-build -nologo -v q }
 }

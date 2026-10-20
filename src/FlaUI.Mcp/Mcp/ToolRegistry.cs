@@ -36,7 +36,12 @@ public class ToolRegistry
         return _tools.Values.Select(t => t.GetDefinition()).ToList();
     }
 
-    public async Task<McpToolResult> ExecuteToolAsync(string name, JsonElement? arguments)
+    public async Task<McpToolResult> ExecuteToolAsync(
+        string name,
+        JsonElement? arguments,
+        CancellationToken cancellationToken = default,
+        string? requestKey = null
+    )
     {
         if (!_tools.TryGetValue(name, out var tool))
         {
@@ -50,6 +55,7 @@ public class ToolRegistry
             };
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         try
         {
             _onToolActivity?.Invoke();
@@ -59,7 +65,8 @@ public class ToolRegistry
                 return await tool.ExecuteAsync(arguments);
             }
 
-            var operation = Operations.Begin(name);
+            var operation = Operations.Begin(name, requestKey);
+            using var cancellation = cancellationToken.Register(() => operation.Stop.Cancel());
             var toolTask = Task.Run(async () =>
             {
                 OperationContext.Current.Value = operation;
@@ -72,6 +79,7 @@ public class ToolRegistry
                     operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
                     OperationContext.Check();
                     var result = await tool.ExecuteAsync(arguments);
+                    operation.ResultOutcome = result.Outcome;
                     if (result.IsError == true || result.Outcome?.Dispatch == "failed")
                     {
                         var error = string.Join("; ", result.Content.Select(c => c.Text));
@@ -93,10 +101,11 @@ public class ToolRegistry
             });
             using var timer = new CancellationTokenSource();
             var timeoutTask = Task.Delay(_toolTimeout, timer.Token);
-            var finished = await Task.WhenAny(toolTask, timeoutTask);
+            var cancelledTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            var finished = await Task.WhenAny(toolTask, timeoutTask, cancelledTask);
             // Stop the timer once the tool returns, so a fast call doesn't leave it running for the full timeout.
             await timer.CancelAsync();
-            if (finished == timeoutTask)
+            if (finished != toolTask)
             {
                 operation.Stop.Cancel();
                 // A stranded call can still hold this app's UIA provider. Fail later ref tools fast until it returns.
@@ -118,21 +127,14 @@ public class ToolRegistry
                 {
                     Content = new List<McpContent>
                     {
-                        new()
-                        {
-                            Type = "text",
-                            Text =
-                                $"Tool '{name}' timed out after {(int)_toolTimeout.TotalMilliseconds}ms. "
-                                + "A modal dialog or blocked UI Automation provider may still be running in the background. "
-                                + "Inspect the target and operation status before continuing. The request may have partially executed; do not blindly replay it.",
-                        },
+                        new() { Type = "text", Text = PendingMessage(name, cancellationToken.IsCancellationRequested) },
                     },
                     Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id),
                     IsError = true,
                 };
             }
 
-            return await toolTask;
+            return CompleteResult(await toolTask, operation);
         }
         catch (Exception ex)
         {
@@ -145,6 +147,32 @@ public class ToolRegistry
                 IsError = true,
             };
         }
+    }
+
+    private string PendingMessage(string name, bool cancelled) =>
+        (
+            cancelled
+                ? $"Tool '{name}' cancellation requested. "
+                : $"Tool '{name}' timed out after {(int)_toolTimeout.TotalMilliseconds}ms. "
+        )
+        + "A modal dialog or blocked UI Automation provider may still be running in the background. "
+        + "Inspect the target and operation status before continuing. The request may have partially executed; do not blindly replay it.";
+
+    private static McpToolResult CompleteResult(McpToolResult result, OperationContext operation)
+    {
+        var outcome = result.Outcome;
+        if (outcome == null)
+        {
+            outcome = new ToolOutcome(result.IsError == true ? "failed" : "completed", "not-tracked")
+            {
+                Verification = "not-established",
+            };
+        }
+
+        return result with
+        {
+            Outcome = outcome with { OperationId = outcome.OperationId ?? operation.Id },
+        };
     }
 }
 
