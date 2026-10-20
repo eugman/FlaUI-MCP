@@ -83,6 +83,17 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override void Dispatch(Action input) => Interlocked.Increment(ref dispatched);
 
+    /// <summary>What PostMessage(WM_CLOSE) returns.</summary>
+    public bool PostCloseResult { get; set; } = true;
+
+    public int CloseRequests { get; private set; }
+
+    public override bool PostClose(nint hwnd)
+    {
+        CloseRequests++;
+        return PostCloseResult;
+    }
+
     public override string WindowState(nint hwnd) => State;
 
     public override void SetWindowState(nint hwnd, string state) => StateRequests.Add(state);

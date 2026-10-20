@@ -484,7 +484,7 @@ public class SessionManager : IDisposable
         return result;
     }
 
-    public void FocusWindow(string handle)
+    public void FocusWindow(string handle, PendingInvokeTracker? pending = null)
     {
         OperationContext.Check();
         // Prefer Win32 focus (never blocks); fall back to UIA for windows
@@ -508,7 +508,7 @@ public class SessionManager : IDisposable
         window.Focus();
     }
 
-    public void CloseWindow(string handle)
+    public void CloseWindow(string handle, PendingInvokeTracker? pending = null)
     {
         OperationContext.Check();
         // Prefer a Win32 WM_CLOSE (never blocks); fall back to UIA.
