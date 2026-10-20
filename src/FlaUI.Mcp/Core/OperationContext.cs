@@ -11,10 +11,12 @@ public sealed class OperationContext
     public int ProcessId { get; set; }
     public long ProcessStartedTicks { get; set; }
     public string Tool { get; init; } = "";
+    public string? RequestKey { get; init; }
     public DateTime StartedUtc { get; } = DateTime.UtcNow;
     public CancellationTokenSource Stop { get; } = new();
     public volatile bool Finished;
     public string? Error { get; set; }
+    public ToolOutcome? ResultOutcome { get; set; }
 
     public static void Check() => Current.Value?.Stop.Token.ThrowIfCancellationRequested();
 }
@@ -24,7 +26,7 @@ public sealed class OperationCoordinator
     private readonly object gate = new();
     private readonly ConcurrentDictionary<string, OperationContext> operations = new();
 
-    public OperationContext Begin(string tool)
+    public OperationContext Begin(string tool, string? requestKey = null)
     {
         lock (gate)
         {
@@ -39,15 +41,15 @@ public sealed class OperationCoordinator
                 operations.TryRemove(old.Id, out _);
             }
 
-            var op = new OperationContext { Tool = tool };
+            var op = new OperationContext { Tool = tool, RequestKey = requestKey };
             operations[op.Id] = op;
             return op;
         }
     }
 
-    public object Status(string? id = null, PendingInvokeTracker? pending = null) =>
+    public object Status(string? id = null, PendingInvokeTracker? pending = null, string? requestKey = null) =>
         operations
-            .Values.Where(o => id == null || o.Id == id)
+            .Values.Where(o => (id == null || o.Id == id) && (requestKey == null || o.RequestKey == requestKey))
             .OrderByDescending(o => o.StartedUtc)
             .Select(o =>
             {
@@ -59,6 +61,8 @@ public sealed class OperationCoordinator
                 return new
                 {
                     operationId = o.Id,
+                    requestKey = o.RequestKey,
+                    finished = o.Finished,
                     o.ProcessId,
                     o.ProcessStartedTicks,
                     o.Tool,
@@ -70,6 +74,7 @@ public sealed class OperationCoordinator
                     : "idle",
                     pendingPatternIds = patterns,
                     o.Error,
+                    resultOutcome = o.ResultOutcome,
                 };
             })
             .ToArray();

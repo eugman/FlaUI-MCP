@@ -1,7 +1,8 @@
 # Fails when a product repo changes files owned by the shared core (see scripts/core-paths.txt).
 # Core changes belong in FlaUI-MCP-Core; product repos receive them with `git merge core/main`.
 # In the core repo itself there is nothing to check.
-param([switch]$Staged)
+param([switch]$Staged, [string]$CoreRevision = $env:CORE_REVISION)
+if (-not $CoreRevision) { $CoreRevision = "core/main" }
 
 $ErrorActionPreference = 'Stop'
 $root = git rev-parse --show-toplevel
@@ -10,7 +11,7 @@ $root = git rev-parse --show-toplevel
 $isProduct = [bool](Get-ChildItem (Join-Path $root 'src') -Directory | Where-Object Name -like 'FlaUI.Mcp.?*')
 if (-not $isProduct) { exit 0 }
 
-if ((git remote) -notcontains 'core') {
+if ($CoreRevision -eq 'core/main' -and (git remote) -notcontains 'core') {
     Write-Host 'This product repo has no `core` remote, so core ownership cannot be checked.' -ForegroundColor Red
     Write-Host 'Run: pwsh scripts/setup.ps1'
     exit 1
@@ -28,14 +29,19 @@ if ($Staged) {
     $changed = git diff --cached --name-only --no-renames
 }
 else {
-    git rev-parse -q --verify core/main *> $null
+    git rev-parse -q --verify "$CoreRevision^{commit}" *> $null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host 'core/main is not fetched. Run: git fetch core' -ForegroundColor Red
+        Write-Host "Core revision $CoreRevision is not available. Fetch the intended core commit." -ForegroundColor Red
         exit 1
     }
 
-    $base = git merge-base HEAD core/main
-    $changed = git diff --name-only --no-renames $base HEAD
+    git merge-base --is-ancestor $CoreRevision HEAD
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "The selected core revision is not merged into this branch: $CoreRevision" -ForegroundColor Red
+        exit 1
+    }
+
+    $changed = git diff --name-only --no-renames $CoreRevision HEAD
 }
 
 $touched = $changed | Where-Object { $file = $_; $corePaths | Where-Object { $file.StartsWith($_) } }

@@ -72,6 +72,9 @@ public record McpServerInfo
 
 public record McpCapabilities
 {
+    [JsonPropertyName("experimental")]
+    public Dictionary<string, object>? Experimental { get; init; }
+
     [JsonPropertyName("tools")]
     public ToolsCapability? Tools { get; init; }
 }
