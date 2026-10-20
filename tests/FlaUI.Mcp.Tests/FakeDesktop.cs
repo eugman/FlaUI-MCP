@@ -35,6 +35,17 @@ internal sealed class FakeDesktop : InputDesktop
 
     public int Dispatched => Volatile.Read(ref dispatched);
 
+    public int FocusAttempts { get; private set; }
+
+    public ProcessIntegrity Self { get; set; } = new(ProcessIntegrity.Medium, false);
+
+    /// <summary>The target's token as the fake reader reports it; null when unreadable.</summary>
+    public ProcessIntegrity? TargetIntegrity { get; set; } = new(ProcessIntegrity.Medium, false);
+
+    public override ProcessIntegrity SelfIntegrity() => Self;
+
+    public override ProcessIntegrity? Integrity(int processId) => TargetIntegrity;
+
     public IDisposable Install()
     {
         Override.Value = this;
@@ -47,6 +58,7 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override void Focus(nint hwnd)
     {
+        FocusAttempts++;
         if (ActivationAllowed)
         {
             ForegroundWindow = hwnd;

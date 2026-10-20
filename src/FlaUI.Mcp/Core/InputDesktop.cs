@@ -43,4 +43,14 @@ internal class InputDesktop
     public virtual string WindowState(nint hwnd) => Win32Desktop.GetWindowState(hwnd);
 
     public virtual void SetWindowState(nint hwnd, string state) => Win32Desktop.SetWindowState(hwnd, state);
+
+    private static readonly Lazy<ProcessIntegrity> Self = new(() =>
+        ProcessIntegrity.Read(Environment.ProcessId) ?? new(ProcessIntegrity.Medium, false)
+    );
+
+    /// <summary>This server's own integrity level and UIAccess flag.</summary>
+    public virtual ProcessIntegrity SelfIntegrity() => Self.Value;
+
+    /// <summary>A target process's integrity, or null when its token cannot be read.</summary>
+    public virtual ProcessIntegrity? Integrity(int processId) => ProcessIntegrity.Read(processId);
 }

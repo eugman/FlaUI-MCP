@@ -30,7 +30,15 @@ public sealed record InputRefusal(
 public sealed record ProcessRef(
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("pid")] int Pid
-);
+)
+{
+    /// <summary>untrusted, low, medium, high, system or unknown; set when integrity decided the refusal.</summary>
+    [JsonPropertyName("integrityLevel"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? IntegrityLevel { get; init; }
+
+    [JsonPropertyName("uiAccess"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? UiAccess { get; init; }
+}
 
 /// <summary>Thrown when guarded input sends nothing; carries the structured reason.</summary>
 public sealed class InputRefusedException(InputRefusal refusal) : InvalidOperationException(refusal.Message)
