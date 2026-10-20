@@ -76,8 +76,13 @@ public static class ArtifactFiles
         try
         {
             var item = Backlog.Find(checkpoint, backlogPath);
-            var path = Path.GetFullPath(Path.Combine(docsRoot, item.Source));
-            return item.Source.StartsWith("content/", StringComparison.Ordinal) && File.Exists(path) ? path : null;
+            if (!item.Source.StartsWith("content/", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var path = ContainedPath(item.Source, docsRoot);
+            return File.Exists(path) ? path : null;
         }
         catch (Exception error) when (error is ArgumentException or IOException or JsonException)
         {
@@ -114,33 +119,40 @@ public static class ArtifactFiles
         // rather than re-deriving it and refusing the redacted image they were asked to publish.
         if (annotation == null)
         {
-            await Promote(runDirectory, itemId, image, overwrite, redactionSatisfied: true);
+            await PromoteCore(runDirectory, itemId, image, overwrite, null, redactionSatisfied: true);
             return;
         }
 
-        await Promote(runDirectory, annotation.Checkpoint, image, overwrite, redactionSatisfied: true);
+        string? spec = null;
+        if (!annotation.Redacted)
+        {
+            spec = ContainedPath(Path.ChangeExtension(image, ".annotations.json"), root);
+            if (File.Exists(spec))
+            {
+                if (!overwrite)
+                {
+                    throw new IOException("Destination exists; explicit --overwrite required");
+                }
+
+                await RequireCleanTracked(root, spec);
+            }
+        }
+
+        await PromoteCore(runDirectory, annotation.Checkpoint, image, overwrite, null, redactionSatisfied: true);
         if (annotation.Redacted)
         {
             return;
         }
 
-        await Promote(
+        await PromoteCore(
             runDirectory,
             itemId,
             Path.ChangeExtension(image, ".clean.png"),
             overwrite,
+            null,
             redactionSatisfied: true
         );
-        var spec = ContainedPath(Path.ChangeExtension(image, ".annotations.json"), root);
-        if (File.Exists(spec) && !overwrite)
-        {
-            throw new IOException("Destination exists; explicit --overwrite required");
-        }
-
-        File.WriteAllText(
-            spec,
-            JsonSerializer.Serialize(annotation, new JsonSerializerOptions(RunConfig.Json) { WriteIndented = true })
-        );
+        AtomicJournal.Write(spec!, annotation, new JsonSerializerOptions(RunConfig.Json) { WriteIndented = true });
     }
 
     /// <summary>
@@ -198,17 +210,21 @@ public static class ArtifactFiles
         JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(path), RunConfig.Json)
         ?? throw new ArgumentException("Missing manifest");
 
-    /// <param name="redactionSatisfied">
-    /// Set only by <see cref="PromoteItem"/>, which has already checked the item's redaction
-    /// requirement against its annotation.
-    /// </param>
-    public static async Task Promote(
+    public static Task Promote(
         string runDirectory,
         string checkpoint,
         string destination,
         bool overwrite,
-        string? backlogPath = null,
-        bool redactionSatisfied = false
+        string? backlogPath = null
+    ) => PromoteCore(runDirectory, checkpoint, destination, overwrite, backlogPath, redactionSatisfied: false);
+
+    private static async Task PromoteCore(
+        string runDirectory,
+        string checkpoint,
+        string destination,
+        bool overwrite,
+        string? backlogPath,
+        bool redactionSatisfied
     )
     {
         // The guard used to live only in PromoteItem, but Promote is public and is reachable from

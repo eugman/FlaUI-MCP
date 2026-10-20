@@ -148,4 +148,48 @@ public sealed class BacklogTests : IDisposable
         Assert.Null(ArtifactFiles.OriginalFor("L026", null, backlog));
         Assert.Null(ArtifactFiles.OriginalFor("R013", docs, backlog));
     }
+
+    [Fact]
+    public void OriginalImageCannotEscapeTheDocsCopy()
+    {
+        var outside = Path.Combine(root, "outside.png");
+        File.WriteAllBytes(outside, [1, 2, 3]);
+        var traversalBacklog = Path.Combine(root, "traversal-backlog.json");
+        File.WriteAllText(
+            traversalBacklog,
+            """[{"id":"L026","source":"content/../../outside.png","pages":[],"status":"unreviewed"}]"""
+        );
+
+        Assert.Null(ArtifactFiles.OriginalFor("L026", docs, traversalBacklog));
+    }
+
+    [Fact]
+    public async Task ExistingUntrackedAnnotationSpecCannotBeOverwritten()
+    {
+        WriteRun("L026");
+        var annotated = Path.Combine(root, "L026-annotated.png");
+        File.WriteAllBytes(annotated, [4, 5, 6]);
+        var manifestPath = Path.Combine(root, "manifest.json");
+        var manifest = ArtifactFiles.ReadManifest(manifestPath);
+        manifest.Screenshots["L026-annotated"] = annotated;
+        manifest.ScreenshotHashes["L026-annotated"] = ArtifactFiles.Sha256(annotated);
+        manifest.Annotations["L026-annotated"] = new AnnotationSpec(
+            1,
+            "recipe",
+            "L026",
+            10,
+            10,
+            Boxes: [new(1, 1, 3, 3)]
+        );
+        File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, RunConfig.Json));
+
+        var image = Path.Combine(docs, "content", "assets", "images", "auto-formatting-settings.png");
+        var spec = Path.ChangeExtension(image, ".annotations.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(spec)!);
+        File.WriteAllText(spec, "keep this local edit");
+
+        await Assert.ThrowsAsync<IOException>(() => ArtifactFiles.PromoteItem(root, "L026", true, backlog));
+        Assert.Equal("keep this local edit", File.ReadAllText(spec));
+        Assert.False(File.Exists(image));
+    }
 }

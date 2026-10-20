@@ -65,9 +65,21 @@ public sealed record RunConfig
         };
     }
 
-    public void ValidateFiles()
+    public void ValidateFiles(IEnumerable<Recipe> recipes)
     {
-        foreach (var path in new[] { Te3, Te, OfflineBaseline ?? FixtureScript })
+        var selected = recipes.ToArray();
+        var paths = new List<string> { Te3, Te };
+        if (OfflineBaseline == null || selected.Any(UseServer))
+        {
+            paths.Add(FixtureScript);
+        }
+
+        if (OfflineBaseline != null && selected.Any(recipe => !UseServer(recipe)))
+        {
+            paths.Add(OfflineBaseline);
+        }
+
+        foreach (var path in paths)
         {
             if (!File.Exists(path))
             {

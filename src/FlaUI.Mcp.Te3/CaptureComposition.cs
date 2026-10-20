@@ -75,9 +75,16 @@ public static class CaptureComposition
                     throw new ArgumentException("Missing checkpoint: " + panel.Checkpoint);
                 }
 
-                using var bitmap = new Bitmap(
-                    ArtifactFiles.ContainedPath(path, Path.GetDirectoryName(Path.GetFullPath(manifestPath))!)
-                );
+                path = ArtifactFiles.ContainedPath(path, runDirectory);
+                if (
+                    manifest.ScreenshotHashes.TryGetValue(panel.Checkpoint, out var captured)
+                    && ArtifactFiles.Sha256(path) != captured
+                )
+                {
+                    throw new IOException("Checkpoint PNG changed since capture; refusing composition");
+                }
+
+                using var bitmap = new Bitmap(path);
                 if (bitmap.Width != panel.ExpectedWidth || bitmap.Height != panel.ExpectedHeight)
                 {
                     throw new ArgumentException("Source geometry changed");

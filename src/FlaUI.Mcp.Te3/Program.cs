@@ -141,12 +141,13 @@ public static class RunnerCommands
                 return 0;
             }
 
-            config.ValidateFiles();
             var recipes = RecipeCatalog.Select(options.Scenarios ?? config.Scenarios);
             if (recipes.Any(r => r.RequiresServer && !config.UseServer(r)))
             {
                 throw new ArgumentException("Selected recipes require fixed/auto fixture mode");
             }
+
+            config.ValidateFiles(recipes);
 
             if (command == "validate")
             {

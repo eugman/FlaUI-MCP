@@ -26,6 +26,32 @@ public sealed class RunnerTests : IDisposable
     }
 
     [Fact]
+    public void ConfigValidatesInputsNeededByEverySelectedFixtureMode()
+    {
+        var te3 = Path.Combine(root, "te3.exe");
+        var te = Path.Combine(root, "te.exe");
+        var baseline = Path.Combine(root, "baseline.bim");
+        var fixture = Path.Combine(root, "fixture.csx");
+        File.WriteAllText(te3, "");
+        File.WriteAllText(te, "");
+        File.WriteAllText(baseline, "");
+        var config = new RunConfig
+        {
+            Te3 = te3,
+            Te = te,
+            OfflineBaseline = baseline,
+            FixtureScript = fixture,
+        };
+        var offline = RecipeCatalog.All.Single(recipe => recipe.Id == "model-open");
+        var engine = RecipeCatalog.All.Single(recipe => recipe.Id == "dax-query");
+
+        config.ValidateFiles([offline]);
+        Assert.Throws<FileNotFoundException>(() => config.ValidateFiles([offline, engine]));
+        File.WriteAllText(fixture, "");
+        config.ValidateFiles([offline, engine]);
+    }
+
+    [Fact]
     public void SelectionRejectsUnknownAndDuplicateRecipes()
     {
         Assert.Throws<ArgumentException>(() => RecipeCatalog.Select(["unknown"]));

@@ -91,4 +91,58 @@ public sealed class CompositionTests
             Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void CompositionRejectsACaptureChangedWithoutChangingItsDimensions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "fla_compose_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "source.png");
+            using (var bitmap = new Bitmap(10, 10))
+            {
+                bitmap.Save(source, ImageFormat.Png);
+            }
+
+            var captured = ArtifactFiles.Sha256(source);
+            using (var bitmap = new Bitmap(10, 10))
+            {
+                bitmap.SetPixel(0, 0, Color.Red);
+                bitmap.Save(source, ImageFormat.Png);
+            }
+
+            var manifestPath = Path.Combine(root, "manifest.json");
+            File.WriteAllText(
+                manifestPath,
+                JsonSerializer.Serialize(
+                    new RunManifest
+                    {
+                        Passed = true,
+                        RequestedScenario = "recipe",
+                        Screenshots = new() { ["source"] = source },
+                        ScreenshotHashes = new() { ["source"] = captured },
+                    },
+                    RunConfig.Json
+                )
+            );
+            var specPath = Path.Combine(root, "spec.json");
+            File.WriteAllText(
+                specPath,
+                JsonSerializer.Serialize(
+                    new CompositionSpec(1, "recipe", "crop", [new("source", "source", 10, 10, 0, 0, 10, 10)], true),
+                    RunConfig.Json
+                )
+            );
+
+            var output = Path.Combine(root, "crop.png");
+            Assert.Throws<IOException>(() => CaptureComposition.Create(manifestPath, specPath, output));
+            Assert.False(File.Exists(output));
+            Assert.False(ArtifactFiles.ReadManifest(manifestPath).Screenshots.ContainsKey("crop"));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
 }
