@@ -94,24 +94,39 @@ public sealed class NativeMcpProbeTransportTests
         Assert.Equal([null, "2025-11-25", "2025-11-25", "2025-11-25"], handler.Versions);
     }
 
-    [Fact]
-    public async Task RejectsMalformedAndOversizedSse()
-    {
-        foreach (var eventData in new[] { "data: {bad}\n\n", "data: " + new string('x', 70_000) + "\n\n" })
-        {
-            var handler = new Handler(
-                (_, _) =>
-                    new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StreamContent(new MemoryStream(Encoding.UTF8.GetBytes(eventData)))
+    private static NativeMcpProbeSession SseSession(string eventData) =>
+        new(
+            new HttpClient(
+                new Handler(
+                    (_, _) =>
+                        new HttpResponseMessage(HttpStatusCode.OK)
                         {
-                            Headers = { ContentType = new MediaTypeHeaderValue("text/event-stream") },
-                        },
-                    }
-            );
-            var session = new NativeMcpProbeSession(new HttpClient(handler), new("http://localhost:42100/mcp"), null);
-            await Assert.ThrowsAnyAsync<Exception>(() => session.Send("tools/list", new { }, CancellationToken.None));
-        }
+                            Content = new StreamContent(new MemoryStream(Encoding.UTF8.GetBytes(eventData)))
+                            {
+                                Headers = { ContentType = new MediaTypeHeaderValue("text/event-stream") },
+                            },
+                        }
+                )
+            ),
+            new("http://localhost:42100/mcp"),
+            null
+        );
+
+    [Fact]
+    public async Task RejectsMalformedSse() =>
+        await Assert.ThrowsAnyAsync<System.Text.Json.JsonException>(() =>
+            SseSession("data: {bad}\n\n").Send("tools/list", new { }, CancellationToken.None)
+        );
+
+    [Fact]
+    public async Task RejectsAValidJsonLineOverTheSizeLimit()
+    {
+        // Valid JSON-RPC for this request, so only the 64K line limit can reject it.
+        var line = "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"pad\":\"" + new string('x', 70_000) + "\"}}\n\n";
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            SseSession(line).Send("tools/list", new { }, CancellationToken.None)
+        );
+        Assert.Contains("size limit", error.Message);
     }
 
     [Fact]

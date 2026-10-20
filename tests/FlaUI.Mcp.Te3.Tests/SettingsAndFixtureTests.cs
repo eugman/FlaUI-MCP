@@ -55,7 +55,8 @@ public sealed class SettingsAndFixtureTests : IDisposable
         File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
         var lease = new SettingsLease(root, Path.Combine(root, "backup"));
         File.WriteAllText(Path.Combine(root, "backup", "UiPreferences.json"), "tampered");
-        Assert.ThrowsAny<Exception>(lease.Restore);
+        var error = Assert.Throws<IOException>(lease.Restore);
+        Assert.Contains("checksum mismatch", error.Message);
         Assert.Equal("{}", File.ReadAllText(Path.Combine(root, "UiPreferences.json")));
     }
 
