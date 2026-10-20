@@ -240,6 +240,41 @@ public sealed class ShotSetupTests
     public void ToggleReportsTheStateItReached(ToggleState before, ToggleState after, string expected) =>
         Assert.Equal(expected, ClickTool.ToggleOutcome("Show changes", before, after));
 
+    [Theory]
+    [InlineData(true, "Selected Node9 after fallback click (SelectionItem confirmed)")]
+    [InlineData(
+        false,
+        "Clicked Node9 after Select changed nothing; selection was not observed. Inspect the current selection before continuing; do not repeat the click blindly."
+    )]
+    [InlineData(
+        null,
+        "Clicked Node9 after Select changed nothing; selection could not be read. Inspect the current selection before continuing; do not repeat the click blindly."
+    )]
+    public void FallbackClickReportsObservedSelection(bool? selected, string expected) =>
+        Assert.Equal(expected, ClickTool.SelectionClickOutcome("Node9", selected));
+
+    [Fact]
+    public void SelectionObservationWaitsForProviderToSettle()
+    {
+        var reads = 0;
+        var result = ClickTool.ObserveSelection(() => ++reads >= 2);
+        Assert.True(result);
+        Assert.Equal(2, reads);
+    }
+
+    [Fact]
+    public void SelectionObservationReportsAnUnreadableProviderWithoutReplayingInput()
+    {
+        var reads = 0;
+        var result = ClickTool.ObserveSelection(() =>
+        {
+            reads++;
+            throw new InvalidOperationException("Provider unavailable");
+        });
+        Assert.Null(result);
+        Assert.Equal(1, reads);
+    }
+
     [Fact]
     public void ToggleWithUnreadableStateSaysSo() =>
         Assert.Contains("could not be read", ClickTool.ToggleOutcome("X", null, ToggleState.On));

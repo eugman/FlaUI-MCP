@@ -27,6 +27,7 @@ public class ClickTool : ToolBase
         + "falls back to mouse click if needed. Menu items and controls whose name ends in \"...\" get a physical click "
         + "by default, because an Invoke that opens a menu or dialog blocks UI Automation until it closes; pass physical=false to force Invoke. "
         + "If the click opens a modal dialog, returns immediately with the dialog title instead of waiting for the dialog to close. "
+        + "A select fallback click reports whether SelectionItem confirms selection; an unconfirmed click must be inspected before continuing. "
         + "A right-click after selecting a tree or list row can start inline rename; open context menus with windows_send_keys Shift+F10 or Apps.";
 
     public override object InputSchema =>
@@ -102,7 +103,7 @@ public class ClickTool : ToolBase
                 element.Properties.ControlType.ValueOrDefault,
                 pattern => Supports(element, pattern)
             );
-            var fallbackNote = "";
+            var selectionFallback = false;
             if (action != null)
             {
                 // In some tree controls, clicking a row that is already selected starts inline rename, and the
@@ -128,7 +129,7 @@ public class ClickTool : ToolBase
                 }
 
                 // Some tree providers accept Select() and change nothing; a real click selects.
-                fallbackNote = " (Select changed nothing, so it was clicked instead)";
+                selectionFallback = true;
             }
 
             // Fall back to mouse click
@@ -153,7 +154,13 @@ public class ClickTool : ToolBase
                 input.Click(element, mouseButton);
                 if (!opensDialog)
                 {
-                    return Task.FromResult(TextResult($"Clicked {elementName}{fallbackNote}"));
+                    if (selectionFallback)
+                    {
+                        var selected = ObserveSelection(() => IsSelected(element));
+                        return Task.FromResult(TextResult(SelectionClickOutcome(elementName, selected)));
+                    }
+
+                    return Task.FromResult(TextResult($"Clicked {elementName}"));
                 }
                 // A physical click returns before its dialog exists; report the window so agents don't list too early.
                 for (var waited = 0; waited < 2000; waited += 100)
@@ -239,6 +246,32 @@ public class ClickTool : ToolBase
         element.Patterns.SelectionItem.TryGetPattern(out var selection)
         && selection.IsSelected.TryGetValue(out var selected)
         && selected;
+
+    internal static string SelectionClickOutcome(string name, bool? selected) =>
+        selected switch
+        {
+            true => $"Selected {name} after fallback click (SelectionItem confirmed)",
+            false =>
+                $"Clicked {name} after Select changed nothing; selection was not observed. Inspect the current selection before continuing; do not repeat the click blindly.",
+            _ =>
+                $"Clicked {name} after Select changed nothing; selection could not be read. Inspect the current selection before continuing; do not repeat the click blindly.",
+        };
+
+    internal static bool? ObserveSelection(Func<bool> isSelected)
+    {
+        try
+        {
+            return Settled(isSelected, 500);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     /// <summary>Polls a condition until it holds or the time runs out; providers update state asynchronously.</summary>
     private static bool Settled(Func<bool> condition, int timeoutMs)
