@@ -83,11 +83,13 @@ public sealed class GenericHardeningTests
             ResolveTarget = _ => new ProcessIdentity(123, 456),
             Pending = tracker,
         };
-        registry.RegisterTool(new AwaitingTool(release.Task));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        registry.RegisterTool(new AwaitingTool(release.Task, entered));
         using var cancel = new CancellationTokenSource();
         try
         {
             var call = registry.ExecuteToolAsync("awaiting", null, cancel.Token);
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await cancel.CancelAsync();
             await call.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.True(tracker.TryGetPending(123, out var stranded));
@@ -117,7 +119,7 @@ public sealed class GenericHardeningTests
         }
     }
 
-    private sealed class AwaitingTool(Task release) : ToolBase
+    private sealed class AwaitingTool(Task release, TaskCompletionSource? entered = null) : ToolBase
     {
         public override string Name => "awaiting";
         public override string Description => "Waits until the test releases it; no desktop access";
@@ -125,6 +127,7 @@ public sealed class GenericHardeningTests
 
         public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
         {
+            entered?.TrySetResult();
             await release;
             return TextResult("late");
         }

@@ -136,18 +136,23 @@ public class McpServer
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
-            notDispatched[key] = 1;
-            cancelledBeforeDispatch.Enqueue(key);
-            while (cancelledBeforeDispatch.Count > 128 && cancelledBeforeDispatch.TryDequeue(out var old))
-            {
-                notDispatched.TryRemove(old, out _);
-            }
-
+            RecordNotDispatched(key);
             return null;
         }
         finally
         {
             cancellations.TryRemove(key, out _);
+        }
+    }
+
+    /// <summary>Remember a request that never dispatched, so status can tell a broker it is safe to retry.</summary>
+    internal void RecordNotDispatched(string key)
+    {
+        notDispatched[key] = 1;
+        cancelledBeforeDispatch.Enqueue(key);
+        while (cancelledBeforeDispatch.Count > 128 && cancelledBeforeDispatch.TryDequeue(out var old))
+        {
+            notDispatched.TryRemove(old, out _);
         }
     }
 

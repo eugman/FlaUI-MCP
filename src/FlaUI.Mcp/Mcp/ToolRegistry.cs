@@ -156,7 +156,10 @@ public class ToolRegistry
         // A stranded call can still hold this app's UIA provider. Fail later ref tools fast until it returns.
         if (Pending != null && operation.ProcessId != 0)
         {
-            var stranded = Pending.Begin(operation.ProcessId, $"timed-out {name}");
+            var stranded = Pending.Begin(
+                operation.ProcessId,
+                settled != null ? $"cancelled {name}" : $"timed-out {name}"
+            );
             _ = toolTask.ContinueWith(_ => Pending.Complete(stranded), TaskScheduler.Default);
         }
 
