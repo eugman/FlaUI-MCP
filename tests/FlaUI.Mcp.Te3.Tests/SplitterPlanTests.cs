@@ -68,4 +68,16 @@ public sealed class SplitterPlanTests
         var (from, _) = SplitterPlan.Resize(Explorer, [Documents], width: 900, height: null, window: window);
         Assert.Equal(827, from.X);
     }
+
+    [Fact]
+    public void ARealNeighbourBelowWinsOverTheFallbackAbove()
+    {
+        // TOM Explorer on top, Properties below it; the space above TOM Explorer is title bar and toolbars.
+        var tom = new Rectangle(920, 85, 1000, 593);
+        var properties = new Rectangle(920, 683, 1000, 345);
+        var window = new Rectangle(0, 0, 1920, 1030);
+        var (from, to) = SplitterPlan.Resize(tom, [properties], width: null, height: 600, window: window);
+        Assert.Equal(680, from.Y);
+        Assert.Equal(687, to.Y);
+    }
 }

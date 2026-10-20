@@ -86,10 +86,15 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
     private string Required(JsonElement a, string name) =>
         GetStringArgument(a, name) ?? throw new ArgumentException($"{name} is required for this action.");
 
-    private static string[] Titles(JsonElement a) =>
-        a.TryGetProperty("titles", out var t) && t.ValueKind == JsonValueKind.Array
-            ? t.EnumerateArray().Select(x => x.GetString() ?? "").ToArray()
-            : throw new ArgumentException("titles is required for close and keep.");
+    private static string[] Titles(JsonElement a)
+    {
+        var titles =
+            a.TryGetProperty("titles", out var t) && t.ValueKind == JsonValueKind.Array
+                ? t.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => x.Length > 0).ToArray()
+                : throw new ArgumentException("titles is required for close and keep.");
+        // An empty keep would close every pane and tab.
+        return titles.Length > 0 ? titles : throw new ArgumentException("titles must name at least one pane or tab.");
+    }
 
     /// <summary>Docked panes (a TitleBar with a Close button inside the window) and closable document tabs.</summary>
     private static List<Part> Parts(Window window)
@@ -159,7 +164,7 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
             }
 
             await Click(handle, next.Close);
-            RequireNoDialog(window, next.Title);
+            await RequireNoDialog(window, next.Title);
             closed.Add(next.Title);
         }
 
@@ -173,19 +178,25 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         };
     }
 
-    // Closing an unsaved document asks to save. Stop there: answering it is the caller's decision.
-    private static void RequireNoDialog(Window window, string closing)
+    // Closing an unsaved document asks to save, sometimes a moment after the click. Watch for ~1s and
+    // stop there: answering it is the caller's decision.
+    private static async Task RequireNoDialog(Window window, string closing)
     {
         var pid = window.Properties.ProcessId.ValueOrDefault;
         var main = window.Properties.NativeWindowHandle.ValueOrDefault;
-        var dialog = Win32Desktop
-            .GetTopLevelWindows(pid)
-            .FirstOrDefault(w => w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow);
-        if (dialog != null)
+        for (var waited = 0; waited <= 1000; waited += 200)
         {
-            throw new InvalidOperationException(
-                $"Closing '{closing}' opened \"{dialog.Title}\"; nothing else was closed. Answer it, then run keep/close again."
-            );
+            var dialog = Win32Desktop
+                .GetTopLevelWindows(pid)
+                .FirstOrDefault(w => w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow);
+            if (dialog != null)
+            {
+                throw new InvalidOperationException(
+                    $"Closing '{closing}' opened \"{dialog.Title}\"; nothing else was closed. Answer it, then run keep/close again."
+                );
+            }
+
+            await Task.Delay(200);
         }
     }
 
@@ -242,12 +253,20 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
                 to = new { x = to.X - origin.X, y = to.Y - origin.Y },
             }
         );
-        var after = pane.Container.BoundingRectangle;
+        await Task.Delay(300);
+        var after = FindPane(window, title).Container.BoundingRectangle;
+        var requested = GetArgument<int?>(a, "width") ?? GetArgument<int?>(a, "height");
+        var reached = GetArgument<int?>(a, "width") is null ? after.Height : after.Width;
         return new
         {
             title,
             before = Relative(before, origin),
             after = Relative(after, origin),
+            requested,
+            reached,
+            note = Math.Abs(reached - requested!.Value) > 4
+                ? "The pane did not reach the requested size; the drag may have missed the splitter."
+                : null,
         };
     }
 

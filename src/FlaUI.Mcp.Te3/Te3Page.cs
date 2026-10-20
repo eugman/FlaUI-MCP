@@ -1696,7 +1696,9 @@ public sealed class Te3Page(
             .WaitAsync(TimeSpan.FromSeconds(5));
         if (rows.Elements.Count <= 1)
         {
-            await SelectObject(objectName);
+            // windows_click's select path refuses to click a row that is already selected, which a
+            // physical click would turn into an inline rename.
+            await Click(target, physical: false);
             return;
         }
 
@@ -1704,11 +1706,10 @@ public sealed class Te3Page(
         foreach (var row in rows.Elements)
         {
             reportStep?.Invoke($"Try row {row.Ref} named '{objectName}' as {objectType}");
-            // Pattern select, not a mouse click: clicking an already-selected TE3 row starts a rename.
+            // physical:false goes through windows_click's select path: it skips an already-selected row
+            // and falls back to a mouse click only when Select changes nothing (usual for TE3 rows).
             await invoke("windows_click", new { @ref = row.Ref, physical = false });
-            // Every candidate has the same Name, so wait for the grid to follow the selection.
-            await Task.Delay(400);
-            var type = (await Resolve(PropertyTarget("Object Type"))).Patterns.Value.Pattern.Value.ValueOrDefault;
+            var type = await SettledGridValue("Object Type");
             if (ObjectTypeMatches(objectType, type))
             {
                 return;
@@ -1718,8 +1719,32 @@ public sealed class Te3Page(
         }
 
         throw new InvalidOperationException(
-            $"{rows.Elements.Count} rows are named '{objectName}', and none is a {objectType} (saw {string.Join(", ", seen)})."
+            $"{rows.Elements.Count} rows are named '{objectName}', and none is a {objectType} (saw {string.Join(", ", seen.Select(t => t ?? "(none)"))})."
         );
+    }
+
+    /// <summary>
+    /// A property grid value once two reads 200ms apart agree, after a short wait (up to ~1.5s). The
+    /// candidates in <see cref="SelectObjectOfType"/> share one Name, so a stale grid can't be told
+    /// apart by name; waiting for it to settle is the only guard.
+    /// </summary>
+    private async Task<string?> SettledGridValue(string property)
+    {
+        await Task.Delay(250);
+        string? last = null;
+        for (var read = 0; read < 7; read++)
+        {
+            var value = (await Resolve(PropertyTarget(property))).Patterns.Value.Pattern.Value.ValueOrDefault;
+            if (read > 0 && value == last)
+            {
+                return value;
+            }
+
+            last = value;
+            await Task.Delay(200);
+        }
+
+        return last;
     }
 
     public async Task SelectTable(string table)

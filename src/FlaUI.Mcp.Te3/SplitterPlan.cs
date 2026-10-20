@@ -24,18 +24,25 @@ public static class SplitterPlan
         }
 
         var neighbours = others.Where(o => o != pane).ToList();
+        (Point, Point)? Plan(List<Rectangle> candidates) =>
+            width is { } w ? Horizontal(pane, candidates, w) : Vertical(pane, candidates, height!.Value);
+
+        // A real neighbour on either side wins; the interior fallback is only for an edge with none.
+        if (Plan(neighbours) is { } shared)
+        {
+            return shared;
+        }
+
         // An empty document area is no pane, so it leaves no neighbour. Its splitter is still there,
         // just outside the pane edge that faces the window interior.
         var room = window ?? Rectangle.Empty;
-        if (!room.IsEmpty)
-        {
-            neighbours.AddRange(InteriorGaps(pane, room));
-        }
-
-        return width is { } w ? Horizontal(pane, neighbours, w) : Vertical(pane, neighbours, height!.Value);
+        return (room.IsEmpty ? null : Plan(InteriorGaps(pane, room).ToList()))
+            ?? throw new InvalidOperationException(
+                $"No pane shares a {(width is null ? "horizontal" : "vertical")} edge with this one; nothing to drag."
+            );
     }
 
-    private static (Point, Point) Horizontal(Rectangle pane, List<Rectangle> others, int width)
+    private static (Point, Point)? Horizontal(Rectangle pane, List<Rectangle> others, int width)
     {
         var y = (pane.Top + pane.Bottom) / 2;
         if (
@@ -55,10 +62,10 @@ public static class SplitterPlan
             return (new Point(x, y), new Point(x + width - pane.Width, y));
         }
 
-        throw new InvalidOperationException("No pane shares a vertical edge with this one; nothing to drag.");
+        return null;
     }
 
-    private static (Point, Point) Vertical(Rectangle pane, List<Rectangle> others, int height)
+    private static (Point, Point)? Vertical(Rectangle pane, List<Rectangle> others, int height)
     {
         var x = (pane.Left + pane.Right) / 2;
         if (
@@ -79,7 +86,7 @@ public static class SplitterPlan
             return (new Point(x, y), new Point(x, y + height - pane.Height));
         }
 
-        throw new InvalidOperationException("No pane shares a horizontal edge with this one; nothing to drag.");
+        return null;
     }
 
     // Pixels between a pane edge and the dock splitter beside it, seen live at 175%.

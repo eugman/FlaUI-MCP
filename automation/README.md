@@ -4,7 +4,7 @@ Everything here builds on the generic FlaUI MCP server and adds what is specific
 
 | Piece | What it is |
 |---|---|
-| `FlaUI.Mcp.Te3 mcp` | A small MCP server with two TE3 tools, `te3_navigate` and `te3_model_state`. Run it next to the generic server. |
+| `FlaUI.Mcp.Te3 mcp` | A small MCP server with three TE3 tools, `te3_navigate`, `te3_model_state` and `te3_layout`. Run it next to the generic server. |
 | `FlaUI.Mcp.Te3 run` | A runner that launches its own TE3, stages a disposable model, runs typed C# recipes and saves screenshots. |
 | [skills/te3-ui](skills/te3-ui/SKILL.md) | Agent guidance for driving TE3 with the MCP tools. |
 | [UI-MAP.md](UI-MAP.md) | Locators and behaviour observed in TE3 3.26 and 3.27. |
@@ -35,6 +35,7 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 |---|---|
 | `te3_navigate` | Moves to a destination and checks it arrived. Takes focus. |
 | `te3_model_state` | Reads the status bar: whether a model is loaded, its connection, the BPA count, the selected object. Sends no input. |
+| `te3_layout` | Lists, closes, maximizes, restores and resizes docked panes and document tabs for a screenshot. Takes focus; no model edits. |
 
 Destinations: `tom-explorer`, `expression-editor`, `object` (with `table`, `objectName`, `objectType` Table/Column/Measure and optional `folder`), `preferences/auto-formatting`, `preferences/code-actions`, `preferences/mcp-server`.
 
