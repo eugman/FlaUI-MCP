@@ -137,4 +137,62 @@ public sealed class SettingsAndFixtureTests : IDisposable
         Assert.True(manifest.SettingsRestored);
         Assert.False(manifest.NeedsRecovery);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("[]")]
+    [InlineData("not json")]
+    public void MissingOrMalformedPreferencesAreRefusedBeforeAnyBackup(string? preferences)
+    {
+        if (preferences != null)
+        {
+            File.WriteAllText(Path.Combine(root, "UiPreferences.json"), preferences);
+        }
+
+        var backup = Path.Combine(root, "backup");
+        var error = Assert.Throws<InvalidOperationException>(() => new SettingsLease(root, backup));
+
+        Assert.Contains("malformed", error.Message);
+        Assert.False(Directory.Exists(backup));
+    }
+
+    [Fact]
+    public void RecoverLeavesAManifestThatNamesAnotherBackupAlone()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var manifestPath = Path.Combine(root, "manifest.json");
+        File.WriteAllText(
+            manifestPath,
+            JsonSerializer.Serialize(
+                new RunManifest { SettingsBackup = Path.Combine(root, "other-backup"), NeedsRecovery = true },
+                RunConfig.Json
+            )
+        );
+        new SettingsLease(root, backup, manifestPath).Normalize();
+
+        Assert.False(SettingsLease.Recover(backup, false, root));
+
+        Assert.True(ArtifactFiles.ReadManifest(manifestPath).NeedsRecovery);
+    }
+
+    [Fact]
+    public void AFileThatCannotBeRestoredDoesNotStopTheOthers()
+    {
+        var preferences = Path.Combine(root, "UiPreferences.json");
+        File.WriteAllText(preferences, """{"Skin":"user"}""");
+        var original = File.ReadAllBytes(preferences);
+        // Restored first, so the files after it show restoration carries on.
+        var blocked = Path.Combine(root, "Preferences.json");
+        File.WriteAllText(blocked, "{}");
+        var lease = new SettingsLease(root, Path.Combine(root, "backup"));
+        lease.Normalize();
+        File.Delete(blocked);
+        Directory.CreateDirectory(blocked);
+
+        var error = Assert.Throws<AggregateException>(lease.Restore);
+
+        Assert.Contains("Partial restoration", error.Message);
+        Assert.Equal(original, File.ReadAllBytes(preferences));
+    }
 }
