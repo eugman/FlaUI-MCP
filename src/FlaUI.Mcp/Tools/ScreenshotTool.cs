@@ -255,7 +255,7 @@ public class ScreenshotTool : ToolBase
                         Win32Desktop.ObserveZOrder(),
                         guardTarget,
                         Win32Desktop.GetProcessId(guardTarget),
-                        captured
+                        GuardRect(captured, frame)
                     );
                 }
 
@@ -692,6 +692,30 @@ public class ScreenshotTool : ToolBase
         var visible = new System.Drawing.Rectangle(0, 0, frame?.Width ?? imageWidth, frame?.Height ?? imageHeight);
         var located = new System.Drawing.Rectangle(x, y, element.Width, element.Height);
         return new(reference, x, y, element.Width, element.Height, !visible.Contains(located));
+    }
+
+    /// <summary>
+    /// The screen rectangle the occlusion guard checks: the part of the capture a crop keeps. A window
+    /// over pixels the frame throws away cannot reach the returned image, so it must not refuse it.
+    /// </summary>
+    /// <param name="sourceBounds">Screen rectangle the capture covers; its origin is image pixel (0,0).</param>
+    /// <param name="frame">The crop applied to the capture, if any.</param>
+    /// <returns>The kept region in screen coordinates.</returns>
+    internal static System.Drawing.Rectangle GuardRect(System.Drawing.Rectangle sourceBounds, CaptureFrame? frame)
+    {
+        if (frame == null)
+        {
+            return sourceBounds;
+        }
+
+        var kept = new System.Drawing.Rectangle(
+            sourceBounds.X + frame.X,
+            sourceBounds.Y + frame.Y,
+            frame.Width,
+            frame.Height
+        );
+        kept.Intersect(sourceBounds);
+        return kept;
     }
 
     /// <summary>Whether a capture method reads pixels off the screen rather than the window's own surface.</summary>
