@@ -1675,6 +1675,53 @@ public sealed class Te3Page(
         await Click(ObjectTarget(objectName));
     }
 
+    /// <summary>
+    /// Select the row named <paramref name="objectName"/> that is a <paramref name="objectType"/>. A model
+    /// can hold several rows with one name (SpaceParts' Date table, its Date column and a Date hierarchy
+    /// level), so with more than one match each is selected in turn until the property grid shows the
+    /// requested Object Type.
+    /// </summary>
+    public async Task SelectObjectOfType(string objectName, string objectType)
+    {
+        var target = ObjectTarget(objectName);
+        var rows = await Task.Run(() =>
+                query.Find(
+                    handle,
+                    target.Selector,
+                    target.Within,
+                    maxResults: 20,
+                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
+                )
+            )
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        if (rows.Elements.Count <= 1)
+        {
+            await SelectObject(objectName);
+            return;
+        }
+
+        var seen = new List<string?>();
+        foreach (var row in rows.Elements)
+        {
+            reportStep?.Invoke($"Try row {row.Ref} named '{objectName}' as {objectType}");
+            // Pattern select, not a mouse click: clicking an already-selected TE3 row starts a rename.
+            await invoke("windows_click", new { @ref = row.Ref, physical = false });
+            // Every candidate has the same Name, so wait for the grid to follow the selection.
+            await Task.Delay(400);
+            var type = (await Resolve(PropertyTarget("Object Type"))).Patterns.Value.Pattern.Value.ValueOrDefault;
+            if (ObjectTypeMatches(objectType, type))
+            {
+                return;
+            }
+
+            seen.Add(type);
+        }
+
+        throw new InvalidOperationException(
+            $"{rows.Elements.Count} rows are named '{objectName}', and none is a {objectType} (saw {string.Join(", ", seen)})."
+        );
+    }
+
     public async Task SelectTable(string table)
     {
         // The DevExpress tree virtualizes rows in large models. Filtering makes an off-screen table
@@ -1682,9 +1729,9 @@ public sealed class Te3Page(
         // to the end of the filtered tree, where alphabetized table rows are materialized.
         await Fill(SearchTarget(), table);
         await Keys("Ctrl+End", TomExplorerTarget());
-        await SelectObject(table);
+        await SelectObjectOfType(table, "Table");
         await ResetSearch();
-        await SelectObject(table);
+        await SelectObjectOfType(table, "Table");
         await AssertProperty("Name", table);
     }
 
@@ -2449,7 +2496,7 @@ public sealed class Te3Page(
                 }
             }
 
-            await SelectObject(objectName);
+            await SelectObjectOfType(objectName, objectType);
         }
 
         await AssertProperty("Name", objectType == "Table" ? table : objectName);
@@ -2537,6 +2584,16 @@ public sealed class Te3Page(
         }
     }
 
+    /// <summary>Whether the property grid's Object Type is the kind of object that was asked for.</summary>
+    internal static bool ObjectTypeMatches(string objectType, string? observed)
+    {
+        var actualType = observed?.Replace(" ", "", StringComparison.Ordinal);
+        return objectType == "Column"
+                ? actualType is "Column" or "DataColumn" or "CalculatedColumn" or "CalculatedTableColumn"
+            : objectType == "Table" ? actualType is "Table" or "CalculatedTable"
+            : actualType == "Measure";
+    }
+
     internal static void VerifyObjectIdentity(
         string table,
         string objectName,
@@ -2546,12 +2603,7 @@ public sealed class Te3Page(
         string? dax
     )
     {
-        var actualType = type?.Replace(" ", "", StringComparison.Ordinal);
-        var typeMatches =
-            objectType == "Column"
-                ? actualType is "Column" or "DataColumn" or "CalculatedColumn" or "CalculatedTableColumn"
-            : objectType == "Table" ? actualType is "Table" or "CalculatedTable"
-            : actualType == "Measure";
+        var typeMatches = ObjectTypeMatches(objectType, type);
         var qualified =
             "'"
             + table.Replace("'", "''", StringComparison.Ordinal)

@@ -171,6 +171,16 @@ public sealed class CompanionTests
             Te3Page.VerifyObjectIdentity("Sales", "Amount", "Column", "Amount", type, dax)
         );
 
+    [Theory]
+    [InlineData("Table", "Table", true)]
+    [InlineData("Table", "Calculated Table", true)]
+    [InlineData("Table", "Calculated Table Column", false)]
+    [InlineData("Column", "Calculated Table Column", true)]
+    [InlineData("Column", "Level", false)]
+    [InlineData("Measure", null, false)]
+    public void SameNamedRowsArePickedByObjectType(string requested, string? observed, bool expected) =>
+        Assert.Equal(expected, Te3Page.ObjectTypeMatches(requested, observed));
+
     [Fact]
     public void QualifiedColumnIdentityAccepted() =>
         Te3Page.VerifyObjectIdentity("Sales", "Amount", "Column", "Amount", "Data Column", "'Sales'[Amount]");
