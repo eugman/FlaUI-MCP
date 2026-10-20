@@ -19,7 +19,7 @@ pwsh scripts/coverage.ps1 -Mutation -MutationMinutes 45
 
 Stryker mutates committed code only. It runs on an export of `HEAD` in `local/build-background/stryker-te3`, so its builds never land in the working tree. It uses one test runner and is stopped after `-MutationMinutes` (30 by default). The report is at `local/build-background/stryker-te3/tests/FlaUI.Mcp.Te3.Tests/StrykerOutput/run/reports/mutation-report.html`.
 
-- `tests/FlaUI.Mcp.Te3.Tests/stryker-config.json` lists the files that are mutated: the TE3 guard and protocol files in `src/FlaUI.Mcp.Te3`. The shared core, generated code and `local/` recipes are never mutated.
+- `tests/FlaUI.Mcp.Te3.Tests/stryker-config.json` lists the files that are mutated: the TE3 guard and protocol files in `src/FlaUI.Mcp.Te3`. The shared core and generated code are never mutated, and the export holds no `local/` recipes. Patterns match the full path, which runs through `local/`, so never exclude `**/local/**`.
 - `tests/FlaUI.Mcp.Te3.Tests/.config/dotnet-tools.json` pins `dotnet-stryker`. It is a non-root manifest, so the root one (owned by the core) still supplies CSharpier. When the core's root manifest gains `dotnet-stryker`, delete this one.
 - `scripts/check.ps1` is owned by the core, so the mutation switch lives here until the core's check script gains one.
 
