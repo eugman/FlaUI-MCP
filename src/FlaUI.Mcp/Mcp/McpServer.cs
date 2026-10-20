@@ -23,6 +23,9 @@ public class McpServer
         _concurrentRequests = concurrentRequests;
     }
 
+    /// <summary>True while a serialized tool call, possibly a cancelled one still running, owns the slot.</summary>
+    internal bool SerialSlotHeld => serialRequests.CurrentCount == 0;
+
     public Task RunAsync(CancellationToken cancellationToken = default) =>
         new McpLineTransport(this).RunConsoleAsync(cancellationToken);
 
