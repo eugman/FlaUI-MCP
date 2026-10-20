@@ -204,7 +204,8 @@ public sealed class CompanionTests
         var response = JsonDocument
             .Parse(Te3Companion.Failure("navigate", "search", error).Content[0].Text!)
             .RootElement;
-        Assert.Equal(JsonValueKind.Null, response.GetProperty("blocker").ValueKind);
+        // The reply omits a null blocker.
+        Assert.False(response.TryGetProperty("blocker", out _));
     }
 
     [Fact]

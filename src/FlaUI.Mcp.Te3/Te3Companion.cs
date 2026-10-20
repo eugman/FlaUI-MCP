@@ -225,10 +225,7 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
 
     internal static McpToolResult Failure(string phase, string lastStep, string error)
     {
-        var blocker =
-            error.Contains("activation-denied:", StringComparison.Ordinal) ? "activation-denied"
-            : error.Contains("desktop-unavailable:", StringComparison.Ordinal) ? "desktop-unavailable"
-            : null;
+        var blocker = Blocker(error);
         var next = blocker switch
         {
             "activation-denied" =>
@@ -254,6 +251,16 @@ public sealed class Te3Companion(AutomationHost host, string name) : ToolBase
             )
         );
     }
+
+    // Core's GuardedInput text, at the start of the error or after a tool's "Failed to ...: " prefix.
+    // TODO(core): report activation-denied as a structured outcome instead of matching its text.
+    private static readonly System.Text.RegularExpressions.Regex Blockers = new(
+        "(?:^|: )(?<blocker>activation-denied): Windows kept |(?:^|: )(?<blocker>desktop-unavailable): Windows reports no foreground window",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant
+    );
+
+    private static string? Blocker(string error) =>
+        Blockers.Match(error) is { Success: true } match ? match.Groups["blocker"].Value : null;
 
     internal static void Validate(JsonElement a, string tool)
     {
