@@ -15,6 +15,7 @@ using FlaUI.Mcp.Te3;
 public sealed class Te3Layout(AutomationHost host) : ToolBase
 {
     public const string ToolName = "te3_layout";
+
     private const int MaxCloses = 30;
 
     public override string Name => ToolName;
@@ -23,7 +24,7 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         + "close: hide named docked panes by title; document tabs are never closed. keep: hide every docked pane except these titles (closing a "
         + "tab-group pane surfaces the next tab, so this repeats until only the kept ones remain). "
         + "show-pane / hide-pane: named AI Assistant, TOM Explorer, or Properties dock surfaces; show refuses absent panes until their reopen locator is verified. "
-        + "plan-preset / apply-preset: assistant-model-review 1920x1080 layout. "
+        + "plan-preset: offline assistant-model-review geometry (windowWidth/windowHeight default to 1920x1080). apply-preset: live guarded resizing. "
         + "maximize-pane / restore-pane: the pane's own Maximize or Restore button (TE3 remembers a maximized "
         + "pane across restarts, so restore it when done). Pane titles match with or without TE3's \"(Changed)\" "
         + "suffix. resize: drag the splitter a pane shares with its "
@@ -64,6 +65,18 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
                     description = "show-pane/hide-pane/maximize-pane/restore-pane/resize: the pane title.",
                 },
                 preset = new { type = "string", @enum = new[] { Te3PanePlan.AssistantModelReview } },
+                windowWidth = new
+                {
+                    type = "integer",
+                    minimum = 1,
+                    description = "plan-preset: physical window width; defaults to 1920.",
+                },
+                windowHeight = new
+                {
+                    type = "integer",
+                    minimum = 1,
+                    description = "plan-preset: physical window height; defaults to 1080.",
+                },
                 width = new { type = "integer", description = "resize: target width in physical pixels." },
                 height = new { type = "integer", description = "resize: target height in physical pixels." },
             },
@@ -78,6 +91,16 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
         try
         {
             var a = arguments ?? JsonSerializer.SerializeToElement(new { });
+            if (GetStringArgument(a, "action") == "plan-preset")
+            {
+                var plan = Te3PanePlan.Resolve(
+                    Required(a, "preset"),
+                    GetArgument<int?>(a, "windowWidth") ?? 1920,
+                    GetArgument<int?>(a, "windowHeight") ?? 1080
+                );
+                return TextResult(JsonSerializer.Serialize(plan, McpProtocol.JsonOptions));
+            }
+
             using var process = Process.GetProcessById(Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3));
             var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(process.Id));
             var handle = host.Sessions.RegisterNativeWindow(hwnd, process.Id);
@@ -90,11 +113,6 @@ public sealed class Te3Layout(AutomationHost host) : ToolBase
                 "keep" => await Close(handle, window, Titles(a), keep: true),
                 "show-pane" => ShowPane(window, Required(a, "title")),
                 "hide-pane" => await HidePane(handle, window, Required(a, "title")),
-                "plan-preset" => Te3PanePlan.Resolve(
-                    Required(a, "preset"),
-                    window.BoundingRectangle.Width,
-                    window.BoundingRectangle.Height
-                ),
                 "apply-preset" => await ApplyPreset(handle, window, Required(a, "preset")),
                 "maximize-pane" => await PaneButton(handle, window, Required(a, "title"), "Maximize"),
                 "restore-pane" => await PaneButton(handle, window, Required(a, "title"), "Restore"),

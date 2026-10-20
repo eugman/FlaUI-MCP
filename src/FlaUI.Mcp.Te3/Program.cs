@@ -41,6 +41,7 @@ public static class RunnerCommands
                 }
 
                 registry.RegisterTool(new Te3Layout(host));
+                registry.RegisterTool(FlaUI.Mcp.Te3.Te3NativePreflightTool.Create());
 
                 await new FlaUI.Mcp.McpServer(registry).RunAsync();
                 return 0;

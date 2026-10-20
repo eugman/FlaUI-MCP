@@ -160,8 +160,8 @@ Neither suite touches the desktop. `tests/FlaUI.Mcp.IntegrationTests` launches t
 
 ## Native MCP read-only preflight
 
-`NativeMcpPreflight` probes an already-running TE3 native MCP endpoint using an explicit
-loopback URL. It performs initialize, tools/list, and exactly one configured identity
+`te3_native_preflight` exposes `NativeMcpPreflight` through the MCP server. Supply an explicit
+loopback `endpoint`, `identityTool`, `identityProperty`, and `expectedIdentity`; optional `tokenEnv` names an environment variable holding the bearer token. It performs initialize, tools/list, and exactly one configured identity
 tool call. The identity tool must advertise `annotations.readOnlyHint=true`; its
 configured response property must equal the expected disposable model identity.
 A missing server, denied token, missing tool, unannotated tool, or model mismatch
@@ -175,7 +175,4 @@ and verify live behavior separately under a machine grant.
 close/keep actions preserve document tabs. Named show/hide accepts AI Assistant,
 TOM Explorer, and Properties. Showing an absent pane currently refuses input
 because the View-menu reopen locator has not been live-verified. The
-`assistant-model-review` preset targets a 1920x1080 window: AI Assistant width
-1000, TOM Explorer width 700, and Properties height 300 physical pixels. Plan
-and apply routes have offline tests; live geometry and the editor's remaining
-width are unverified.
+`assistant-model-review` preset targets AI Assistant width 680, TOM Explorer width 480, and Properties height 320 physical pixels. At the 1800-pixel minimum, it budgets 40 pixels for borders and splitters and reserves at least 600 pixels for the editor. `plan-preset` is offline and accepts optional `windowWidth`/`windowHeight` (defaults 1920x1080); `apply-preset` attaches to TE3 and is live-unverified.

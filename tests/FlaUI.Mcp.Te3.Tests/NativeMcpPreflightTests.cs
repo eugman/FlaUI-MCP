@@ -85,4 +85,23 @@ public sealed class NativeMcpPreflightTests
             preflight.Inspect(new(new("http://localhost:42100/"), "model_identity", "model.name", "other-model"))
         );
     }
+
+    [Fact]
+    public async Task ToolRouteUsesFakeNativeMcpWithoutDesktop()
+    {
+        var handler = new FakeHandler();
+        var tool = new Te3NativePreflightTool(new HttpClient(handler));
+        var args = System.Text.Json.JsonSerializer.SerializeToElement(
+            new
+            {
+                endpoint = "http://127.0.0.1:42100/",
+                identityTool = "model_identity",
+                identityProperty = "model.name",
+                expectedIdentity = "scratch-model",
+            }
+        );
+        var result = await tool.ExecuteAsync(args);
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal(4, handler.Calls.Count);
+    }
 }

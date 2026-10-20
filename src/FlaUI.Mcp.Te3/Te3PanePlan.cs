@@ -19,7 +19,8 @@ public static class Te3PanePlan
             throw new ArgumentException("Assistant model review needs a window at least 1800x900 physical pixels.");
         }
 
-        return [new("AI Assistant", Width: 1000), new("TOM Explorer", Width: 700), new("Properties", Height: 300)];
+        // Reserve 40 pixels for splitter/chrome: at 1800 pixels the editor retains at least 600.
+        return [new("AI Assistant", Width: 680), new("TOM Explorer", Width: 480), new("Properties", Height: 320)];
     }
 
     public static bool IsNamedPane(string pane) => pane is "AI Assistant" or "TOM Explorer" or "Properties";
