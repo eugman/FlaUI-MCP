@@ -67,7 +67,25 @@ public class ElementRegistry
         return element;
     }
 
-    public void ValidateReference(string reference, string? handle = null) => ResolveRef(reference, handle);
+    /// <summary>
+    /// The check every mutation through a ref runs: <see cref="ResolveRef"/>, plus a process identity for
+    /// its window. Without one there is no PID/start-time to revalidate and no PID for the pending-provider
+    /// check or modal detection, so the mutation is refused.
+    /// </summary>
+    public void ValidateReference(string reference, string? handle = null)
+    {
+        ResolveRef(reference, handle);
+        lock (_gate)
+        {
+            if (!_identities.ContainsKey(WindowForRef(reference)))
+            {
+                throw new InvalidOperationException(
+                    $"Ref {reference} has no process identity; no action dispatched. "
+                        + "Refresh it with windows_snapshot or windows_find on a window handle."
+                );
+            }
+        }
+    }
 
     public InputTarget InputForRef(string reference)
     {
