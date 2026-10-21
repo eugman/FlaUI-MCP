@@ -179,6 +179,21 @@ public sealed class DispatchAccountingTests
         Assert.StartsWith(text, result.Content[0].Text);
     }
 
+    // K3: the button release goes through the same seam and count as every other input.
+
+    [Fact]
+    public void ADragThatFailsMidwayStillReleasesTheButtonThroughTheSeam()
+    {
+        // Move to the start and press go out; the first path step then sees another window in front.
+        var desktop = new FakeDesktop { FocusLostAfter = 2 };
+        using var installed = desktop.Install();
+
+        var counted = Counted(() => MouseTool.Drag(FakeDesktop.Target, new Point(10, 10), new Point(50, 10), 4));
+
+        Assert.Equal(3, desktop.Dispatched);
+        Assert.Equal(3, counted);
+    }
+
     private sealed class DelegateTool(string name, Func<McpToolResult> run) : ToolBase
     {
         public override string Name => name;

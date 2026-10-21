@@ -257,7 +257,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         finally
         {
             // Never leave the button held, even when a step fails verification.
-            Mouse.Up(MouseButton.Left);
+            input.Release(() => Mouse.Up(MouseButton.Left));
         }
 
         return Mouse.Position;

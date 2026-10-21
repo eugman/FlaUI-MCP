@@ -323,6 +323,16 @@ public sealed class GuardedInput : IDisposable
         desktop.Dispatch(input);
     }
 
+    /// <summary>
+    /// Undo a held button or key. It goes through the same seam and count as other input, but skips the
+    /// foreground check: a release must go out even after focus moved, or the button stays held.
+    /// </summary>
+    public void Release(Action input)
+    {
+        MutationGuard.RecordDispatch();
+        desktop.Dispatch(input);
+    }
+
     public void Type(string text)
     {
         // Recheck foreground between chunks, without repeated process-start queries.
