@@ -6,8 +6,9 @@ public sealed partial class Te3Page
     /// <summary>
     /// Selects an object in TOM Explorer by name, type and table. The object name is typed into the search box, then the
     /// selection walks down the filtered tree (see <see cref="PathWalker"/>), so table groups, display folders and rows
-    /// that share a name (a Date table, a Date column, a Date level) need no path. <paramref name="folder"/> is accepted
-    /// for compatibility and not needed. The search is cleared afterwards and the selection is checked again.
+    /// that share a name (a Date table, a Date column, a Date level) need no path. With <paramref name="folder"/> the
+    /// object must be inside that display folder, and the walk stops once it leaves the table (see
+    /// <see cref="WalkPlace"/>). The search is cleared afterwards and the selection is checked again.
     /// </summary>
     public async Task SelectObjectPath(string table, string objectName, string objectType, string folder = "")
     {
@@ -16,11 +17,15 @@ public sealed partial class Te3Page
             throw new ArgumentException("Unsupported object type");
         }
 
-        _ = folder;
+        if (folder.Length > 0 && objectType == "Table")
+        {
+            throw new ArgumentException("folder applies to columns and measures; a table is in no display folder.");
+        }
+
         // The walk's time limit counts from here: opening TOM Explorer, the gate and the search use the same 30 s.
         var elapsed = WalkClock.Start();
         await NavigationRetry.Once(
-            () => WalkToObject(table, objectName, objectType, elapsed),
+            () => WalkToObject(table, objectName, objectType, folder, elapsed),
             () => Inputs.Sent,
             reportStep
         );
@@ -29,7 +34,13 @@ public sealed partial class Te3Page
     // Where the last walk ended; the arrival check compares it with the request.
     private WalkResult? lastWalk;
 
-    private async Task WalkToObject(string table, string objectName, string objectType, Func<TimeSpan> elapsed)
+    private async Task WalkToObject(
+        string table,
+        string objectName,
+        string objectType,
+        string folder,
+        Func<TimeSpan> elapsed
+    )
     {
         await OpenTom();
         if (await ShowChangesGate.TurnOff(TomChangesState, () => Click(TomChangesTarget())))
@@ -45,13 +56,15 @@ public sealed partial class Te3Page
             table,
             objectName,
             objectType,
-            outOfTime: WalkClock.OutOfTime(elapsed)
+            outOfTime: WalkClock.OutOfTime(elapsed),
+            folder: folder
         );
         if (!walk.Found)
         {
             await ClearTomSearchTyped();
             throw new InvalidOperationException(
-                $"No {objectType} '{objectName}' under table '{table}' in TOM Explorer after {walk.RowsVisited} rows "
+                $"No {objectType} '{objectName}' under table '{table}'{(folder.Length > 0 ? $" in folder '{folder}'" : "")} "
+                    + $"in TOM Explorer after {walk.RowsVisited} rows "
                     + $"and {Inputs.Sent} inputs. {walk.Reason}"
             );
         }
@@ -151,8 +164,4 @@ public sealed partial class Te3Page
         var below = TomSelection.RowShownBelow(rows.Elements.Select(r => r.Bounds?.Y), selected?.Bounds?.Y);
         return (new(TomSelection.ObservedRow(selected?.Value, bar), bar, selected?.Bounds?.Y), below);
     }
-
-    public static string ObjectNotFoundMessage(string table, string objectName) =>
-        $"'{objectName}' is not directly under table '{table}'. If it is in a display folder, pass folder (e.g. Smoke tests); "
-        + "if it should be there, the model may have changed since it was loaded.";
 }

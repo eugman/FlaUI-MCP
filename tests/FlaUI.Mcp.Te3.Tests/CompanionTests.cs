@@ -34,14 +34,28 @@ public sealed class CompanionTests
         Assert.Equal(["te3_navigate", "te3_model_state"], Te3Companion.Names);
 
     [Fact]
-    public void FolderSchemaAndMissMessagePointToDisplayFolders()
+    public void TheFolderSchemaSaysWhatTheWalkDoesWithIt()
     {
         var schema = JsonSerializer.SerializeToElement(new Te3Companion(null!, "te3_navigate").InputSchema);
-        Assert.Contains(
-            "display folder",
-            schema.GetProperty("properties").GetProperty("folder").GetProperty("description").GetString()
-        );
-        Assert.Contains("pass folder", Te3Page.ObjectNotFoundMessage("Sales", "Total Amount"));
+        var folder = schema.GetProperty("properties").GetProperty("folder").GetProperty("description").GetString();
+
+        Assert.Contains("display folder", folder);
+        Assert.Contains("must be inside", folder);
+        Assert.DoesNotContain("required", folder);
+    }
+
+    [Fact]
+    public void AFolderForATableIsRefusedBeforeAnyInput()
+    {
+        var call = JsonDocument
+            .Parse(
+                """{"destination":"object","table":"Sales","objectName":"Sales","objectType":"Table","folder":"X"}"""
+            )
+            .RootElement;
+
+        var error = Assert.Throws<ArgumentException>(() => Te3Companion.Validate(call, Te3Companion.Navigate));
+
+        Assert.Contains("folder", error.Message);
     }
 
     [Fact]

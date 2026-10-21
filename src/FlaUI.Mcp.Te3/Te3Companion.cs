@@ -74,7 +74,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             properties["folder"] = new
             {
                 type = "string",
-                description = "Display folder path of the object, backslash-separated; required when the object sits in a display folder.",
+                description = "Optional display folder path of a column or measure, backslash-separated (e.g. 1. Brand Hierarchy). The object must be inside it: the walk passes the table, then each folder of the path, and stops with the reason once it leaves the table. It does not make the walk faster.",
             };
             properties["objectType"] = new { type = "string", @enum = Te3Destinations.ObjectTypes };
             return new
@@ -352,6 +352,15 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         if (!Te3Destinations.ObjectTypes.Contains(a.GetProperty("objectType").GetString()))
         {
             throw new ArgumentException("Unsupported objectType.");
+        }
+
+        if (
+            a.GetProperty("objectType").GetString() == "Table"
+            && a.TryGetProperty("folder", out var folder)
+            && !string.IsNullOrWhiteSpace(folder.GetString())
+        )
+        {
+            throw new ArgumentException("folder applies to columns and measures; a table is in no display folder.");
         }
     }
 

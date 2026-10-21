@@ -42,27 +42,32 @@ public static class PathWalker
     /// <param name="objectType">Table, Column or Measure.</param>
     /// <param name="maxRows">Rows to visit before giving up.</param>
     /// <param name="outOfTime">True once the walk must stop to finish inside the tool deadline.</param>
+    /// <param name="folder">
+    /// The object's display folder path, backslash-separated, or null: the object must then be inside it, and the walk
+    /// stops once it leaves the table (see <see cref="WalkPlace"/>). Columns and measures only.
+    /// </param>
     public static async Task<WalkResult> Find(
         ITreeCursor cursor,
         string table,
         string objectName,
         string objectType,
         int maxRows = DefaultMaxRows,
-        Func<bool>? outOfTime = null
+        Func<bool>? outOfTime = null,
+        string? folder = null
     )
     {
-        string? currentTable = null;
+        var place = new WalkPlace(table, folder);
+        if (place.HasFolder && objectType == "Table")
+        {
+            throw new ArgumentException("folder applies to columns and measures; a table is in no display folder.");
+        }
+
         var row = await cursor.Current();
         for (var visited = 1; visited <= maxRows; visited++)
         {
-            if (IsTable(row.Type))
+            if (Ends(place, row, visited, table, objectName, objectType) is { } ended)
             {
-                currentTable = row.Value;
-            }
-
-            if (Matches(row, currentTable, table, objectName, objectType))
-            {
-                return new(true, currentTable, visited, null);
+                return ended;
             }
 
             if (visited == maxRows)
@@ -75,17 +80,17 @@ public static class PathWalker
             {
                 return new(
                     false,
-                    currentTable,
+                    place.Table,
                     visited,
                     $"Stopped before the tool deadline after {visited} rows, on '{row.Value}' ({row.Type ?? "unknown type"}) "
-                        + $"under table '{currentTable ?? "none"}'. Narrow the search or retry from here."
+                        + $"under table '{place.Table ?? "none"}'. Narrow the search or retry from here."
                 );
             }
 
             if (await cursor.Down() is not { } next)
             {
                 return cursor.Stalled
-                    ? new(false, currentTable, visited, DidNotMove(row, visited))
+                    ? new(false, place.Table, visited, DidNotMove(row, visited))
                     : new(false, null, visited, $"Reached the end of the filtered tree after {visited} rows.");
             }
 
@@ -93,6 +98,31 @@ public static class PathWalker
         }
 
         return new(false, null, maxRows, $"Stopped after {maxRows} rows.");
+    }
+
+    // The walk ends on this row: it is the object, it is the object outside the folder, or it leaves the table.
+    private static WalkResult? Ends(
+        WalkPlace place,
+        RowObservation row,
+        int visited,
+        string table,
+        string objectName,
+        string objectType
+    )
+    {
+        if (place.Enter(row) is { } left)
+        {
+            return new(false, table, visited, left);
+        }
+
+        if (!Matches(row, place.Table, table, objectName, objectType))
+        {
+            return null;
+        }
+
+        return place.InFolder
+            ? new(true, place.Table, visited, null)
+            : new(false, place.Table, visited, place.OutsideFolder(objectName));
     }
 
     /// <summary>Walk down to the first row showing the value, in tree order.</summary>

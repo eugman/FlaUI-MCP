@@ -127,6 +127,130 @@ public sealed class PathWalkerTests
     public void ARowShownBelowTheSelectionMeansItHadSomewhereToMove(double[] tops, double? selected, bool below) =>
         Assert.Equal(below, TomSelection.RowShownBelow(tops.Select(t => (double?)t), selected));
 
+    // SpaceParts filtered by "Brand": Brands[Brand] sits in display folder "1. Brand Hierarchy" (UI-MAP), and another
+    // table has a same-named column outside any folder.
+    private static FakeTree BrandFolders() =>
+        new(
+            new("Tables", "Tables"),
+            new("Brands", "Table"),
+            new("Brand Hierarchy", "Hierarchy"),
+            new("Brand", "Level"),
+            new("1. Brand Hierarchy", "Display Folder"),
+            new("Brand", "Data Column"),
+            new("Sub Brand", "Data Column"),
+            new("Products", "Table"),
+            new("Brand", "Data Column")
+        );
+
+    [Fact]
+    public async Task WithAFolderTheWalkPassesTheTableThenTheFolderThenFindsTheObjectInIt()
+    {
+        var walk = await PathWalker.Find(BrandFolders(), "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
+
+        Assert.True(walk.Found);
+        Assert.Equal("Brands", walk.Table);
+        Assert.Equal(6, walk.RowsVisited);
+    }
+
+    [Fact]
+    public async Task AnObjectOutsideTheRequestedFolderIsNotTakenForIt()
+    {
+        var tree = new FakeTree(
+            new("Brands", "Table"),
+            new("Brand", "Data Column"),
+            new("1. Brand Hierarchy", "Display Folder"),
+            new("Sub Brand", "Data Column")
+        );
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
+
+        Assert.False(walk.Found);
+        Assert.Contains("not inside display folder '1. Brand Hierarchy'", walk.Reason);
+        Assert.Equal(1, tree.Downs);
+    }
+
+    [Fact]
+    public async Task AWalkThatLeavesTheTableWithoutTheFolderStopsThereAndSaysSo()
+    {
+        // Without a folder the walk would go on through Products to the end of the tree or the clock.
+        var tree = BrandFolders();
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand Key", "Column", folder: "2. Other");
+
+        Assert.False(walk.Found);
+        Assert.Contains("no display folder '2. Other'", walk.Reason);
+        Assert.Equal(8, walk.RowsVisited);
+        Assert.Equal(7, tree.Downs);
+    }
+
+    [Fact]
+    public async Task TheObjectFoundInAnotherFolderEndsTheWalk()
+    {
+        // Object names are unique in a table, and a row's folders come before it in tree order.
+        var tree = BrandFolders();
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "2. Other");
+
+        Assert.False(walk.Found);
+        Assert.Contains("not inside display folder '2. Other'", walk.Reason);
+        Assert.Equal(5, tree.Downs);
+    }
+
+    [Fact]
+    public async Task AFolderRowNamedLikeAHierarchyIsNotTakenForTheFolder()
+    {
+        var tree = new FakeTree(
+            new("Brands", "Table"),
+            new("Brand Hierarchy", "Hierarchy"),
+            new("Brand", "Level"),
+            new("Brand", "Data Column")
+        );
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "Brand Hierarchy");
+
+        Assert.False(walk.Found);
+    }
+
+    [Fact]
+    public async Task AFolderForATableIsRefused() =>
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            PathWalker.Find(BrandFolders(), "Brands", "Brands", "Table", folder: "1. Brand Hierarchy")
+        );
+
+    [Fact]
+    public async Task ANestedFolderIsMatchedOneLevelAtATime()
+    {
+        var tree = new FakeTree(
+            new("Sales", "Table"),
+            new("Totals", "Display Folder"),
+            new("Gross", "Measure"),
+            new("Automation", "Display Folder"),
+            new("Verified", "Display Folder"),
+            new("Net", "Measure")
+        );
+
+        var walk = await PathWalker.Find(tree, "Sales", "Net", "Measure", folder: @"Automation\Verified");
+
+        Assert.True(walk.Found);
+        Assert.Equal(6, walk.RowsVisited);
+    }
+
+    [Fact]
+    public async Task AFolderRowIsMatchedOnlyUnderTheRequestedTable()
+    {
+        var tree = new FakeTree(
+            new("Products", "Table"),
+            new("1. Brand Hierarchy", "Display Folder"),
+            new("Brands", "Table"),
+            new("Brand", "Data Column")
+        );
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
+
+        Assert.False(walk.Found);
+        Assert.Contains("not inside display folder", walk.Reason);
+    }
+
     [Fact]
     public async Task TheWalkStopsAtTheRowLimit()
     {
