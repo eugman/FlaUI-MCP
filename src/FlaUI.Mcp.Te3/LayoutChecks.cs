@@ -56,4 +56,21 @@ internal static class LayoutChecks
 
         return step;
     }
+
+    /// <summary>
+    /// keep closes every pane it is not told to keep, so a title that names no visible pane or tab (a typo) is refused
+    /// before the first click instead of closing everything.
+    /// </summary>
+    public static void RequireKept(IEnumerable<string> titles, IEnumerable<string> visible)
+    {
+        var shown = visible.ToList();
+        var unknown = titles.Where(t => !shown.Any(v => Te3Layout.TitleMatches(v, t))).ToList();
+        if (unknown.Count > 0)
+        {
+            throw new ArgumentException(
+                $"keep names {string.Join(", ", unknown.Select(t => $"'{t}'"))}, which no visible pane or tab has "
+                    + $"(visible: {string.Join(", ", shown.Select(t => $"'{t}'"))}). Nothing was closed; no input sent."
+            );
+        }
+    }
 }

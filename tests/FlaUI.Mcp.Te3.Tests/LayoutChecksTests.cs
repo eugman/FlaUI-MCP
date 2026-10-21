@@ -56,4 +56,17 @@ public sealed class LayoutChecksTests
 
         Assert.Equal(760, reply.GetProperty("step").GetProperty("reached").GetInt32());
     }
+
+    [Fact]
+    public void KeepRefusesATitleThatNamesNoVisiblePaneOrTab()
+    {
+        // keep ["TOM Explorr"] closed AI Assistant, TOM Explorer and Properties, then listed the typo as unresolved.
+        string[] visible = ["AI Assistant", "TOM Explorer (Changed)", "Properties", "Expression Editor"];
+
+        var error = Assert.Throws<ArgumentException>(() => LayoutChecks.RequireKept(["TOM Explorr"], visible));
+
+        Assert.Contains("TOM Explorr", error.Message);
+        Assert.Contains("no input sent", error.Message);
+        LayoutChecks.RequireKept(["TOM Explorer", "Expression Editor"], visible);
+    }
 }

@@ -221,6 +221,11 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
 
     private async Task<object> Close(InputTally inputs, string handle, Window window, string[] titles, bool keep)
     {
+        if (keep)
+        {
+            LayoutChecks.RequireKept(titles, Parts(window).Select(p => p.Title));
+        }
+
         var attempted = new HashSet<string>();
         var closes = 0;
         var closed = await LayoutSteps.Progress(
