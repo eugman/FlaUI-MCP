@@ -21,8 +21,9 @@ internal static class CoreFailure
     private static readonly HashSet<string> DesktopBlockers = ["activation-denied", "desktop-unavailable"];
 
     /// <summary>
-    /// The outcome of the failing Core call, or of a direct send that guarded input refused, searched through the
-    /// exceptions that wrap it (a retry, a cancel step).
+    /// The outcome of the failing Core call, of a direct send that guarded input refused, or of a call refused because
+    /// an earlier one still holds TE3's provider (as Core's BlockedResult), searched through the exceptions that wrap
+    /// it (a retry, a cancel step).
     /// </summary>
     internal static ToolOutcome? Outcome(Exception? error)
     {
@@ -34,6 +35,13 @@ internal static class CoreFailure
                     return call.Outcome;
                 case InputRefusedException refused:
                     return new ToolOutcome("not-dispatched", "not-tracked") { Failure = refused.Refusal };
+                case ProviderBlockedException blocked:
+                    return new ToolOutcome(
+                        "not-dispatched",
+                        "pending",
+                        blocked.Pending.OperationId,
+                        blocked.Pending.ModalTitle
+                    );
             }
         }
 
@@ -48,17 +56,31 @@ internal static class CoreFailure
         error is CoreCallException { Outcome.Dispatch: "not-dispatched" };
 
     /// <summary>
+    /// Whether the failing call itself may still reach the app: it timed out pending, or it went out and its
+    /// provider has not returned. A call refused because another one holds the provider never will.
+    /// </summary>
+    internal static bool MayStillGoOut(ToolOutcome? outcome) =>
+        outcome is { Dispatch: "timed_out_pending" } or { Provider: "pending", Dispatch: not "not-dispatched" };
+
+    /// <summary>
     /// The outcome for a TE3 tool's own failure after <paramref name="inputsSent"/> inputs: partial once any went
-    /// out, otherwise not-dispatched, or timed_out_pending while the failing call may still go out. It carries the
-    /// refusal that stopped it, when guarded input refused.
+    /// out, otherwise not-dispatched, or timed_out_pending while the failing call may still go out. A held provider
+    /// shows as provider pending, with the pending call's id and modal. It carries the refusal that stopped it, when
+    /// guarded input refused.
     /// </summary>
     internal static ToolOutcome Reply(Exception error, int inputsSent)
     {
         var failing = Outcome(error);
-        var pending = failing?.IsPending == true;
         var dispatch =
-            pending && inputsSent == 0 ? "timed_out_pending" : ToolOutcome.DispatchFor(failed: true, inputsSent);
-        return new ToolOutcome(dispatch, pending ? "pending" : "not-tracked")
+            MayStillGoOut(failing) && inputsSent == 0
+                ? "timed_out_pending"
+                : ToolOutcome.DispatchFor(failed: true, inputsSent);
+        return new ToolOutcome(
+            dispatch,
+            failing?.IsPending == true ? "pending" : "not-tracked",
+            failing?.PendingPatternId,
+            failing?.ModalTitle
+        )
         {
             Verification = "not-established",
             Status = "failed",

@@ -60,7 +60,7 @@ internal static class LayoutSteps
         {
             await input();
         }
-        catch (Exception ex) when (CoreFailure.Outcome(ex)?.IsPending == true)
+        catch (Exception ex) when (CoreFailure.MayStillGoOut(CoreFailure.Outcome(ex)))
         {
             sent(item);
             throw;

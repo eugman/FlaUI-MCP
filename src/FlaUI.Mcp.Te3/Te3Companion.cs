@@ -192,7 +192,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         var identity = host.Sessions.GetInputTarget(handle);
         if (host.Pending.TryGetPending(process.Id, out var pendingCall))
         {
-            throw new InvalidOperationException(PendingInvokeTracker.DescribeBlocked(pendingCall));
+            throw new ProviderBlockedException(pendingCall);
         }
 
         return (windows, hwnd, handle, identity);
