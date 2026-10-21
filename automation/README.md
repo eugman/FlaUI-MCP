@@ -180,5 +180,8 @@ and verify live behavior separately under a machine grant. The saved 3.27.1 tool
 `te3_layout` distinguishes docked pane hiding from document closing. Its
 close/keep actions preserve document tabs. Named show/hide accepts AI Assistant,
 TOM Explorer, and Properties. Showing an absent pane still refuses input. The View-menu reopen
-locator was verified by hand on 3.27.1 (see UI-MAP), but the tool does not use it yet. The
+locator was verified by hand on 3.27.1 (see UI-MAP), but the tool does not use it yet. Best Practice
+Analyzer shares TOM Explorer's tab container (UI-MAP), so reopening either one can change which of
+the two tabs shows; check `te3_layout_read list` afterwards. The View popup's Expression Editor entry
+opens a document, not a pane, so `reopen-pane` does not accept it. The
 `assistant-model-review` preset targets AI Assistant width 680, TOM Explorer width 480, and Properties height 320 physical pixels. At the 1800-pixel minimum, it budgets 40 pixels for borders and splitters and reserves at least 600 pixels for the editor. `plan-preset` is offline and accepts optional `windowWidth`/`windowHeight` (defaults 1920x1080); `apply-preset` failed live on 3.27.1 (2026-10-21): its first drag missed the splitter between touching panes and changed nothing. A fix for touching panes is committed but not live-verified. `list` bounds are relative to the UIA window rectangle, not to a capture; use `windows_screenshot` `locate` for pixel positions.

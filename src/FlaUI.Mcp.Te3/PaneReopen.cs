@@ -11,7 +11,10 @@ internal static class PaneReopen
     private const int SettleMs = 2000;
     private const int PollMs = 200;
 
-    /// <summary>View popup Buttons observed on TE3 3.27.1.</summary>
+    /// <summary>
+    /// View popup Buttons observed on TE3 3.27.1 that open docked panes. The popup's "Expression Editor" entry is left
+    /// out: it opens a document, which the pane check never counts as visible.
+    /// </summary>
     internal static readonly string[] ViewMenuPanes =
     [
         "TOM Explorer",
@@ -20,7 +23,6 @@ internal static class PaneReopen
         "Best Practice Analyzer",
         "Messages",
         "Data Refresh",
-        "Expression Editor",
         "Macros",
         "VertiPaq Analyzer",
         "Dependencies",
