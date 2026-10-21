@@ -98,4 +98,17 @@ public sealed class DirectInputJournalTests
         Assert.Equal(4242, error.Refusal.Target?.Pid);
         Assert.Equal("Model menu is obscured; no input sent.", error.Message);
     }
+
+    [Fact]
+    public void EveryFillSaysWhetherCoreMustSeeFocusMove()
+    {
+        // Core's windows_fill keyboard fallback types Ctrl+A, Backspace and the text; whether it first checks that focus
+        // reached the field is a per-call decision, never left to Core's default.
+        var page = File.ReadAllText(Path.Combine(Sources(), "Te3Page.cs"));
+        var fills = Regex.Matches(page, @"invoke\(\s*""windows_fill"",\s*new\s*\{[^}]*\}");
+
+        Assert.NotEmpty(fills);
+        Assert.All(fills, fill => Assert.Contains("verifyFocus", fill.Value));
+        Assert.DoesNotMatch(@"await Fill\([^;]*\);", Regex.Replace(page, @"await Fill\([^;]*verifyFocus[^;]*\);", ""));
+    }
 }

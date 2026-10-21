@@ -414,7 +414,8 @@ public sealed partial class Te3Page(
     public async Task SearchPreferences(string text) =>
         await Fill(
             new(new(AutomationId: "searchPreferences", ControlType: "Edit"), PreferencesTarget().Selector, true),
-            text
+            text,
+            verifyFocus: true
         );
 
     public async Task SizePreferences(int width, int height)
@@ -1215,11 +1216,21 @@ public sealed partial class Te3Page(
         await invoke("windows_click", new { @ref = reference, physical });
     }
 
-    private async Task Fill(Target target, string value)
+    // verifyFocus: Core's keyboard fallback (Ctrl+A, Backspace, text) first checks that focus reached the field and
+    // refuses otherwise. Every TE3 field filled here is a single focusable edit, so each call site asks for it.
+    private async Task Fill(Target target, string value, bool verifyFocus)
     {
         var reference = await Reference(target);
         reportStep?.Invoke($"Fill {target.Selector}");
-        await invoke("windows_fill", new { @ref = reference, value });
+        await invoke(
+            "windows_fill",
+            new
+            {
+                @ref = reference,
+                value,
+                verifyFocus,
+            }
+        );
     }
 
     private async Task Keys(string chord, Target? target = null)
@@ -1497,7 +1508,7 @@ public sealed partial class Te3Page(
         await Click(ExpressionTabTarget());
         await Keys("Ctrl+O");
         await Expect(OpenFileDialogTarget());
-        await Fill(OpenFileNameTarget(), file);
+        await Fill(OpenFileNameTarget(), file, verifyFocus: true);
         await Keys("Enter", OpenFileNameTarget());
         await Absent(OpenFileDialogTarget());
         await Expect(CsharpTextTarget(), script);
@@ -1753,7 +1764,7 @@ public sealed partial class Te3Page(
     public async Task SetProperty(string property, string value)
     {
         await Click(PropertyTarget(property));
-        await Fill(PropertyInputTarget(), value);
+        await Fill(PropertyInputTarget(), value, verifyFocus: true);
         await Keys("Enter", PropertyInputTarget());
         await Expect(PropertyTarget(property), value);
     }
@@ -1793,7 +1804,7 @@ public sealed partial class Te3Page(
 
     public async Task ResetSearch()
     {
-        await Fill(SearchTarget(), "");
+        await Fill(SearchTarget(), "", verifyFocus: true);
     }
 
     public async Task SelectObject(string objectName)
@@ -1814,7 +1825,7 @@ public sealed partial class Te3Page(
     public async Task SetExpression(string expression)
     {
         await Click(ExpressionTabTarget());
-        await Fill(ExpressionInputTarget(), expression);
+        await Fill(ExpressionInputTarget(), expression, verifyFocus: true);
         await Expect(ExpressionTarget(), expression);
         await Keys("F5");
     }
@@ -1841,7 +1852,7 @@ public sealed partial class Te3Page(
 
     public async Task RunQuery(string query)
     {
-        await Fill(QueryInputTarget(), query);
+        await Fill(QueryInputTarget(), query, verifyFocus: true);
         await Expect(QueryTextTarget(), query);
         await Keys("F5", QueryInputTarget());
     }
@@ -2220,7 +2231,15 @@ public sealed partial class Te3Page(
         );
 
     public async Task StageField(Dialog dialog, string name, string controlType, string value) =>
-        await invoke("windows_fill", new { @ref = await DialogRef(dialog, name, controlType), value });
+        await invoke(
+            "windows_fill",
+            new
+            {
+                @ref = await DialogRef(dialog, name, controlType),
+                value,
+                verifyFocus = true,
+            }
+        );
 
     public async Task SetDialogChoice(Dialog dialog, string name, string value)
     {
@@ -2228,7 +2247,15 @@ public sealed partial class Te3Page(
             dialog,
             new(Name: name, ControlType: "ComboBox", Pattern: "Value", Visible: true)
         );
-        await invoke("windows_fill", new { @ref = reference, value });
+        await invoke(
+            "windows_fill",
+            new
+            {
+                @ref = reference,
+                value,
+                verifyFocus = true,
+            }
+        );
         var observed = (
             await ResolveDialog(dialog, new(Name: name, ControlType: "ComboBox", Pattern: "Value", Visible: true))
         )
