@@ -155,53 +155,9 @@ public static class RunExecutor
 
             app = RunJournal.Launch(manifest, Save, start, Process.Start);
             manifest.Te3Version = app.MainModule?.FileVersionInfo.ProductVersion;
-            var startup = Stopwatch.StartNew();
-            while (startup.Elapsed < TimeSpan.FromSeconds(90))
-            {
-                var marker = manifest.Database.Length > 0 ? manifest.Database : id;
-                var windows = Win32Desktop
-                    .GetTopLevelWindows(app.Id)
-                    .Where(w => !w.IsToolWindow && w.Title.Contains(marker) && w.Title.Contains("Tabular Editor 3"))
-                    .ToArray();
-                if (windows.Length == 1)
-                {
-                    handle = host.Sessions.RegisterNativeWindow(windows[0].Hwnd, app.Id);
-                    break;
-                }
-
-                if (app.HasExited)
-                {
-                    throw new InvalidOperationException("TE3 exited during startup");
-                }
-
-                await Task.Delay(250, cancellationToken);
-            }
-
-            if (handle == null)
-            {
-                throw new TimeoutException("TE3 did not open the owned model");
-            }
-
-            host.Sessions.FocusWindow(handle);
-            var target = host.Sessions.GetInputTarget(handle);
-            var activation = Stopwatch.StartNew();
-            if (Win32Desktop.GetForegroundWindow() != target.Hwnd)
-            {
-                Console.WriteLine($"Click the TE3 window containing {manifest.Database} {id}; waiting 120 seconds.");
-            }
-
-            while (Win32Desktop.GetForegroundWindow() != target.Hwnd)
-            {
-                RunSafety.RequireExclusiveTe3(app.Id);
-                target.EnsureAlive();
-                if (activation.Elapsed > TimeSpan.FromSeconds(120))
-                {
-                    throw new TimeoutException("Manual activation not received; no input sent");
-                }
-
-                await Task.Delay(250, cancellationToken);
-            }
-
+            var marker = manifest.Database.Length > 0 ? manifest.Database : id;
+            handle = await WaitForOwnedWindow(host, app, marker, cancellationToken);
+            await ActivateOwnedWindow(host, handle, app.Id, $"{manifest.Database} {id}", cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken));
             await page.DefaultLayout();
@@ -335,6 +291,67 @@ public static class RunExecutor
             {
                 throw new InvalidOperationException(string.Join("; ", result.Content.Select(c => c.Text)));
             }
+        }
+    }
+
+    // The run's TE3 window: the only top-level window titled with the run's model or database.
+    private static async Task<string> WaitForOwnedWindow(
+        AutomationHost host,
+        Process app,
+        string marker,
+        CancellationToken cancellationToken
+    )
+    {
+        var startup = Stopwatch.StartNew();
+        while (startup.Elapsed < TimeSpan.FromSeconds(90))
+        {
+            var windows = Win32Desktop
+                .GetTopLevelWindows(app.Id)
+                .Where(w => !w.IsToolWindow && w.Title.Contains(marker) && w.Title.Contains("Tabular Editor 3"))
+                .ToArray();
+            if (windows.Length == 1)
+            {
+                return host.Sessions.RegisterNativeWindow(windows[0].Hwnd, app.Id);
+            }
+
+            if (app.HasExited)
+            {
+                throw new InvalidOperationException("TE3 exited during startup");
+            }
+
+            await Task.Delay(250, cancellationToken);
+        }
+
+        throw new TimeoutException("TE3 did not open the owned model");
+    }
+
+    // Asks Windows to focus the run's TE3, then waits for the user to click it if Windows refused.
+    private static async Task ActivateOwnedWindow(
+        AutomationHost host,
+        string handle,
+        int processId,
+        string label,
+        CancellationToken cancellationToken
+    )
+    {
+        host.Sessions.FocusWindow(handle);
+        var target = host.Sessions.GetInputTarget(handle);
+        var activation = Stopwatch.StartNew();
+        if (Win32Desktop.GetForegroundWindow() != target.Hwnd)
+        {
+            Console.WriteLine($"Click the TE3 window containing {label}; waiting 120 seconds.");
+        }
+
+        while (Win32Desktop.GetForegroundWindow() != target.Hwnd)
+        {
+            RunSafety.RequireExclusiveTe3(processId);
+            target.EnsureAlive();
+            if (activation.Elapsed > TimeSpan.FromSeconds(120))
+            {
+                throw new TimeoutException("Manual activation not received; no input sent");
+            }
+
+            await Task.Delay(250, cancellationToken);
         }
     }
 
