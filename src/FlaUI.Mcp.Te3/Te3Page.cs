@@ -1377,19 +1377,7 @@ public sealed class Te3Page(
             new(Name: "Model", ControlType: "MenuItem"),
             new(Name: "Main menu", ControlType: "MenuBar")
         );
-        var menuBarItem = await Resolve(modelMenu);
-        var ownerIdentity = host.Sessions.GetInputTarget(handle);
-        var menuBarPoint = await Task.Run(menuBarItem.GetClickablePoint).WaitAsync(TimeSpan.FromSeconds(5));
-        using (var input = new GuardedInput(ownerIdentity))
-        {
-            if (Win32Desktop.WindowAt(menuBarPoint) != ownerIdentity.Hwnd)
-            {
-                throw new InvalidOperationException("Model menu is obscured");
-            }
-
-            reportStep?.Invoke("Open Model menu");
-            input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(menuBarPoint));
-        }
+        var ownerIdentity = await HoverModelMenu(modelMenu);
         // Invoke can remain pending for TE3 menu popups; use the guarded input path.
         await Click(modelMenu);
         await Task.Delay(500);
@@ -1400,7 +1388,46 @@ public sealed class Te3Page(
         var popup = await MenuPopup(element);
         var owner = host.Sessions.GetInputTarget(handle);
         // Keep the pointer on the menu bar, outside the popup, so tooltips cannot hide rows.
-        // This is the observed enabled-item order; assert every step instead of blind key counts.
+        await WalkModelMenuToCalculationGroup();
+        var ownerBounds =
+            Win32Desktop.GetWindowBounds(owner.Hwnd) ?? throw new InvalidOperationException("Owner disappeared");
+        var bounds = Win32Desktop.GetWindowBounds(popup) ?? throw new InvalidOperationException("Menu disappeared");
+        await Task.Delay(500);
+        await RequireKeyboardFocus(target, "Calculation group menu item is not highlighted/focused");
+        var workArea = Screen.FromHandle(owner.Hwnd).WorkingArea;
+        var x = Math.Max(ownerBounds.Left, workArea.Left);
+        var y = Math.Max(ownerBounds.Top, workArea.Top);
+        var scene = new System.Drawing.Rectangle(
+            x,
+            y,
+            Math.Max(1018, bounds.Right - x + 16),
+            Math.Max(665, bounds.Bottom - y + 16)
+        );
+        CaptureScene(path, owner, InputTarget.Capture(popup, owner.ProcessId), scene, modal: false);
+        await Keys("Escape");
+        await Absent(target);
+    }
+
+    // Parks the pointer on the Model menu-bar item, so the popup opens under it and no tooltip covers its rows.
+    private async Task<InputTarget> HoverModelMenu(Target modelMenu)
+    {
+        var menuBarItem = await Resolve(modelMenu);
+        var ownerIdentity = host.Sessions.GetInputTarget(handle);
+        var menuBarPoint = await Task.Run(menuBarItem.GetClickablePoint).WaitAsync(TimeSpan.FromSeconds(5));
+        using var input = new GuardedInput(ownerIdentity);
+        if (Win32Desktop.WindowAt(menuBarPoint) != ownerIdentity.Hwnd)
+        {
+            throw new InvalidOperationException("Model menu is obscured");
+        }
+
+        reportStep?.Invoke("Open Model menu");
+        input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(menuBarPoint));
+        return ownerIdentity;
+    }
+
+    // The observed enabled-item order of the Model menu; every step is asserted instead of a blind key count.
+    private async Task WalkModelMenuToCalculationGroup()
+    {
         await Keys("Home");
         foreach (
             var name in new[]
@@ -1423,24 +1450,6 @@ public sealed class Te3Page(
 
             await RequireKeyboardFocus(new(new(Name: name), null, true), "Expected focused menu item: " + name);
         }
-
-        var ownerBounds =
-            Win32Desktop.GetWindowBounds(owner.Hwnd) ?? throw new InvalidOperationException("Owner disappeared");
-        var bounds = Win32Desktop.GetWindowBounds(popup) ?? throw new InvalidOperationException("Menu disappeared");
-        await Task.Delay(500);
-        await RequireKeyboardFocus(target, "Calculation group menu item is not highlighted/focused");
-        var workArea = Screen.FromHandle(owner.Hwnd).WorkingArea;
-        var x = Math.Max(ownerBounds.Left, workArea.Left);
-        var y = Math.Max(ownerBounds.Top, workArea.Top);
-        var scene = new System.Drawing.Rectangle(
-            x,
-            y,
-            Math.Max(1018, bounds.Right - x + 16),
-            Math.Max(665, bounds.Bottom - y + 16)
-        );
-        CaptureScene(path, owner, InputTarget.Capture(popup, owner.ProcessId), scene, modal: false);
-        await Keys("Escape");
-        await Absent(target);
     }
 
     public static System.Drawing.Rectangle ScalarSceneBounds(
