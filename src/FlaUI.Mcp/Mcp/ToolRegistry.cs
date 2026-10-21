@@ -22,8 +22,12 @@ public class ToolRegistry
     /// </summary>
     public Action<string, ToolOutcome>? FailedAfterInput { get; set; }
 
-    public ToolRegistry(TimeSpan? toolTimeout = null, Action? onToolActivity = null)
+    private readonly TimeProvider _time;
+
+    /// <param name="time">The clock for tool timeouts; the system clock by default (tests inject one).</param>
+    public ToolRegistry(TimeSpan? toolTimeout = null, Action? onToolActivity = null, TimeProvider? time = null)
     {
+        _time = time ?? TimeProvider.System;
         _toolTimeout = toolTimeout ?? TimeSpan.FromSeconds(30);
         if (_toolTimeout <= TimeSpan.Zero)
         {
@@ -154,9 +158,9 @@ public class ToolRegistry
             var operation = Operations.Begin(name, requestKey, tool.GetDefinition().Annotations);
             using var cancellation = cancellationToken.Register(() => operation.Stop.Cancel());
             var toolTask = Task.Run(() => RunOperation(tool, arguments, operation));
-            var started = Stopwatch.GetTimestamp();
+            var started = _time.GetTimestamp();
             using var timer = new CancellationTokenSource();
-            var timeoutTask = Task.Delay(_toolTimeout, timer.Token);
+            var timeoutTask = Task.Delay(_toolTimeout, _time, timer.Token);
             var cancelledTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             var finished = await Task.WhenAny(toolTask, timeoutTask, cancelledTask);
             // Stop the timer once the tool returns, so a fast call doesn't leave it running for the full timeout.
@@ -164,7 +168,7 @@ public class ToolRegistry
             if (finished != toolTask)
             {
                 var settled =
-                    finished == cancelledTask ? SettledOrTimedOut(toolTask, Stopwatch.GetElapsedTime(started)) : null;
+                    finished == cancelledTask ? SettledOrTimedOut(toolTask, _time.GetElapsedTime(started)) : null;
                 return Strand(name, operation, toolTask, settled, whenStranded);
             }
 
@@ -383,7 +387,7 @@ public class ToolRegistry
     private Task SettledOrTimedOut(Task toolTask, TimeSpan elapsed)
     {
         var remaining = _toolTimeout - elapsed;
-        return Task.WhenAny(toolTask, Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero));
+        return Task.WhenAny(toolTask, Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, _time));
     }
 
     private string PendingMessage(string name, bool cancelled) =>
