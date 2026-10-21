@@ -84,7 +84,9 @@ function RunPart($name, $files, $expected) {
                     throw "Mutation testing ($name) aborted before running tests: $reason"
                 }
 
-                $checked = (Get-Content (Join-Path $output 'logs/*.txt') -Raw -ErrorAction SilentlyContinue) -match 'Number of tests found'
+                $logText = Get-ChildItem (Join-Path $output 'logs') -Filter '*.txt' -ErrorAction SilentlyContinue |
+                    ForEach-Object { Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue }
+                $checked = ($logText -join "`n") -match 'Number of tests found'
             }
 
             if ((Get-Date) -gt $deadline) {
