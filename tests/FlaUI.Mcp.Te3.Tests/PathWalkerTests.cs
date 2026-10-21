@@ -252,6 +252,27 @@ public sealed class PathWalkerTests
     }
 
     [Fact]
+    public async Task TheRowAfterAParentIsReadOrTheSlowMoveIsSaid()
+    {
+        // SelectChild reads the row after the parent as the boundary of its subtree. A slow Down read as "the parent
+        // is the last row" walked with no boundary and could select a same-named row outside the parent.
+        var slow = new FakeTree(new("Sales", "Table"), new("Date", "Calculated Table")) { SlowAt = 0 };
+        var last = new FakeTree(new RowObservation("Sales", "Table"));
+        var next = new FakeTree(new("Sales", "Table"), new("Date", "Calculated Table"));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            PathWalker.RowAfter(slow, new("Sales", "Table"))
+        );
+
+        Assert.Contains("did not move", error.Message);
+        Assert.Null(await PathWalker.RowAfter(last, new("Sales", "Table")));
+        Assert.Equal(
+            new RowObservation("Date", "Calculated Table"),
+            await PathWalker.RowAfter(next, new("Sales", "Table"))
+        );
+    }
+
+    [Fact]
     public async Task TheWalkStopsAtTheRowLimit()
     {
         var tree = SpaceParts();

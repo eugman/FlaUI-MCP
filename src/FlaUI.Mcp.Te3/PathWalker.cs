@@ -125,6 +125,23 @@ public static class PathWalker
             : new(false, place.Table, visited, place.OutsideFolder(objectName));
     }
 
+    /// <summary>
+    /// Presses Down once and returns the row below, or null at the end of the tree. A Down that did not move while a
+    /// row was shown below throws: the caller would otherwise take the current row for the last one.
+    /// </summary>
+    /// <param name="cursor">The tree, on <paramref name="current"/>.</param>
+    /// <param name="current">The selected row, already read.</param>
+    public static async Task<RowObservation?> RowAfter(ITreeCursor cursor, RowObservation current)
+    {
+        var next = await cursor.Down();
+        if (next == null && cursor.Stalled)
+        {
+            throw new InvalidOperationException(DidNotMove(current, 1));
+        }
+
+        return next;
+    }
+
     /// <summary>Walk down to the first row showing the value, in tree order.</summary>
     /// <param name="cursor">The tree, on the row to start from.</param>
     /// <param name="value">The row text to select.</param>

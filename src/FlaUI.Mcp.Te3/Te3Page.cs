@@ -2031,7 +2031,7 @@ public sealed partial class Te3Page(
     private async Task SelectChild(TomCursor cursor, string child)
     {
         var parent = await cursor.Current();
-        var after = await cursor.Down();
+        var after = await PathWalker.RowAfter(cursor, parent);
         if (after != null && await cursor.Up() != parent)
         {
             throw new InvalidOperationException(
