@@ -40,13 +40,29 @@ public sealed partial class Te3Layout(
 
     private sealed record Part(string Title, string Kind, AutomationElement Close, AutomationElement Container);
 
-    // A failure after input pauses the grant; a read of the layout (list, show-pane) lifts it.
-    public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
-        FailurePause.After(
-            grant,
-            await Respond(inputs => Run(arguments, inputs)),
-            observation: readOnly && Observes(arguments)
-        );
+    // A failure after input pauses the grant; a read of the layout (list, show-pane) lifts it. An exception Respond
+    // does not turn into a reply escapes after input may have gone out, so it pauses too.
+    public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
+    {
+        var settled = false;
+        try
+        {
+            var result = FailurePause.After(
+                grant,
+                await Respond(inputs => Run(arguments, inputs)),
+                observation: readOnly && Observes(arguments)
+            );
+            settled = true;
+            return result;
+        }
+        finally
+        {
+            if (!settled && !readOnly)
+            {
+                grant.Pause("a te3_layout call failed with an unexpected error, so input may have gone out");
+            }
+        }
+    }
 
     private bool Observes(JsonElement? arguments) =>
         arguments is { } a && GetStringArgument(a, "action") is "list" or "show-pane";

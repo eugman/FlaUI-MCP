@@ -357,4 +357,26 @@ public sealed class LayoutEntryTests : IDisposable
             p => p.GetProperty("title").GetString() == "Dependencies" && p.GetProperty("kind").GetString() == "floating"
         );
     }
+
+    [Fact]
+    public async Task AnUnexpectedErrorThatEscapesTheCallStillPauses()
+    {
+        // Respond turns the usual failures into a reply; anything else (a COM error mid-call) escaped before the
+        // pause, after input may have gone out.
+        var tool = new Te3Layout(
+            null!,
+            interaction,
+            attach: (_, inputs) =>
+                throw new System.Runtime.InteropServices.COMException("provider gone", unchecked((int)0x80040201))
+        );
+
+        await Assert.ThrowsAsync<System.Runtime.InteropServices.COMException>(() =>
+            tool.ExecuteAsync(Args(new { action = "close", titles = new[] { "AI Assistant" } }))
+        );
+
+        Assert.Equal(
+            Te3Interaction.PausedAfterFailure,
+            Assert.Throws<InputRefusedException>(interaction.Require).Refusal.Code
+        );
+    }
 }
