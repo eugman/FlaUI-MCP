@@ -251,7 +251,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         }
     }
 
-    internal static McpToolResult Failure(string phase, string lastStep, string error)
+    internal static McpToolResult Failure(string phase, string lastStep, string error, int inputsSent = 0)
     {
         var blocker = Blocker(error);
         var next = blocker switch
@@ -274,6 +274,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     error,
                     blocker,
                     next,
+                    inputsSent,
                 },
                 McpProtocol.JsonOptions
             )
