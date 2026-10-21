@@ -249,6 +249,11 @@ internal sealed class NativeMcpProbeSession(
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;
         result = default;
+        if (IsUnattributedError(root, out var unattributed))
+        {
+            throw new InvalidOperationException("Native MCP error: " + unattributed);
+        }
+
         if (!IsResponseTo(root, id))
         {
             return false;
@@ -266,6 +271,23 @@ internal sealed class NativeMcpProbeSession(
 
         result = value.Clone();
         return true;
+    }
+
+    /// <summary>
+    /// An error the server could not tie to a request (JSON-RPC sends id null when it cannot read one). Only one
+    /// request is outstanding, so it is about this one, and waiting for a matching id would only time out.
+    /// </summary>
+    private static bool IsUnattributedError(JsonElement root, out JsonElement error)
+    {
+        error = default;
+        if (root.ValueKind != JsonValueKind.Object || root.TryGetProperty("method", out _))
+        {
+            return false;
+        }
+
+        return root.TryGetProperty("id", out var responseId)
+            && responseId.ValueKind == JsonValueKind.Null
+            && root.TryGetProperty("error", out error);
     }
 
     /// <summary>
