@@ -39,21 +39,26 @@ public sealed class NativeMcpPreflightRefusalTests
             );
     }
 
-    private static NativeMcpPreflight.Request Request(string identityTool = "model_identity") =>
+    private const string AllowlistedServer = "TE3/3.27.1";
+
+    private static NativeMcpPreflight.Request Request(
+        string identityTool = "model_identity",
+        string? compatibleServer = AllowlistedServer
+    ) =>
         new(
             new("http://localhost:42100/mcp"),
             identityTool,
             "model.name",
             "scratch-model",
-            CompatibleServer: "TE3/3.27.1"
+            CompatibleServer: compatibleServer
         );
 
-    private static string Listing(JsonObject tool) =>
+    private static string Listing(params JsonNode[] tools) =>
         new JsonObject
         {
             ["jsonrpc"] = "2.0",
             ["id"] = 2,
-            ["result"] = new JsonObject { ["tools"] = new JsonArray(tool) },
+            ["result"] = new JsonObject { ["tools"] = new JsonArray(tools) },
         }.ToJsonString();
 
     private static JsonObject WorkspaceTool() =>
@@ -72,12 +77,14 @@ public sealed class NativeMcpPreflightRefusalTests
     private static async Task<(InvalidOperationException Error, int Calls)> Refusal(
         string listing,
         string identityTool = "model_identity",
-        string identity = """{"jsonrpc":"2.0","id":3,"result":{"model":{"name":"scratch-model"}}}"""
+        string identity = """{"jsonrpc":"2.0","id":3,"result":{"model":{"name":"scratch-model"}}}""",
+        string initialize = Initialize,
+        string? compatibleServer = AllowlistedServer
     )
     {
-        var handler = new ScriptedHandler(Initialize, "", listing, identity);
+        var handler = new ScriptedHandler(initialize, "", listing, identity);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new NativeMcpPreflight(new HttpClient(handler)).Inspect(Request(identityTool))
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(Request(identityTool, compatibleServer))
         );
         return (error, handler.Calls);
     }
@@ -96,6 +103,8 @@ public sealed class NativeMcpPreflightRefusalTests
     [InlineData("schemaType")]
     [InlineData("properties")]
     [InlineData("required")]
+    [InlineData("noProperties")]
+    [InlineData("requiredNotArray")]
     public async Task AWorkspaceToolThatDiffersFromTheAllowlistIsNeverCalled(string change)
     {
         // Each one is the exact TE3 3.27.1 tool with one field changed.
@@ -111,6 +120,12 @@ public sealed class NativeMcpPreflightRefusalTests
                 break;
             case "properties":
                 schema["properties"] = new JsonObject { ["model"] = new JsonObject { ["type"] = "string" } };
+                break;
+            case "noProperties":
+                schema.Remove("properties");
+                break;
+            case "requiredNotArray":
+                schema["required"] = "model";
                 break;
             default:
                 schema.Remove("required");
@@ -152,6 +167,11 @@ public sealed class NativeMcpPreflightRefusalTests
 
     [Theory]
     [InlineData("""{"jsonrpc":"2.0","id":3,"result":{"model":{"name":""}}}""")]
+    [InlineData("""{"jsonrpc":"2.0","id":3,"result":{"model":{"name":42}}}""")]
+    // Only a single text block is read; two are ambiguous.
+    [InlineData(
+        """{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\"model\":{\"name\":\"scratch-model\"}}"},{"type":"text","text":"{}"}]}}"""
+    )]
     // An image block is never read as the identity, even when its text carries one.
     [InlineData(
         """{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"image","text":"{\"model\":{\"name\":\"scratch-model\"}}"}]}}"""
@@ -171,11 +191,13 @@ public sealed class NativeMcpPreflightRefusalTests
     {
         var handler = new ScriptedHandler(Initialize);
 
-        await Assert.ThrowsAsync<ArgumentException>(() =>
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
             new NativeMcpPreflight(new HttpClient(handler)).Inspect(
                 new(new("http://localhost:42100/mcp"), tool, property, expected)
             )
         );
+
+        Assert.Contains("Identity tool, response property and expected identity are required", error.Message);
 
         Assert.Equal(0, handler.Calls);
     }
@@ -208,5 +230,137 @@ public sealed class NativeMcpPreflightRefusalTests
         Assert.True(result.IsError);
         Assert.Contains(refusal, result.Content[0].Text);
         Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public async Task TheWorkspaceExceptionNeedsTheAllowlistedServerVersion()
+    {
+        // The caller names the allowlisted server, but the server reports another version.
+        var (error, calls) = await Refusal(
+            Listing(WorkspaceTool()),
+            identityTool: "get_workspace_info",
+            initialize: Initialize.Replace("3.27.1", "3.28.0")
+        );
+
+        Assert.Contains("applies only to a server reporting \"TE3/3.27.1\"", error.Message);
+        Assert.Contains("lacks readOnlyHint", error.Message);
+        Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public async Task TheWorkspaceExceptionNeedsTheCallerToNameTheServer()
+    {
+        var (error, calls) = await Refusal(
+            Listing(WorkspaceTool()),
+            identityTool: "get_workspace_info",
+            compatibleServer: null
+        );
+
+        Assert.Contains("also requires compatibleServer \"TE3/3.27.1\"", error.Message);
+        Assert.Equal(3, calls);
+    }
+
+    [Theory]
+    [InlineData("""{"jsonrpc":"2.0","id":2,"result":{}}""", "did not return a tools list")]
+    [InlineData("""{"jsonrpc":"2.0","id":2,"result":{"tools":{}}}""", "did not return a tools list")]
+    [InlineData(
+        """{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"model_identity","annotations":{"readOnlyHint":true}},{"description":"no name"}]}}""",
+        "listed a tool without a name"
+    )]
+    public async Task AMalformedToolListIsRefusedBeforeAnyCall(string listing, string refusal)
+    {
+        var (error, calls) = await Refusal(listing);
+
+        Assert.Contains(refusal, error.Message);
+        Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public async Task AServerWithoutANameIsRefused()
+    {
+        var (error, _) = await Refusal(
+            ReadOnlyIdentity,
+            initialize: """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{}}}"""
+        );
+
+        Assert.Contains("did not report server identity", error.Message);
+    }
+
+    [Fact]
+    public async Task AnEndpointWithAFragmentIsRefusedBeforeAnyRequest()
+    {
+        var handler = new ScriptedHandler(Initialize);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(
+                new(new("http://localhost:42100/mcp#elsewhere"), "model_identity", "model.name", "scratch-model")
+            )
+        );
+
+        Assert.Contains("explicit local HTTP loopback", error.Message);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    private static JsonObject ToolArguments() =>
+        new()
+        {
+            ["endpoint"] = "http://127.0.0.1:42100/",
+            ["identityTool"] = "get_workspace_info",
+            ["identityProperty"] = "model.name",
+            ["expectedIdentity"] = "scratch-model",
+            ["compatibleServer"] = AllowlistedServer,
+        };
+
+    private static ScriptedHandler WorkspaceServer() =>
+        new(
+            Initialize,
+            "",
+            Listing(WorkspaceTool()),
+            """{"jsonrpc":"2.0","id":3,"result":{"model":{"name":"scratch-model"}}}"""
+        );
+
+    [Fact]
+    public async Task TheToolPassesTheNamedServerToTheWorkspaceException()
+    {
+        var result = await new Te3NativePreflightTool(new HttpClient(WorkspaceServer())).ExecuteAsync(
+            JsonSerializer.SerializeToElement(ToolArguments())
+        );
+
+        Assert.NotEqual(true, result.IsError);
+        Assert.Contains("scratch-model", result.Content[0].Text);
+    }
+
+    [Fact]
+    public async Task TheToolRefusesANonStringIdentityTool()
+    {
+        var arguments = ToolArguments();
+        arguments["identityTool"] = 42;
+
+        var result = await new Te3NativePreflightTool(new HttpClient(WorkspaceServer())).ExecuteAsync(
+            JsonSerializer.SerializeToElement(arguments)
+        );
+
+        Assert.True(result.IsError);
+        Assert.Contains("identityTool is required", result.Content[0].Text);
+    }
+
+    [Fact]
+    public async Task AStoppedOperationStopsThePreflight()
+    {
+        var context = new FlaUI.Mcp.Core.OperationContext();
+        context.Stop.Cancel();
+        FlaUI.Mcp.Core.OperationContext.Current.Value = context;
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                new Te3NativePreflightTool(new HttpClient(WorkspaceServer())).ExecuteAsync(
+                    JsonSerializer.SerializeToElement(ToolArguments())
+                )
+            );
+        }
+        finally
+        {
+            FlaUI.Mcp.Core.OperationContext.Current.Value = null;
+        }
     }
 }

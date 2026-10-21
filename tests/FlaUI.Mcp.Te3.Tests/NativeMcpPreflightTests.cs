@@ -52,6 +52,12 @@ public sealed class NativeMcpPreflightTests
         Assert.Equal("2025-11-25", result.ProtocolVersion);
         Assert.Equal(4, handler.Calls.Count);
         Assert.DoesNotContain(handler.Calls, call => call.Contains("run_script", StringComparison.Ordinal));
+        Assert.Contains("\"method\":\"initialize\"", handler.Calls[0]);
+        Assert.Contains("\"protocolVersion\":\"2025-11-25\"", handler.Calls[0]);
+        Assert.Contains("\"clientInfo\":{\"name\":\"flaui-te3-preflight\",\"version\":\"1.0\"}", handler.Calls[0]);
+        Assert.Contains("\"method\":\"tools/list\"", handler.Calls[2]);
+        Assert.Contains("\"method\":\"tools/call\"", handler.Calls[3]);
+        Assert.Contains("\"jsonrpc\":\"2.0\"", handler.Calls[3]);
     }
 
     [Fact]
@@ -81,9 +87,10 @@ public sealed class NativeMcpPreflightTests
     {
         var handler = new FakeHandler();
         var preflight = new NativeMcpPreflight(new HttpClient(handler));
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             preflight.Inspect(new(new("http://localhost:42100/"), "model_identity", "model.name", "other-model"))
         );
+        Assert.Contains("does not match the expected model", error.Message);
     }
 
     [Fact]
