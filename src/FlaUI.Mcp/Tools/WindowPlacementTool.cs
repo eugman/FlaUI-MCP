@@ -130,6 +130,8 @@ public sealed class WindowPlacementTool(
             }
 
             target.EnsureAlive();
+            // Windows drops window messages to a higher-integrity window, as it drops input.
+            GuardedInput.RequireDrivable(target.ProcessId, desktop);
             if (!desktop.IsNormalWindow(target.Hwnd))
             {
                 throw new InvalidOperationException(

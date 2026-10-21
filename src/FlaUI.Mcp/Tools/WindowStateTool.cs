@@ -59,7 +59,15 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
         var before = desktop.WindowState(target.Hwnd);
         using (GuardedInput.AcquireLease())
         {
-            MutationGuard.Execute(target.EnsureAlive, () => desktop.SetWindowState(target.Hwnd, requested));
+            // Windows drops window messages to a higher-integrity window, as it drops input.
+            MutationGuard.Execute(
+                () =>
+                {
+                    target.EnsureAlive();
+                    GuardedInput.RequireDrivable(target.ProcessId, desktop);
+                },
+                () => desktop.SetWindowState(target.Hwnd, requested)
+            );
         }
 
         var after = WaitForState(target.Hwnd, requested);

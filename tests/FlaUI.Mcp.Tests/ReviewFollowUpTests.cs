@@ -268,6 +268,55 @@ public sealed class ReviewFollowUpTests
         Assert.Equal(activated ? 1 : 0, result.Outcome!.InputsSent);
     }
 
+    [Fact]
+    public async Task WindowStateIsRefusedForAHigherIntegrityWindow()
+    {
+        var desktop = new FakeDesktop { TargetIntegrity = new(ProcessIntegrity.High, false) };
+        using var installed = desktop.Install();
+        using var sessions = new SessionManager(null, ProcessPolicy.AllowAll);
+        var handle = sessions.PublishWindow(null, FakeDesktop.TargetHwnd, FakeDesktop.TargetPid, FakeDesktop.Target);
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new WindowStateTool(new ElementRegistry(), new PendingInvokeTracker(), sessions));
+
+        var result = await registry.ExecuteToolAsync(
+            "windows_set_window_state",
+            Args(new { handle, state = "maximize" })
+        );
+
+        Assert.True(result.IsError);
+        Assert.Equal("integrity-blocked", result.Outcome!.Failure!.Code);
+        Assert.Empty(desktop.StateRequests);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WindowPlacementChecksIntegrityBeforeMoving(bool elevated)
+    {
+        var desktop = new FakeDesktop
+        {
+            TargetIntegrity = new(elevated ? ProcessIntegrity.High : ProcessIntegrity.Medium, false),
+        };
+        using var installed = desktop.Install();
+        using var sessions = new SessionManager(null, ProcessPolicy.AllowAll);
+        var handle = sessions.PublishWindow(null, FakeDesktop.TargetHwnd, FakeDesktop.TargetPid, FakeDesktop.Target);
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new WindowPlacementTool(new ElementRegistry(), new PendingInvokeTracker(), sessions));
+        var area = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
+        var placement = new
+        {
+            x = area.X + 10,
+            y = area.Y + 10,
+            width = 400,
+            height = 300,
+        };
+
+        var result = await registry.ExecuteToolAsync("windows_place_window", Args(new { handle, placement }));
+
+        Assert.Equal(elevated, result.IsError == true);
+        Assert.Equal(elevated ? 0 : 1, desktop.Placements.Count);
+    }
+
     private static bool LeaseHeld()
     {
         var gate = (SemaphoreSlim)
