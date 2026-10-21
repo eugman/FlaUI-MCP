@@ -17,7 +17,7 @@ internal static class NavigationRetry
     /// Runs attempt, and once more only when it was refused before sending input: a failure after typing or
     /// clicking may have changed TE3, so it is reported as it is. When the retry fails too, the first error leads.
     /// </summary>
-    public static async Task Once(Func<Task> attempt, Action<string>? report)
+    public static async Task Once(Func<Task> attempt, Func<int> inputsSent, Action<string>? report)
     {
         try
         {

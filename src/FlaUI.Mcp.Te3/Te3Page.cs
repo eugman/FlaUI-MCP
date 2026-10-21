@@ -2521,7 +2521,7 @@ public sealed class Te3Page(
         }
 
         _ = folder;
-        await NavigationRetry.Once(() => WalkToObject(table, objectName, objectType), reportStep);
+        await NavigationRetry.Once(() => WalkToObject(table, objectName, objectType), () => Inputs.Sent, reportStep);
     }
 
     // Where the last walk ended; the arrival check compares it with the request.
