@@ -169,4 +169,20 @@ public sealed class NativeMcpProbeSessionTests
 
         Assert.Contains("neither result nor error", error.Message);
     }
+
+    [Fact]
+    public async Task AnErrorTheServerCouldNotTieToARequestFailsAtOnce()
+    {
+        // JSON-RPC answers a request it cannot read with id null; waiting for our id would only time out.
+        var recorder = new Recorder(_ =>
+            Json("""{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}""")
+        );
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Session(recorder).Send("initialize", new { }, CancellationToken.None)
+        );
+
+        Assert.Contains("Native MCP error", error.Message);
+        Assert.Contains("Parse error", error.Message);
+    }
 }
