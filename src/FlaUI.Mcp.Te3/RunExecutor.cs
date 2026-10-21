@@ -5,7 +5,7 @@ using FlaUI.Mcp.Core;
 
 public sealed record RunExecutionResult(string ManifestPath, RunManifest Manifest);
 
-public static class RunExecutor
+public static partial class RunExecutor
 {
     internal static FileStream AcquireRunnerLock() =>
         new(
@@ -159,7 +159,15 @@ public static class RunExecutor
             manifest.Te3Version = app.MainModule?.FileVersionInfo.ProductVersion;
             var marker = manifest.Database.Length > 0 ? manifest.Database : id;
             handle = await WaitForOwnedWindow(host, app, marker, cancellationToken);
-            await ActivateOwnedWindow(host, handle, app.Id, $"{manifest.Database} {id}", journal, cancellationToken);
+            await ActivateOwnedWindow(
+                host,
+                handle,
+                app.Id,
+                $"{manifest.Database} {id}",
+                journal,
+                inputs,
+                cancellationToken
+            );
             cancellationToken.ThrowIfCancellationRequested();
             var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken), journal, inputs);
             await page.DefaultLayout();
@@ -293,71 +301,6 @@ public static class RunExecutor
                     ),
                 tool
             );
-        }
-    }
-
-    // The run's TE3 window: the only top-level window titled with the run's model or database.
-    private static async Task<string> WaitForOwnedWindow(
-        AutomationHost host,
-        Process app,
-        string marker,
-        CancellationToken cancellationToken
-    )
-    {
-        var startup = Stopwatch.StartNew();
-        while (startup.Elapsed < TimeSpan.FromSeconds(90))
-        {
-            var windows = Win32Desktop
-                .GetTopLevelWindows(app.Id)
-                .Where(w => !w.IsToolWindow && w.Title.Contains(marker) && w.Title.Contains("Tabular Editor 3"))
-                .ToArray();
-            if (windows.Length == 1)
-            {
-                return host.Sessions.RegisterNativeWindow(windows[0].Hwnd, app.Id);
-            }
-
-            if (app.HasExited)
-            {
-                throw new InvalidOperationException("TE3 exited during startup");
-            }
-
-            await Task.Delay(250, cancellationToken);
-        }
-
-        throw new TimeoutException("TE3 did not open the owned model");
-    }
-
-    internal const string ActivationTimeout =
-        "Manual activation not received within 120 seconds. The run asked Windows to focus TE3; nothing was typed or clicked.";
-
-    // Asks Windows to focus the run's TE3, then waits for the user to click it if Windows refused.
-    private static async Task ActivateOwnedWindow(
-        AutomationHost host,
-        string handle,
-        int processId,
-        string label,
-        string journal,
-        CancellationToken cancellationToken
-    )
-    {
-        await RunJournal.Input(journal, "te3_focus_window", new { handle }, () => host.Sessions.FocusWindow(handle));
-        var target = host.Sessions.GetInputTarget(handle);
-        var activation = Stopwatch.StartNew();
-        if (Win32Desktop.GetForegroundWindow() != target.Hwnd)
-        {
-            Console.WriteLine($"Click the TE3 window containing {label}; waiting 120 seconds.");
-        }
-
-        while (Win32Desktop.GetForegroundWindow() != target.Hwnd)
-        {
-            RunSafety.RequireExclusiveTe3(processId);
-            target.EnsureAlive();
-            if (activation.Elapsed > TimeSpan.FromSeconds(120))
-            {
-                throw new TimeoutException(ActivationTimeout);
-            }
-
-            await Task.Delay(250, cancellationToken);
         }
     }
 

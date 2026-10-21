@@ -61,6 +61,7 @@ public sealed class DirectInputJournalTests
     [Theory]
     [InlineData("Te3Page.cs")]
     [InlineData("RunExecutor.cs")]
+    [InlineData("RunExecutor.Window.cs")]
     [InlineData("RunSafety.cs")]
     [InlineData("Te3Layout.cs")]
     [InlineData("DialogCancel.cs")]
