@@ -65,6 +65,59 @@ public sealed class StatusToolExemptionTests
         );
     }
 
+    [Theory]
+    [InlineData("tools/call", false)]
+    [InlineData("tools/list", true)]
+    public async Task AtCapacityOnlyAStatusToolCallIsAnswered(string method, bool refused)
+    {
+        var blocking = new Blocking();
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        registry.RegisterTool(blocking);
+        registry.RegisterTool(new Immediate("host_status", McpToolAnnotations.Status));
+        var server = new McpServer(registry, concurrentRequests: true);
+        var lines = Enumerable
+            .Range(1, McpLineTransport.MaxRequestsInFlight)
+            .Select(id => Line(id, "tools/call", "blocking"))
+            .Append(Line(99, method, "host_status"));
+        var output = new StringWriter();
+
+        var run = new McpLineTransport(server).RunAsync(
+            new StringReader(string.Join("\n", lines) + "\n"),
+            output,
+            CancellationToken.None
+        );
+        await WaitFor(() => output.ToString().Contains("\"id\":99", StringComparison.Ordinal));
+        blocking.Release.SetResult();
+        await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var answer = output
+            .ToString()
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => JsonDocument.Parse(l).RootElement)
+            .Single(r => r.GetProperty("id").GetInt32() == 99);
+        Assert.Equal(refused, answer.TryGetProperty("error", out _));
+    }
+
+    private static string Line(int id, string method, string tool) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                jsonrpc = "2.0",
+                id,
+                method,
+                @params = new { name = tool },
+            }
+        );
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+    }
+
     private static (McpServer Server, Blocking Blocking) Server(ITool status)
     {
         var blocking = new Blocking();
