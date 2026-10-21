@@ -71,6 +71,56 @@ public sealed class ReviewFollowUpTests
         }
     }
 
+    [Fact]
+    public void RestoringAMinimizedTargetCountsEvenWhenActivationIsDenied()
+    {
+        var desktop = new FakeDesktop
+        {
+            ForegroundWindow = FakeDesktop.OtherHwnd,
+            ActivationAllowed = false,
+            State = WindowStates.Minimized,
+        };
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        try
+        {
+            var error = Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target));
+
+            Assert.Equal("activation-denied", error.Refusal.Code);
+            Assert.Contains("No keys or clicks were sent, but the target window was restored first.", error.Message);
+            Assert.Equal(1, operation.InputsSent);
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
+    [Fact]
+    public void ANativeFocusThatOnlyRestoresTheWindowCounts()
+    {
+        var desktop = new FakeDesktop
+        {
+            ForegroundWindow = FakeDesktop.OtherHwnd,
+            ActivationAllowed = false,
+            State = WindowStates.Minimized,
+        };
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        try
+        {
+            WindowMutation.Focus(FakeDesktop.Target, FakeDesktop.TargetHwnd);
+
+            Assert.Equal(1, operation.InputsSent);
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
     private sealed class Sends(string name) : ToolBase
     {
         public override string Name => name;

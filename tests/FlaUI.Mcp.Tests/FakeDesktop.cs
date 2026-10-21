@@ -72,6 +72,12 @@ internal sealed class FakeDesktop : InputDesktop
     public override void Focus(nint hwnd)
     {
         FocusAttempts++;
+        // Like Windows: focusing a minimized window restores it, even when activation is then refused.
+        if (ForegroundWindow != hwnd && State == WindowStates.Minimized)
+        {
+            State = WindowStates.Normal;
+        }
+
         if (ActivationAllowed)
         {
             ForegroundWindow = hwnd;

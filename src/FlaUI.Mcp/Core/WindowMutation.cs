@@ -14,10 +14,13 @@ internal static class WindowMutation
             target,
             () =>
             {
-                // Focusing the window already in front changes nothing, so it is not counted.
-                var before = InputDesktop.Current.Foreground();
-                InputDesktop.Current.Focus(hwnd);
-                return InputDesktop.Current.Foreground() != before;
+                // Focusing the window already in front changes nothing, so it is not counted; restoring a
+                // minimized window is a change even when Windows then refuses to activate it.
+                var desktop = InputDesktop.Current;
+                var before = desktop.Foreground();
+                var stateBefore = desktop.WindowState(hwnd);
+                desktop.Focus(hwnd);
+                return desktop.Foreground() != before || desktop.WindowState(hwnd) != stateBefore;
             }
         );
 

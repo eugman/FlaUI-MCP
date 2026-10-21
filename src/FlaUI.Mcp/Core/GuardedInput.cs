@@ -76,7 +76,8 @@ public sealed class GuardedInput : IDisposable
 
     /// <summary>
     /// Bring the target to the foreground when another window is in front. Counted as one change when the
-    /// foreground moved; returns a note for a later refusal, or null when nothing changed.
+    /// foreground moved or the window was restored; returns a note for a later refusal, or null when nothing
+    /// changed.
     /// </summary>
     private string? Activate(InputTarget target)
     {
@@ -87,14 +88,18 @@ public sealed class GuardedInput : IDisposable
         }
         // While a modal dialog disables the target, activate the dialog: a disabled window
         // cannot take input, so focusing it would only fail verification.
-        desktop.Focus(desktop.IsEnabled(target.Hwnd) ? target.Hwnd : desktop.LastActivePopup(target.Hwnd));
-        if (desktop.Foreground() == before)
+        var window = desktop.IsEnabled(target.Hwnd) ? target.Hwnd : desktop.LastActivePopup(target.Hwnd);
+        // Focusing a minimized window restores it even when Windows then refuses to activate it.
+        var stateBefore = desktop.WindowState(window);
+        desktop.Focus(window);
+        var activated = desktop.Foreground() != before;
+        if (!activated && desktop.WindowState(window) == stateBefore)
         {
             return null;
         }
 
         MutationGuard.RecordDispatch();
-        return "the target window was activated";
+        return activated ? "the target window was activated" : "the target window was restored";
     }
 
     /// <summary>Focus the intended control. Counted as one change, and true, when it gained keyboard focus.</summary>
