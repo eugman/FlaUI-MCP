@@ -40,7 +40,24 @@ internal static class PlacementReadBack
             return moved;
         }
 
-        return readBack() ?? throw new InvalidOperationException("The placed window's bounds could not be read back.");
+        // This branch's Core replies success with no verdict, so the read-back is compared here too.
+        var placed =
+            readBack() ?? throw new InvalidOperationException("The placed window's bounds could not be read back.");
+        if (placed == requested)
+        {
+            return placed;
+        }
+
+        if (!GrewToMinimum(requested, placed))
+        {
+            throw new InvalidOperationException(
+                $"The window did not land where requested: requested {requested}, read back {placed} "
+                    + $"({Deltas(requested, placed)}). It was not moved again."
+            );
+        }
+
+        report?.Invoke($"Placement not exact: requested {requested}, read back {placed} ({Deltas(requested, placed)})");
+        return placed;
     }
 
     // Core's windows_place_window when the move went out in full but the window did not land exactly.

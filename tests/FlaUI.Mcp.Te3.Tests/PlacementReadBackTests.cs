@@ -75,4 +75,24 @@ public sealed class PlacementReadBackTests
             Requested,
             await PlacementReadBack.Place(() => Task.CompletedTask, () => Requested, Requested, null)
         );
+
+    [Fact]
+    public async Task ASuccessfulPlacementIsStillComparedWithTheRequest()
+    {
+        // This branch's Core replies success with the before/after bounds and never says "mismatch".
+        var steps = new List<string>();
+
+        var grown = await PlacementReadBack.Place(
+            () => Task.CompletedTask,
+            () => new Rectangle(96, 192, 569, 261),
+            Requested,
+            steps.Add
+        );
+
+        Assert.Equal(new Rectangle(96, 192, 569, 261), grown);
+        Assert.Contains(steps, s => s.Contains("dw +14"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            PlacementReadBack.Place(() => Task.CompletedTask, () => new Rectangle(120, 192, 555, 254), Requested, null)
+        );
+    }
 }
