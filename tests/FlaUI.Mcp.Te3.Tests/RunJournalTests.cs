@@ -86,4 +86,47 @@ public sealed class RunJournalTests : IDisposable
         Assert.Equal("provider hung", error.Message);
         Assert.Contains("could not be recorded", (string)error.Data[RunJournal.JournalErrorKey]!);
     }
+
+    [Fact]
+    public async Task ADirectInputIsJournaledBeforeAndAfterItIsSent()
+    {
+        string[]? seen = null;
+
+        await RunJournal.Input(
+            journal,
+            "te3_pointer_move",
+            new { x = 10, y = 20 },
+            () => seen = File.ReadAllLines(journal)
+        );
+
+        var intent = System.Text.Json.JsonDocument.Parse(Assert.Single(seen!)).RootElement;
+        Assert.Equal("intent", intent.GetProperty("phase").GetString());
+        Assert.Equal("te3_pointer_move", intent.GetProperty("tool").GetString());
+        Assert.Equal(10, intent.GetProperty("arguments").GetProperty("x").GetInt32());
+        var after = System.Text.Json.JsonDocument.Parse(File.ReadAllLines(journal)[^1]).RootElement;
+        Assert.Equal("result", after.GetProperty("phase").GetString());
+    }
+
+    [Fact]
+    public async Task AFailedDirectInputIsJournaledAsAnError()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RunJournal.Input(journal, "te3_click", new { }, () => throw new InvalidOperationException("obscured"))
+        );
+
+        var after = System.Text.Json.JsonDocument.Parse(File.ReadAllLines(journal)[^1]).RootElement;
+        Assert.Equal("error", after.GetProperty("phase").GetString());
+        Assert.Equal("obscured", after.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task WithoutAJournalTheInputIsJustSent()
+    {
+        var sent = false;
+
+        await RunJournal.Input(null, "te3_click", new { }, () => sent = true);
+
+        Assert.True(sent);
+        Assert.False(File.Exists(journal));
+    }
 }

@@ -26,6 +26,13 @@ internal static class RunJournal
         return app;
     }
 
+    /// <summary>Sends one input that no Core tool dispatches, journaled like a tool call when the run has a journal.</summary>
+    internal static Task Input(string? journal, string action, object arguments, Action send)
+    {
+        send();
+        return Task.CompletedTask;
+    }
+
     /// <summary>
     /// Runs one tool call, journaling its intent before it runs and its result or error after. The call has run by
     /// then, so a journal write that fails afterwards is reported beside the result or error, never instead of it.
