@@ -104,6 +104,7 @@ public sealed class NativeMcpPreflightRefusalTests
     [InlineData("properties")]
     [InlineData("required")]
     [InlineData("noProperties")]
+    [InlineData("propertiesNotObject")]
     [InlineData("requiredNotArray")]
     public async Task AWorkspaceToolThatDiffersFromTheAllowlistIsNeverCalled(string change)
     {
@@ -123,6 +124,9 @@ public sealed class NativeMcpPreflightRefusalTests
                 break;
             case "noProperties":
                 schema.Remove("properties");
+                break;
+            case "propertiesNotObject":
+                schema["properties"] = new JsonArray();
                 break;
             case "requiredNotArray":
                 schema["required"] = "model";

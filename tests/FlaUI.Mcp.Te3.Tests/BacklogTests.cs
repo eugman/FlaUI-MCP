@@ -205,6 +205,20 @@ public sealed class BacklogTests : IDisposable
     }
 
     [Fact]
+    public void TheSearchFindsTheBacklogInAWorktreesOwnLocalFolder()
+    {
+        var worktree = Path.Combine(root, "worktree");
+        var bin = Path.Combine(worktree, "bin");
+        Directory.CreateDirectory(bin);
+        File.WriteAllText(Path.Combine(worktree, ".git"), "gitdir: ../main/.git/worktrees/x");
+        Directory.CreateDirectory(Path.Combine(worktree, "local"));
+        var own = Path.Combine(worktree, "local", "screenshot-backlog.json");
+        File.Copy(backlog, own);
+
+        Assert.Equal(own, Backlog.DefaultPath(null, bin));
+    }
+
+    [Fact]
     public void TheSearchStopsAtAWorktreeRoot()
     {
         // In a worktree .git is a file; the search must not climb past it into an unrelated local/.
