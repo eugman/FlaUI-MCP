@@ -32,8 +32,6 @@ jobs:
         include:
           - runtime: win-x64
             artifact_name: FlaUI-MCP-win-x64
-          - runtime: win-arm64
-            artifact_name: FlaUI-MCP-win-arm64
 
     steps:
     - uses: actions/checkout@v4
@@ -166,7 +164,6 @@ jobs:
           | Platform | Self-contained | Framework-dependent |
           |----------|---------------|---------------------|
           | Windows x64 | `FlaUI-MCP-win-x64-*-self-contained.zip` | `FlaUI-MCP-win-x64-*.zip` |
-          | Windows ARM64 | `FlaUI-MCP-win-arm64-*-self-contained.zip` | `FlaUI-MCP-win-arm64-*.zip` |
           
           - **Self-contained**: Includes .NET runtime, no prerequisites needed
           - **Framework-dependent**: Requires the .NET 8 Desktop Runtime
