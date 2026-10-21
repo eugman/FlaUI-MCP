@@ -26,10 +26,8 @@ internal sealed class WalkPlace(string table, string? folder)
         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
     );
 
-    // The folders the walk is inside under the table, innermost on top: each one's depth, and whether it is the next
-    // folder of the path (an unmatched folder between path folders means the path does not continue there).
-    private readonly Stack<(int Depth, bool OnPath)> inside = new();
-    private int matched;
+    // The depths of the path's folders the walk is inside, innermost on top.
+    private readonly Stack<int> inside = new();
     private string? group;
     private bool seenFolder;
     private bool placed = true;
@@ -39,7 +37,7 @@ internal sealed class WalkPlace(string table, string? folder)
     public string? Table { get; private set; }
 
     /// <summary>True when no folder was asked for, or the current row is inside every folder of the path.</summary>
-    public bool InFolder => !HasFolder || (matched == segments.Length && placed);
+    public bool InFolder => !HasFolder || (inside.Count == segments.Length && placed);
 
     public bool HasFolder => segments.Length > 0;
 
@@ -62,7 +60,6 @@ internal sealed class WalkPlace(string table, string? folder)
             Table = isTable ? row.Value : null;
             tableDepth = isTable ? row.Depth : null;
             inside.Clear();
-            matched = 0;
             return left;
         }
 
@@ -76,24 +73,33 @@ internal sealed class WalkPlace(string table, string? folder)
 
     private bool InTables => group is null or TablesGroup;
 
+    // The path's folders are matched by name and exact depth: segment n sits at the table's depth + 1 + n. Rows off
+    // the path are left untyped by the walk, so an outer folder may not be known as one; the exact depth is what
+    // keeps a same-named folder nested inside it (X\A) from being taken for the requested top-level one (A).
     private void Track(RowObservation row)
     {
         placed = row.Depth != null;
-        while (inside.Count > 0 && row.Depth <= inside.Peek().Depth)
+        while (inside.Count > 0 && row.Depth <= inside.Peek())
         {
-            matched -= inside.Pop().OnPath ? 1 : 0;
+            inside.Pop();
         }
 
-        if (row.Depth is not { } depth || !IsFolder(row))
+        if (NextOnPath(row) is { } depth)
         {
-            return;
+            inside.Push(depth);
+            seenFolder = true;
+        }
+    }
+
+    // The row's depth when it is the path's next folder: the next segment's name, a folder, at exactly that depth.
+    private int? NextOnPath(RowObservation row)
+    {
+        if (row.Depth is not { } depth || tableDepth is not { } own || inside.Count == segments.Length)
+        {
+            return null;
         }
 
-        var continues = matched < segments.Length && (inside.Count == 0 || inside.Peek().OnPath);
-        var onPath = continues && row.Value == segments[matched];
-        inside.Push((depth, onPath));
-        matched += onPath ? 1 : 0;
-        seenFolder |= onPath;
+        return depth == own + 1 + inside.Count && IsFolder(row) && row.Value == segments[inside.Count] ? depth : null;
     }
 
     /// <summary>The object was found under the table, but not inside the folder path.</summary>

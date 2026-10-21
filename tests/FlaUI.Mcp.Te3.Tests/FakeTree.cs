@@ -10,10 +10,24 @@ internal sealed class FakeTree(params RowObservation[] rows) : ITreeCursor
 
     public bool Stalled { get; private set; }
 
+    /// <summary>
+    /// As the live cursor reads it: only rows whose text is in this set keep their type (Properties is read only for
+    /// the object, its table and the folder path); null keeps every type.
+    /// </summary>
+    public HashSet<string>? TypedOnly { get; init; }
+
+    private RowObservation Seen(int index) =>
+        TypedOnly == null || TypedOnly.Contains(rows[index].Value ?? "")
+            ? rows[index]
+            : rows[index] with
+            {
+                Type = null,
+            };
+
     /// <summary>The rows collapsed, in order.</summary>
     public List<string> Collapsed { get; } = [];
 
-    public Task<RowObservation> Current() => Task.FromResult(rows[at]);
+    public Task<RowObservation> Current() => Task.FromResult(Seen(at));
 
     public Task<RowObservation?> Down()
     {
@@ -26,7 +40,7 @@ internal sealed class FakeTree(params RowObservation[] rows) : ITreeCursor
         }
 
         at = next;
-        return Task.FromResult<RowObservation?>(rows[at]);
+        return Task.FromResult<RowObservation?>(Seen(at));
     }
 
     // Left on an expanded row: the rows below it that are deeper are hidden, and the selection stays. Left on a row

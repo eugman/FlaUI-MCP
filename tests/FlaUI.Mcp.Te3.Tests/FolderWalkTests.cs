@@ -267,4 +267,45 @@ public sealed class FolderWalkTests
 
         Assert.False(walk.Found);
     }
+
+    [Fact]
+    public async Task AFolderNestedInAnUntypedOuterFolderIsNotTheRequestedTopLevelFolder()
+    {
+        // The walk reads Properties only for rows it is looking for, so outer folder X arrives untyped; folder A
+        // inside it then matched "A" as if it sat directly under the table, and Brand in X\A was found for "A".
+        var tree = new FakeTree(
+            At(1, "Tables", null),
+            At(2, "Brands", "Table"),
+            At(3, "X", "Folder"),
+            At(4, "A", "Folder"),
+            At(5, "Brand", "Column")
+        )
+        {
+            TypedOnly = ["Brands", "A", "Brand"],
+        };
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "A");
+
+        Assert.False(walk.Found);
+    }
+
+    [Fact]
+    public async Task ATopLevelFolderStillMatchesWhenOffPathRowsAreUntyped()
+    {
+        var tree = new FakeTree(
+            At(1, "Tables", null),
+            At(2, "Brands", "Table"),
+            At(3, "X", "Folder"),
+            At(4, "Other", "Column"),
+            At(3, "A", "Folder"),
+            At(4, "Brand", "Column")
+        )
+        {
+            TypedOnly = ["Brands", "A", "Brand"],
+        };
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "A");
+
+        Assert.True(walk.Found, walk.Reason);
+    }
 }
