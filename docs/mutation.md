@@ -27,7 +27,7 @@ A surviving mutant is either a missing test, which you fix with a red-green test
 
 ## Latest run
 
-On 2026-10-20, run against `e84d006`'s parent: 871 mutants tested, 757 killed, 5 timed out and 109 survived. The covered-mutant score is 87.5%; the score over all mutants is 28.5%, because 1801 mutants have no covering test. Almost all of the uncovered ones are in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs` and drive the live TE3 desktop, so only the integration tests can reach them. The first run scored 75.6% covered, with 208 survivors; tests killed 99 of them, and `e84d006` kills 6 more.
+On 2026-10-20, run at `f463ab9`: 871 mutants tested, 757 killed, 5 timed out and 109 survived. The covered-mutant score is 87.5%; the score over all mutants is 28.5%, because 1801 mutants have no covering test. Almost all of the uncovered ones are in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs` and drive the live TE3 desktop, so only the integration tests can reach them. The first run scored 75.6% covered, with 208 survivors; tests killed 99 of them, and `e84d006` kills 6 more.
 
 ## Equivalent and accepted survivors
 
