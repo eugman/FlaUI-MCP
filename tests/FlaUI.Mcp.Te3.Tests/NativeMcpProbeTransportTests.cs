@@ -167,6 +167,9 @@ public sealed class NativeMcpProbeTransportTests
             null,
             TimeSpan.FromMilliseconds(100)
         );
-        await Assert.ThrowsAsync<TimeoutException>(() => session.Send("tools/list", new { }, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<TimeoutException>(() =>
+            session.Send("tools/list", new { }, CancellationToken.None)
+        );
+        Assert.Contains("response deadline expired", error.Message);
     }
 }
