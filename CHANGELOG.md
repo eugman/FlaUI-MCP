@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed for product repos
+- The interaction guard is in Core: `IInputObserver`, `InputCounts`, `PhysicalInputObserver` (keys and button-downs counted apart, with the last button-down point), `Heartbeat` and `InteractionGrant` (Camtasia's permission with an injectable observer and clock, 500 ms foreground grace, `Reason`/`Code`, `Guard()`, `Pause`/`Observed`, `Mark`/`Rebaseline`). `MutationGuard.RequireHook()` makes a host fail closed when no hook is installed. Contract tests in `tests/FlaUI.Mcp.Tests/Contract/` are for each product test project to link. Delete the product copies.
 - `windows_fill`'s keyboard fallback verifies keyboard focus by default and refuses before Ctrl+A without it; `verifyFocus` is in its schema. Fill says "Filled" only when the read-back matches (ccd5ba7).
 - Click, fill and scroll pattern calls go through `GuardedDesktop.CallPattern`, so they run the integrity check; paste writes the clipboard through `GuardedInput.SetClipboardText`, re-checking permission and foreground first (98df458).
 - Tools read the foreground, focus, window bounds and owners and the clipboard through `InputDesktop` (`FocusedControl`, `ClipboardText` are new), so product fakes drive them (7ae40c0).

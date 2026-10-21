@@ -5,7 +5,53 @@ public static class MutationGuard
 {
     public static readonly AsyncLocal<Action?> BeforeMutation = new();
 
-    public static void CheckPermission() => BeforeMutation.Value?.Invoke();
+    private static int hookRequired;
+
+    /// <summary>
+    /// Declare this host interactive: from now on a mutation with no <see cref="BeforeMutation"/> hook on its flow is
+    /// refused (approval-required) instead of allowed, so a path that forgot to install the grant fails closed. A
+    /// host calls it once at startup; disposing the result undoes it (for tests).
+    /// </summary>
+    public static IDisposable RequireHook()
+    {
+        Interlocked.Increment(ref hookRequired);
+        return new Undo();
+    }
+
+    private sealed class Undo : IDisposable
+    {
+        private int done;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref done, 1) == 0)
+            {
+                Interlocked.Decrement(ref hookRequired);
+            }
+        }
+    }
+
+    public static void CheckPermission()
+    {
+        if (BeforeMutation.Value is { } hook)
+        {
+            hook();
+            return;
+        }
+
+        if (Volatile.Read(ref hookRequired) > 0)
+        {
+            throw InputRefusedException.Record(
+                new InputRefusal(
+                    "approval-required",
+                    "This host takes input only under an interaction grant, and none is installed on this path; no input sent."
+                )
+                {
+                    ActionDispatched = false,
+                }
+            );
+        }
+    }
 
     /// <summary>Count one input or mutation against the running operation, just before it is sent.</summary>
     public static void RecordDispatch() => OperationContext.Current.Value?.RecordInput();
