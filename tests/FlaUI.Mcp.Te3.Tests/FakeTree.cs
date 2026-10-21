@@ -29,10 +29,18 @@ internal sealed class FakeTree(params RowObservation[] rows) : ITreeCursor
         return Task.FromResult<RowObservation?>(rows[at]);
     }
 
-    // Left on an expanded row: the rows below it that are deeper are hidden, and the selection stays.
+    // Left on an expanded row: the rows below it that are deeper are hidden, and the selection stays. Left on a row
+    // with nothing open below it moves the selection to its parent, as TE3 does.
     public Task<bool> Collapse()
     {
         Collapsed.Add(rows[at].Value ?? "");
+        var next = Enumerable.Range(at + 1, Math.Max(0, rows.Length - at - 1)).FirstOrDefault(i => !hidden.Contains(i));
+        if (next == 0 || !(rows[next].Depth > rows[at].Depth))
+        {
+            at = Enumerable.Range(0, at).LastOrDefault(i => rows[i].Depth < rows[at].Depth);
+            return Task.FromResult(false);
+        }
+
         for (var i = at + 1; i < rows.Length && rows[i].Depth > rows[at].Depth; i++)
         {
             hidden.Add(i);

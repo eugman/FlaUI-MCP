@@ -219,4 +219,34 @@ public sealed class FolderWalkTests
             await PathWalker.RowAfter(next, new("Sales", "Table"))
         );
     }
+
+    [Fact]
+    public async Task AGroupThatWasAlreadyCollapsedIsNotPressedAgainAndAgain()
+    {
+        // Left on a collapsed group moves the selection to the model root; the next Down reaches the group again, and
+        // the walk pressed Left on it until the clock ran out.
+        var tree = new FakeTree(
+            At(0, "SpaceParts", "Model"),
+            At(1, "Roles", null),
+            At(1, "Tables", null),
+            At(2, "Brands", "Table"),
+            At(3, "Brand", "Column")
+        );
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column");
+
+        Assert.True(walk.Found, walk.Reason);
+        Assert.Equal(["Roles"], tree.Collapsed);
+    }
+
+    [Fact]
+    public async Task NoGroupIsCollapsedOnceTheClockHasRunOut()
+    {
+        var tree = LiveBrandSearch();
+        var checks = 0;
+
+        await PathWalker.Find(tree, "Brands", "Brand", "Column", outOfTime: () => ++checks > 1);
+
+        Assert.Empty(tree.Collapsed);
+    }
 }

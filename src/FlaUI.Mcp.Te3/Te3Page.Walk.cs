@@ -148,7 +148,12 @@ public sealed partial class Te3Page
         /// </summary>
         public async Task<bool> Collapse()
         {
-            var before = await page.ObserveSelection();
+            var (before, _, open) = await page.ReadSelection();
+            if (!open)
+            {
+                return false;
+            }
+
             await page.Keys("Left", TomExplorerTarget());
             await Task.Delay(WalkClock.CollapseSettleMs);
             return (await page.ObserveSelection()).Row == before.Row;
@@ -160,7 +165,7 @@ public sealed partial class Te3Page
         // The row the key moved to, and whether a row was shown below the selection before the key.
         private async Task<(RowObservation? Row, bool RowBelow)> Move(string key)
         {
-            var (before, rowBelow) = await page.ReadSelection();
+            var (before, rowBelow, _) = await page.ReadSelection();
             await page.Keys(key, TomExplorerTarget());
             var moved = await WalkClock.AwaitMove(
                 before,
@@ -181,7 +186,8 @@ public sealed partial class Te3Page
     // One read of the tree gives the selected TreeItem and its DataItem, whose indent is the row's depth; the status
     // bar's selection slot gives the type when it names this row (a selected display folder leaves the bar on the
     // previous object; Typed then reads Properties).
-    private async Task<(SelectionSnapshot Snapshot, bool RowBelow)> ReadSelection()
+    // Also whether the row shown below is deeper (the selection is open, so Left collapses it).
+    private async Task<(SelectionSnapshot Snapshot, bool RowBelow, bool ChildBelow)> ReadSelection()
     {
         var tree = TomExplorerTarget();
         var rows = await Task.Run(() =>
@@ -206,7 +212,11 @@ public sealed partial class Te3Page
             rows.Elements.Where(r => r.ControlType == "TreeItem").Select(r => r.Bounds?.Y),
             selected?.Bounds?.Y
         );
-        return (new(new RowObservation(value, type, depth), bar, selected?.Bounds?.Y), below);
+        return (
+            new(new RowObservation(value, type, depth), bar, selected?.Bounds?.Y),
+            below,
+            TomRows.ChildBelow(rows.Elements, depthScale)
+        );
     }
 
     // The row with its type from Properties' ObjectType when the status bar did not name it: read once per settled row,

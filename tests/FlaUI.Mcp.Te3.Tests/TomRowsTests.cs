@@ -162,4 +162,27 @@ public sealed class TomRowsTests
             PathWalker.Arrived(row with { Type = null }, "Brand", "Folder", "Brands", "Brands", "Brand", "Column")
         );
     }
+
+    [Fact]
+    public void AGroupIsOpenOnlyWhenTheRowBelowItIsDeeper()
+    {
+        ElementInfo[] open =
+        [
+            Item("TreeItem", "Node4", "Roles", 1161, 302, selected: true),
+            Item("TreeItem", "Node5", "Brand VPs", 1161, 324),
+            Item("DataItem", "Name row 4", "Roles", 1233, 302),
+            Item("DataItem", "Name row 5", "Brand VPs", 1257, 324),
+        ];
+        ElementInfo[] closed =
+        [
+            Item("TreeItem", "Node4", "Roles", 1161, 302, selected: true),
+            Item("TreeItem", "Node5", "Tables", 1161, 324),
+            Item("DataItem", "Name row 4", "Roles", 1233, 302),
+            Item("DataItem", "Name row 5", "Tables", 1233, 324),
+        ];
+
+        Assert.True(TomRows.ChildBelow(open, Live125));
+        Assert.False(TomRows.ChildBelow(closed, Live125));
+        Assert.False(TomRows.ChildBelow(open, null));
+    }
 }

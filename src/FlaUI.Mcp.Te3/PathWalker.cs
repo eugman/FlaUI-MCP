@@ -72,6 +72,7 @@ public static class PathWalker
         }
 
         var row = await cursor.Current();
+        var walkedGroups = new HashSet<string>();
         for (var visited = 1; visited <= maxRows; visited++)
         {
             if (Ends(place, row, visited, table, objectName, objectType) is { } ended)
@@ -83,8 +84,6 @@ public static class PathWalker
             {
                 break;
             }
-
-            await SkipGroup(cursor, row);
 
             // Stop on our own before Core's fixed tool deadline cancels a key press part-way.
             if (outOfTime?.Invoke() == true)
@@ -99,6 +98,7 @@ public static class PathWalker
                 );
             }
 
+            await SkipGroup(cursor, row, walkedGroups);
             if (await cursor.Down() is not { } next)
             {
                 return cursor.Stalled
@@ -121,12 +121,14 @@ public static class PathWalker
     // A stop the walk did not decide, on a placed row inside the folder: a read of the selection may still settle it.
     private static bool Undecided(WalkPlace place, RowObservation row) => row.Depth != null && place.InFolder;
 
-    // Roles, Perspectives and the other groups hold no table, column or measure the walk could want.
-    private static async Task SkipGroup(ITreeCursor cursor, RowObservation row)
+    // Roles, Perspectives and the other groups hold no table, column or measure the walk could want. A group Left
+    // could not be shown to collapse (it was not open, or Left moved the selection to the root) is walked through
+    // from then on: pressing Left on it again would send the walk back to the root each time.
+    private static async Task SkipGroup(ITreeCursor cursor, RowObservation row, HashSet<string> notSkipped)
     {
-        if (WalkPlace.SkipsGroup(row))
+        if (WalkPlace.SkipsGroup(row) && !notSkipped.Contains(row.Value ?? "") && !await cursor.Collapse())
         {
-            await cursor.Collapse();
+            notSkipped.Add(row.Value ?? "");
         }
     }
 

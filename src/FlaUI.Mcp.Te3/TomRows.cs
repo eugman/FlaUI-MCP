@@ -63,6 +63,21 @@ internal static class TomRows
         return (selected, label?.Bounds is { } cell ? Depth(row.X, cell.X, scale) : null);
     }
 
+    /// <summary>
+    /// Whether the row shown just below the selected one is deeper: the selection is open, so Left collapses it rather
+    /// than moving to its parent. False when either depth is unknown.
+    /// </summary>
+    public static bool ChildBelow(IReadOnlyList<ElementInfo> elements, Scale? scale)
+    {
+        var (selected, depth) = Selected(elements, scale);
+        var below = elements
+            .Where(e => e.ControlType == "TreeItem" && e.Bounds?.Y > selected?.Bounds?.Y)
+            .MinBy(e => e.Bounds!.Y);
+        var label = below == null ? null : Label(elements, below.Name.Replace("Node", "", StringComparison.Ordinal));
+        var belowDepth = below?.Bounds is { } row && label?.Bounds is { } cell ? Depth(row.X, cell.X, scale) : null;
+        return depth != null && belowDepth > depth;
+    }
+
     private static ElementInfo? Label(IReadOnlyList<ElementInfo> elements, string index) =>
         elements.FirstOrDefault(e => e.ControlType == "DataItem" && e.Name == "Name row " + index);
 
