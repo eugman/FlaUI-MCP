@@ -563,7 +563,11 @@ public sealed partial class Te3Page(
             true
         );
 
-    public Task OpenSerializationModes() => Keys("Alt+Down", SerializationModeTarget());
+    public Task OpenSerializationModes()
+    {
+        MarkPopups();
+        return Keys("Alt+Down", SerializationModeTarget());
+    }
 
     public Task CloseSerializationModes() => Keys("Escape", SerializationModeTarget());
 
@@ -579,11 +583,12 @@ public sealed partial class Te3Page(
         nint popupHwnd = 0;
         try
         {
+            MarkPopups();
             await Keys("Alt+Down", language);
             await Task.Delay(500);
             var main = host.Sessions.GetInputTarget(handle);
             var preferences = host.Elements.InputForRef(await Reference(PreferencesTarget()));
-            var popups = await ObservePopups(main.ProcessId, maxWindows: 5, main.Hwnd, preferences.Hwnd);
+            var popups = await ObservePopups(main.ProcessId, maxWindows: 5);
             File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(popups, Indented));
             if (popups.Any(p => !p.Tree.Complete))
             {
@@ -778,13 +783,12 @@ public sealed partial class Te3Page(
     public async Task SaveSerializationModes(string path)
     {
         var owner = host.Sessions.GetInputTarget(handle);
-        var preferences = host.Elements.InputForRef(await Reference(PreferencesTarget()));
         string[] expected = ["Database.json (default)", "Database.json (customizable)", "TMDL"];
         // Alt+Down can return before the dropdown window exists, so poll until one popup holds the choices.
         var clock = Stopwatch.StartNew();
         while (true)
         {
-            var popups = await ObservePopups(owner.ProcessId, maxWindows: 6, owner.Hwnd, preferences.Hwnd);
+            var popups = await ObservePopups(owner.ProcessId, maxWindows: 6);
             var lists = popups.Where(p => p.Tree.Elements.Any(e => e.ControlType == "ListItem")).ToArray();
             var problem = "Serialization mode popup not found";
             if (lists.Length == 1 && lists[0].Tree.Complete)
@@ -1091,12 +1095,14 @@ public sealed partial class Te3Page(
     private sealed record PopupObservation(long Hwnd, string Title, System.Drawing.Rectangle? Bounds, QueryResult Tree);
 
     // Popups are separate top-level windows; searching them directly avoids spending the budget on the editor.
-    private async Task<PopupObservation[]> ObservePopups(int processId, int? maxWindows, params nint[] exclude)
+    // The windows open just before the input that opens a popup; ObservePopups considers only windows opened since.
+    private IReadOnlyCollection<nint>? popupBaseline;
+
+    private void MarkPopups() => popupBaseline = PopupWindows.Baseline(host.Sessions.GetInputTarget(handle).ProcessId);
+
+    private async Task<PopupObservation[]> ObservePopups(int processId, int? maxWindows)
     {
-        var windows = Win32Desktop
-            .GetTopLevelWindows(processId)
-            .Where(w => !w.IsCloaked && !exclude.Contains(w.Hwnd))
-            .ToArray();
+        var windows = PopupWindows.New(Win32Desktop.GetTopLevelWindows(processId), popupBaseline);
         if (windows.Length > maxWindows)
         {
             throw new InvalidOperationException($"Popup discovery incomplete: {windows.Length} candidate windows");
@@ -1385,9 +1391,10 @@ public sealed partial class Te3Page(
         );
         var ownerIdentity = await HoverModelMenu(modelMenu);
         // Invoke can remain pending for TE3 menu popups; use the guarded input path.
+        MarkPopups();
         await Click(modelMenu);
         await Task.Delay(500);
-        var discovery = await ObservePopups(ownerIdentity.ProcessId, maxWindows: null, ownerIdentity.Hwnd);
+        var discovery = await ObservePopups(ownerIdentity.ProcessId, maxWindows: null);
         File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(discovery, Indented));
         var target = new Target(new(Name: "Add Calculation Group", ControlType: "Button"), null, true);
         var element = await Resolve(target);
@@ -1904,6 +1911,7 @@ public sealed partial class Te3Page(
 
     public async Task OpenMenu(string menu)
     {
+        MarkPopups();
         await Click(new(new(Name: menu, ControlType: "MenuItem"), new(Name: "Main menu", ControlType: "MenuBar")));
         await Task.Delay(500);
     }
@@ -1916,7 +1924,7 @@ public sealed partial class Te3Page(
         var owner = host.Sessions.GetInputTarget(handle);
         File.WriteAllText(
             path,
-            JsonSerializer.Serialize(await ObservePopups(owner.ProcessId, maxWindows: null, owner.Hwnd), Indented)
+            JsonSerializer.Serialize(await ObservePopups(owner.ProcessId, maxWindows: null), Indented)
         );
     }
 

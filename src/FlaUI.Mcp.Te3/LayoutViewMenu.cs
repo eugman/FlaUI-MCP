@@ -20,6 +20,9 @@ internal sealed class LayoutViewMenu(AutomationHost host, string handle, Window 
     // Enough matches to get past main-window Buttons that share the pane's name.
     private const int EntryMatches = 10;
 
+    // The process's windows just before View was clicked: the popup is a window that was not among them.
+    private IReadOnlyCollection<nint>? beforeView;
+
     public async Task OpenViewMenu()
     {
         var reply = await FindReply(
@@ -27,6 +30,7 @@ internal sealed class LayoutViewMenu(AutomationHost host, string handle, Window 
             new { controlType = "MenuBar", name = "Main menu" },
             includeOwned: false
         );
+        beforeView = PopupWindows.Baseline(host.Sessions.GetWindowProcessId(handle));
         await Click(FirstRef(reply));
     }
 
@@ -61,13 +65,15 @@ internal sealed class LayoutViewMenu(AutomationHost host, string handle, Window 
             tool: "windows_send_keys"
         );
 
-    /// <summary>The process's visible top-level windows other than the main one: where the View popup can be.</summary>
-    private HashSet<long> PopupHwnds()
-    {
-        var main = host.Sessions.GetWindowHwnd(handle);
-        var pid = host.Sessions.GetWindowProcessId(handle);
-        return Win32Desktop.GetTopLevelWindows(pid).Where(w => w.Hwnd != main).Select(w => (long)w.Hwnd).ToHashSet();
-    }
+    /// <summary>
+    /// The process's windows that opened since View was clicked: where the View popup can be. A window already open
+    /// then (a floating pane with a Button of the same name) is never a candidate.
+    /// </summary>
+    private HashSet<long> PopupHwnds() =>
+        PopupWindows
+            .New(Win32Desktop.GetTopLevelWindows(host.Sessions.GetWindowProcessId(handle)), beforeView)
+            .Select(w => (long)w.Hwnd)
+            .ToHashSet();
 
     /// <summary>
     /// The first match of an ancestry find whose chain passes through one of <paramref name="popups"/>; null when every
