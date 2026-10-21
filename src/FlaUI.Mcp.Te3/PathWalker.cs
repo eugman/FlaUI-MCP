@@ -107,7 +107,7 @@ public static class PathWalker
                         false,
                         place.Table,
                         visited,
-                        $"Reached the end of the filtered tree after {visited} rows.",
+                        $"Reached the end of the filtered tree after {visited} rows, {Where(row, place)}.",
                         Undecided(place, row)
                     );
             }
@@ -115,8 +115,18 @@ public static class PathWalker
             row = next;
         }
 
-        return new(false, place.Table, maxRows, $"Stopped after {maxRows} rows.", Undecided(place, row));
+        return new(
+            false,
+            place.Table,
+            maxRows,
+            $"Stopped after {maxRows} rows, {Where(row, place)}.",
+            Undecided(place, row)
+        );
     }
+
+    // The row a walk ended on, so a miss never reads as if it had searched somewhere else.
+    private static string Where(RowObservation row, WalkPlace place) =>
+        $"on '{row.Value}' ({row.Type ?? "unknown type"}) under table '{place.Table ?? "none"}'";
 
     // A stop the walk did not decide, on a placed row inside the folder: a read of the selection may still settle it.
     private static bool Undecided(WalkPlace place, RowObservation row) => row.Depth != null && place.InFolder;

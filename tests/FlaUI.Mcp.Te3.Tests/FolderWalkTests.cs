@@ -308,4 +308,21 @@ public sealed class FolderWalkTests
 
         Assert.True(walk.Found, walk.Reason);
     }
+
+    [Fact]
+    public async Task AMissAtTheEndOfTheTreeNamesTheRowItEndedOn()
+    {
+        // Live, a folder miss said "Reached the end of the filtered tree after 3 rows" while it had ended on
+        // Products[Sub Brand Name], which read as if it had searched Brands.
+        var tree = new FakeTree(
+            At(1, "Tables", null),
+            At(2, "Products", "Table"),
+            At(3, "5. Keys", "Folder"),
+            At(4, "Sub Brand Name", "Column")
+        );
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "2. Something");
+
+        Assert.Contains("on 'Sub Brand Name' (Column) under table 'Products'", walk.Reason);
+    }
 }

@@ -107,7 +107,7 @@ public sealed class PathWalkerTests
         var walk = await PathWalker.Find(tree, "Exchange Rate", "Date", "Column", maxRows: 3);
         Assert.False(walk.Found);
         Assert.Equal(2, tree.Downs);
-        Assert.Equal("Stopped after 3 rows.", walk.Reason);
+        Assert.StartsWith("Stopped after 3 rows, on ", walk.Reason);
     }
 
     [Fact]
