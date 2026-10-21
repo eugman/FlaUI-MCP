@@ -33,6 +33,10 @@ public sealed record ProcessIntegrity(int Level, bool UiAccess)
     public bool Outranks(ProcessIntegrity other) =>
         Level > other.Level || (Level == other.Level && UiAccess && !other.UiAccess);
 
+    /// <summary>Whether this server cannot drive the target; an unreadable target token blocks.</summary>
+    internal static bool Blocks(ProcessIntegrity self, ProcessIntegrity? target) =>
+        target == null || target.Outranks(self);
+
     /// <summary>
     /// The refusal when this server cannot drive the target, or null when it can. An unreadable target token
     /// fails closed: an elevated process's token is exactly the one a medium process cannot open.
@@ -44,7 +48,7 @@ public sealed record ProcessIntegrity(int Level, bool UiAccess)
         string? targetName
     )
     {
-        if (target != null && !target.Outranks(self))
+        if (!Blocks(self, target))
         {
             return null;
         }

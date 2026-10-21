@@ -224,7 +224,7 @@ public sealed class GuardedInput : IDisposable
     {
         var self = desktop.SelfIntegrity();
         var target = desktop.Integrity(processId);
-        if (ProcessIntegrity.DescribeBlocked(self, target, processId, null) == null)
+        if (!ProcessIntegrity.Blocks(self, target))
         {
             return;
         }
