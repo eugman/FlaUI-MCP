@@ -239,4 +239,38 @@ public sealed class Te3LayoutTests
                 .GetInt32()
         );
     }
+
+    [Fact]
+    public async Task AResizeDragRefusedMidDragCountsAsSent()
+    {
+        // windows_mouse drags with MoveTo, Down, several MoveTo and Up, and has no catch: a grant refusal after the
+        // button went down reaches the tally as the bare refusal, though the splitter may have moved.
+        var inputs = new InputTally();
+        var sent = new List<object>();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            LayoutSteps.Sending(
+                inputs,
+                sent.Add,
+                "Properties",
+                () =>
+                    inputs.Invoke(
+                        Click(
+                            "Desktop input needs the user's approval: keyboard or mouse input from the user was observed; ask them before resuming.",
+                            true
+                        ),
+                        tool: "windows_mouse"
+                    )
+            )
+        );
+
+        Assert.True(inputs.Sent >= 1);
+        Assert.Equal(["Properties"], sent);
+        var reply = System
+            .Text.Json.JsonDocument.Parse(
+                Te3Layout.Failure(new InvalidOperationException("drag refused"), inputs.Sent).Content[0].Text!
+            )
+            .RootElement;
+        Assert.True(reply.GetProperty("actionDispatched").GetBoolean());
+    }
 }
