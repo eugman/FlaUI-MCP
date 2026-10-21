@@ -22,3 +22,4 @@ scripts/coverage.ps1
 scripts/mutation.ps1
 stryker-config.json
 docs/mutation.md
+stryker-config.tools.json

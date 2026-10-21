@@ -23,7 +23,7 @@ Both use only the no-focus tests in `tests/FlaUI.Mcp.Tests`, and build into `loc
 | Command | What it does |
 |---|---|
 | `pwsh scripts/coverage.ps1` | Runs the tests with coverlet and renders line and branch coverage to `local/build-background/coverage/index.html`. Needs the `reportgenerator` global tool. |
-| `pwsh scripts/mutation.ps1` or `pwsh scripts/check.ps1 -Mutation` | Runs Stryker (local tool in `.config/dotnet-tools.json`) on a worktree of `HEAD`, so commit first. `stryker-config.json` limits mutation to the guard and protocol files, with concurrency 2. The run stops after 45 minutes (`-Minutes`). The report goes to `local/build-background/StrykerOutput`. |
+| `pwsh scripts/mutation.ps1` or `pwsh scripts/check.ps1 -Mutation` | Runs Stryker (local tool in `.config/dotnet-tools.json`) on a worktree of `HEAD`, so commit first. The guard and protocol files are split so each run fits its cap: `stryker-config.json` mutates the Core and Mcp files, `stryker-config.tools.json` the Tools files, both with concurrency 2. Each run stops after 45 minutes (`-Minutes`), and a run stopped that way writes no report. `-Part core` or `-Part tools` runs one half, and `-Concurrency 1` lowers the load. Reports go to `local/build-background/StrykerOutput/<part>`. |
 
 `check.ps1` runs mutation testing only with `-Mutation`; it is off by default. Each surviving mutant gets a test that kills it, or a line in [mutation.md](mutation.md) saying why it is equivalent.
 

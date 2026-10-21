@@ -1,0 +1,27 @@
+{
+  "stryker-config": {
+    "project": "FlaUI.Mcp.csproj",
+    "test-projects": [
+      "tests/FlaUI.Mcp.Tests/FlaUI.Mcp.Tests.csproj"
+    ],
+    "mutate": [
+      "**/Tools/ClickTool.cs",
+      "**/Tools/MouseTool.cs",
+      "**/Tools/SendKeysTool.cs",
+      "**/Tools/TypeTools.cs",
+      "**/Tools/BatchTool.cs"
+    ],
+    "concurrency": 2,
+    "coverage-analysis": "perTest",
+    "reporters": [
+      "html",
+      "json",
+      "progress"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    }
+  }
+}
