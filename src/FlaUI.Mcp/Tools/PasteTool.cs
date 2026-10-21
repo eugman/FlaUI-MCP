@@ -159,7 +159,7 @@ public sealed class PasteTool(
         var before = ReadValue(element);
         // Focus as it was when Ctrl+V was dispatched. Reading it afterwards names whatever the
         // paste moved focus to — an autocomplete popup, say — not where the text went.
-        var dispatchFocus = Win32Desktop.GetFocusedControl();
+        var dispatchFocus = InputDesktop.Current.FocusedControl();
         input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
 
         // Ctrl+V is already dispatched. Nothing below may report a failure to paste: a

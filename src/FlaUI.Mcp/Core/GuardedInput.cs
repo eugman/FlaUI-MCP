@@ -19,7 +19,7 @@ public sealed record InputTarget(nint Hwnd, int ProcessId, long StartedTicks, ni
 
     public static InputTarget Capture(nint hwnd, int pid)
     {
-        if (hwnd == 0 || pid == 0 || Win32Desktop.GetProcessId(hwnd) != pid)
+        if (hwnd == 0 || pid == 0 || InputDesktop.Current.ProcessOf(hwnd) != pid)
         {
             throw new InvalidOperationException("Cannot establish window ownership.");
         }

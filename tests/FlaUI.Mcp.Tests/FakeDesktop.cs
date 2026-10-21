@@ -109,7 +109,14 @@ internal sealed class FakeDesktop : InputDesktop
     /// <summary>The process that owns the other window.</summary>
     public int OtherProcessId { get; set; } = OtherPid;
 
-    public override int ProcessOf(nint hwnd) => hwnd == OtherHwnd ? OtherProcessId : TargetPid;
+    // Like Windows: no window, no process.
+    public override int ProcessOf(nint hwnd) =>
+        hwnd switch
+        {
+            0 => 0,
+            OtherHwnd => OtherProcessId,
+            _ => TargetPid,
+        };
 
     public override bool BelongsTo(nint hwnd, nint target) => hwnd != 0 && hwnd == target;
 

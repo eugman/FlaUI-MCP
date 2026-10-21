@@ -184,7 +184,7 @@ public class SendKeysTool : ToolBase
             );
             var targetName = string.IsNullOrWhiteSpace(refId) ? "focused element" : refId;
             var expectFocusClass = GetStringArgument(arguments, "expectFocusClass");
-            var focus = Win32Desktop.GetFocusedControl();
+            var focus = InputDesktop.Current.FocusedControl();
             // Where the first chord went. The loop overwrites `focus` as the sequence moves it.
             var dispatchFocus = focus;
             foreach (var step in prepared)
@@ -204,7 +204,7 @@ public class SendKeysTool : ToolBase
                     Thread.Sleep(30);
                 }
 
-                focus = Win32Desktop.GetFocusedControl();
+                focus = InputDesktop.Current.FocusedControl();
             }
 
             // "focus at dispatch" is where the input went; the after-state is reported only when

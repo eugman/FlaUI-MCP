@@ -231,7 +231,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             // A blocked provider: the Win32 bounds are the same rectangle the screen fallback captures.
         }
 
-        return Win32Desktop.GetWindowBounds(hwnd) ?? throw new InvalidOperationException("Window bounds unavailable");
+        return InputDesktop.Current.WindowBounds(hwnd)
+            ?? throw new InvalidOperationException("Window bounds unavailable");
     }
 
     private Func<Point> ResolvePoint(

@@ -254,7 +254,7 @@ public class ScreenshotTool : ToolBase
                 // the captured region is the target in that case.
                 if (guardTarget == 0 && sourceBounds is { } region && ReadsScreenPixels(method))
                 {
-                    guardTarget = Win32Desktop.WindowAt(
+                    guardTarget = InputDesktop.Current.WindowAt(
                         new System.Drawing.Point(region.Left + region.Width / 2, region.Top + region.Height / 2)
                     );
                 }
@@ -264,7 +264,7 @@ public class ScreenshotTool : ToolBase
                     occlusion = Win32Desktop.FindObstructions(
                         Win32Desktop.ObserveZOrder(),
                         guardTarget,
-                        Win32Desktop.GetProcessId(guardTarget),
+                        InputDesktop.Current.ProcessOf(guardTarget),
                         GuardRect(captured, frame)
                     );
                 }
@@ -466,7 +466,7 @@ public class ScreenshotTool : ToolBase
                     }
 
                     targetHwnd = element.Properties.NativeWindowHandle.ValueOrDefault;
-                    sourceBounds = Win32Desktop.GetWindowBounds(targetHwnd);
+                    sourceBounds = InputDesktop.Current.WindowBounds(targetHwnd);
                     method = "native-window";
                     return Task.FromResult(Finish(image));
                 }
@@ -502,7 +502,7 @@ public class ScreenshotTool : ToolBase
                     }
 
                     var hwnd = _sessionManager.GetWindowHwnd(handle);
-                    var bounds = hwnd != 0 ? Win32Desktop.GetWindowBounds(hwnd) : null;
+                    var bounds = hwnd != 0 ? InputDesktop.Current.WindowBounds(hwnd) : null;
                     if (bounds == null)
                     {
                         return Task.FromResult(
@@ -541,7 +541,7 @@ public class ScreenshotTool : ToolBase
                     {
                         if (NativeWindowCapture.TryCaptureHwnd(targetHwnd, out var backgroundImage, out var reason))
                         {
-                            sourceBounds = Win32Desktop.GetWindowBounds(targetHwnd);
+                            sourceBounds = InputDesktop.Current.WindowBounds(targetHwnd);
                             method = "native-window";
                             return Task.FromResult(Finish(backgroundImage));
                         }
@@ -573,7 +573,7 @@ public class ScreenshotTool : ToolBase
 
                     if (elementCapture == null)
                     {
-                        var bounds = targetHwnd != 0 ? Win32Desktop.GetWindowBounds(targetHwnd) : null;
+                        var bounds = targetHwnd != 0 ? InputDesktop.Current.WindowBounds(targetHwnd) : null;
                         if (bounds == null)
                         {
                             return Task.FromResult(
@@ -595,7 +595,7 @@ public class ScreenshotTool : ToolBase
             {
                 // Resolve the foreground window through Win32 and authorize its process before
                 // reading its provider; a focused-element walk can hang on unrelated apps.
-                var foreground = Win32Desktop.GetForegroundWindow();
+                var foreground = InputDesktop.Current.Foreground();
                 if (foreground == 0)
                 {
                     return Task.FromResult(ErrorResult("No foreground window found"));
@@ -605,7 +605,7 @@ public class ScreenshotTool : ToolBase
                 try
                 {
                     foregroundWindow = CaptureForeground(
-                        Win32Desktop.GetProcessId(foreground),
+                        InputDesktop.Current.ProcessOf(foreground),
                         _processPolicy,
                         () => _sessionManager.Automation.FromHandle(foreground)?.AsWindow()
                     );
@@ -650,18 +650,18 @@ public class ScreenshotTool : ToolBase
     {
         warning = null;
         var window = handle ?? (refId == null ? null : _elementRegistry.WindowForRef(refId));
-        var hwnd = window == null ? Win32Desktop.GetForegroundWindow() : _sessionManager.GetWindowHwnd(window);
+        var hwnd = window == null ? InputDesktop.Current.Foreground() : _sessionManager.GetWindowHwnd(window);
         if (window != null && WindowIsGone(hwnd))
         {
             return ClosedWindowMessage(window);
         }
 
-        if (!_processPolicy.IsProcessAllowed(Win32Desktop.GetProcessId(hwnd)))
+        if (!_processPolicy.IsProcessAllowed(InputDesktop.Current.ProcessOf(hwnd)))
         {
             return _processPolicy.DescribeDenied("parkPointer target");
         }
 
-        if (Win32Desktop.GetWindowBounds(hwnd) is not { } bounds)
+        if (InputDesktop.Current.WindowBounds(hwnd) is not { } bounds)
         {
             return "parkPointer: window bounds unavailable; no screenshot was taken.";
         }
@@ -680,7 +680,7 @@ public class ScreenshotTool : ToolBase
 
     // A cached handle can outlive its window (a dialog that closed, an app that exited). Report that,
     // not the allowlist refusal its dead process would otherwise produce.
-    internal static bool WindowIsGone(nint hwnd) => hwnd != 0 && Win32Desktop.GetProcessId(hwnd) == 0;
+    internal static bool WindowIsGone(nint hwnd) => hwnd != 0 && InputDesktop.Current.ProcessOf(hwnd) == 0;
 
     internal static string ClosedWindowMessage(string handle) =>
         $"Window {handle} has closed. Get a current handle from windows_list_windows; no screenshot was taken.";

@@ -130,6 +130,12 @@ internal class InputDesktop
     public virtual string DescribeElement(AutomationElement element) =>
         $"{element.Properties.ControlType.ValueOrDefault} '{element.Properties.Name.ValueOrDefault}'";
 
+    /// <summary>The control with keyboard focus on the desktop, or null when Windows reports none.</summary>
+    public virtual FocusedControl? FocusedControl() => Win32Desktop.GetFocusedControl();
+
+    /// <summary>The clipboard's text, read without changing it.</summary>
+    public virtual Win32Desktop.ClipboardText ClipboardText() => Win32Desktop.GetClipboardText();
+
     /// <summary>Renders a window by handle (PrintWindow); a read, so it needs no lease or grant.</summary>
     public virtual bool CaptureWindow(nint hwnd, out byte[] image, out string? reason) =>
         NativeWindowCapture.TryCaptureHwnd(hwnd, out image, out reason);

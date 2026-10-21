@@ -43,7 +43,7 @@ public sealed class GetClipboardTool(ProcessPolicy? policy = null, Func<int>? cl
                 return Task.FromResult(ErrorResult(denial));
             }
 
-            var clipboard = Win32Desktop.GetClipboardText();
+            var clipboard = InputDesktop.Current.ClipboardText();
             // "Could not read it" is not "there is nothing there"; the old code returned the same
             // sentence for both, so a clipboard held open by another process read as empty.
             if (clipboard.Failure != null)
