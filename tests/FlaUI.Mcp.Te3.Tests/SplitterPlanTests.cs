@@ -39,8 +39,9 @@ public sealed class SplitterPlanTests
     [Fact]
     public void TouchingPanesDragInsideTheUpperPaneNotTheLowerTitleBar()
     {
-        // Seen live on 3.27.1 at 125%: TOM Explorer ends at y 651 and Properties starts there. Its title bar
-        // starts at 651 and the splitter sits in TOM Explorer's last few rows; a drag from 651 undocked Properties.
+        // Seen live on 3.27.1 at 125%, in screen coordinates (651 in UIA-window-relative ones): TOM Explorer ends at
+        // y 681 and Properties starts there. Its title bar starts at 681 and the splitter sits in TOM Explorer's last
+        // few rows; a drag from 681 undocked Properties.
         var tom = new Rectangle(1160, 91, 760, 590);
         var properties = new Rectangle(1160, 681, 760, 427);
         var (from, to) = SplitterPlan.Resize(properties, [tom], width: null, height: 320);

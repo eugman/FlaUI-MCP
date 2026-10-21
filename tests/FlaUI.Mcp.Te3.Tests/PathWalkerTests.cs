@@ -165,7 +165,7 @@ public sealed class PathWalkerTests
     [Fact]
     public async Task ALongWalkStopsBeforeTheToolDeadlineAndSaysWhereItGot()
     {
-        // Brands[Brand] on SpaceParts: many rows before the column. Each Down costs ~2 s live, so the old walk ran
+        // Brands[Brand] on SpaceParts: many rows before the column. Each Down costs ~2 s live (three or more ~0.5 s reads), so the old walk ran
         // into Core's 30 s deadline mid-key. A fake clock that runs out after 15 rows stands in for it.
         var rows = new List<RowObservation> { new("Brands", "Table") };
         rows.AddRange(Enumerable.Range(1, 40).Select(i => new RowObservation($"Measure {i}", "Measure")));

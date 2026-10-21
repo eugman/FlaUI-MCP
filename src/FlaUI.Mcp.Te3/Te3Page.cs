@@ -2590,8 +2590,9 @@ public sealed class Te3Page(
 
     /// <summary>
     /// The selected TOM Explorer row and the status bar's type for it; nothing is clicked. Each step reads every realized
-    /// row and the status bar through the generic query: correct, but about 0.5s a row, so a long filtered tree can
-    /// exceed the 30s tool timeout. A version that cached the tree element timed out live; speed this up with care.
+    /// row and the status bar through the generic query: correct, but about 0.5 s a read, and a Down takes three or more
+    /// reads (about 2 s live), so a long filtered tree can exceed the 30 s tool timeout (see <see cref="WalkClock"/>). A
+    /// version that cached the tree element timed out live; speed this up with care.
     /// </summary>
     private sealed class TomCursor(Te3Page page) : ITreeCursor
     {
