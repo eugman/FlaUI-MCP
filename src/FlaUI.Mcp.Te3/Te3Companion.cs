@@ -249,6 +249,9 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             case { Id: "tom-explorer/changes" }:
                 await page.OpenTomChanges();
                 break;
+            case { Id: "tom-explorer/changes-off" }:
+                await page.CloseTomChanges();
+                break;
             case { Id: "native-mcp-server" }:
                 await page.OpenNativeMcpServer();
                 break;

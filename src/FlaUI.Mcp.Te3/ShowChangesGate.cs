@@ -1,7 +1,7 @@
 /// <summary>
 /// Object navigation walks TOM Explorer's filtered tree, and with the Show changes filter on that tree holds only
 /// changed objects (empty when nothing is unsaved), so a walk would report the table missing. The filter is turned off
-/// first; tom-explorer/changes is the only route that turns it on.
+/// first; tom-explorer/changes turns it on and tom-explorer/changes-off turns it off.
 /// </summary>
 internal static class ShowChangesGate
 {

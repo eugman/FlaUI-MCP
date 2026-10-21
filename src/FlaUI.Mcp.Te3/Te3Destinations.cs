@@ -14,6 +14,7 @@ public static class Te3Destinations
     [
         new("tom-explorer"),
         new("tom-explorer/changes"),
+        new("tom-explorer/changes-off"),
         new("native-mcp-server"),
         new("expression-editor"),
         new("object"),

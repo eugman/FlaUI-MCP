@@ -32,7 +32,7 @@ Seen in TE3 3.27.1. With the TOM Explorer `Show changes` filter on and no unsave
 
 Fixed in the host: `te3_navigate object` turns Show changes off before it walks, and reports "show-changes filter active" with a next action if it stays on. Verified live.
 
-Gap: no host tool turns the filter off on its own. `tom-explorer/changes` turns it on, and only `te3_navigate object` turns it off, as part of its walk. In the live session it was turned off with a raw Toggle on the CheckBox, which dropped the TOM Explorer selection.
+Closed gap: `te3_navigate` `tom-explorer/changes-off` turns the TOM Explorer filter off on its own (the CheckBox, polled until it reads off, then checked on arrival); not yet run live. Earlier the filter was turned off in a live session with a raw Toggle on the CheckBox, which dropped the TOM Explorer selection. Properties' own Show changes has no bindable command and no host tool; the TOM Explorer one is bindable as `TomExplorer.ToggleChangedOnly`.
 
 ## Object navigation can outrun the 30-second tool deadline
 

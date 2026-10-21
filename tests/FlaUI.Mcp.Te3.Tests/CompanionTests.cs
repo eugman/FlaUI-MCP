@@ -121,6 +121,25 @@ public sealed class CompanionTests
     }
 
     [Fact]
+    public void ShowChangesCanBeTurnedOffOnItsOwnAndEveryDestinationHasAnArrivalCheck()
+    {
+        // Only te3_navigate object turned the TOM Explorer filter off, as part of its walk (KNOWN-ISSUES).
+        Assert.Contains("tom-explorer/changes-off", Te3Destinations.Ids);
+        var page = File.ReadAllText(Path.Combine(FlaUI.Mcp.Te3.Tests.DirectInputJournalTests.Sources(), "Te3Page.cs"));
+        var companion = File.ReadAllText(
+            Path.Combine(FlaUI.Mcp.Te3.Tests.DirectInputJournalTests.Sources(), "Te3Companion.cs")
+        );
+        Assert.All(
+            Te3Destinations.All.Where(d => d.Section == null),
+            d =>
+            {
+                Assert.Contains($"Id: \"{d.Id}\"", page);
+                Assert.Contains($"Id: \"{d.Id}\"", companion);
+            }
+        );
+    }
+
+    [Fact]
     public void ObservedAiPreferencesUseDialogLocalPaneMarkers()
     {
         var provider = Te3Destinations.Find("preferences/ai-provider");

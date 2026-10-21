@@ -1673,6 +1673,21 @@ public sealed partial class Te3Page(
         }
     }
 
+    /// <summary>
+    /// Turns TOM Explorer's Show changes filter off (the Toggle CheckBox; the bindable command is
+    /// TomExplorer.ToggleChangedOnly). Properties' own Show changes has no bindable command and is not driven here.
+    /// </summary>
+    public async Task CloseTomChanges()
+    {
+        await OpenTom();
+        if (await TomChangesState() is null)
+        {
+            throw new InvalidOperationException("TOM Explorer shows no Show changes checkbox; no input sent.");
+        }
+
+        await ShowChangesGate.TurnOff(TomChangesState, () => Click(TomChangesTarget()));
+    }
+
     // Null when the checkbox is not on screen (builds without it, or the TOM Explorer toolbar hidden).
     private async Task<bool?> TomChangesState() => await IsOnScreen(TomChangesTarget()) ? await TomChangesOn() : null;
 
@@ -2548,6 +2563,13 @@ public sealed partial class Te3Page(
                 if (!await IsOnScreen(TomTreeTarget()) || !await TomChangesOn())
                 {
                     throw new InvalidOperationException("TOM Explorer Show changes is not visible and on.");
+                }
+
+                break;
+            case { Id: "tom-explorer/changes-off" }:
+                if (!await IsOnScreen(TomTreeTarget()) || await TomChangesOn())
+                {
+                    throw new InvalidOperationException("TOM Explorer Show changes is not visible and off.");
                 }
 
                 break;
