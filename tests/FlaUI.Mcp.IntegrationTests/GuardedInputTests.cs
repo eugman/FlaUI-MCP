@@ -60,7 +60,9 @@ public class GuardedInputTests(TestAppFixture fixture)
     {
         var target = fixture.Session.GetInputTarget(fixture.WpfHandle);
         using var input = new GuardedInput(target);
-        fixture.Session.FocusWindow(fixture.WinFormsHandle);
+        // Another app stealing focus does not take this server's input lease, so steal it directly:
+        // SessionManager.FocusWindow would wait for the lease this test holds.
+        Win32Desktop.FocusWindow(fixture.Session.GetWindowHwnd(fixture.WinFormsHandle));
         var sent = false;
         Assert.Throws<InvalidOperationException>(() => input.Send(() => sent = true));
         Assert.False(sent);
