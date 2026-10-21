@@ -8,6 +8,20 @@ internal static class RunJournal
     /// <summary>Exception.Data key for a journal entry that could not be written after the call.</summary>
     internal const string JournalErrorKey = "journalError";
 
+    /// <summary>The journal note on the failing call, which a retry or cancel step may have wrapped.</summary>
+    internal static string? ErrorNote(Exception? error)
+    {
+        for (; error != null; error = error.InnerException)
+        {
+            if (error.Data[JournalErrorKey] is string note)
+            {
+                return note;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Persists the launch intent, starts TE3, then records the owned PID and start time.</summary>
     internal static Process Launch(
         RunManifest manifest,

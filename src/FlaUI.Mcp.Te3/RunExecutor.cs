@@ -366,7 +366,7 @@ public static class RunExecutor
     {
         manifest.Error = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
         manifest.ErrorDetails = error.ToString();
-        manifest.JournalError = error.Data[RunJournal.JournalErrorKey] as string;
+        manifest.JournalError = RunJournal.ErrorNote(error);
     }
 
     // The failure capture shows only the main window; this z-ordered list shows what overlapped it.
