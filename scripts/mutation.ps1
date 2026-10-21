@@ -76,13 +76,17 @@ function UnsafeRun($logs, $expected, $allowed = $offlineProject) {
     return $null
 }
 
-# Close test apps a timed-out test host left behind.
+# Close test apps a timed-out test host left behind: only those built under this checkout (its worktrees
+# included), never another checkout's, whose own suite may be running.
 function CloseTestApps {
+    $prefix = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($root)) + [IO.Path]::DirectorySeparatorChar
     foreach ($app in $testApps) {
-        Get-Process -Name $app -ErrorAction SilentlyContinue | ForEach-Object {
-            $_.Kill($true)
-            $null = $_.WaitForExit(5000)
-        }
+        Get-Process -Name $app -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -and $_.Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } |
+            ForEach-Object {
+                $_.Kill($true)
+                $null = $_.WaitForExit(5000)
+            }
     }
 }
 
