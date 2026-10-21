@@ -168,6 +168,8 @@ None of this is done by the host: these are manual steps for the person who owns
 
 The host refuses before any input when a known prompt is open (Get Started, External changes detected, a workspace prompt), and says how to clear it; it never answers one.
 
+Not built yet (see [KNOWN-ISSUES](KNOWN-ISSUES.md#not-built-yet)): a typed menu tool using the Alt mnemonics, and MCP-based selection or error assertions through TE3's own MCP server.
+
 ## Tests
 
 ```powershell

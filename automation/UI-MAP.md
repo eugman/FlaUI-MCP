@@ -203,3 +203,21 @@ Every row below was observed live on 3.27.1 Enterprise (SpaceParts, `localhost s
 Keyboard commands (Preferences > Keyboard): TOM Explorer Show changes is bindable as `TomExplorer.ToggleChangedOnly`; the Properties grid's Show changes has no command. Also bindable: `Window.CaptureLayout`, `Window.Layouts...`, a `View.*` command per pane (including `View.GitChanges`), `StatusBar.BarStatusMcp`, `Tools.McpServerDetails` and the `TomExplorer.Toggle*` filters. No command exists for Reset Window Layout, Default or Classic layout, or Float. `KeyboardCustomizations` in UiPreferences.json is `{"Custom":{}}`.
 
 Settings files: `%LocalAppData%\TabularEditor3\Layouts.json` (Version 2; `Layouts[]` with Panels Dock/Type/SizeFactor/Visibility/FloatPosition, and Menus; `DaxDependencies` and `FindReplace` are `Dock: Float` by default), `UiPreferences.json` (RememberWindowBounds, RememberWindowState, MainWindowState, MainWindowRectangle, ModelSourceDetail, ShowWhatsNew) and `Preferences.json` (`Mcp`: Enabled, Port 42100, AutoStart false). TE3 rewrites all three when it closes, so a preset applied in a session persists into the next launch. No policies were set (`HKCU`/`HKLM\Software\Policies\Tabular Editor ApS\TE3` absent).
+
+## Host actions verified live on te3-cfa803c (TE3 3.27.1, 2026-10-21)
+
+Verified: yes, unless the row says otherwise.
+
+| Action | What was seen |
+|---|---|
+| `te3_layout close-document` | `DAX Query 1` closed with 1 input in 2.9 s, read back gone, no dialog. Refused before input for `Properties` (a pane) and for an already closed title (lists the open documents) |
+| `te3_layout snapshot` / `restore` | Snapshot hashes matched the live files; after TE3's close rewrote Layouts.json and Preferences.json, restore put all three back and the hashes read back. (Then gated on the grant; now file-only and grant-free, not re-run) |
+| `te3_navigate tom-explorer/changes` / `changes-off` | On, then off, 1 input each; the TOM selection drops to "(Nothing selected)" on off |
+| `te3_env_check` | Policies not set (user and machine), licence present, Mcp Enabled / Port 42100 / AutoStart false, window state Normal at 0,0,1920,1080, Layouts v2 count 1 |
+| `te3_layout_read list` floating | `Dependencies` listed with kind `floating` and its bounds |
+| `te3_layout resize` (strict) | TOM Explorer 467 -> 480 in 1 attempt, 15 inputs, 5.3 s |
+| `te3_layout apply-preset assistant-model-review` | Second live pass: 45 inputs; TOM Explorer and Properties were already at target (now skipped without input, not re-run) |
+| `paused_after_failure` | A failed reopen-pane paused input; te3_navigate was refused with the code; `te3_layout_read list` lifted it |
+| Known-prompt guard | No false positive with only the main window open |
+| Object walk | Not promoted: see KNOWN-ISSUES "Object walk timing on te3-cfa803c" |
+

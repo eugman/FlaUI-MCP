@@ -32,7 +32,7 @@ Seen in TE3 3.27.1. With the TOM Explorer `Show changes` filter on and no unsave
 
 Fixed in the host: `te3_navigate object` turns Show changes off before it walks, and reports "show-changes filter active" with a next action if it stays on. Verified live.
 
-Closed gap: `te3_navigate` `tom-explorer/changes-off` turns the TOM Explorer filter off on its own (the CheckBox, polled until it reads off, then checked on arrival); not yet run live. Earlier the filter was turned off in a live session with a raw Toggle on the CheckBox, which dropped the TOM Explorer selection. Properties' own Show changes has no bindable command and no host tool; the TOM Explorer one is bindable as `TomExplorer.ToggleChangedOnly`.
+Closed gap: `te3_navigate` `tom-explorer/changes-off` turns the TOM Explorer filter off on its own (the CheckBox, polled until it reads off, then checked on arrival). Verified live on te3-cfa803c (2026-10-21) with `tom-explorer/changes` (title `TOM Explorer (Changed)`, then `TOM Explorer`; 1 input each). Turning it off drops the TOM Explorer selection to "(Nothing selected)": the host does not restore it, so navigate to the object again afterwards if the shot needs it. Earlier the filter was turned off in a live session with a raw Toggle on the CheckBox, which dropped the TOM Explorer selection. Properties' own Show changes has no bindable command and no host tool; the TOM Explorer one is bindable as `TomExplorer.ToggleChangedOnly`.
 
 ## Object navigation can outrun the 30-second tool deadline
 
@@ -51,4 +51,16 @@ Changed in the host: rows are placed by DataItem depth, typed from the selection
 The expression editor and the DAX query editor are Scintilla controls (`daxscilla`). Whether UI Automation reports keyboard focus on the control itself, or on a child, was never checked live, so the host fills them with `verifyFocus: false`: Core's Value pattern is tried first, and if it falls back to the keyboard (Ctrl+A, Backspace, text) it does not first confirm focus reached the editor. Every other field the host fills asks for the check.
 
 Next: once Core's `verifyFocus: "self-or-descendant"` (Core c807de5) is merged here, and the editors are seen to report focus that way live, switch both calls to it.
+
+## Object walk timing on te3-cfa803c (still open)
+
+Live on 2026-10-21 (te3-cfa803c), `te3_navigate object` Brands/Brand/Column stopped on the 18 s clock both ways, at about 3.5-4 s a row, 13 inputs and about 21 s wall each: with `folder` after 4 rows on Group "Roles" (the time went on collapsing groups), without after 5 rows on Partition "Brands", two rows short of the column. Budget Rate/Rate/Column (in folder 1. Facts, near the top) passed in 21.8 s with 12 inputs. Stop reasons were accurate (typed rows, the real table). Groups collapsed during a walk stay collapsed or are re-expanded by TE3 when the search clears (the partition moved from Node12 to Node39).
+
+Changed in the host since: one read per row (the settled read is reused as the next key's "before" and for the collapse check), Properties only for rows whose text the walk is looking for, Left only on an open group, and no group collapsed once the clock has run out. Not yet re-timed live. TOM Explorer's own type filters (Ctrl+1..7, documented) would shrink the tree further but are not used: their state has no verified read-back and they change the user's view (deferred).
+
+## Not built yet
+
+- A typed menu tool using the Alt mnemonics (File Alt+F, Edit Alt+E, View Alt+V, Model Alt+M, Tools Alt+O, Window Alt+W, Help Alt+H, verified on 3.27.1): deferred because the popup entries reached after Alt+letter have not been mapped live.
+- MCP-based selection and error assertions through TE3's own MCP server: deferred because the server's selection tool names are not known and the server is stopped with AutoStart off on the test machine (the host never starts it). `te3_native_preflight` is the only route so far.
+- TOM Explorer type filters (Ctrl+1..7) for the object walk: see above.
 
