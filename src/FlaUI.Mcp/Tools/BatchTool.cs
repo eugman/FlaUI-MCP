@@ -83,7 +83,7 @@ public sealed class BatchTool : ToolBase
         bool stopOnError = true
     )
     {
-        var batch = new BatchRun(invoke, stopOnError);
+        var batch = new BatchRun(invoke, stopOnError, rows.Length);
         foreach (var (row, index) in rows.Select((row, index) => (row, index)))
         {
             OperationContext.Check();
@@ -97,11 +97,12 @@ public sealed class BatchTool : ToolBase
     }
 
     /// <summary>The trace and step outcomes of one batch, filled in step by step.</summary>
-    private sealed class BatchRun(Func<string, JsonElement, Task<McpToolResult>> invoke, bool stopOnError)
+    private sealed class BatchRun(Func<string, JsonElement, Task<McpToolResult>> invoke, bool stopOnError, int rowCount)
     {
         private readonly List<string> trace = [];
         private readonly List<ToolStepOutcome> steps = [];
         private ToolOutcome? pending;
+        private int pendingNumber;
 
         /// <summary>Run one step; false when the batch must stop after it.</summary>
         public async Task<bool> Run(JsonElement row, int number)
@@ -158,6 +159,7 @@ public sealed class BatchTool : ToolBase
             if (result.Outcome?.IsPending == true)
             {
                 pending = result.Outcome;
+                pendingNumber = number;
                 trace.Add(
                     $"Stopped at action {number}: operation still pending; inspect state before continuing, do not replay."
                 );
@@ -189,11 +191,31 @@ public sealed class BatchTool : ToolBase
         // Preserve the legacy numbered text and IsError contract. Structured
         // outcomes expose failures/pending state without interpreting UI text.
         // A step that fails after completed ones makes the batch partial: earlier input reached the app.
+        /// <summary>
+        /// A batch stopped at a pending step after earlier steps sent input is partial, with the pending marker
+        /// kept. Reporting the pending step's own "not-dispatched" would invite a replay of input already sent.
+        /// </summary>
+        private static ToolOutcome PendingOutcome(ToolOutcome pending, int sent, bool stoppedEarly)
+        {
+            if (sent == 0 || pending.Dispatch == "completed" && !stoppedEarly)
+            {
+                return pending;
+            }
+
+            return pending with
+            {
+                Dispatch = "partial",
+                Provider = "pending",
+            };
+        }
+
         public McpToolResult Result()
         {
             var failed = steps.Any(s => s.IsError);
             var sent = steps.Sum(s => s.Outcome?.InputsSent ?? 0);
-            var outcome = pending ?? new(ToolOutcome.DispatchFor(failed, sent), "returned");
+            var outcome = pending is null
+                ? new(ToolOutcome.DispatchFor(failed, sent), "returned")
+                : PendingOutcome(pending, sent, pendingNumber < rowCount);
             return TextResult(string.Join("\n", trace)) with
             {
                 Outcome = outcome with { Steps = steps, InputsSent = sent, Status = failed ? "failed" : null },
