@@ -158,4 +158,14 @@ public sealed class CheckpointRetryTests : IDisposable
 
         AssertRecorded();
     }
+
+    [Fact]
+    public void AMissingRunFolderIsNotReportedAsAnotherWriter()
+    {
+        var missing = Path.Combine(root, "no-such-run", "manifest.json");
+
+        var error = Assert.Throws<DirectoryNotFoundException>(() => CheckpointOutput.Lock(missing));
+
+        Assert.DoesNotContain("Another command", error.Message);
+    }
 }
