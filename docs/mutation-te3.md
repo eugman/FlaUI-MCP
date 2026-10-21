@@ -29,7 +29,7 @@ A surviving mutant is either a missing test, which you fix with a red-green test
 
 ## Latest run
 
-On 2026-10-21, run at `e75f4df` (the Core `9b6cdc4` merge and its adaptation, plus the tests below), concurrency 1, 489 offline tests and no desktop tests. Coverage: 35.9% of lines, 30.2% of branches. Stryker tested 1161 mutants: 994 killed, 5 timed out and 162 survived. The covered-mutant score is 86.0%; the score over all mutants is 34.2%, because 1761 mutants have no covering test, almost all in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs`, which drive the live TE3 desktop.
+On 2026-10-21, run at `4df0df5` (the Core `abb17ea` merge and its adaptation, plus the tests below), concurrency 1, 491 offline tests and no desktop tests. Coverage: 36.0% of lines, 30.2% of branches (1561 of 5155). Stryker tested 1161 mutants: 994 killed, 5 timed out and 162 survived, the same survivors as at `e75f4df`; the later changes (the TE CLI's guarded start, the status-read annotations and their revert) added none. The covered-mutant score is 86.0%; the score over all mutants is 34.2%, because 1761 mutants have no covering test, almost all in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs`, which drive the live TE3 desktop.
 
 The first run on the adapted code, at `daeb643`, tested 1153 mutants: 936 killed, 6 timed out, 211 survived (81.7% covered, 32.2% overall). `e75f4df` (`AdaptationMutationTests`, plus a backlog-in-a-worktree test and a workspace schema whose `properties` is not an object) kills 49 of those. The survivors that remain are listed below, or are tool descriptions and `InputSchema` text (most of `Te3Layout.Schema.cs`, `Te3InteractionTool.cs`, `Te3NativePreflightTool.cs` and `Te3Companion.cs`'s schema), or need TE3 (`Te3Page.cs`).
 
