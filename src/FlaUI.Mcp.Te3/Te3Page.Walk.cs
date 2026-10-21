@@ -31,8 +31,9 @@ public sealed partial class Te3Page
         );
     }
 
-    // Where the last walk ended; the arrival check compares it with the request.
+    // Where the last walk ended and what it was asked for; the arrival check compares them with the selection.
     private WalkResult? lastWalk;
+    private WalkRequest? lastRequest;
 
     private async Task WalkToObject(
         string table,
@@ -51,20 +52,14 @@ public sealed partial class Te3Page
         await SearchTomTyped(objectName);
         await Keys("Home", TomExplorerTarget());
         var cursor = new TomCursor(this);
-        var walk = await PathWalker.Find(
+        var request = new WalkRequest(table, objectName, objectType, folder);
+        var walk = await ObjectWalk.Find(
             cursor,
-            table,
-            objectName,
-            objectType,
-            outOfTime: WalkClock.OutOfTime(elapsed),
-            folder: folder
+            request,
+            WalkClock.OutOfTime(elapsed),
+            WalkClock.CanRead(elapsed),
+            () => PropertiesValue("Name")
         );
-        // A walk that stopped on the object itself (its type unread, or the clock) is not a miss.
-        if (!walk.Found && await SelectionIsTarget(cursor, walk.Table, table, objectName, objectType))
-        {
-            walk = walk with { Found = true, Table = table };
-        }
-
         if (!walk.Found)
         {
             await ClearTomSearchTyped();
@@ -78,29 +73,32 @@ public sealed partial class Te3Page
         reportStep?.Invoke($"Found {objectType} '{objectName}' under '{walk.Table}' after {walk.RowsVisited} rows");
         await ClearTomSearchTyped();
         // Clearing the filter keeps the selection; check it really did before reporting arrival.
-        var after = await cursor.Current();
-        if (!await SelectionIsTarget(cursor, walk.Table, table, objectName, objectType))
+        if (!await ObjectWalk.Arrived(cursor, walk, request, () => PropertiesValue("Name")))
         {
+            var after = await cursor.Current();
             throw new InvalidOperationException(
                 $"Selection moved when the search was cleared: now '{after.Value}' ({after.Type ?? "unknown type"})."
             );
         }
 
         lastWalk = walk;
+        lastRequest = request;
     }
 
-    // The selected row against the request, with Properties' Name and ObjectType read for it.
-    private async Task<bool> SelectionIsTarget(
-        TomCursor cursor,
-        string? walkedTable,
-        string table,
-        string objectName,
-        string objectType
-    )
+    /// <summary>te3_navigate object's arrival check: the last walk's object, in its folder, is still selected.</summary>
+    private async Task VerifyObjectArrival()
     {
-        var row = await cursor.Current();
-        var (name, type) = await Task.Run(() => (PropertiesValue("Name"), PropertiesValue("ObjectType")));
-        return PathWalker.Arrived(row, name, type, walkedTable, table, objectName, objectType);
+        if (
+            lastWalk == null
+            || lastRequest == null
+            || !await ObjectWalk.Arrived(new TomCursor(this), lastWalk, lastRequest, () => PropertiesValue("Name"))
+        )
+        {
+            throw new InvalidOperationException(
+                "Object identity unverified: the selection is not the object the walk reached in its table and folder. "
+                    + "No fallback guess was made."
+            );
+        }
     }
 
     /// <summary>Types into the TOM Explorer search box; setting its value does not apply TE3's filter.</summary>

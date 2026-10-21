@@ -2547,13 +2547,7 @@ public sealed partial class Te3Page(
             case { Id: "object" }:
                 // Proof from the tree and the status bar; Properties' ObjectType only when the bar names another row
                 // (it does not follow every selection on 3.27.1).
-                VerifyArrival(
-                    table!,
-                    objectName!,
-                    objectType!,
-                    await Typed((await ObserveSelection()).Row),
-                    lastWalk?.Table
-                );
+                await VerifyObjectArrival();
                 break;
             case { Id: "tom-explorer" }:
                 if (!await IsOnScreen(TomTreeTarget()))
@@ -2604,27 +2598,5 @@ public sealed partial class Te3Page(
                 ? actualType is "Column" or "DataColumn" or "CalculatedColumn" or "CalculatedTableColumn"
             : objectType == "Table" ? actualType is "Table" or "CalculatedTable"
             : actualType == "Measure";
-    }
-
-    /// <summary>
-    /// The object is where it was asked for: the selected row has its name, the status bar has its type, and the walk
-    /// that reached it passed through the requested table.
-    /// </summary>
-    internal static void VerifyArrival(
-        string table,
-        string objectName,
-        string objectType,
-        RowObservation selected,
-        string? walkedTable
-    )
-    {
-        var expectedName = objectType == "Table" ? table : objectName;
-        if (selected.Value != expectedName || !ObjectTypeMatches(objectType, selected.Type) || walkedTable != table)
-        {
-            throw new InvalidOperationException(
-                $"Object identity unverified: expected {table}/{expectedName} ({objectType}), observed row '{selected.Value}' "
-                    + $"({selected.Type ?? "unknown type"}) reached through table '{walkedTable ?? "none"}'. No fallback guess was made."
-            );
-        }
     }
 }

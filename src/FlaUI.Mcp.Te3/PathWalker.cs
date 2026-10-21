@@ -27,7 +27,12 @@ public interface ITreeCursor
 }
 
 /// <summary>Where a walk ended: the table the object was found under, or why it was not found.</summary>
-public sealed record WalkResult(bool Found, string? Table, int RowsVisited, string? Reason);
+/// <param name="Rescuable">
+/// The walk stopped without deciding (the clock, the row limit, the end of the tree or a slow move) on a row of known
+/// depth inside the requested folder: only then may a read of the selection still prove it reached the object. A
+/// miss the walk decided (outside the folder, depth unknown, past the table) never is.
+/// </param>
+public sealed record WalkResult(bool Found, string? Table, int RowsVisited, string? Reason, bool Rescuable = false);
 
 /// <summary>
 /// Finds an object in TOM Explorer by walking the selection down a search-filtered tree. DevExpress only exposes on-screen
@@ -89,22 +94,32 @@ public static class PathWalker
                     place.Table,
                     visited,
                     $"Stopped before the tool deadline after {visited} rows, on '{row.Value}' ({row.Type ?? "unknown type"}) "
-                        + $"under table '{place.Table ?? "none"}'. Narrow the search or retry from here."
+                        + $"under table '{place.Table ?? "none"}'. Narrow the search or retry from here.",
+                    Undecided(place, row)
                 );
             }
 
             if (await cursor.Down() is not { } next)
             {
                 return cursor.Stalled
-                    ? new(false, place.Table, visited, DidNotMove(row, visited))
-                    : new(false, null, visited, $"Reached the end of the filtered tree after {visited} rows.");
+                    ? new(false, place.Table, visited, DidNotMove(row, visited), Undecided(place, row))
+                    : new(
+                        false,
+                        place.Table,
+                        visited,
+                        $"Reached the end of the filtered tree after {visited} rows.",
+                        Undecided(place, row)
+                    );
             }
 
             row = next;
         }
 
-        return new(false, null, maxRows, $"Stopped after {maxRows} rows.");
+        return new(false, place.Table, maxRows, $"Stopped after {maxRows} rows.", Undecided(place, row));
     }
+
+    // A stop the walk did not decide, on a placed row inside the folder: a read of the selection may still settle it.
+    private static bool Undecided(WalkPlace place, RowObservation row) => row.Depth != null && place.InFolder;
 
     // Roles, Perspectives and the other groups hold no table, column or measure the walk could want.
     private static async Task SkipGroup(ITreeCursor cursor, RowObservation row)

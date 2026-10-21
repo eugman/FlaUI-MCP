@@ -25,6 +25,12 @@ internal static class WalkClock
         return () => watch.Elapsed;
     }
 
+    /// <summary>Total elapsed time after which no further read of the selection is started (each takes about 1 s).</summary>
+    public static readonly TimeSpan ReadStop = TimeSpan.FromSeconds(21);
+
+    /// <summary>True while a read after the walk stopped still leaves time to clear the search inside Core's 30 s.</summary>
+    public static Func<bool> CanRead(Func<TimeSpan> elapsed) => () => elapsed() < ReadStop;
+
     /// <summary>True once <paramref name="elapsed"/> (since the tool started) passes <see cref="WalkStop"/>.</summary>
     public static Func<bool> OutOfTime(Func<TimeSpan> elapsed) => () => elapsed() > WalkStop;
 

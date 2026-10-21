@@ -318,9 +318,7 @@ public sealed class CompanionTests
     [InlineData("Total", "Data Column", "Sales")]
     [InlineData("Amount", "Data Column", null)]
     public void WrongOrUnprovenArrivalRejected(string value, string? type, string? walkedTable) =>
-        Assert.Throws<InvalidOperationException>(() =>
-            Te3Page.VerifyArrival("Sales", "Amount", "Column", new(value, type), walkedTable)
-        );
+        Assert.False(PathWalker.Arrived(new(value, type), null, null, walkedTable, "Sales", "Amount", "Column"));
 
     [Theory]
     [InlineData("Table", "Table", true)]
@@ -367,11 +365,11 @@ public sealed class CompanionTests
 
     [Fact]
     public void ColumnArrivalAccepted() =>
-        Te3Page.VerifyArrival("Sales", "Amount", "Column", new("Amount", "Data Column"), "Sales");
+        Assert.True(PathWalker.Arrived(new("Amount", "Data Column"), null, null, "Sales", "Sales", "Amount", "Column"));
 
     [Fact]
     public void TableArrivalUsesTheTableName() =>
-        Te3Page.VerifyArrival("Date", "RefDate", "Table", new("Date", "Calculated Table"), "Date");
+        Assert.True(PathWalker.Arrived(new("Date", "Calculated Table"), null, null, "Date", "Date", "Date", "Table"));
 
     [Fact]
     public void ProcessIdIsOptionalWhenOneTe3IsRunning()
