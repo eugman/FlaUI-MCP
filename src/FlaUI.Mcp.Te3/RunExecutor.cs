@@ -7,13 +7,11 @@ public sealed record RunExecutionResult(string ManifestPath, RunManifest Manifes
 
 public static partial class RunExecutor
 {
-    internal static FileStream AcquireRunnerLock() =>
-        new(
-            Path.Combine(Path.GetTempPath(), "fla_te3_automation.lock"),
-            FileMode.OpenOrCreate,
-            FileAccess.ReadWrite,
-            FileShare.None
-        );
+    /// <summary>The machine-wide lock every runner and recovery takes; tests pass their own path.</summary>
+    internal static readonly string RunnerLockPath = Path.Combine(Path.GetTempPath(), "fla_te3_automation.lock");
+
+    internal static FileStream AcquireRunnerLock(string? path = null) =>
+        new(path ?? RunnerLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
     // Engine recipes save into the shared database, so each one starts from the test model again:
     // the same steps as automation/reset-engine.ps1.
@@ -80,15 +78,16 @@ public static partial class RunExecutor
         CancellationToken cancellationToken = default
     ) => Execute(config, recipe, cancellationToken, heldRunnerLock: null);
 
-    // A batch passes its held lock so no other runner can start between recipes.
+    // A batch passes its held lock so no other runner can start between recipes; tests pass a lock path of their own.
     internal static async Task<RunExecutionResult> Execute(
         RunConfig config,
         Recipe recipe,
         CancellationToken cancellationToken,
-        FileStream? heldRunnerLock
+        FileStream? heldRunnerLock,
+        string? lockPath = null
     )
     {
-        using var runnerGate = heldRunnerLock == null ? AcquireRunnerLock() : null;
+        using var runnerGate = heldRunnerLock == null ? AcquireRunnerLock(lockPath) : null;
         cancellationToken.ThrowIfCancellationRequested();
         if (recipe.RequiresServer && !config.UseServer(recipe))
         {

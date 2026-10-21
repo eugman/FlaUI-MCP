@@ -15,7 +15,7 @@ public sealed class DirectInputJournalTests
     );
     private static readonly Regex Journaled = new(@"\bRunJournal\.Input\(|\bSendInput\(");
 
-    private static string Sources()
+    internal static string Sources()
     {
         for (
             var directory = new DirectoryInfo(AppContext.BaseDirectory);

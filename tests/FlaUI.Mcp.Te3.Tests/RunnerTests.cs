@@ -222,12 +222,19 @@ public sealed class RunnerTests : IDisposable
     [Fact]
     public void RunnerLockExcludesConcurrentRunnerEntry()
     {
-        using var first = RunExecutor.AcquireRunnerLock();
+        // A lock of the test's own: the real one belongs to whatever runner is going on this machine.
+        using var first = RunExecutor.AcquireRunnerLock(LockPath);
         Assert.Throws<IOException>(() =>
         {
-            using var second = RunExecutor.AcquireRunnerLock();
+            using var second = RunExecutor.AcquireRunnerLock(LockPath);
         });
     }
+
+    [Fact]
+    public void TheRealRunnerLockIsTheMachineWideOne() =>
+        Assert.Equal(Path.Combine(Path.GetTempPath(), "fla_te3_automation.lock"), RunExecutor.RunnerLockPath);
+
+    private string LockPath => Path.Combine(root, "runner.lock");
 
     [Fact]
     public async Task CanceledRunnerEntryStopsBeforeDesktopOrSettingsWork()
@@ -239,7 +246,9 @@ public sealed class RunnerTests : IDisposable
             RunExecutor.Execute(
                 new RunConfig(),
                 new Recipe("test", "page", false, _ => Task.CompletedTask),
-                cancellation.Token
+                cancellation.Token,
+                heldRunnerLock: null,
+                lockPath: LockPath
             )
         );
     }
@@ -247,17 +256,18 @@ public sealed class RunnerTests : IDisposable
     [Fact]
     public async Task BatchLockHolderEntersRecipeWithoutReacquiringLock()
     {
-        using var held = RunExecutor.AcquireRunnerLock();
+        using var held = RunExecutor.AcquireRunnerLock(LockPath);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
-        // Reacquiring would throw IOException; cancellation proves the held lock was accepted.
+        // Reacquiring the same path would throw IOException; cancellation proves the held lock was accepted.
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             RunExecutor.Execute(
                 new RunConfig(),
                 new Recipe("test", "page", false, _ => Task.CompletedTask),
                 cancellation.Token,
-                held
+                held,
+                LockPath
             )
         );
     }
