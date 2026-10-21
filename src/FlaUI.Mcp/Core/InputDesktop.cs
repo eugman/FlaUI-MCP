@@ -135,6 +135,11 @@ internal class InputDesktop
     /// <summary>Whether two elements are the same UI Automation element (compared by the provider).</summary>
     public virtual bool SameElement(AutomationElement a, AutomationElement b) => a.Equals(b);
 
+    public virtual string AutomationIdOf(AutomationElement element) =>
+        element.Properties.AutomationId.ValueOrDefault ?? "";
+
+    public virtual Rectangle BoundsOf(AutomationElement element) => element.BoundingRectangle;
+
     public virtual FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         element.Properties.ControlType.ValueOrDefault;
 

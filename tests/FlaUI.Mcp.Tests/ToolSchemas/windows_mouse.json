@@ -83,6 +83,13 @@
         "type": "string",
         "description": "drag: release on this element instead of a \u0060to\u0060 point."
       },
+      "fromMustNotHit": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "drag: refs the start point must not land on (a neighbouring pane\u0027s caption, say); the drag is refused before the button goes down when UI Automation reports one of them, or something inside it, there."
+      },
       "toEdge": {
         "type": "string",
         "enum": [

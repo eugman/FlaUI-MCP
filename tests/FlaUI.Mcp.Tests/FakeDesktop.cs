@@ -301,6 +301,15 @@ internal sealed class FakeDesktop : InputDesktop
     public override FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         ControlTypes.TryGetValue(element, out var type) ? type : FlaUI.Core.Definitions.ControlType.Custom;
 
+    /// <summary>Each element's AutomationId; empty unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, string> AutomationIds { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override string AutomationIdOf(AutomationElement element) =>
+        AutomationIds.TryGetValue(element, out var id) ? id : "";
+
+    public override Rectangle BoundsOf(AutomationElement element) =>
+        ElementBounds.TryGetValue(element, out var bounds) ? bounds : Rectangle.Empty;
+
     /// <summary>Elements that support the Value pattern.</summary>
     public HashSet<AutomationElement> ValueBearing { get; } = new(ReferenceEqualityComparer.Instance);
 

@@ -25,6 +25,64 @@ public static class ClickHitTest
 
     public static string Verify(Point point, AutomationElement target) => Note(Prove(point, target));
 
+    private static string[] passThrough = [];
+
+    /// <summary>
+    /// Opt-in for a host: overlays (by AutomationId) that do not take a press, such as Camtasia's selectionPlayhead
+    /// line over a clip. A hit on one passes ("pass-through") when the point lies in the target's bounds, and they
+    /// are not counted as covering siblings. Dispose to restore the previous list.
+    /// </summary>
+    public static IDisposable PassThrough(params string[] automationIds)
+    {
+        var previous = Interlocked.Exchange(ref passThrough, automationIds);
+        return new Restore(previous);
+    }
+
+    private sealed class Restore(string[] previous) : IDisposable
+    {
+        public void Dispose() => Volatile.Write(ref passThrough, previous);
+    }
+
+    private static bool PassesThrough(InputDesktop desktop, AutomationElement element)
+    {
+        var listed = Volatile.Read(ref passThrough);
+        return listed.Length > 0 && listed.Contains(desktop.AutomationIdOf(element), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Opt-in for a drag start on a raw point (TE3's splitter gaps): refuse before the button goes down when UI
+    /// Automation reports one of <paramref name="mustNotHit"/> (or something inside it) at the point.
+    /// </summary>
+    public static void RequireNotWithin(
+        Point point,
+        AutomationElement target,
+        IEnumerable<AutomationElement> mustNotHit
+    )
+    {
+        var desktop = InputDesktop.Current;
+        AutomationElement? hit;
+        try
+        {
+            hit = desktop.ElementAt(target, point);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            throw Covered($"The point ({point.X},{point.Y}) could not be hit-tested ({error.Message})");
+        }
+
+        if (
+            hit != null
+            && mustNotHit.Any(element =>
+                desktop.SameElement(hit, element) || Levels(desktop, hit, element, MaxWalk) > 0
+            )
+        )
+        {
+            throw Covered(
+                $"The drag start ({point.X},{point.Y}) is on {desktop.DescribeElement(hit)}, which must not be pressed"
+            );
+        }
+    }
+
     /// <summary>Keep the weakest proof of the running operation, for its reply's hitTest field.</summary>
     private static string Note(string kind)
     {
@@ -42,6 +100,7 @@ public static class ClickHitTest
             "target" => 1,
             "descendant" => 2,
             "ancestor" => 3,
+            "pass-through" => 4,
             _ => 0,
         };
 
@@ -66,6 +125,11 @@ public static class ClickHitTest
         if (Levels(desktop, hit, target, MaxWalk) > 0)
         {
             return "descendant";
+        }
+
+        if (hit != null && PassesThrough(desktop, hit) && desktop.BoundsOf(target).Contains(point))
+        {
+            return "pass-through";
         }
 
         var covering = hit == null ? "nothing UI Automation can see" : desktop.DescribeElement(hit);
@@ -105,7 +169,10 @@ public static class ClickHitTest
             var overlay = desktop
                 .ChildBoxes(parent)
                 .FirstOrDefault(box =>
-                    !box.IsOffscreen && box.Bounds.Contains(point) && !desktop.SameElement(box.Element, child)
+                    !box.IsOffscreen
+                    && box.Bounds.Contains(point)
+                    && !desktop.SameElement(box.Element, child)
+                    && !PassesThrough(desktop, box.Element)
                 );
             if (overlay != null)
             {

@@ -45,6 +45,12 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                     description = "drag: grab this edge of ref instead of its centre (e.g. right for a column header's divider).",
                 },
                 toRef = new { type = "string", description = "drag: release on this element instead of a `to` point." },
+                fromMustNotHit = new
+                {
+                    type = "array",
+                    items = new { type = "string" },
+                    description = "drag: refs the start point must not land on (a neighbouring pane's caption, say); the drag is refused before the button goes down when UI Automation reports one of them, or something inside it, there.",
+                },
                 toEdge = new
                 {
                     type = "string",
@@ -131,7 +137,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 "click" => PointerActions.Click(target, ResolvePoint(arguments, "to", reference, origin, ref scrolled)),
                 "drag" => PointerActions.Drag(
                     target,
-                    DragFromArguments(arguments, reference, origin, ref scrolled),
+                    AvoidingStart(arguments, DragFromArguments(arguments, reference, origin, ref scrolled)),
                     GetArgument<int?>(arguments, "steps") ?? PointerPlan.DefaultDragSteps
                 ),
                 _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
@@ -177,6 +183,23 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             var point = choose(geometry);
             ClickPoint.Verify(point, element);
             return point;
+        };
+    }
+
+    /// <summary>The drag's points, refused under the lease when the start lands on a fromMustNotHit element.</summary>
+    private Func<(Point From, Point To)> AvoidingStart(JsonElement? arguments, Func<(Point From, Point To)> resolve)
+    {
+        var avoid = (GetArgument<string[]>(arguments, "fromMustNotHit") ?? []).Select(r => refs.ResolveRef(r)).ToList();
+        if (avoid.Count == 0)
+        {
+            return resolve;
+        }
+
+        return () =>
+        {
+            var points = resolve();
+            ClickHitTest.RequireNotWithin(points.From, avoid[0], avoid);
+            return points;
         };
     }
 
