@@ -4,13 +4,13 @@ using Xunit;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
-/// <summary>An input counts once it went out, not when it was attempted; scripted Core results, no desktop.</summary>
+/// <summary>
+/// The tally counts what Core counted (its outcome's inputsSent, or the inputs Core recorded during a direct send),
+/// never what a tool's text claims. Scripted Core results and a fake desktop; nothing is sent.
+/// </summary>
 public sealed class InputTallyTests
 {
-    private const string ActivationDenied =
-        "Failed to click w1e3: activation-denied: Windows kept 'WindowsTerminal' (PID 9) in the foreground instead of target PID 7. ";
-
-    private static Func<Task<McpToolResult>> Returns(string text, bool error = false, ToolOutcome? outcome = null) =>
+    private static Func<Task<McpToolResult>> Returns(string text, ToolOutcome outcome, bool error = false) =>
         () =>
             Task.FromResult(
                 new McpToolResult
@@ -21,99 +21,129 @@ public sealed class InputTallyTests
                 }
             );
 
-    [Theory]
-    [InlineData(ActivationDenied)]
-    [InlineData(
-        "Failed to click w1e3: desktop-unavailable: Windows reports no foreground window; the session may be locked."
-    )]
-    [InlineData("Point is not on the target window (off-window or covered); no input sent.")]
-    [InlineData("Desktop input needs the user's approval: keyboard or mouse input from the user was observed.")]
-    [InlineData("Failed to click w1e3: Stale element reference.")]
-    public async Task ARefusedFirstClickSendsNothing(string refusal)
+    private static ToolOutcome Outcome(string dispatch, int inputsSent, string provider = "not-tracked") =>
+        new(dispatch, provider) { InputsSent = inputsSent, Status = dispatch == "completed" ? "ok" : "failed" };
+
+    [Fact]
+    public async Task ACompletedCallCountsEveryInputCoreCounted()
     {
         var inputs = new InputTally();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            inputs.Invoke(Returns(refusal, error: true), tool: "windows_click")
-        );
+        await inputs.Invoke(Returns("Typed 2 lines", Outcome("completed", 3)), tool: "windows_type");
 
-        Assert.Equal(0, inputs.Sent);
-        Assert.False(
-            System
-                .Text.Json.JsonDocument.Parse(
-                    Te3Companion.Failure("navigate", "click", refusal, inputs.Sent).Content[0].Text!
-                )
-                .RootElement.GetProperty("actionDispatched")
-                .GetBoolean()
-        );
+        Assert.Equal(3, inputs.Sent);
     }
 
     [Fact]
-    public async Task OneClickThenARefusalIsOneInput()
+    public async Task AReadThatSentNothingCountsNothing()
     {
         var inputs = new InputTally();
 
-        await inputs.Invoke(Returns("Clicked w1e3."));
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            inputs.Invoke(Returns(ActivationDenied, error: true))
-        );
+        await inputs.Invoke(Returns("Found 1 element", Outcome("completed", 0)), tool: "windows_find");
 
-        Assert.Equal(1, inputs.Sent);
-        var reply = System
-            .Text.Json.JsonDocument.Parse(
-                Te3Companion.Failure("navigate", "click", ActivationDenied, inputs.Sent).Content[0].Text!
+        Assert.Equal(0, inputs.Sent);
+    }
+
+    [Fact]
+    public async Task AFailureCountsWhatCoreCountedWhateverItsTextSays()
+    {
+        // Text that proves nothing either way: Core's count decides.
+        var inputs = new InputTally();
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+            inputs.Invoke(
+                Returns("UIA call timed out", Outcome("not-dispatched", 0), error: true),
+                tool: "windows_click"
             )
-            .RootElement;
-        Assert.True(reply.GetProperty("actionDispatched").GetBoolean());
-        Assert.Equal(1, reply.GetProperty("inputsSent").GetInt32());
-    }
-
-    [Fact]
-    public async Task AnErrorThatDoesNotProveARefusalCountsAsSent()
-    {
-        var inputs = new InputTally();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            inputs.Invoke(Returns("UIA call timed out", error: true))
         );
-
-        Assert.Equal(1, inputs.Sent);
-    }
-
-    [Fact]
-    public async Task APendingCallWentOut()
-    {
-        var inputs = new InputTally();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            inputs.Invoke(Returns("Invoke pending", outcome: new ToolOutcome("completed", "pending")))
-        );
-
-        Assert.Equal(1, inputs.Sent);
-    }
-
-    [Fact]
-    public async Task AReadIsNotInput()
-    {
-        var inputs = new InputTally();
-
-        await inputs.Invoke(Returns("Saved screenshot"), readOnly: true);
 
         Assert.Equal(0, inputs.Sent);
     }
 
     [Fact]
-    public void ADirectInputThatFailsAfterItsChecksPassedCounts()
+    public async Task APartialCallCountsEachInputThatWentOut()
     {
-        // GuardedInput's last check passed, so the click may have pressed the button before it threw.
         var inputs = new InputTally();
 
-        Assert.Throws<InvalidOperationException>(() =>
-            inputs.Dispatch(() => throw new InvalidOperationException("Mouse up failed after mouse down"))
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+            inputs.Invoke(
+                Returns("Failed to send keys: Completed 2 chord(s).", Outcome("partial", 2), error: true),
+                tool: "windows_send_keys"
+            )
         );
-        inputs.Dispatch(() => { });
 
         Assert.Equal(2, inputs.Sent);
+    }
+
+    [Fact]
+    public async Task ARefusalAfterTheTargetWasRestoredCounts()
+    {
+        // The refusal's text says no input was sent, but focusing the minimized target restored it first.
+        var inputs = new InputTally();
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+            inputs.Invoke(
+                Returns(
+                    "Failed to click w1e3: activation-denied: Windows kept 'WindowsTerminal' (PID 9) in the foreground. No input sent.",
+                    Outcome("partial", 1),
+                    error: true
+                ),
+                tool: "windows_click"
+            )
+        );
+
+        Assert.Equal(1, inputs.Sent);
+    }
+
+    [Fact]
+    public async Task APendingCallCountsItsDispatch()
+    {
+        var inputs = new InputTally();
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+            inputs.Invoke(Returns("Invoke pending", Outcome("completed", 1, provider: "pending")))
+        );
+
+        Assert.Equal(1, inputs.Sent);
+    }
+
+    [Fact]
+    public void ADirectSendCountsWhatCoreRecordedIncludingTheActivation()
+    {
+        // GuardedInput brought the target forward (one change) and then sent one input.
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd };
+        var inputs = new InputTally();
+        using (desktop.Install())
+        {
+            inputs.Dispatch(() =>
+            {
+                using var input = new GuardedInput(FakeDesktop.Target);
+                input.Send(() => { });
+            });
+        }
+
+        Assert.Equal(2, inputs.Sent);
+        Assert.Equal(1, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void ADirectSendRefusedBeforeAnythingChangedCountsNothing()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd, ActivationAllowed = false };
+        var inputs = new InputTally();
+        using (desktop.Install())
+        {
+            Assert.Throws<InputRefusedException>(() =>
+                inputs.Dispatch(() =>
+                {
+                    using var input = new GuardedInput(FakeDesktop.Target);
+                    input.Send(() => { });
+                })
+            );
+        }
+
+        Assert.Equal(0, inputs.Sent);
+        Assert.Equal(0, desktop.Dispatched);
     }
 
     [Fact]
@@ -132,7 +162,7 @@ public sealed class InputTallyTests
                     () =>
                     {
                         called = true;
-                        return Returns("Clicked")();
+                        return Returns("Clicked", Outcome("completed", 1))();
                     }
                 )
             )
@@ -140,83 +170,5 @@ public sealed class InputTallyTests
 
         Assert.False(called);
         Assert.Equal(0, inputs.Sent);
-    }
-
-    // Core's own wording when a multi-part tool stops part-way (SendKeysTool, TypeTools).
-    private const string SecondChordRefused =
-        "Failed to send keys: Input target/focus changed or is disabled; no further input sent. Completed 1 chord(s). "
-        + "A failing chord may have partially executed; inspect state before replaying input.";
-
-    [Theory]
-    [InlineData("windows_send_keys", SecondChordRefused)]
-    [InlineData(
-        "windows_send_keys",
-        "Failed to send keys: Stale element reference. Completed 2 chord(s). A failing chord may have partially executed; inspect state before replaying input."
-    )]
-    [InlineData(
-        "windows_type",
-        "Failed to type: Desktop input needs the user's approval: keyboard or mouse input from the user was observed; ask them before resuming. Ask the user, then call te3_interaction_begin. Typed 0 of 1 line(s); line 1 may be partly typed."
-    )]
-    [InlineData(
-        "windows_type",
-        "Failed to type: Input target/focus changed or is disabled; no further input sent. Typed 1 of 2 line(s); line 2 may be partly typed."
-    )]
-    [InlineData(
-        "windows_fill",
-        "Failed to fill w1e2: Desktop input needs the user's approval: keyboard or mouse input from the user was observed."
-    )]
-    [InlineData(
-        "windows_click",
-        "Failed to click w1e3: Input target/focus changed or is disabled; no further input sent."
-    )]
-    public async Task APartlySentCallCountsAsSent(string tool, string failure)
-    {
-        var inputs = new InputTally();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            inputs.Invoke(Returns(failure, error: true), tool: tool)
-        );
-
-        Assert.Equal(1, inputs.Sent);
-    }
-
-    [Fact]
-    public async Task KeysRefusedBeforeTheFirstChordSendNothing()
-    {
-        var inputs = new InputTally();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            inputs.Invoke(
-                Returns(
-                    "Failed to send keys: Desktop input is busy; no input sent. Completed 0 chord(s). No keyboard input was dispatched.",
-                    error: true
-                ),
-                tool: "windows_send_keys"
-            )
-        );
-
-        Assert.Equal(0, inputs.Sent);
-    }
-
-    [Fact]
-    public async Task ASearchClearThatLostFocusBetweenItsKeysIsNotRetried()
-    {
-        // ClearTomSearchTyped sends Ctrl+A then Backspace in one call; focus moved between them.
-        var inputs = new InputTally();
-        var attempts = 0;
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            NavigationRetry.Once(
-                () =>
-                {
-                    attempts++;
-                    return inputs.Invoke(Returns(SecondChordRefused, error: true), tool: "windows_send_keys");
-                },
-                () => inputs.Sent,
-                null
-            )
-        );
-
-        Assert.Equal(1, attempts);
     }
 }
