@@ -25,9 +25,10 @@ internal static class DialogCancel
     ];
 
     /// <summary>
-    /// Tries each button only while nothing has been sent: a missing button or a refusal that sent no input moves on
-    /// to the next one. Once a click may have gone out, nothing else is clicked; if the dialog stays open the click's
-    /// outcome is reported for inspection.
+    /// Tries each button only while nothing has been sent: a missing button, or a click Core reports as not
+    /// dispatched, moves on to the next one. Once a click may have gone out (completed, partial, pending, or a failure
+    /// Core did not report on), nothing else is clicked; if the dialog stays open the click's outcome is reported for
+    /// inspection.
     /// </summary>
     public static async Task Run(Steps steps)
     {
@@ -48,7 +49,7 @@ internal static class DialogCancel
             {
                 await steps.Click(reference);
             }
-            catch (Exception error) when (InputProof.NotSent(error.Message, "windows_click"))
+            catch (Exception error) when (CoreFailure.NotDispatched(error))
             {
                 continue;
             }
