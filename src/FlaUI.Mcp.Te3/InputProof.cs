@@ -26,8 +26,9 @@ internal static class InputProof
         TimeSpan.FromSeconds(1)
     );
 
-    // Tools that send several inputs in one call, so a grant or stale-ref refusal may follow an earlier one.
-    private static readonly HashSet<string> SeveralInputs = ["windows_send_keys", "windows_type", "windows_fill"];
+    // Tools that send a single input, checked first, so a grant or stale-ref refusal from them proves nothing went
+    // out. Every other tool may send several (send_keys, type, fill, a mouse drag or scroll) and is never proven.
+    private static readonly HashSet<string> SingleInput = ["windows_click"];
 
     // Core's GuardedInput text, at the start of the error or after a tool's "Failed to ...: " prefix.
     // TODO(core): report activation-denied as a structured outcome instead of matching its text.
@@ -39,7 +40,7 @@ internal static class InputProof
 
     /// <summary>
     /// Whether the failure proves no input went out. A partial-input marker always means something was sent. A grant
-    /// or stale-ref refusal proves nothing was sent only for a known tool that sends a single input.
+    /// or stale-ref refusal proves nothing was sent only for a tool on the single-input allowlist.
     /// </summary>
     /// <param name="tool">The Core tool that failed, when known.</param>
     internal static bool NotSent(string message, string? tool = null)
@@ -54,7 +55,7 @@ internal static class InputProof
             return true;
         }
 
-        return tool != null && !SeveralInputs.Contains(tool) && RefusedBeforeInput.IsMatch(message);
+        return tool != null && SingleInput.Contains(tool) && RefusedBeforeInput.IsMatch(message);
     }
 
     /// <summary>The desktop condition that refused the input, when retrying cannot help: activation-denied or desktop-unavailable.</summary>

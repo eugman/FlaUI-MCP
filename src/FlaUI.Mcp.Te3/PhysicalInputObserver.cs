@@ -33,8 +33,19 @@ internal sealed class PhysicalInputObserver : IInputObserver
     {
         keyboard = (code, message, data) => OnInput(code, message, data, true);
         mouse = (code, message, data) => OnInput(code, message, data, false);
-        thread = new Thread(Run) { IsBackground = true, Name = "TE3 input observer" };
-        pulse = new Thread(Pulse) { IsBackground = true, Name = "TE3 input observer heartbeat" };
+        // Above normal, so a busy machine rarely starves the hooks or the beat past the 1 s latch.
+        thread = new Thread(Run)
+        {
+            IsBackground = true,
+            Name = "TE3 input observer",
+            Priority = ThreadPriority.AboveNormal,
+        };
+        pulse = new Thread(Pulse)
+        {
+            IsBackground = true,
+            Name = "TE3 input observer heartbeat",
+            Priority = ThreadPriority.AboveNormal,
+        };
         thread.Start();
         ready.Wait();
         if (failure != null)
