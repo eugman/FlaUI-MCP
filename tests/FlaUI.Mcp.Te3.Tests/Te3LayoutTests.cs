@@ -108,4 +108,50 @@ public sealed class Te3LayoutTests
         Assert.DoesNotContain("nothing else", payload.GetProperty("error").GetString());
         Assert.Equal("Messages", Assert.Single(panes));
     }
+
+    private static async Task<System.Text.Json.JsonElement> FailedProgress(Exception failure)
+    {
+        var steps = new Queue<string>(["Properties", "TOM Explorer"]);
+        var error = await Assert.ThrowsAsync<LayoutSteps.ProgressException>(() =>
+            LayoutSteps.Progress(
+                "closed",
+                sent =>
+                {
+                    var pane = steps.Dequeue();
+                    sent(pane);
+                    return pane == "TOM Explorer" ? throw failure : Task.FromResult<object?>(pane);
+                }
+            )
+        );
+        var result = Te3Layout.Failure(error);
+        return System.Text.Json.JsonDocument.Parse(result.Content[0].Text!).RootElement.GetProperty("closed");
+    }
+
+    [Fact]
+    public async Task AStepWhoseInputWentOutBeforeItFailedIsRecordedAsAttempted()
+    {
+        var closed = await FailedProgress(
+            new InvalidOperationException(Te3Layout.DialogOpened("TOM Explorer", "Save?"))
+        );
+
+        Assert.Equal("Properties", closed[0].GetString());
+        Assert.Equal("TOM Explorer", closed[1].GetProperty("attempted").GetString());
+        Assert.Contains("Save?", closed[1].GetProperty("error").GetString());
+    }
+
+    [Theory]
+    [InlineData("cancel")]
+    [InlineData("com")]
+    public async Task CancellationOrAComFailureKeepsTheProgressRecord(string kind)
+    {
+        Exception failure =
+            kind == "cancel"
+                ? new OperationCanceledException("stopped")
+                : new System.Runtime.InteropServices.COMException("element gone");
+
+        var closed = await FailedProgress(failure);
+
+        Assert.Equal("Properties", closed[0].GetString());
+        Assert.Equal("TOM Explorer", closed[1].GetProperty("attempted").GetString());
+    }
 }

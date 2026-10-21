@@ -12,6 +12,10 @@ internal static class LayoutSteps
         public List<object> Completed => completed;
     }
 
+    /// <summary>Like <see cref="Progress(string, Func{Task{object?}})"/>; the step calls sent before its input goes out.</summary>
+    public static Task<List<object>> Progress(string name, Func<Action<object>, Task<object?>> step) =>
+        Progress(name, () => step(_ => { }));
+
     /// <summary>Runs step until it returns null and collects what each step did, also when a later step fails.</summary>
     public static async Task<List<object>> Progress(string name, Func<Task<object?>> step)
     {
