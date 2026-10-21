@@ -33,8 +33,24 @@ internal static class LayoutFiles
         bool whileRunning
     )
     {
+        var named =
+            $"path is a folder name under {root}, not a full path or one that leaves it ('{path}'); nothing was copied.";
+        if (Path.IsPathRooted(path))
+        {
+            throw new ArgumentException(named);
+        }
+
         Directory.CreateDirectory(root);
-        var target = ArtifactFiles.ContainedPath(path, root);
+        string target;
+        try
+        {
+            target = ArtifactFiles.ContainedPath(path, root);
+        }
+        catch (ArgumentException error)
+        {
+            throw new ArgumentException(named, error);
+        }
+
         return snapshot ? Snapshot(settings, target) : Restore(target, settings, te3Running(), whileRunning);
     }
 

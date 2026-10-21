@@ -108,7 +108,7 @@ public sealed partial class Te3Layout
                 path = new
                 {
                     type = "string",
-                    description = "snapshot: a new folder to copy the layout files into; restore: a snapshot folder.",
+                    description = "snapshot: the name of a new folder under %LOCALAPPDATA%/FlaUI.Mcp.Te3/layout-snapshots; restore: the name of a snapshot there. A full path, or one that leaves that folder, is refused.",
                 },
                 whileRunning = new
                 {

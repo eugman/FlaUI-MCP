@@ -160,6 +160,7 @@ public sealed class LayoutFilesTests : IDisposable
             .ExecuteAsync(JsonSerializer.SerializeToElement(new { action = "snapshot", path }));
 
         Assert.Equal(true, refused.IsError);
+        Assert.Contains("a folder name under", refused.Content.Single().Text);
         Assert.False(Directory.Exists(Path.GetFullPath(Path.Combine(root, path))));
     }
 }
