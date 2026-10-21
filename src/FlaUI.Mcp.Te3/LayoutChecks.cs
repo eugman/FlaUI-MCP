@@ -1,4 +1,5 @@
 using System.Drawing;
+using FlaUI.Mcp.Core;
 
 /// <summary>
 /// The checks that decide whether a te3_layout change happened, kept apart from the UIA reads so they can be tested:
@@ -96,4 +97,17 @@ internal static class LayoutChecks
             await delay(PollMs);
         }
     }
+
+    /// <summary>
+    /// The titled, non-tool window of the TE3 process that a click opened: one that was not open in
+    /// <paramref name="before"/>, read before the click. Null when there is none.
+    /// </summary>
+    public static Win32WindowInfo? NewDialog(
+        IEnumerable<Win32WindowInfo> windows,
+        nint main,
+        IReadOnlyCollection<nint> before
+    ) =>
+        windows.FirstOrDefault(w =>
+            w.Hwnd != main && !before.Contains(w.Hwnd) && w.Title.Length > 0 && !w.IsToolWindow
+        );
 }

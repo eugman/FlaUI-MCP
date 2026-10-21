@@ -137,8 +137,9 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
             };
         }
 
+        var before = LayoutSteps.WindowsOf(window);
         await Click(inputs, handle, pane.Close);
-        await LayoutSteps.RequireNoDialog(window, pane.Title);
+        await LayoutSteps.RequireNoDialog(window, pane.Title, before);
         if (Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title)))
         {
             throw new InvalidOperationException("Pane remained visible after Close; inspect before retrying.");
@@ -243,8 +244,9 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
                 }
 
                 attempted.Add(next.Title);
+                var before = LayoutSteps.WindowsOf(window);
                 await LayoutSteps.Sending(inputs, sent, next.Title, () => Click(inputs, handle, next.Close));
-                await LayoutSteps.RequireNoDialog(window, next.Title);
+                await LayoutSteps.RequireNoDialog(window, next.Title, before);
                 return next.Title;
             }
         );

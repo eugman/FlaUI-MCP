@@ -161,17 +161,19 @@ internal static class LayoutSteps
         return JsonSerializer.Serialize(reply, McpProtocol.JsonOptions);
     }
 
-    // Closing a pane can open a dialog on an unfamiliar build. Watch for ~1s and
-    // stop there: answering it is the caller's decision.
-    public static async Task RequireNoDialog(Window window, string closing)
+    /// <summary>The TE3 process's top-level windows now: read before a click, for <see cref="RequireNoDialog"/>.</summary>
+    public static IReadOnlyCollection<nint> WindowsOf(Window window) =>
+        Win32Desktop.GetTopLevelWindows(window.Properties.ProcessId.ValueOrDefault).Select(w => w.Hwnd).ToList();
+
+    // Closing a pane can open a dialog on an unfamiliar build. Watch for ~1s and stop there: answering it is the
+    // caller's decision. A window already open before the click (such as a floating pane) is not one it opened.
+    public static async Task RequireNoDialog(Window window, string closing, IReadOnlyCollection<nint> before)
     {
         var pid = window.Properties.ProcessId.ValueOrDefault;
         var main = window.Properties.NativeWindowHandle.ValueOrDefault;
         for (var waited = 0; waited <= 1000; waited += 200)
         {
-            var dialog = Win32Desktop
-                .GetTopLevelWindows(pid)
-                .FirstOrDefault(w => w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow);
+            var dialog = LayoutChecks.NewDialog(Win32Desktop.GetTopLevelWindows(pid), main, before);
             if (dialog != null)
             {
                 throw new InvalidOperationException(DialogOpened(closing, dialog.Title));

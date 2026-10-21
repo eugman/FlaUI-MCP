@@ -102,4 +102,18 @@ public sealed class LayoutChecksTests
         Assert.Contains("still shows Maximize", error.Message);
         Assert.InRange(waited, 1000, 1200);
     }
+
+    [Fact]
+    public void AWindowOpenBeforeTheClickIsNotADialogTheClickOpened()
+    {
+        // A floating Properties window left by an earlier undock failed every later close as "opened Properties".
+        var main = new Win32WindowInfo(0x10, "Model - Tabular Editor 3", 7, true, false, false);
+        var floating = new Win32WindowInfo(0x30, "Properties", 7, true, false, false);
+        var dialog = new Win32WindowInfo(0x40, "Save changes?", 7, true, false, false);
+        var tool = new Win32WindowInfo(0x50, "Tip", 7, true, true, false);
+        var untitled = new Win32WindowInfo(0x60, "", 7, true, false, false);
+
+        Assert.Null(LayoutChecks.NewDialog([main, floating, tool, untitled], main.Hwnd, [main.Hwnd, floating.Hwnd]));
+        Assert.Equal(dialog, LayoutChecks.NewDialog([main, floating, dialog], main.Hwnd, [main.Hwnd, floating.Hwnd]));
+    }
 }
