@@ -71,6 +71,40 @@ public sealed class CompanionDispatchTests
     }
 
     [Fact]
+    public void AnAppWhoseProviderIsStillHeldIsReportedAsPendingNotAsThisCallPending()
+    {
+        // An earlier call still holds TE3's provider: this call sent nothing and never will, as Core's BlockedResult.
+        var pending = new PendingInvokeTracker().Begin(Environment.ProcessId, "Invoke Save");
+        pending.ModalTitle = "Save changes?";
+
+        var result = Te3Companion.Failure("attach", "validate request", new ProviderBlockedException(pending), 0);
+
+        Assert.Equal("not-dispatched", result.Outcome?.Dispatch);
+        Assert.Equal("pending", result.Outcome?.Provider);
+        Assert.Equal(pending.OperationId, result.Outcome?.PendingPatternId);
+        Assert.Equal("Save changes?", result.Outcome?.ModalTitle);
+    }
+
+    [Fact]
+    public void ACoreCallBlockedByAnEarlierPendingCallSentNothing()
+    {
+        var blocked = new CoreCallException(
+            "windows_click",
+            new FlaUI.Mcp.McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Text = "Blocked: an earlier call is still pending." }],
+                Outcome = new ToolOutcome("not-dispatched", "pending") { Status = "failed", InputsSent = 0 },
+            }
+        );
+
+        var result = Te3Companion.Failure("navigate", "click", blocked, 0);
+
+        Assert.Equal("not-dispatched", result.Outcome?.Dispatch);
+        Assert.Equal("pending", result.Outcome?.Provider);
+    }
+
+    [Fact]
     public void AFailureCarriesTheRefusalAsFields()
     {
         var refused = new InputRefusedException(new InputRefusal("activation-denied", "Windows kept another window."));
