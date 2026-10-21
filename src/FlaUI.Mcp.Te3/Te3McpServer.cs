@@ -36,6 +36,7 @@ internal static class Te3McpServer
         registry.RegisterTool(new Te3Layout(host, interaction));
         registry.RegisterTool(new Te3Layout(host, interaction, readOnly: true));
         registry.RegisterTool(FlaUI.Mcp.Te3.Te3NativePreflightTool.Create());
+        registry.RegisterTool(new Te3EnvCheck());
 
         MutationGuard.BeforeMutation.Value = interaction.Require;
     }

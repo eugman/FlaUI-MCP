@@ -39,6 +39,7 @@ public sealed class ToolAnnotationTests : IDisposable
     [InlineData("te3_model_state")]
     [InlineData("te3_native_preflight")]
     [InlineData("te3_layout_read")]
+    [InlineData("te3_env_check")]
     public void TheTe3ReadsArePlainReadsNotStatusTools(string name)
     {
         // Core's status hint is for instant in-memory reports on other calls, run beside live calls without the
