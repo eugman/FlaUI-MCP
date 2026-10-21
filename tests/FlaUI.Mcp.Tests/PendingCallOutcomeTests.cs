@@ -96,6 +96,42 @@ public sealed class PendingCallOutcomeTests
     }
 
     [Fact]
+    public void ACallHeldInThePermissionCheckWhenTheLeaseIsReleasedIsNeverSent()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        using var hold = new ManualResetEventSlim();
+        MutationGuard.BeforeMutation.Value = () => hold.Wait();
+        var tracker = new PendingInvokeTracker(_ => 1);
+        var sent = false;
+        try
+        {
+            var result = WindowMutation.Uia(
+                Pid,
+                "Invoke on 'Save'",
+                () => sent = true,
+                tracker,
+                gracePeriod: TimeSpan.FromMilliseconds(100)
+            );
+            Assert.Equal(PatternCallOutcome.StillPending, result.Outcome);
+            Assert.False(result.Dispatched);
+        }
+        finally
+        {
+            hold.Set();
+            MutationGuard.BeforeMutation.Value = null;
+            OperationContext.Current.Value = null;
+        }
+
+        WaitUntil(() => !tracker.TryGetPending(Pid, out _));
+        Assert.False(sent);
+        Assert.Equal(0, desktop.PatternCalls);
+        Assert.Equal(0, operation.InputsSent);
+    }
+
+    [Fact]
     public void AFailedWindowReadWhileWaitingDoesNotAbandonTheCall()
     {
         var reads = 0;

@@ -112,21 +112,24 @@ internal static class WindowMutation
         {
             validate?.Invoke();
             GuardedInput.RequireDrivable(processId, InputDesktop.Current);
-            gate.Enter();
         }
 
-        void Call() => InputDesktop.Current.CallPattern(call);
-        void Guarded()
-        {
-            if (counted)
-            {
-                MutationGuard.Execute(Validate, Call);
-            }
-            else
-            {
-                MutationGuard.ExecuteUncounted(Validate, Call);
-            }
-        }
+        // The gate is entered after every check (validation, integrity, permission) and right before the count
+        // and the call, so a call held anywhere in its checks when the tool gives up can never go out.
+        void Guarded() =>
+            MutationGuard.ExecuteUncounted(
+                Validate,
+                () =>
+                {
+                    gate.Enter();
+                    if (counted)
+                    {
+                        MutationGuard.RecordDispatch();
+                    }
+
+                    InputDesktop.Current.CallPattern(call);
+                }
+            );
 
         if (pending == null)
         {
