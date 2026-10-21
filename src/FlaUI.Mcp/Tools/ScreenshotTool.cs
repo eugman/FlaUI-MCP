@@ -30,6 +30,12 @@ public class ScreenshotTool : ToolBase
 
     public override string Name => "windows_screenshot";
 
+    protected override bool Observation => true;
+
+    protected override bool Recovery => true;
+
+    protected override IReadOnlyList<string> MutatingWhenArgument => ["parkPointer"];
+
     // Not read-only: parkPointer moves the pointer off the window before capturing, and that is counted.
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
 

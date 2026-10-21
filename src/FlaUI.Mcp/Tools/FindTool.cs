@@ -14,6 +14,8 @@ public sealed class FindTool(ElementQuery query) : ToolBase
 
     public override string Name => "windows_find";
 
+    protected override bool Observation => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
     public override string Description =>
         "Find controls with exact UIA selectors (nameContains for a partial name) and optional ancestor scope (within, e.g. a pane's TitleBar to tell identical Close buttons apart; ancestry:true shows each match's parents); returns compact properties, patterns and fresh refs. Omit selector for bounded raw-tree inspection. An absent state field means unknown. Does not invalidate snapshot refs.";

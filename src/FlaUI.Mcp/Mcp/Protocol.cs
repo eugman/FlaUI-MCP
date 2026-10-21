@@ -134,6 +134,18 @@ public record McpToolAnnotations
     [JsonPropertyName("openWorldHint")]
     public bool? OpenWorldHint { get; init; }
 
+    /// <summary>Reads the app's state; a successful call is evidence of what is on screen.</summary>
+    [JsonPropertyName("observationHint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ObservationHint { get; init; }
+
+    /// <summary>Usable while an app's UI Automation provider is blocked (Win32 only, by handle).</summary>
+    [JsonPropertyName("recoveryHint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? RecoveryHint { get; init; }
+
+    /// <summary>Arguments that make an otherwise observing call change the desktop (screenshot parkPointer).</summary>
+    [JsonPropertyName("mutatingWhenArgument"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? MutatingWhenArgument { get; init; }
+
     /// <summary>
     /// Set by status tools: read-only tools that report on other calls. With <see cref="ReadOnlyHint"/>
     /// true, the server answers them at once, never refused for capacity and never waiting for the serial

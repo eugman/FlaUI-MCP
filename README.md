@@ -70,13 +70,32 @@ Then add the server to your MCP client:
 
 Every tool in `tools/list` carries MCP `annotations`, and `flaui/operations/status` echoes them on each operation, so a client can tell a failed observation (safe to repeat) from a failed mutation (inspect before repeating):
 
-| Hint | Core tools |
-|---|---|
-| `readOnlyHint: true` | `operation_status` (also `statusHint`, so it is answered while other calls block), `find`, `wait`, `snapshot`, `get_text`, `list_windows`, `get_clipboard` |
-| `readOnlyHint: false`, `destructiveHint: true` | `close`, `fill`, `send_keys`, `click`, `mouse`, `paste`, `batch`: they can remove or overwrite content |
-| `readOnlyHint: false`, `destructiveHint: false` | `type`, `launch`; also `idempotentHint: true` for `focus`, `set_window_state`, `place_window`, `screenshot` (its `parkPointer` option moves the pointer before capturing and counts that as input) |
+<!-- tool-facts:begin -->
+| Tool | readOnly | destructive | idempotent | observation | recovery | mutating when |
+|---|---|---|---|---|---|---|
+| `windows_batch` |  | yes |  |  |  |  |
+| `windows_click` |  | yes |  |  |  |  |
+| `windows_close` |  | yes |  |  | yes |  |
+| `windows_fill` |  | yes |  |  |  |  |
+| `windows_find` | yes |  | yes | yes |  |  |
+| `windows_focus` |  |  | yes |  | yes |  |
+| `windows_get_clipboard` | yes |  | yes | yes |  |  |
+| `windows_get_text` | yes |  | yes | yes |  |  |
+| `windows_launch` |  |  |  |  |  |  |
+| `windows_list_windows` | yes |  | yes | yes | yes |  |
+| `windows_mouse` |  | yes |  |  |  |  |
+| `windows_operation_status` | yes |  | yes |  | yes |  |
+| `windows_paste` |  | yes |  |  |  |  |
+| `windows_place_window` |  |  | yes |  |  |  |
+| `windows_screenshot` |  |  | yes | yes | yes | `parkPointer` |
+| `windows_send_keys` |  | yes |  |  | yes |  |
+| `windows_set_window_state` |  |  | yes |  |  |  |
+| `windows_snapshot` | yes |  | yes | yes |  |  |
+| `windows_type` |  |  |  |  |  |  |
+| `windows_wait` | yes |  | yes | yes |  |  |
+<!-- tool-facts:end -->
 
-`openWorldHint` is false throughout. A product tool sets its own hints by overriding `ToolBase.Annotations` with `McpToolAnnotations.ReadOnly` or `McpToolAnnotations.Input(destructive: ..., idempotent: ...)`; a tool that does not is listed without annotations, which a client must treat as a possible mutation.
+The table is generated from each tool's `ToolFacts` (run the offline tests with `FLAUI_APPROVE_TOOL_SCHEMAS=1` to rewrite it). `observation` marks a call whose success is evidence of what is on screen, `recovery` one usable while an app's UI Automation provider is blocked, and `mutating when` the arguments that make an observing call change the desktop; `tools/list` carries them as `observationHint`, `recoveryHint` and `mutatingWhenArgument`. `openWorldHint` is false throughout. A product tool sets its own hints by overriding `ToolBase.Annotations` with `McpToolAnnotations.ReadOnly` or `McpToolAnnotations.Input(destructive: ..., idempotent: ...)`; a tool that does not is listed without annotations, which a client must treat as a possible mutation.
 
 Product hosts embed the core and may expose only some of these. `launch`, `list_windows`, `focus`, `close`, `get_text` and `batch` are the desktop-management tools that a host can leave out.
 

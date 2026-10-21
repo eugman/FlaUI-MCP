@@ -74,7 +74,7 @@ public sealed partial class SchemaParityTests
     {
         using var host = new AutomationHost(new ProcessPolicy(["test-app"]), includeDesktopTools: true);
         var tool = host.Tools.All.Single(t => t.Name == name);
-        var schema = JsonSerializer.SerializeToElement(tool.GetDefinition().InputSchema, McpProtocol.JsonOptions);
+        var schema = JsonSerializer.SerializeToElement(((ToolBase)tool).Facts.Schema, McpProtocol.JsonOptions);
         var declared = schema.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet();
         var source = ClassSource(tool.GetType().Name);
         Assert.False(string.IsNullOrEmpty(source), $"No source found for {tool.GetType().Name}");

@@ -26,6 +26,8 @@ public class SnapshotTool : ToolBase
 
     public override string Name => "windows_snapshot";
 
+    protected override bool Observation => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
 
     public override string Description =>

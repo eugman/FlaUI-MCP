@@ -23,6 +23,10 @@ public class ListWindowsTool : ToolBase
 
     public override string Name => "windows_list_windows";
 
+    protected override bool Observation => true;
+
+    protected override bool Recovery => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
 
     public override string Description =>
@@ -80,6 +84,8 @@ public class FocusWindowTool : ToolBase
     }
 
     public override string Name => "windows_focus";
+
+    protected override bool Recovery => true;
 
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
 
@@ -200,6 +206,8 @@ public class CloseWindowTool : ToolBase
     }
 
     public override string Name => "windows_close";
+
+    protected override bool Recovery => true;
 
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 

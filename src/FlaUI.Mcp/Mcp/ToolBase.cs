@@ -25,14 +25,46 @@ public abstract class ToolBase : ITool
     /// <summary>MCP annotations for tools/list; null leaves a client to assume the tool may mutate.</summary>
     public virtual McpToolAnnotations? Annotations => null;
 
-    public McpTool GetDefinition() =>
-        new()
+    /// <summary>Reads the app's state, so a successful call is evidence of what is on screen.</summary>
+    protected virtual bool Observation => false;
+
+    /// <summary>Usable while an app's UI Automation provider is blocked.</summary>
+    protected virtual bool Recovery => false;
+
+    /// <summary>Arguments that make an otherwise observing call change the desktop.</summary>
+    protected virtual IReadOnlyList<string> MutatingWhenArgument => [];
+
+    /// <summary>The tool's facts in one record; its definition and the README table are built from it.</summary>
+    public ToolFacts Facts =>
+        new(
+            Name,
+            Description,
+            FactAnnotations(),
+            InputSchema,
+            InputFree: Annotations?.ReadOnlyHint == true,
+            Observation,
+            Recovery,
+            MutatingWhenArgument
+        );
+
+    // The MCP annotations with the fact hints added; null (no hints) when the tool declares none.
+    private McpToolAnnotations? FactAnnotations()
+    {
+        if (Annotations is not { } annotations)
         {
-            Name = Name,
-            Description = Description,
-            InputSchema = InputSchema,
-            Annotations = Annotations,
+            return null;
+        }
+
+        bool? Hint(bool value) => value ? true : null;
+        return annotations with
+        {
+            ObservationHint = Hint(Observation),
+            RecoveryHint = Hint(Recovery),
+            MutatingWhenArgument = MutatingWhenArgument.Count > 0 ? MutatingWhenArgument : null,
         };
+    }
+
+    public McpTool GetDefinition() => Facts.Definition();
 
     public abstract Task<McpToolResult> ExecuteAsync(JsonElement? arguments);
 

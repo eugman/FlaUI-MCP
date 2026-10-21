@@ -17,6 +17,8 @@ public sealed class GetClipboardTool(ProcessPolicy? policy = null, Func<int>? cl
 
     public override string Name => "windows_get_clipboard";
 
+    protected override bool Observation => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
 
     public override string Description =>
