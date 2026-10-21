@@ -125,17 +125,29 @@ function RunPart($name, $files, $expected) {
 }
 
 # Stryker's builds must not leave a compiler server or build nodes running with a worktree as their
-# working directory: that keeps the folder busy after the run.
-# The offline tests also set this themselves; the real desktop then refuses every change.
-$env:FLAUI_OFFLINE_TESTS = '1'
-$env:UseSharedCompilation = 'false'
-$env:MSBUILDDISABLENODEREUSE = '1'
-$expected = OfflineTestCount
-Write-Host "Offline project: $expected tests."
+# working directory: that keeps the folder busy after the run. The offline tests also set
+# FLAUI_OFFLINE_TESTS themselves; the real desktop then refuses every change. All three are restored after.
+$saved = @{
+    FLAUI_OFFLINE_TESTS = $env:FLAUI_OFFLINE_TESTS
+    UseSharedCompilation = $env:UseSharedCompilation
+    MSBUILDDISABLENODEREUSE = $env:MSBUILDDISABLENODEREUSE
+}
 $failed = 0
-foreach ($name in $parts.Keys) {
-    if ($Part -ne 'all' -and $Part -ne $name) { continue }
-    if ((RunPart $name $parts[$name] $expected) -ne 0) { $failed = 1 }
+try {
+    $env:FLAUI_OFFLINE_TESTS = '1'
+    $env:UseSharedCompilation = 'false'
+    $env:MSBUILDDISABLENODEREUSE = '1'
+    $expected = OfflineTestCount
+    Write-Host "Offline project: $expected tests."
+    foreach ($name in $parts.Keys) {
+        if ($Part -ne 'all' -and $Part -ne $name) { continue }
+        if ((RunPart $name $parts[$name] $expected) -ne 0) { $failed = 1 }
+    }
+}
+finally {
+    $env:FLAUI_OFFLINE_TESTS = $saved.FLAUI_OFFLINE_TESTS
+    $env:UseSharedCompilation = $saved.UseSharedCompilation
+    $env:MSBUILDDISABLENODEREUSE = $saved.MSBUILDDISABLENODEREUSE
 }
 
 exit $failed

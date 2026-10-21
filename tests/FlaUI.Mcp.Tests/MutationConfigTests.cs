@@ -133,4 +133,17 @@ public sealed class MutationConfigTests
         );
         Assert.Contains("has no common history with core/main", next);
     }
+
+    [Fact]
+    public void TheMutationScriptRestoresTheEnvironmentItChanged()
+    {
+        var script = File.ReadAllText(RepoFile(Path.Combine("scripts", "mutation.ps1")));
+        var finallyAt = script.LastIndexOf("finally", StringComparison.Ordinal);
+
+        Assert.True(finallyAt >= 0);
+        var restore = script[finallyAt..];
+        Assert.Contains("$env:FLAUI_OFFLINE_TESTS = $saved.FLAUI_OFFLINE_TESTS", restore);
+        Assert.Contains("$env:UseSharedCompilation = $saved.UseSharedCompilation", restore);
+        Assert.Contains("$env:MSBUILDDISABLENODEREUSE = $saved.MSBUILDDISABLENODEREUSE", restore);
+    }
 }
