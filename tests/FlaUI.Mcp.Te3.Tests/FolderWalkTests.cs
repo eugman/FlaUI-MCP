@@ -184,9 +184,21 @@ public sealed class FolderWalkTests
     }
 
     [Fact]
-    public async Task ARowWithNoTypeIsNeverTakenForTheFolder()
+    public async Task AnUntypedRowAtTheFolderDepthWithADeeperRowBelowIsTheFolder()
     {
+        // Live, folder rows read "unknown type" (the status bar does not follow a selected folder), so the keyboard
+        // fallback never entered the folder. Placed by name and exact depth, with a deeper row below, it is one.
         var tree = new FakeTree(At(2, "Brands", "Table"), At(3, "1. Brand Hierarchy", null), At(4, "Brand", "Column"));
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
+
+        Assert.True(walk.Found, walk.Reason);
+    }
+
+    [Fact]
+    public async Task AnUntypedRowNamedLikeTheFolderWithNothingBelowItIsNotTheFolder()
+    {
+        var tree = new FakeTree(At(2, "Brands", "Table"), At(3, "1. Brand Hierarchy", null), At(3, "Brand", "Column"));
 
         var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
 

@@ -99,7 +99,9 @@ internal sealed class WalkPlace(string table, string? folder)
             return null;
         }
 
-        return depth == own + 1 + inside.Count && IsFolder(row) && row.Value == segments[inside.Count] ? depth : null;
+        return depth == own + 1 + inside.Count && MaybeFolder(row) && row.Value == segments[inside.Count]
+            ? depth
+            : null;
     }
 
     /// <summary>The object was found under the table, but not inside the folder path.</summary>
@@ -114,6 +116,10 @@ internal sealed class WalkPlace(string table, string? folder)
         seenFolder
             ? $"Walked through display folder '{folder}' under table '{table}' without finding the object."
             : $"Walked through table '{table}' and found no display folder '{folder}' under it for this search.";
+
+    // A folder, or a row of unknown type: the walk reads no type for a folder (the status bar does not follow one),
+    // and an untyped row only counts while deeper rows follow it, since the next row at its depth leaves it again.
+    private static bool MaybeFolder(RowObservation row) => row.Type == null || IsFolder(row);
 
     private static bool IsFolder(RowObservation row) =>
         row.Type is { } type
