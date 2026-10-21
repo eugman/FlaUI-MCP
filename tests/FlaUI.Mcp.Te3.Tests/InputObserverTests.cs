@@ -27,7 +27,7 @@ public sealed class InputObserverTests
         interaction.Begin("Open Preferences", userApproved: true);
 
         started[0].Dead = true;
-        Assert.Throws<InvalidOperationException>(interaction.Require);
+        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
 
         interaction.Begin("Open Preferences again", userApproved: true);
         interaction.Require();

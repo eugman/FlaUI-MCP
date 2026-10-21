@@ -30,13 +30,13 @@ public sealed class ServerGrantTests : IDisposable
     [Fact]
     public void EveryCoreMutationNeedsTheGrantAndTheUsersInputRevokesIt()
     {
-        Assert.Throws<InvalidOperationException>(MutationGuard.CheckPermission);
+        Assert.Throws<InputRefusedException>(MutationGuard.CheckPermission);
 
         interaction.Begin("Click Save", userApproved: true);
         MutationGuard.CheckPermission();
 
         input++;
-        Assert.Throws<InvalidOperationException>(MutationGuard.CheckPermission);
+        Assert.Throws<InputRefusedException>(MutationGuard.CheckPermission);
     }
 
     [Theory]

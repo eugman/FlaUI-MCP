@@ -65,7 +65,7 @@ public sealed class RunGrantTests : IDisposable
     {
         using var interaction = new Te3Interaction(() => 0);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<FlaUI.Mcp.Core.InputRefusedException>(() =>
             RunExecutor.Execute(
                 new RunConfig { Output = root },
                 new Recipe("test", "page", false, _ => Task.CompletedTask),
@@ -77,6 +77,7 @@ public sealed class RunGrantTests : IDisposable
         );
 
         Assert.Contains("approval", error.Message);
+        Assert.Equal(Te3Interaction.ApprovalRequired, error.Refusal.Code);
         Assert.Empty(Directory.GetDirectories(root));
     }
 

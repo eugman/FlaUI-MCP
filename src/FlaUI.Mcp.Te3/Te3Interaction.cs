@@ -13,6 +13,13 @@ public sealed class Te3Interaction : IDisposable
     private long inputAtApproval;
     private string? batch;
     private string reason = "the user has not approved a batch.";
+    private string code = ApprovalRequired;
+
+    /// <summary>The refusal code when no batch was approved, or it ended.</summary>
+    public const string ApprovalRequired = "approval_required";
+
+    /// <summary>The refusal code once the user's own input revoked the batch.</summary>
+    public const string FocusRevoked = "focus_revoked";
 
     /// <param name="physicalInput">Counts non-injected input; null hooks the real keyboard and mouse once a batch begins.</param>
     public Te3Interaction(Func<long>? physicalInput = null)
@@ -59,6 +66,7 @@ public sealed class Te3Interaction : IDisposable
             inputAtApproval = InputSequence();
             batch = description;
             reason = "approved.";
+            code = ApprovalRequired;
         }
     }
 
@@ -68,6 +76,7 @@ public sealed class Te3Interaction : IDisposable
         {
             batch = null;
             reason = why;
+            code = ApprovalRequired;
         }
     }
 
@@ -80,11 +89,13 @@ public sealed class Te3Interaction : IDisposable
             {
                 batch = null;
                 reason = "keyboard or mouse input from the user was observed; ask them before resuming.";
+                code = FocusRevoked;
             }
 
             if (batch == null)
             {
-                throw new InvalidOperationException(
+                throw Refusal(
+                    code,
                     $"Desktop input needs the user's approval: {reason} Ask the user, then call {Te3InteractionTool.Begin}."
                 );
             }
@@ -107,6 +118,10 @@ public sealed class Te3Interaction : IDisposable
             inputAtApproval = InputSequence();
         }
     }
+
+    // A typed refusal, noted on the running operation so Core's outcome carries the code; it sent nothing itself.
+    private static InputRefusedException Refusal(string code, string message) =>
+        InputRefusedException.Record(new InputRefusal(code, message) { ActionDispatched = false });
 
     /// <summary>Requires the grant now and before every input the core tools send, until disposed.</summary>
     public IDisposable Guard()

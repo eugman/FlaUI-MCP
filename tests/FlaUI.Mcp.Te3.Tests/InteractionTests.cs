@@ -13,7 +13,7 @@ public sealed class InteractionTests
     public void InputIsRefusedUntilTheUserApprovesABatch()
     {
         using var interaction = Grant();
-        var error = Assert.Throws<InvalidOperationException>(interaction.Require);
+        var error = Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
         Assert.Contains(Te3InteractionTool.Begin, error.Message);
         Assert.Contains("has not approved a batch", error.Message);
         var refusal = Assert.Throws<ArgumentException>(() =>
@@ -33,11 +33,11 @@ public sealed class InteractionTests
 
         input++;
 
-        var error = Assert.Throws<InvalidOperationException>(interaction.Require);
+        var error = Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
         Assert.Contains("keyboard or mouse", error.Message);
         Assert.False(interaction.Active);
         // Revoked for good: the count settling again does not bring it back.
-        Assert.Throws<InvalidOperationException>(interaction.Require);
+        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class InteractionTests
         using var interaction = Grant();
         interaction.Begin("Open Preferences", userApproved: true);
         interaction.End();
-        Assert.Throws<InvalidOperationException>(interaction.Require);
+        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
         interaction.Begin("Open TOM Explorer", userApproved: true);
         Assert.True(interaction.Active);
     }
@@ -61,7 +61,7 @@ public sealed class InteractionTests
         {
             MutationGuard.CheckPermission();
             input++;
-            Assert.Throws<InvalidOperationException>(MutationGuard.CheckPermission);
+            Assert.Throws<InputRefusedException>(MutationGuard.CheckPermission);
         }
 
         Assert.Equal(before, MutationGuard.BeforeMutation.Value);
@@ -123,7 +123,7 @@ public sealed class InteractionTests
 
         await new Te3InteractionTool(interaction, Te3InteractionTool.End).ExecuteAsync(null);
         Assert.False(interaction.Active);
-        var error = Assert.Throws<InvalidOperationException>(interaction.Require);
+        var error = Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
         Assert.Contains("ended by te3_interaction_end.", error.Message);
     }
 
@@ -161,7 +161,7 @@ public sealed class InteractionTests
 
         stopped = true;
 
-        Assert.Throws<InvalidOperationException>(interaction.Require);
+        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
         Assert.False(interaction.Active);
     }
 
@@ -188,7 +188,7 @@ public sealed class InteractionTests
         interaction.Dispose();
 
         Assert.False(interaction.Active);
-        var error = Assert.Throws<InvalidOperationException>(interaction.Require);
+        var error = Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
         Assert.Contains("the host stopped", error.Message);
     }
 

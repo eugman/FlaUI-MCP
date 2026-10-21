@@ -17,8 +17,15 @@ public sealed class CoreCallException(string? tool, McpToolResult result)
 /// <summary>What a failure's structured outcome says about input and the desktop, read instead of its text.</summary>
 internal static class CoreFailure
 {
-    // Refusals that retrying cannot get past: Windows kept another window in front, or there is no desktop.
-    private static readonly HashSet<string> DesktopBlockers = ["activation-denied", "desktop-unavailable"];
+    // Refusals that retrying cannot get past: Windows kept another window in front, there is no desktop, or the
+    // user has not approved (or has revoked) the batch.
+    private static readonly HashSet<string> DesktopBlockers =
+    [
+        "activation-denied",
+        "desktop-unavailable",
+        Te3Interaction.ApprovalRequired,
+        Te3Interaction.FocusRevoked,
+    ];
 
     /// <summary>
     /// The outcome of the failing Core call, of a direct send that guarded input refused, or of a call refused because

@@ -170,7 +170,7 @@ public sealed class RunnerFocusTests : IDisposable
         interaction.Require();
 
         Interlocked.Increment(ref userInput);
-        Assert.Throws<InvalidOperationException>(interaction.Require);
+        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
         Assert.Throws<InvalidOperationException>(interaction.Rebaseline);
     }
 }
