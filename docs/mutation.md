@@ -17,6 +17,8 @@ pwsh scripts/coverage.ps1 -Mutation             # coverage first, then Stryker
 pwsh scripts/coverage.ps1 -Mutation -MutationMinutes 45
 ```
 
+Mutation testing never runs desktop tests. Stryker runs from `tests/FlaUI.Mcp.Te3.Tests` with that one test project named in its config, and no solution, and `MutationScopeTests` checks that. While it starts, `scripts/stryker-guard.ps1` reads its output and stops it before any test runs if it finds a second test project, any `*IntegrationTests*` project, or more tests than the offline run found.
+
 Stryker mutates committed code only. It runs on an export of `HEAD` in `local/build-background/stryker-te3`, so its builds never land in the working tree. It uses one test runner and is stopped after `-MutationMinutes` (30 by default). The report is at `local/build-background/stryker-te3/tests/FlaUI.Mcp.Te3.Tests/StrykerOutput/run/reports/mutation-report.html`.
 
 - `tests/FlaUI.Mcp.Te3.Tests/stryker-config.json` lists the files that are mutated: the TE3 guard and protocol files in `src/FlaUI.Mcp.Te3`. The shared core and generated code are never mutated, and the export holds no `local/` recipes. Patterns match the full path, which runs through `local/`, so never exclude `**/local/**`.
