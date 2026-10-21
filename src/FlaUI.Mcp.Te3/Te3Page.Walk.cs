@@ -85,11 +85,21 @@ public sealed partial class Te3Page
     // only when the rows cannot be placed or may not all be realized, and the 18 s stop bounds both.
     private async Task<WalkResult> FindObject(WalkRequest request, TomCursor cursor, Func<TimeSpan> elapsed)
     {
-        var picked = await ObjectSelect.Run(
-            new RowTree(this, WalkClock.OutOfTime(elapsed)),
-            request,
-            WalkClock.OutOfTime(elapsed)
-        );
+        SelectResult picked;
+        try
+        {
+            picked = await ObjectSelect.Run(
+                new RowTree(this, WalkClock.OutOfTime(elapsed)),
+                request,
+                WalkClock.OutOfTime(elapsed)
+            );
+        }
+        catch (TimeoutException stopped)
+        {
+            // A key the clock refused: a miss like any other, so the search is cleared afterwards.
+            return new(false, null, 0, stopped.Message);
+        }
+
         WalkReport = new
         {
             strategy = "rows",

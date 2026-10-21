@@ -29,7 +29,7 @@ public sealed partial class Te3Page
 
     // One guarded select of TreeItem NodeN (Core's windows_click action select; it clicks when Select is ignored). A
     // row read on a later page is no longer realized once the tree paged on: Home and the same PageDowns bring it back.
-    private async Task SelectRow(TreeRow row)
+    private async Task SelectRow(TreeRow row, Func<bool> outOfTime)
     {
         var target = new Target(
             new(Name: "Node" + row.Index, ControlType: "TreeItem"),
@@ -43,10 +43,14 @@ public sealed partial class Te3Page
         }
         catch (ElementNotFoundException)
         {
-            await Keys("Home", TomExplorerTarget());
+            await KeyBudget.Press(outOfTime, () => Keys("Home", TomExplorerTarget()), "Home to bring the row back");
             for (var page = 0; page < row.Page; page++)
             {
-                await Keys("PageDown", TomExplorerTarget());
+                await KeyBudget.Press(
+                    outOfTime,
+                    () => Keys("PageDown", TomExplorerTarget()),
+                    $"PageDown {page + 1} of {row.Page} to bring the row back"
+                );
             }
 
             reference = await Reference(target);
@@ -74,7 +78,7 @@ public sealed partial class Te3Page
         // before; then every realized row, paging down while the tree scrolls (treeList has no Scroll pattern).
         public async Task<RowRead> Read()
         {
-            await page.Keys("Home", TomExplorerTarget());
+            await KeyBudget.Press(outOfTime, () => page.Keys("Home", TomExplorerTarget()), "Home before the row read");
             var truncated = false;
             var paged = await RowPager.ReadAll(
                 async () =>
@@ -84,7 +88,7 @@ public sealed partial class Te3Page
                     page.depthScale ??= TomRows.Calibrate(found.Elements);
                     return (TomRows.Rows(found.Elements, page.depthScale), TomRows.Scrolls(found.Elements));
                 },
-                () => page.Keys("PageDown", TomExplorerTarget()),
+                () => KeyBudget.Press(outOfTime, () => page.Keys("PageDown", TomExplorerTarget()), "PageDown"),
                 MaxPages,
                 outOfTime
             );
@@ -111,7 +115,7 @@ public sealed partial class Te3Page
             return (page.depthScale == null ? null : TomRows.Rows(found.Elements, page.depthScale), index);
         }
 
-        public Task Select(TreeRow row) => page.SelectRow(row);
+        public Task Select(TreeRow row) => page.SelectRow(row, outOfTime);
 
         public Task<SelectionView> View() => Task.Run(page.ViewSelection);
 
