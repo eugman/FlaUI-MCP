@@ -48,4 +48,27 @@ public sealed class RunnerFocusTests : IDisposable
 
         Assert.Equal(0, inputs.Sent);
     }
+
+    [Fact]
+    public async Task AHeldProviderRefusesTheFocusBeforeAnythingIsSent()
+    {
+        // Core's native-handle focus never consults the pending tracker, so the runner checks it first.
+        using var host = new AutomationHost(ProcessPolicy.AllowAll);
+        using var form = new System.Windows.Forms.Form();
+        var handle = host.Sessions.RegisterNativeWindow(form.Handle, Environment.ProcessId);
+        var pending = host.Pending.Begin(Environment.ProcessId, "Invoke Save");
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd };
+        var inputs = new InputTally();
+
+        using (desktop.Install())
+        {
+            var error = await Assert.ThrowsAsync<ProviderBlockedException>(() =>
+                RunExecutor.FocusOwnedWindow(host, handle, journal, inputs)
+            );
+            Assert.Same(pending, error.Pending);
+        }
+
+        Assert.Equal(0, desktop.FocusRequests);
+        Assert.Equal(0, inputs.Sent);
+    }
 }
