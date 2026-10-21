@@ -55,7 +55,7 @@ public sealed class Te3LayoutTests
     [Fact]
     public async Task PlanPresetDoesNotRequireTe3Process()
     {
-        var tool = new Te3Layout(null!);
+        var tool = new Te3Layout(null!, readOnly: true);
         var args = System.Text.Json.JsonSerializer.SerializeToElement(
             new
             {
