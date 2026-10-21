@@ -51,10 +51,10 @@ internal static class ObjectSelect
             );
         }
 
-        var candidates = SearchPick.Candidates(rows, request);
+        var (candidates, unplaced) = SearchPick.Candidates(rows, request);
         if (candidates.Count == 0)
         {
-            return new(false, null, rows.Count, indent, 0, Missing(request, rows), !complete);
+            return new(false, null, rows.Count, indent, 0, Missing(request, rows), !complete || unplaced);
         }
 
         TreeRow? last = null;

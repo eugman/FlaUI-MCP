@@ -1,6 +1,9 @@
 /// <summary>One realized TOM Explorer row: its index in the tree (TreeItem <c>NodeN</c>), its text and its depth.</summary>
 public sealed record TreeRow(int Index, string? Value, int? Depth);
 
+/// <summary>The rows that can be the object, and whether a row of unknown depth broke the placement on the way.</summary>
+public sealed record Pick(IReadOnlyList<TreeRow> Candidates, bool Unplaced);
+
 /// <summary>
 /// Picks the requested object among the rows the search filter realized, by names and depth alone (no row is
 /// typed): Tables at depth 1, a table at depth 2 under it, the folder path at the table's depth + 1 + n, and the
@@ -17,18 +20,28 @@ internal static class SearchPick
     /// gives, or any depth under the table when there is no folder): the caller selects each and lets Properties'
     /// Name and ObjectType decide. Empty when none; a row of unknown depth is never a candidate.
     /// </summary>
-    public static IReadOnlyList<TreeRow> Candidates(IReadOnlyList<TreeRow> rows, WalkRequest request)
+    /// <remarks>
+    /// A row of unknown depth could be a table, so it ends the requested table: nothing after it is a candidate until
+    /// the next row placed at table depth or above, and <see cref="Pick.Unplaced"/> tells the caller to fall back.
+    /// </remarks>
+    public static Pick Candidates(IReadOnlyList<TreeRow> rows, WalkRequest request)
     {
         var scan = new Scan(request);
+        var unplaced = false;
         foreach (var row in rows)
         {
-            if (row.Depth is { } depth && scan.IsCandidate(row, depth))
+            if (row.Depth is not { } depth)
+            {
+                unplaced = true;
+                scan.Break();
+            }
+            else if (scan.IsCandidate(row, depth))
             {
                 scan.Found.Add(row);
             }
         }
 
-        return scan.Found;
+        return new(scan.Found, unplaced);
     }
 
     // Where the scan is: the top-level group, whether it is inside the requested table, and how many folders of the
@@ -45,6 +58,13 @@ internal static class SearchPick
         private int matched;
 
         public List<TreeRow> Found { get; } = [];
+
+        // A row that could not be placed: whatever follows may belong to another table.
+        public void Break()
+        {
+            inTable = false;
+            matched = 0;
+        }
 
         public bool IsCandidate(TreeRow row, int depth)
         {

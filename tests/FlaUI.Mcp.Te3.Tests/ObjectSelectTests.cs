@@ -7,7 +7,7 @@ using Xunit;
 public sealed class ObjectSelectTests
 {
     /// <summary>The filtered tree as one read gives it, with the object types Properties shows once a row is selected.</summary>
-    private sealed class FakeRows(params (string? Value, int Depth, string Type)[] rows) : IRowTree
+    private sealed class FakeRows(params (string? Value, int? Depth, string Type)[] rows) : IRowTree
     {
         private TreeRow? selected;
 
@@ -188,5 +188,23 @@ public sealed class ObjectSelectTests
 
         Assert.False(result.Found);
         Assert.Empty(tree.Selects);
+    }
+
+    [Fact]
+    public async Task ARowOfUnknownDepthEndsTheTableSoAnotherTablesObjectIsNoCandidate()
+    {
+        // Products' row gave no depth; without it the scan stayed "inside Brands" and Products' Brand was picked.
+        var tree = new FakeRows(
+            ("Tables", 1, "Group"),
+            ("Brands", 2, "Table"),
+            ("Products", null, "Table"),
+            ("Brand", 3, "Column")
+        );
+
+        var result = await ObjectSelect.Run(tree, NoFolder, () => false);
+
+        Assert.False(result.Found);
+        Assert.Empty(tree.Selects);
+        Assert.True(result.FallBack);
     }
 }
