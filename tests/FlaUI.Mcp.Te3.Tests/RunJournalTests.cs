@@ -154,6 +154,40 @@ public sealed class RunJournalTests : IDisposable
     }
 
     [Fact]
+    public async Task TheJournalRecordsCoresOutcomeForEachCall()
+    {
+        // McpToolResult.Outcome is not serialized; the journal writes the outcome itself, as structuredContent.
+        await RunJournal.Tool(
+            journal,
+            "windows_click",
+            new { @ref = "w1e3" },
+            () =>
+                Task.FromResult(
+                    new FlaUI.Mcp.McpToolResult
+                    {
+                        IsError = true,
+                        Content = [new() { Text = "Failed to click w1e3." }],
+                        Outcome = new FlaUI.Mcp.Core.ToolOutcome("partial", "not-tracked")
+                        {
+                            Status = "failed",
+                            InputsSent = 2,
+                            Failure = new FlaUI.Mcp.Core.InputRefusal("activation-denied", "Windows refused."),
+                        },
+                    }
+                )
+        );
+
+        var entry = System.Text.Json.JsonDocument.Parse(File.ReadLines(journal).Last()).RootElement;
+        Assert.Equal("result", entry.GetProperty("phase").GetString());
+        Assert.True(entry.GetProperty("isError").GetBoolean());
+        Assert.Equal("Failed to click w1e3.", entry.GetProperty("content")[0].GetProperty("text").GetString());
+        var outcome = entry.GetProperty("structuredContent");
+        Assert.Equal("partial", outcome.GetProperty("dispatch").GetString());
+        Assert.Equal(2, outcome.GetProperty("inputsSent").GetInt32());
+        Assert.Equal("activation-denied", outcome.GetProperty("failure").GetProperty("code").GetString());
+    }
+
+    [Fact]
     public void AnActivationTimeoutDoesNotClaimNothingWasSent()
     {
         // te3_focus_window was sent before the wait, so the timeout must not read as a call that was not dispatched.
