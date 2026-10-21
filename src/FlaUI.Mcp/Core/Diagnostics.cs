@@ -108,7 +108,6 @@ public static class Diagnostics
         }
     }
 
-    /// <summary>Run a read on a worker; the value, or why there is none ("did not ... within" or the failure).</summary>
     /// <summary>The whole capture's time: one deadline shared by its stages.</summary>
     private sealed class Budget(TimeSpan total)
     {
@@ -119,6 +118,10 @@ public static class Diagnostics
         public TimeSpan Remaining => total - clock.Elapsed;
     }
 
+    /// <summary>
+    /// Run a read on a worker within what is left of the budget; the value, or why there is none (skipped, timed out
+    /// and abandoned, or the failure).
+    /// </summary>
     private static (T? Value, string? Error) Bounded<T>(Func<T> read, Budget budget, string verb)
     {
         var remaining = budget.Remaining;

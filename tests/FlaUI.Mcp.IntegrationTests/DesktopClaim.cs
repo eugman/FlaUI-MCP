@@ -67,7 +67,11 @@ internal static class DesktopClaim
         }
     }
 
-    /// <summary>The files a process has loaded (a read-only query), or none when they cannot be read.</summary>
+    /// <summary>
+    /// The files a process has loaded (a read-only query), or none when they cannot be read. This fails open for
+    /// elevated dotnet hosts: a non-elevated test host cannot read an elevated process's modules, so such a host is
+    /// not seen. Test-only code; the machine-wide lease (Stage B) replaces this check.
+    /// </summary>
     private static IReadOnlyList<string> ModulesOf(Process process)
     {
         try
