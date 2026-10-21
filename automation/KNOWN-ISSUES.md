@@ -64,3 +64,7 @@ Changed in the host since: one read per row (the settled read is reused as the n
 - MCP-based selection and error assertions through TE3's own MCP server: deferred because the server's selection tool names are not known and the server is stopped with AutoStart off on the test machine (the host never starts it). `te3_native_preflight` is the only route so far.
 - TOM Explorer type filters (Ctrl+1..7) for the object walk: see above.
 
+## The runner's activation click is checked by position only
+
+When Windows refuses to bring the runner's TE3 forward, the run continues only after a mouse click whose point lies inside TE3's window rectangle (and no typing). The point is not hit-tested: a click on another window that overlaps TE3's rectangle, followed by TE3 coming forward, is accepted as the go-ahead. A hit test (which window was under the click) is deferred to the Core rebase, where Core's ClickHitTest and FromPoint go through the desktop seam.
+

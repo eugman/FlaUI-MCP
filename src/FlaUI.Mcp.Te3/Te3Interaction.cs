@@ -134,7 +134,9 @@ public sealed class Te3Interaction : IDisposable
     /// went to some other window, and with no button-down, or with the last one outside TE3's window, TE3 came forward
     /// on its own (a late foreground grant, the user's window closing); each revokes the batch with activation_denied.
     /// The run checks the foreground every 250 ms, so "since the prompt" ends at the poll that first saw TE3 in front:
-    /// input in that last quarter second, after the click, is taken as part of it. A revoked grant stays revoked.
+    /// input in that last quarter second, after the click, is taken as part of it. The click is checked by position, not
+    /// hit-tested: a click on a window overlapping TE3's rectangle is accepted (KNOWN-ISSUES; a hit test waits for the
+    /// Core rebase). A revoked grant stays revoked.
     /// </summary>
     /// <param name="te3">The TE3 window's screen bounds now; the click must have landed inside them.</param>
     internal void Rebaseline(InputCounts? prompt, System.Drawing.Rectangle? te3)
