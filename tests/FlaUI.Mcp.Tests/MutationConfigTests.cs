@@ -13,6 +13,7 @@ public sealed class MutationConfigTests
     private static readonly string[] GuardFiles =
     [
         "Core/GuardedInput.cs",
+        "Core/GuardedDesktop.cs",
         "Core/ProcessIntegrity.cs",
         "Core/WindowMutation.cs",
         "Core/ClickPoint.cs",

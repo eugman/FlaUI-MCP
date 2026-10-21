@@ -4,7 +4,7 @@ The stdio server supports MCP 2024-11-05 and 2025-03-26 initialization. Unknown 
 
 Requests retain operation IDs in structured results. `completed` describes tool execution; `verification: not-established` does not assert the target changed. Existing tool-specific verification is preserved. The operation-status tool can inspect delayed provider completion.
 
-Cancellation notifications cancel only the matching in-flight request ID. Notifications never dispatch tools or produce responses. The input reader remains available while serialized tools run, with at most 32 admitted requests. `ping`, the `flaui/operations/status` method and a `tools/call` of `windows_operation_status` are never refused for capacity, and the status tool does not wait for the serial slot, so status stays readable while a stranded call still holds it. Cancellation suppresses the eventual RPC response and requests cooperative cancellation; it does not undo input already dispatched or terminate an unresponsive UIA provider. Never replay on timeout. Observe the target and pending operation first.
+Cancellation notifications cancel only the matching in-flight request ID. Notifications never dispatch tools or produce responses. The input reader remains available while serialized tools run, with at most 32 admitted requests. `ping`, the `flaui/operations/status` method and a `tools/call` of a status tool are never refused for capacity, and a status tool does not wait for the serial slot, so status stays readable while a stranded call still holds it. A status tool is one whose annotations are `McpToolAnnotations.Status` (read-only with `StatusHint`, which is not sent to clients), or `windows_operation_status` by name. Cancellation suppresses the eventual RPC response and requests cooperative cancellation; it does not undo input already dispatched or terminate an unresponsive UIA provider. Never replay on timeout. Observe the target and pending operation first.
 
 No-focus checks use fake tools, signals, and timers. Foreground, UIPI, docking behavior and real screenshots still require a fresh machine grant.
 
@@ -67,6 +67,7 @@ A product repo that merges this core must check the following.
 - **Refusal text.** Tests and prompts that match "no input sent" must accept the rewritten forms above. The pointer refusals end in "; no input sent.", and the obscured-click text is now "Click point is obscured by another window; no input sent."
 - **Exception types.** `MouseTool.RequireHit`, `ClickPoint.Choose` and the obscured-click check throw `InputRefusedException`, a subclass of `InvalidOperationException`. Tests that assert the exact type must expect it.
 - **Annotations.** Every tool declares MCP annotations. Find, wait, snapshot, get-text, get-clipboard, list-windows and operation status are read-only. The input tools are not: click, send-keys, paste, fill, mouse, batch and close are destructive, and window placement, window state and focus are idempotent. Screenshot is not read-only either, because `parkPointer` moves the pointer before capturing and counts that as input; it is idempotent and not destructive.
+- **Status tools.** A host's own status tool (such as `cam_operation_status`, `cam_session_status` or a `pbi_*` status tool) returns `McpToolAnnotations.Status` from `Annotations` to be answered while other calls block. It must be read-only: it runs beside a call that may still be sending input.
 - **Registration.** `ToolComposition.Register` adds `windows_set_window_state` (`WindowStateTool(elements, pending, sessions)`) and `windows_mouse` (`MouseTool(elements, pending, sessions)`) for every host. A host that registers its tools itself must add them.
 - **Behaviour.**
   - Pointer actions press only where an element is visible (`ClickPoint`). They scroll an element into view through `ClickGeometry.ScrollIntoView`, which takes the input lease, revalidates the ref and counts only when the element moved (a refusal then says "the view was scrolled first", or "a scroll into view was requested first" when nothing moved). The point is read again under the input lease just before the press. `ClickGeometry.Read` no longer scrolls.
@@ -75,13 +76,23 @@ A product repo that merges this core must check the following.
   - Focusing a minimized window counts as a change even when activation is then denied.
   - Paste counts its clipboard write.
 - **Signatures.**
-  - `InputDesktop` gains `SetClipboardText`; a fake desktop must override it.
+  - `InputDesktop` gains `SetClipboardText`, `PreserveAndSetClipboardText`, `StartProcess`, `CallPattern`, `IsNormalWindow`, `WindowBounds` and `PlaceWindow`; a fake desktop overrides the ones its tests reach.
   - `PatternCallResult` gains `Dispatched`.
   - `GuardedInput` gains `Check(Action)` and `Release(Action)`.
   - `ClickGeometry.ScrollIntoView(element, processId, pending, validate)` is new; it returns the note for a later refusal, or null when the element cannot scroll.
   - `MouseTool.Drag` is internal.
   - `ClickTool` is a partial class; its replies are in `ClickToolReplies.cs`.
   - The transport calls the new `McpServer.RecordRefusedRequest`.
+- **Native focus and close.** `SessionManager.FocusWindow` and `CloseWindow` on a window with a native handle deliberately bypass the pending tracker: Win32 focus and `WM_CLOSE` never wait on UI Automation, and they are the documented way to reach or close the modal dialog that is blocking the provider. Hosts that want the stricter behaviour can check `PendingInvokeTracker.TryGetPending` for the window's process themselves before calling them, as TE3's `RunExecutor` does.
+- **Raw calls to switch.** Product code must not start processes, make pattern calls or write the clipboard raw. Use the public guarded calls instead; each takes the lease and the permission check, counts, and is refused under `FLAUI_OFFLINE_TESTS`:
+  - `GuardedDesktop.StartProcess(startInfo)` for `Process.Start`.
+  - `GuardedDesktop.CallPattern(processId, description, call, pending, validate, gracePeriod)` for a UI Automation call that changes the app. It refuses while the provider is blocked, runs `validate` and the integrity check, counts, and runs modal-aware, returning the `PatternCallResult` (pass it to `ToolOutcome.FromPattern`). It takes the lease itself, so do not hold a `GuardedInput` around it.
+  - `GuardedDesktop.SetClipboardText(text)` without a guard, or `GuardedInput.SetClipboardText(text)` and `GuardedInput.PreserveAndSetClipboardText(text)` under one.
+
+  The call sites to switch:
+  - FlaUI-MCP-PBI: `SessionLifecycle.cs:150` (`Process.Start` of Desktop) → `GuardedDesktop.StartProcess`; `ScopedExpand.ExpandByPattern` (its own lease, `ModalAwareInvoker` and `MutationGuard.Execute` around `Expand()`) → `GuardedDesktop.CallPattern`; `DesktopEditor.cs:57` (`Win32Desktop.PreserveAndSetClipboardText` under a `GuardedInput`) → `input.PreserveAndSetClipboardText`. `CommandClient.cs:65` and `RecordingEncoder.cs:68` start helper processes, not the app under test; switch them too if they should be refused offline.
+  - FlaUI-MCP-Camtasia: `SessionWorkflow.cs:69` (Camtasia launch), `RecorderSystem.cs:135` and `RecorderCommandLine.cs:21` (recorder), `CalibrationFiles.cs:223` (cam-CLI) and `RecordingRun.cs:50` (encoder) → `GuardedDesktop.StartProcess`.
+  - FlaUI-MCP-TE3: `CliRunner.cs:24` (TE CLI) and `ArtifactFiles.cs:338` (git) → `GuardedDesktop.StartProcess` where the process changes the desktop or the model; a pure helper such as git may stay raw.
 - **Offline tests.** `InputDesktop` is internal and visible to `FlaUI.Mcp.Tests`, `FlaUI.Mcp.PowerBi.Tests`, `FlaUI.Mcp.Camtasia.Tests` and `FlaUI.Mcp.Te3.Tests`. A product test assembly that drives input tools must derive a fake from it and install it through `InputDesktop.Override` (see `FakeDesktop` in the core tests), and must set `FLAUI_OFFLINE_TESTS=1` before any test runs, as the core test assembly does in a module initializer. The real desktop then refuses the changes it covers (listed below) if a test misses the fake.
 
 ### Changes since the previous core release

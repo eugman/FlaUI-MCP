@@ -134,6 +134,14 @@ public record McpToolAnnotations
     [JsonPropertyName("openWorldHint")]
     public bool? OpenWorldHint { get; init; }
 
+    /// <summary>
+    /// Set by status tools: read-only tools that report on other calls. With <see cref="ReadOnlyHint"/>
+    /// true, the server answers them at once, never refused for capacity and never waiting for the serial
+    /// slot. Not sent to clients.
+    /// </summary>
+    [JsonIgnore]
+    public bool StatusHint { get; init; }
+
     public static readonly McpToolAnnotations ReadOnly = new()
     {
         ReadOnlyHint = true,
@@ -141,6 +149,9 @@ public record McpToolAnnotations
         IdempotentHint = true,
         OpenWorldHint = false,
     };
+
+    /// <summary>A read-only tool that reports on other calls; see <see cref="StatusHint"/>.</summary>
+    public static readonly McpToolAnnotations Status = ReadOnly with { StatusHint = true };
 
     /// <summary>A tool that sends input or changes the app.</summary>
     public static McpToolAnnotations Input(bool destructive, bool idempotent = false) =>

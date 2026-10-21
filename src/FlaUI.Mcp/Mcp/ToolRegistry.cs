@@ -32,6 +32,15 @@ public class ToolRegistry
         _tools[tool.Name] = tool;
     }
 
+    /// <summary>
+    /// A status tool: read-only with the status hint, or windows_operation_status by name. The server answers
+    /// it at once, so status stays readable while other calls block.
+    /// </summary>
+    public bool IsStatusTool(string name) =>
+        name == Tools.OperationStatusTool.ToolName
+        || _tools.TryGetValue(name, out var tool)
+            && tool.GetDefinition().Annotations is { ReadOnlyHint: true, StatusHint: true };
+
     public List<McpTool> GetToolDefinitions()
     {
         return _tools.Values.Select(t => t.GetDefinition()).ToList();
