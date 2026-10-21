@@ -9,7 +9,10 @@ namespace FlaUI.Mcp.Te3.Tests;
 /// </summary>
 public sealed class DirectInputJournalTests
 {
-    private static readonly Regex DirectInput = new(@"\binput\.Send\(|\.FocusWindow\(|\.CloseMainWindow\(");
+    private static readonly Regex DirectInput = new(
+        // GuardedInput's constructor activates the target window, so creating one is input too.
+        @"\binput\.Send\(|\.FocusWindow\(|\.CloseMainWindow\(|\bnew GuardedInput\("
+    );
     private static readonly Regex Journaled = new(@"\bRunJournal\.Input\(|\bSendInput\(");
 
     private static string Sources()
@@ -48,6 +51,8 @@ public sealed class DirectInputJournalTests
     [InlineData("Te3Page.cs")]
     [InlineData("RunExecutor.cs")]
     [InlineData("RunSafety.cs")]
+    [InlineData("Te3Layout.cs")]
+    [InlineData("DialogCancel.cs")]
     public void EveryDirectInputGoesThroughTheJournal(string file)
     {
         var lines = File.ReadAllLines(Path.Combine(Sources(), file));
