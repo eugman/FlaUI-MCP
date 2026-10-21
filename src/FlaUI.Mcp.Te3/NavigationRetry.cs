@@ -2,10 +2,11 @@
 internal static class NavigationRetry
 {
     /// <summary>
-    /// Runs attempt, and once more only when the whole attempt sent no input and its failure proves a refusal before
-    /// any: a walk that typed or pressed keys may have changed TE3, so it is reported with what it sent. A blocked
-    /// desktop (activation denied, no desktop) is not retried either: trying again cannot help. When the retry fails
-    /// too, the first error leads.
+    /// Runs attempt, and once more only when the whole attempt sent no input and Core's outcome for the failing call
+    /// says it was not dispatched: a walk that typed or pressed keys may have changed TE3, so it is reported with what
+    /// it sent, and a partial or pending call may have gone out. A blocked desktop (activation denied, no desktop) is
+    /// not retried either: trying again cannot help. A failure Core did not report on is not retried. When the retry
+    /// fails too, the first error leads.
     /// </summary>
     /// <param name="inputsSent">The caller's running count of inputs that went out.</param>
     public static async Task Once(Func<Task> attempt, Func<int> inputsSent, Action<string>? report)
@@ -26,7 +27,7 @@ internal static class NavigationRetry
                 );
             }
 
-            if (!InputProof.NotSent(first.Message) || InputProof.Blocker(first.Message) != null)
+            if (!CoreFailure.NotDispatched(first) || CoreFailure.Blocker(first) != null)
             {
                 throw;
             }

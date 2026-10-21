@@ -40,6 +40,13 @@ internal static class CoreFailure
         return null;
     }
 
+    /// <summary>
+    /// Whether this failure itself, not one it wraps, is a Core call whose outcome says nothing was dispatched. What
+    /// the caller's own guards changed before it (activation, focus) is in its tally, not here.
+    /// </summary>
+    internal static bool NotDispatched(Exception error) =>
+        error is CoreCallException { Outcome.Dispatch: "not-dispatched" };
+
     /// <summary>The desktop condition that refused the input, when retrying cannot help: activation-denied or desktop-unavailable.</summary>
     internal static string? Blocker(Exception error) =>
         Outcome(error)?.Failure?.Code is { } code && DesktopBlockers.Contains(code) ? code : null;
