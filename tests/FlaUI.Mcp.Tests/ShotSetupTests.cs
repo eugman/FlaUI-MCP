@@ -133,14 +133,16 @@ public sealed class ShotSetupTests
     }
 
     [Fact]
-    public void ParkInTheCornerOfTheMonitorAFullScreenWindowCovers()
+    public void ParkJustOffAFullScreenWindowOntoTheNeighbouringMonitor()
     {
+        // The window covers the second monitor; the point beside its left edge lies on the primary.
         var primary = new Rectangle(0, 0, 1920, 1080);
         var second = new Rectangle(1920, 0, 1920, 1080);
-        Assert.Equal(
-            new Point(1928, 1071),
-            PointerPlan.ParkPoint(new Rectangle(1912, -8, 1936, 1096), [primary, second])
-        );
+        var window = new Rectangle(1912, -8, 1936, 1096);
+        var park = PointerPlan.ParkPoint(window, [primary, second]);
+        Assert.NotNull(park);
+        Assert.False(window.Contains(park.Value));
+        Assert.True(primary.Contains(park.Value));
     }
 
     [Fact]
@@ -168,11 +170,21 @@ public sealed class ShotSetupTests
     }
 
     [Fact]
-    public void ParkInTheMonitorCornerWhenTheWindowCoversTheScreen() =>
-        Assert.Equal(
-            new Point(8, 1071),
-            PointerPlan.ParkPoint(new Rectangle(-8, -8, 1936, 1096), [new Rectangle(0, 0, 1920, 1080)])
-        );
+    public void NoParkPointWhenTheWindowCoversEveryMonitor() =>
+        // Every point of the only screen is on the window, so there is nowhere off it to park.
+        Assert.Null(PointerPlan.ParkPoint(new Rectangle(-8, -8, 1936, 1096), [new Rectangle(0, 0, 1920, 1080)]));
+
+    [Fact]
+    public void ParkInAFreeCornerWhenNoPointBesideTheWindowIsOnAScreen()
+    {
+        // The window overhangs the monitor on three sides and leaves a strip free along its bottom, but the
+        // point below the middle of its bottom edge is off the screen; the bottom-left corner is free.
+        var monitor = new Rectangle(0, 0, 1920, 1080);
+        var window = new Rectangle(-1000, -8, 3000, 1060);
+        var park = PointerPlan.ParkPoint(window, [monitor]);
+        Assert.Equal(new Point(8, 1071), park);
+        Assert.False(window.Contains(park!.Value));
+    }
 
     [Fact]
     public void TreeRowsSelectInsteadOfInvoking() =>

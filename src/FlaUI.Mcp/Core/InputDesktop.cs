@@ -107,6 +107,16 @@ internal class InputDesktop
         input();
     }
 
+    /// <summary>Moves the pointer to a screen point; one input. The fake records the point instead.</summary>
+    public virtual void MovePointer(Point point) => Dispatch(() => FlaUI.Core.Input.Mouse.MoveTo(point));
+
+    /// <summary>Where the pointer is now, in screen pixels.</summary>
+    public virtual Point PointerPosition() => FlaUI.Core.Input.Mouse.Position;
+
+    /// <summary>The bounds of every screen, in physical pixels.</summary>
+    public virtual IReadOnlyList<Rectangle> Monitors() =>
+        System.Windows.Forms.Screen.AllScreens.Select(s => s.Bounds).ToList();
+
     public virtual string WindowState(nint hwnd) => Win32Desktop.GetWindowState(hwnd);
 
     /// <summary>Visible and neither minimized nor maximized.</summary>

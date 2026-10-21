@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed for product repos
+- Pointer parking never lands on the window: it parks beside it, on a neighbouring screen or in a free corner, and refuses with no input when the window covers every such point. It checks the integrity of the window under the park point. `InputDesktop` gains `MovePointer`, `PointerPosition` and `Monitors`.
 - A `windows_batch` with a failed step returns `isError: true` (it mirrors `status: failed`). A stranded (timed-out or cancelled) call reports `status: failed` and keeps a refusal it recorded.
 - The raw Win32 mutators (`Win32Desktop.FocusWindow`, `CloseWindow`, `PlaceWindow`, `SetWindowState`, `SetClipboardText`, `PreserveAndSetClipboardText`) are internal; product code goes through the guarded calls.
 - Native focus and close by handle deliberately bypass the pending tracker, so they still reach a modal dialog that blocks the provider; a host that wants them refused while a call is pending can check `PendingInvokeTracker.TryGetPending` first.

@@ -31,9 +31,10 @@ public static class PointerPlan
     }
 
     /// <summary>
-    /// Where to park the pointer for <paramref name="window"/>: on the monitor that holds most of it, so the
-    /// pointer never jumps to another screen, and outside the window when that monitor has room beside it.
-    /// When the window covers its monitor, the monitor's bottom-left corner. Null when the window is on no monitor.
+    /// Where to park the pointer for <paramref name="window"/>, always outside it: just beside it on the monitor
+    /// that holds most of it, so the pointer never jumps to another screen; else just beside it on a neighbouring
+    /// screen; else a free corner of its monitor. Null when the window is on no monitor or covers every point
+    /// these offer (a full-screen window on a single screen).
     /// </summary>
     public static Point? ParkPoint(Rectangle window, IReadOnlyList<Rectangle> monitors)
     {
@@ -57,8 +58,20 @@ public static class PointerPlan
             new(window.X - Inset, window.Y + window.Height / 2),
             new(window.X + window.Width / 2, window.Y - Inset),
         ];
-        var beside = candidates.Where(monitor.Contains).Select(p => (Point?)p).FirstOrDefault();
-        return beside ?? new Point(monitor.X + Inset, monitor.Bottom - 1 - Inset);
+        Point[] corners =
+        [
+            new(monitor.X + Inset, monitor.Bottom - 1 - Inset),
+            new(monitor.Right - 1 - Inset, monitor.Bottom - 1 - Inset),
+            new(monitor.X + Inset, monitor.Y + Inset),
+            new(monitor.Right - 1 - Inset, monitor.Y + Inset),
+        ];
+        return candidates
+            .Where(monitor.Contains)
+            .Concat(candidates.Where(p => monitors.Any(m => m.Contains(p))))
+            .Concat(corners)
+            .Where(p => !window.Contains(p))
+            .Select(p => (Point?)p)
+            .FirstOrDefault();
     }
 
     private static long Area(Rectangle r) => (long)r.Width * r.Height;
@@ -113,23 +126,40 @@ public static class PointerParking
     // Long enough for a tooltip to fade and a hot-tracked control to repaint.
     private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    /// Move the pointer to <see cref="PointerPlan.ParkPoint"/>, under the lease and the permission check, after the
+    /// integrity check of the window under that point. Refuses with no input when no point is off the window.
+    /// </summary>
     public static Point Park(Rectangle window)
     {
-        var monitors = System.Windows.Forms.Screen.AllScreens.Select(s => s.Bounds).ToList();
-        var point =
-            PointerPlan.ParkPoint(window, monitors)
-            ?? throw new InvalidOperationException(
-                "The window is on no monitor, so there is no screen to park the pointer on; move the window onto a screen first."
-            );
+        var desktop = InputDesktop.Current;
+        var monitors = desktop.Monitors();
+        var point = PointerPlan.ParkPoint(window, monitors) ?? throw NoParkPoint(window, monitors);
         using (GuardedInput.AcquireLease())
         {
             MutationGuard.Execute(
-                OperationContext.Check,
-                () => InputDesktop.Current.Dispatch(() => FlaUI.Core.Input.Mouse.MoveTo(point))
+                () =>
+                {
+                    OperationContext.Check();
+                    // Windows drops input to a higher-integrity window, the pointer's among it.
+                    var under = desktop.WindowAt(point);
+                    if (under != 0 && desktop.ProcessOf(under) is var pid and not 0)
+                    {
+                        GuardedInput.RequireDrivable(pid, desktop);
+                    }
+                },
+                () => desktop.MovePointer(point)
             );
         }
 
         Thread.Sleep(Settle);
-        return FlaUI.Core.Input.Mouse.Position;
+        return desktop.PointerPosition();
     }
+
+    private static InvalidOperationException NoParkPoint(Rectangle window, IReadOnlyList<Rectangle> monitors) =>
+        new(
+            monitors.Any(m => m.IntersectsWith(window))
+                ? "The window covers its screen, so the pointer could not leave the window; no input sent. Restore or move the window, or capture without parkPointer."
+                : "The window is on no monitor, so there is no screen to park the pointer on; no input sent. Move the window onto a screen first."
+        );
 }

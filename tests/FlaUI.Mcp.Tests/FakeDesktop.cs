@@ -228,6 +228,22 @@ internal sealed class FakeDesktop : InputDesktop
         Bounds = bounds;
     }
 
+    /// <summary>The screens the desktop reports, in physical pixels.</summary>
+    public List<Rectangle> MonitorBounds { get; set; } = [new(0, 0, 1920, 1080)];
+
+    public override IReadOnlyList<Rectangle> Monitors() => MonitorBounds;
+
+    /// <summary>Where the pointer is; a counted pointer move puts it on its point.</summary>
+    public Point Pointer { get; set; }
+
+    public override Point PointerPosition() => Pointer;
+
+    public override void MovePointer(Point point)
+    {
+        Interlocked.Increment(ref dispatched);
+        Pointer = point;
+    }
+
     private sealed class Uninstall : IDisposable
     {
         public void Dispose() => Override.Value = null;
