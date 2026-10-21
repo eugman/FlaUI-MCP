@@ -5,6 +5,9 @@ using FlaUI.Mcp;
 /// <summary>What a run records before it acts, so a runner killed mid-step still leaves evidence of it.</summary>
 internal static class RunJournal
 {
+    /// <summary>Exception.Data key for a journal entry that could not be written after the call.</summary>
+    internal const string JournalErrorKey = "journalError";
+
     /// <summary>Persists the launch intent, starts TE3, then records the owned PID and start time.</summary>
     internal static Process Launch(
         RunManifest manifest,
