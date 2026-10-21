@@ -10,7 +10,7 @@ public sealed class OperationStatusTool(OperationCoordinator operations, Pending
 
     public override string Name => ToolName;
 
-    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Status;
     public override string Description =>
         "Read-only status for running, timed-out, and completed operations. status is ok or failed once finished (running or timed_out_pending before); "
         + "dispatch says how much input went out: completed, partial, not-dispatched, timed_out_pending (still running; never replay) or unknown, with inputsSent. "

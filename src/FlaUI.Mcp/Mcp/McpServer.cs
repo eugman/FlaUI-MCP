@@ -26,6 +26,9 @@ public class McpServer
     /// <summary>True while a serialized tool call, possibly a cancelled one still running, owns the slot.</summary>
     internal bool SerialSlotHeld => serialRequests.CurrentCount == 0;
 
+    /// <summary>Whether a tool is a status tool, answered without waiting for capacity or the serial slot.</summary>
+    internal bool IsStatusTool(string name) => _toolRegistry.IsStatusTool(name);
+
     public Task RunAsync(CancellationToken cancellationToken = default) =>
         new McpLineTransport(this).RunConsoleAsync(cancellationToken);
 
@@ -111,7 +114,7 @@ public class McpServer
 
         notDispatched.TryRemove(key, out _);
         // Operation status is read-only and must answer while a stranded call still holds the serial slot.
-        var serialized = !_concurrentRequests && callParams.Name != Tools.OperationStatusTool.ToolName;
+        var serialized = !_concurrentRequests && !_toolRegistry.IsStatusTool(callParams.Name);
         try
         {
             if (serialized)
