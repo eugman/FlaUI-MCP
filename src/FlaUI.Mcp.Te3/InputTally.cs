@@ -1,54 +1,58 @@
 using FlaUI.Mcp;
+using FlaUI.Mcp.Core;
 
 /// <summary>
-/// The inputs one TE3 tool call or run has sent, each counted once it went out: a Core tool call that completed or is
-/// pending, a failed one whose text does not prove a refusal before input, and a direct send whose checks passed. A refusal
-/// before input (activation denied, no desktop, no grant, a stale ref, a covered point, a failed intent write)
-/// counts nothing. TODO(core): switch to Core's inputsSent after the rebase.
+/// The inputs one TE3 tool call or run has sent, as Core counted them: each Core tool call adds its outcome's
+/// inputsSent, and a direct send adds what Core recorded while it ran (activation, focus and each GuardedInput send).
+/// Nothing is inferred from a tool's text.
 /// </summary>
 public sealed class InputTally
 {
     public int Sent { get; private set; }
 
     /// <summary>Runs one Core tool call unless the operation was stopped, and counts it; throws on an error or pending result.</summary>
-    public async Task Invoke(Func<Task<McpToolResult>> call, bool readOnly = false, string? tool = null)
+    public async Task Invoke(Func<Task<McpToolResult>> call, string? tool = null)
     {
-        FlaUI.Mcp.Core.OperationContext.Check();
-        McpToolResult result;
+        _ = tool;
+        OperationContext.Check();
+        // Inside a running operation (a te3_* tool call), Core counts the step against it; otherwise the call is
+        // its own operation and reports its count in the outcome.
+        var parent = OperationContext.Current.Value;
+        var before = parent?.InputsSent ?? 0;
+        McpToolResult? result = null;
         try
         {
             result = await call();
         }
-        catch (Exception error)
+        finally
         {
-            Count(readOnly, error.Message, tool);
-            throw;
+            Sent += parent != null ? parent.InputsSent - before : result?.Outcome?.InputsSent ?? 0;
         }
 
-        var text = string.Join("; ", result.Content.Select(c => c.Text));
-        Count(readOnly, result.IsError == true ? text : null, tool);
-        if (result.IsError == true || result.Outcome?.IsPending == true)
+        if (result.IsError == true || result.Outcome?.Status == "failed" || result.Outcome?.IsPending == true)
         {
-            throw new InvalidOperationException(text);
+            throw new InvalidOperationException(string.Join("; ", result.Content.Select(c => c.Text)));
         }
     }
 
     /// <summary>
-    /// Dispatches one direct input, counted first: call it once every check before the input has passed (inside
-    /// GuardedInput.Send), so a click that throws after the button went down still counts.
+    /// Runs input the host sends itself through GuardedInput, and counts what Core recorded while it ran, also when
+    /// it then throws. Outside a running operation it runs in one of its own, so Core has somewhere to count.
     /// </summary>
     public void Dispatch(Action send)
     {
-        Sent++;
-        send();
-    }
-
-    // failure: null when the call returned normally; otherwise its text, which may prove nothing was sent.
-    private void Count(bool readOnly, string? failure, string? tool)
-    {
-        if (!readOnly && (failure == null || !InputProof.NotSent(failure, tool)))
+        var parent = OperationContext.Current.Value;
+        var counter = parent ?? new OperationContext { Tool = "te3_direct_input" };
+        var before = counter.InputsSent;
+        OperationContext.Current.Value = counter;
+        try
         {
-            Sent++;
+            send();
+        }
+        finally
+        {
+            OperationContext.Current.Value = parent;
+            Sent += counter.InputsSent - before;
         }
     }
 }

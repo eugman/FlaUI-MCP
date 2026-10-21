@@ -17,7 +17,7 @@ public sealed class Te3Page(
     /// <summary>
     /// Sends input this page dispatches itself rather than through a Core tool, journaled like tool calls. The
     /// GuardedInput (whose constructor activates the target), the hit test and the send all run inside the journaled
-    /// call, and the input counts once GuardedInput's last check passed.
+    /// call, and the tally counts what Core recorded: the activation, when there was one, and the send.
     /// </summary>
     /// <param name="clear">The hit test; false refuses before anything is sent.</param>
     /// <param name="obscured">The refusal when <paramref name="clear"/> fails.</param>
@@ -34,15 +34,16 @@ public sealed class Te3Page(
             action,
             arguments,
             () =>
-            {
-                using var input = new GuardedInput(target);
-                if (!clear())
+                Inputs.Dispatch(() =>
                 {
-                    throw new InvalidOperationException(obscured);
-                }
+                    using var input = new GuardedInput(target);
+                    if (!clear())
+                    {
+                        throw new InvalidOperationException(obscured);
+                    }
 
-                input.Send(() => Inputs.Dispatch(send));
-            }
+                    input.Send(send);
+                })
         );
 
     /// <summary>Inputs sent for this page: the caller's tool calls (when it shares the tally) and the page's own.</summary>

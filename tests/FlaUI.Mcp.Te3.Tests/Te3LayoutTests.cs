@@ -156,8 +156,24 @@ public sealed class Te3LayoutTests
         );
     }
 
-    private static Func<Task<FlaUI.Mcp.McpToolResult>> Click(string text, bool error = false) =>
-        () => Task.FromResult(new FlaUI.Mcp.McpToolResult { IsError = error, Content = [new() { Text = text }] });
+    // A scripted Core result. inputsSent is Core's count: by default one for a success and none for a refusal.
+    private static Func<Task<FlaUI.Mcp.McpToolResult>> Click(string text, bool error = false, int? inputsSent = null) =>
+        () =>
+            Task.FromResult(
+                new FlaUI.Mcp.McpToolResult
+                {
+                    IsError = error,
+                    Content = [new() { Text = text }],
+                    Outcome = new FlaUI.Mcp.Core.ToolOutcome(
+                        FlaUI.Mcp.Core.ToolOutcome.DispatchFor(error, inputsSent ?? (error ? 0 : 1)),
+                        "not-tracked"
+                    )
+                    {
+                        Status = error ? "failed" : "ok",
+                        InputsSent = inputsSent ?? (error ? 0 : 1),
+                    },
+                }
+            );
 
     [Fact]
     public async Task AStepIsSentOnlyOnceItsInputWentOut()
@@ -243,8 +259,8 @@ public sealed class Te3LayoutTests
     [Fact]
     public async Task AResizeDragRefusedMidDragCountsAsSent()
     {
-        // windows_mouse drags with MoveTo, Down, several MoveTo and Up, and has no catch: a grant refusal after the
-        // button went down reaches the tally as the bare refusal, though the splitter may have moved.
+        // windows_mouse drags with MoveTo, Down, several MoveTo and Up: a grant refusal after the button went down
+        // is a partial call, and Core's count says the splitter may have moved.
         var inputs = new InputTally();
         var sent = new List<object>();
 
@@ -257,7 +273,8 @@ public sealed class Te3LayoutTests
                     inputs.Invoke(
                         Click(
                             "Desktop input needs the user's approval: keyboard or mouse input from the user was observed; ask them before resuming.",
-                            true
+                            true,
+                            inputsSent: 2
                         ),
                         tool: "windows_mouse"
                     )

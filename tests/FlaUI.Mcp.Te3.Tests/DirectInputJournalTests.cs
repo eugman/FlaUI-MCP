@@ -33,20 +33,25 @@ public sealed class DirectInputJournalTests
         throw new DirectoryNotFoundException("src/FlaUI.Mcp.Te3 not found above " + AppContext.BaseDirectory);
     }
 
-    // The line and the call it is an argument of: back to the line whose unclosed '(' encloses it.
-    // Statements inside a lambda argument balance their own parentheses, so the walk passes them and stops at the
-    // unclosed one; a member declaration ends it when nothing encloses the line.
-    private static string EnclosingCall(string[] lines, int index)
+    // The line and every call it is an argument of, innermost first: each line above it whose unclosed '(' encloses
+    // it. Statements inside a lambda argument balance their own parentheses, so the walk passes them; a member
+    // declaration ends it.
+    private static string EnclosingCalls(string[] lines, int index)
     {
+        var enclosing = new List<string> { lines[index] };
         var depth = 0;
-        var start = index;
-        while (start > 0 && depth <= 0 && !IsMember(lines[start]))
+        for (var start = index; start > 0 && !IsMember(lines[start]); )
         {
             start--;
             depth += lines[start].Count(c => c == '(') - lines[start].Count(c => c == ')');
+            if (depth > 0)
+            {
+                enclosing.Add(lines[start]);
+                depth = 0;
+            }
         }
 
-        return string.Join(' ', lines[(depth > 0 ? start : index)..(index + 1)]);
+        return string.Join(' ', enclosing);
     }
 
     private static readonly Regex Member = new(@"^    (?:public|private|internal) ");
@@ -65,7 +70,7 @@ public sealed class DirectInputJournalTests
         var unjournaled = Enumerable
             .Range(0, lines.Length)
             .Where(i => DirectInput.IsMatch(lines[i]) && !lines[i].TrimStart().StartsWith("//"))
-            .Where(i => !Journaled.IsMatch(EnclosingCall(lines, i)))
+            .Where(i => !Journaled.IsMatch(EnclosingCalls(lines, i)))
             .Select(i => $"{file}:{i + 1}: {lines[i].Trim()}")
             .ToList();
 

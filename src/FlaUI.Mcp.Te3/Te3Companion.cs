@@ -10,9 +10,6 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
     public const string ModelState = "te3_model_state";
     public static readonly string[] Names = [Navigate, ModelState];
 
-    // Tools the page calls that only read; every other call counts as input once it went out.
-    private static readonly HashSet<string> ReadOnlyTools = ["windows_screenshot"];
-
     // Never approved when none is passed, so a tool built without one refuses input.
     private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
 
@@ -128,11 +125,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         {
             identity.EnsureAlive();
             OperationContext.Check();
-            await inputs.Invoke(
-                () => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)),
-                ReadOnlyTools.Contains(tool),
-                tool
-            );
+            await inputs.Invoke(() => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)), tool);
         };
 
     private async Task<McpToolResult> NavigateAndVerify(
