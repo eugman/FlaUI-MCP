@@ -148,7 +148,11 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         // Validate has already confirmed the id is in the registry.
         var destination = Te3Destinations.Find(GetStringArgument(a, "destination"))!;
         var hasPreferences = windows.Any(w => w.Title == "Preferences");
-        RequireNoOtherWindow(windows, hwnd, destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences");
+        Te3Dialogs.RequireNoOtherWindow(
+            windows,
+            hwnd,
+            destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences"
+        );
 
         if (hasPreferences && destination.Section == null)
         {
@@ -260,22 +264,6 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                 break;
             default:
                 throw new ArgumentException("No navigation for destination " + destination.Id);
-        }
-    }
-
-    private static void RequireNoOtherWindow(IReadOnlyList<Win32WindowInfo> windows, nint main, string allowedDialog)
-    {
-        var unexpected = windows.Where(w => w.Hwnd != main && w.Title.Length > 0 && w.Title != allowedDialog).ToArray();
-        if (unexpected.Length > 0)
-        {
-            throw new InvalidOperationException(
-                "An additional TE3 window is open: "
-                    + string.Join(
-                        "; ",
-                        unexpected.Select(w => $"{w.Title} (HWND {w.Hwnd}, tool window: {w.IsToolWindow})")
-                    )
-                    + ". Inspect it; no dialog was dismissed."
-            );
         }
     }
 

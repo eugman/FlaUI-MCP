@@ -126,7 +126,7 @@ internal static class LayoutChecks
         )
         {
             throw new InvalidOperationException(
-                $"TE3 already shows \"{open.Title}\". Answer or close it, then retry; no input sent."
+                $"TE3 already shows {Te3Dialogs.Describe(open)}. Answer or close it, then retry; no input sent."
             );
         }
 
@@ -135,6 +135,6 @@ internal static class LayoutChecks
 
     // A dock pane TE3 floated (see KNOWN-ISSUES), titled like the pane; Dependencies opens floating by default
     // (Layouts.json, observed 3.27.1).
-    private static bool IsFloatingPane(string title) =>
+    internal static bool IsFloatingPane(string title) =>
         Te3PanePlan.IsNamedPane(title) || PaneReopen.IsMapped(title) || title == "Dependencies";
 }
