@@ -166,6 +166,13 @@ public class ToolRegistry
     internal static McpToolResult WithDispatch(McpToolResult result, int inputsSent, InputRefusal? refusal = null)
     {
         var failed = result.IsError == true || result.Outcome?.Status == "failed";
+        // A composite call's steps carry their own refusals. The operation keeps only the latest, which
+        // may belong to an earlier step that the batch went past, so report the last failed step's.
+        if (result.Outcome?.Steps is { } steps)
+        {
+            refusal = steps.LastOrDefault(step => step.IsError)?.Outcome?.Failure;
+        }
+
         var outcome =
             result.Outcome
             ?? new ToolOutcome(ToolOutcome.DispatchFor(failed, inputsSent), "not-tracked")

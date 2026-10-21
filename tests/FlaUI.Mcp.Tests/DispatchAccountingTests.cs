@@ -250,6 +250,40 @@ public sealed class DispatchAccountingTests
         Assert.Equal(0, counted);
     }
 
+    // K6: a refusal belongs to the step that raised it.
+
+    [Fact]
+    public async Task ABatchFailureIsNotBlamedOnAnEarlierStepsRefusal()
+    {
+        var refusal = new InputRefusal("activation-denied", "activation-denied: test. No input sent.");
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new DelegateTool("windows_type", () => throw InputRefusedException.Record(refusal)));
+        registry.RegisterTool(new DelegateTool("windows_click", () => throw new InvalidOperationException("gone")));
+        registry.RegisterTool(new BatchTool(registry));
+        var actions = new object[] { new { action = "type", text = "a" }, new { action = "click", @ref = "w1e1" } };
+
+        var result = await registry.ExecuteToolAsync("windows_batch", Args(new { actions, stopOnError = false }));
+
+        var steps = result.Outcome!.Steps!;
+        Assert.Equal("activation-denied", steps[0].Outcome!.Failure!.Code);
+        Assert.Null(steps[1].Outcome!.Failure);
+        Assert.Null(result.Outcome.Failure);
+    }
+
+    [Fact]
+    public async Task ABatchStoppedByARefusalReportsThatRefusal()
+    {
+        var refusal = new InputRefusal("activation-denied", "activation-denied: test. No input sent.");
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new DelegateTool("windows_type", () => throw InputRefusedException.Record(refusal)));
+        registry.RegisterTool(new BatchTool(registry));
+        var actions = new object[] { new { action = "type", text = "a" } };
+
+        var result = await registry.ExecuteToolAsync("windows_batch", Args(new { actions }));
+
+        Assert.Equal("activation-denied", result.Outcome!.Failure!.Code);
+    }
+
     private sealed class DelegateTool(string name, Func<McpToolResult> run) : ToolBase
     {
         public override string Name => name;
