@@ -60,6 +60,9 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
         var before = desktop.WindowState(target.Hwnd);
         if (before == requested)
         {
+            // A no-op reports on the window, so it must still be the live, drivable one.
+            target.EnsureAlive();
+            GuardedInput.RequireDrivable(target.ProcessId, desktop);
             // Already there: nothing is sent, so nothing is counted.
             return Task.FromResult(
                 TextResult(Report(requested, before, before, desktop.WindowBounds(target.Hwnd))) with

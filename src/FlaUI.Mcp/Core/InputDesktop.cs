@@ -5,7 +5,9 @@ using FlaUI.Core.AutomationElements;
 namespace FlaUI.Mcp.Core;
 
 /// <summary>A child element with the bounds and offscreen state read for it.</summary>
-public sealed record ChildBox(AutomationElement Element, Rectangle Bounds, bool IsOffscreen);
+/// <param name="Bounds">Null when the bounds could not be read.</param>
+/// <param name="IsOffscreen">Null when IsOffscreen could not be read.</param>
+public sealed record ChildBox(AutomationElement Element, Rectangle? Bounds, bool? IsOffscreen);
 
 /// <summary>
 /// The desktop that guarded input reads and drives. Production uses Windows. Offline tests install a
@@ -159,8 +161,8 @@ internal class InputDesktop
                 .FindAllChildren()
                 .Select(child => new ChildBox(
                     child,
-                    child.Properties.BoundingRectangle.ValueOrDefault,
-                    child.Properties.IsOffscreen.ValueOrDefault
+                    child.Properties.BoundingRectangle.TryGetValue(out var bounds) ? bounds : null,
+                    child.Properties.IsOffscreen.TryGetValue(out var offscreen) ? offscreen : null
                 ))
                 .ToList();
         }

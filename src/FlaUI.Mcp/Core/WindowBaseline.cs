@@ -45,13 +45,16 @@ public sealed class WindowBaseline(IEnumerable<Win32WindowInfo> before)
             return null;
         }
 
-        var opened = Opened(after);
-        if (opened.Count == 0)
+        // Only a window the newly disabled one owns is the modal; an unrelated popup (a splash) is not blamed.
+        var disabled = after
+            .Where(window => before.TryGetValue(window.Hwnd, out var was) && was.IsEnabled && !window.IsEnabled)
+            .Select(window => window.Hwnd)
+            .ToHashSet();
+        var dialog = Opened(after).FirstOrDefault(window => disabled.Contains(window.Owner));
+        if (dialog == null)
         {
             return "(unknown title)";
         }
-
-        var dialog = opened[0];
 
         return dialog.Title.Length > 0 ? dialog.Title : "(untitled window)";
     }

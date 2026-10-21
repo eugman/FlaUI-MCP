@@ -143,7 +143,10 @@ public static class ClickHitTest
         // Automation gives no z-order, so any onscreen one whose bounds hold the point refuses.
         if (OverlayOver(desktop, target, hit, point) is { } sibling)
         {
-            throw Covered($"The point ({point.X},{point.Y}) is covered by {desktop.DescribeElement(sibling)}");
+            var unread = sibling.Bounds == null ? ", whose bounds could not be read" : "";
+            throw Covered(
+                $"The point ({point.X},{point.Y}) is covered by {desktop.DescribeElement(sibling.Element)}{unread}"
+            );
         }
 
         return "ancestor";
@@ -156,7 +159,11 @@ public static class ClickHitTest
         return levels > 0 && desktop.ControlTypeOf(hit) != ControlType.Window;
     }
 
-    private static AutomationElement? OverlayOver(
+    // Skipped only when IsOffscreen was read as true; a sibling whose bounds cannot be read counts as covering.
+    private static bool MayCover(ChildBox box, Point point) =>
+        box.IsOffscreen != true && (box.Bounds is not { } bounds || bounds.Contains(point));
+
+    private static ChildBox? OverlayOver(
         InputDesktop desktop,
         AutomationElement target,
         AutomationElement hit,
@@ -169,14 +176,13 @@ public static class ClickHitTest
             var overlay = desktop
                 .ChildBoxes(parent)
                 .FirstOrDefault(box =>
-                    !box.IsOffscreen
-                    && box.Bounds.Contains(point)
+                    MayCover(box, point)
                     && !desktop.SameElement(box.Element, child)
                     && !PassesThrough(desktop, box.Element)
                 );
             if (overlay != null)
             {
-                return overlay.Element;
+                return overlay;
             }
 
             if (desktop.SameElement(parent, hit))

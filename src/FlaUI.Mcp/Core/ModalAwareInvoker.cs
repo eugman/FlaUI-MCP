@@ -89,7 +89,7 @@ public static class ModalAwareInvoker
         var desktop = InputDesktop.Current;
         windowEnumerator ??= desktop.TopLevelWindows;
 
-        var baseline = new WindowBaseline(processId != 0 ? ReadWindows(windowEnumerator, processId).Windows : []);
+        var baseline = Baseline(windowEnumerator, processId, description);
         var operation = OperationContext.Current.Value;
         var sentBefore = operation?.InputsSent ?? 0;
         var info = tracker.Begin(processId, description);
@@ -133,6 +133,38 @@ public static class ModalAwareInvoker
             WaitError = (waited as WaitOutcome<PatternCallResult>.TimedOut)?.LastError?.Message,
         };
         return operation == null ? pending : pending with { Dispatched = operation.InputsSent > sentBefore };
+    }
+
+    /// <summary>
+    /// The windows before the call. A failed read refuses before anything is sent: an empty baseline would turn modal
+    /// detection off for the whole call without saying so.
+    /// </summary>
+    private static WindowBaseline Baseline(
+        Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
+        int processId,
+        string description
+    )
+    {
+        if (processId == 0)
+        {
+            return WindowBaseline.Empty;
+        }
+
+        var (windows, error) = ReadWindows(windowEnumerator, processId);
+        if (error != null)
+        {
+            throw InputRefusedException.Record(
+                new InputRefusal(
+                    "window-baseline-unreadable",
+                    $"The app's windows could not be read before {description} ({error.Message}), so a modal dialog it opens could not be detected; no input sent."
+                )
+                {
+                    ActionDispatched = false,
+                }
+            );
+        }
+
+        return new WindowBaseline(windows);
     }
 
     /// <summary>The process's windows, or the read error: a failed read never ends the wait.</summary>

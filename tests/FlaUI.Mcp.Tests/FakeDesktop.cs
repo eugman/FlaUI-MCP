@@ -323,7 +323,10 @@ internal sealed class FakeDesktop : InputDesktop
             .Where(pair => ReferenceEquals(pair.Value, parent))
             .Select(pair => new ChildBox(
                 pair.Key,
-                ElementBounds.TryGetValue(pair.Key, out var bounds) ? bounds : Rectangle.Empty,
+                // An element with no bounds set reads as unreadable, as an uncached provider property does.
+                ElementBounds.TryGetValue(pair.Key, out var bounds)
+                    ? bounds
+                    : null,
                 Offscreen.Contains(pair.Key)
             ))
             .ToList();
