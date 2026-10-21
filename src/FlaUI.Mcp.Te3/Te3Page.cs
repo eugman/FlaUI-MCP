@@ -2219,43 +2219,16 @@ public sealed class Te3Page(
         return new(dialogHandle, window.Hwnd, window.Title);
     }
 
-    /// <summary>
-    /// Closes a dialog without confirming anything: Escape first, then its Cancel button, then the title-bar Close button.
-    /// Escape can be swallowed by a focused grid (the Layouts dialog has no Cancel button at all).
-    /// </summary>
-    public async Task CancelDialog(Dialog dialog)
-    {
-        await SendKeysTo(dialog.Handle, "Escape");
-        // Layouts has two title bars and two Close buttons; only the title-bar button has AutomationId "Close".
-        foreach (
-            var button in new ElementSelector[]
-            {
-                new(Name: "Cancel", ControlType: "Button"),
-                new(Name: "Close", AutomationId: "Close", ControlType: "Button"),
-            }
-        )
-        {
-            try
-            {
-                await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(2));
-                return;
-            }
-            catch (TimeoutException) { }
-
-            try
-            {
-                await invoke("windows_click", new { @ref = await DialogRef(dialog, button) });
-            }
-            catch (Exception error)
-                when (error
-                        is InvalidOperationException
-                            or TimeoutException
-                            or System.Reflection.AmbiguousMatchException
-                ) { }
-        }
-
-        await WaitForWindowClosed(dialog.Hwnd, TimeSpan.FromSeconds(5));
-    }
+    /// <summary>Closes a dialog without confirming anything; see <see cref="DialogCancel"/>.</summary>
+    public Task CancelDialog(Dialog dialog) =>
+        DialogCancel.Run(
+            new(
+                () => SendKeysTo(dialog.Handle, "Escape"),
+                timeout => WaitForWindowClosed(dialog.Hwnd, timeout),
+                button => DialogRef(dialog, button),
+                reference => invoke("windows_click", new { @ref = reference })
+            )
+        );
 
     public async Task StageField(Dialog dialog, string name, string controlType, string value) =>
         await invoke("windows_fill", new { @ref = await DialogRef(dialog, name, controlType), value });
