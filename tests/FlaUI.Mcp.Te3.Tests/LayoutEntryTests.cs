@@ -32,6 +32,9 @@ public sealed class LayoutEntryTests : IDisposable
             this.panes = [.. panes];
         }
 
+        /// <summary>Open document tabs; Close removes one unless it is in <see cref="Stuck"/>.</summary>
+        public List<string> Documents { get; } = [];
+
         public List<string> Presses { get; } = [];
 
         /// <summary>Extra top-level windows of the TE3 process, read at each check.</summary>
@@ -56,9 +59,17 @@ public sealed class LayoutEntryTests : IDisposable
         public nint MainWindow => Main;
 
         public IReadOnlyList<LayoutPart> Parts() =>
-            [.. panes.Select((t, i) => new LayoutPart(t, "pane", new Rectangle(0, 61 + i * 100, 500, 100)))];
+            [
+                .. panes.Select((t, i) => new LayoutPart(t, "pane", new Rectangle(0, 61 + i * 100, 500, 100))),
+                .. Documents.Select(t => new LayoutPart(t, "document", new Rectangle(680, 61, 760, 947))),
+            ];
+
+        public Rectangle? BoundsOf(nint hwnd) => new Rectangle(200, 200, 400, 600);
 
         public bool ButtonShown(string title, string button) =>
+            Documents.Contains(title) ? button == "Close" : PaneShows(title, button);
+
+        private bool PaneShows(string title, string button) =>
             panes.Contains(title) && (button == "Close" || (button == "Restore") == maximized.Contains(title));
 
         public async Task Press(string title, string button)
@@ -71,6 +82,7 @@ public sealed class LayoutEntryTests : IDisposable
             if (button == "Close" && !Stuck.Contains(title))
             {
                 panes.Remove(title);
+                Documents.Remove(title);
             }
             else if (ButtonsFlip && button == "Maximize")
             {
@@ -272,5 +284,77 @@ public sealed class LayoutEntryTests : IDisposable
         Assert.Equal(Te3Interaction.PausedAfterFailure, error.Refusal.Code);
         interaction.Observed();
         interaction.Require();
+    }
+
+    private static FakeSurface WithDocuments(InputTally inputs)
+    {
+        var layout = Standard(inputs);
+        layout.Documents.AddRange(["Expression Editor", "DAX Query 1"]);
+        return layout;
+    }
+
+    [Fact]
+    public async Task CloseDocumentPressesTheTabsCloseAndReadsItBack()
+    {
+        var result = await Tool(WithDocuments)
+            .ExecuteAsync(Args(new { action = "close-document", title = "DAX Query 1" }));
+
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal(["Close DAX Query 1"], surface!.Presses);
+    }
+
+    [Fact]
+    public async Task CloseDocumentRefusesAPaneOrAnUnknownTitleBeforeInput()
+    {
+        var pane = await Tool(WithDocuments)
+            .ExecuteAsync(Args(new { action = "close-document", title = "Properties" }));
+        Assert.Equal(true, pane.IsError);
+        Assert.Empty(surface!.Presses);
+
+        var unknown = await Tool(WithDocuments)
+            .ExecuteAsync(Args(new { action = "close-document", title = "DAX Query 9" }));
+        Assert.Equal(true, unknown.IsError);
+        Assert.Contains("DAX Query 1", unknown.Content.Single().Text);
+        Assert.Empty(surface!.Presses);
+    }
+
+    [Fact]
+    public async Task ADocumentThatStaysOpenIsAFailure()
+    {
+        var tool = Tool(inputs =>
+        {
+            var layout = WithDocuments(inputs);
+            layout.Stuck.Add("DAX Query 1");
+            return layout;
+        });
+
+        var result = await tool.ExecuteAsync(Args(new { action = "close-document", title = "DAX Query 1" }));
+
+        Assert.Equal(true, result.IsError);
+        Assert.Contains("still open", result.Content.Single().Text);
+    }
+
+    [Fact]
+    public async Task ListShowsFloatingWindowsBesideTheDockedParts()
+    {
+        // The floating Dependencies pane is a top-level window of its own (owner 0), not inside the main window.
+        var tool = Tool(
+            inputs =>
+            {
+                var layout = Standard(inputs);
+                layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
+                return layout;
+            },
+            readOnly: true
+        );
+
+        var listed = JsonDocument.Parse(
+            (await tool.ExecuteAsync(Args(new { action = "list" }))).Content.Single().Text!
+        );
+
+        Assert.Contains(
+            listed.RootElement.EnumerateArray(),
+            p => p.GetProperty("title").GetString() == "Dependencies" && p.GetProperty("kind").GetString() == "floating"
+        );
     }
 }

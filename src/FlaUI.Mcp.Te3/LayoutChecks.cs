@@ -133,6 +133,8 @@ internal static class LayoutChecks
         return windows.Select(w => w.Hwnd).ToList();
     }
 
-    // A dock pane TE3 floated (see KNOWN-ISSUES), titled like the pane.
-    private static bool IsFloatingPane(string title) => Te3PanePlan.IsNamedPane(title) || PaneReopen.IsMapped(title);
+    // A dock pane TE3 floated (see KNOWN-ISSUES), titled like the pane; Dependencies opens floating by default
+    // (Layouts.json, observed 3.27.1).
+    private static bool IsFloatingPane(string title) =>
+        Te3PanePlan.IsNamedPane(title) || PaneReopen.IsMapped(title) || title == "Dependencies";
 }

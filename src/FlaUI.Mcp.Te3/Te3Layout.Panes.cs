@@ -9,16 +9,50 @@ using FlaUI.Mcp.Te3;
 /// </summary>
 public sealed partial class Te3Layout
 {
-    private static object List(ILayoutSurface surface) =>
-        surface
-            .Parts()
-            .Select(p => new
-            {
-                p.Title,
-                p.Kind,
-                bounds = Relative(p.Bounds, surface.Origin),
-            })
-            .ToList();
+    // Docked panes and documents, then TE3's other titled top-level windows (a floating pane such as Dependencies is
+    // one: unowned and not a tool window), which are outside the main window and so not among its parts.
+    private static object List(ILayoutSurface surface)
+    {
+        var docked = surface.Parts().Select(p => new ListedPart(p.Title, p.Kind, Relative(p.Bounds, surface.Origin)));
+        var floating = surface
+            .Windows()
+            .Where(w => w.Hwnd != surface.MainWindow && w.Title.Length > 0 && !w.IsToolWindow)
+            .Select(w => new ListedPart(
+                w.Title,
+                "floating",
+                surface.BoundsOf(w.Hwnd) is { } bounds ? Relative(bounds, surface.Origin) : null
+            ));
+        return docked.Concat(floating).ToList();
+    }
+
+    private sealed record ListedPart(string Title, string Kind, object? Bounds);
+
+    // A document's own tab Close (Invoke closes an unmodified document without a prompt, 3.27.1). Refused before input
+    // for anything but an open document; read back as gone, and a dialog it opens (a save prompt) is reported.
+    private static async Task<object> CloseDocument(ILayoutSurface surface, string title)
+    {
+        var baseline = LayoutChecks.Baseline(surface.Windows(), surface.MainWindow);
+        var parts = surface.Parts();
+        var document =
+            parts.FirstOrDefault(p => p.Kind == "document" && TitleMatches(p.Title, title))
+            ?? throw new ArgumentException(
+                parts.Any(p => p.Kind == "pane" && TitleMatches(p.Title, title))
+                    ? $"'{title}' is a docked pane, not a document; use hide-pane. No input sent."
+                    : $"No open document titled '{title}'. Open documents: "
+                        + string.Join(", ", parts.Where(p => p.Kind == "document").Select(p => $"'{p.Title}'"))
+                        + ". No input sent."
+            );
+        await surface.Press(document.Title, "Close");
+        await LayoutSteps.RequireNoDialog(surface, document.Title, baseline);
+        if (surface.Parts().Any(p => p.Kind == "document" && TitleMatches(p.Title, document.Title)))
+        {
+            throw new InvalidOperationException(
+                $"Document '{document.Title}' is still open after its Close; inspect before retrying."
+            );
+        }
+
+        return new { closedDocument = document.Title };
+    }
 
     private static object ShowPane(ILayoutSurface surface, string title)
     {
@@ -171,6 +205,8 @@ public sealed partial class Te3Layout
                 Button(title, button)
                     ?? throw new InvalidOperationException($"'{title}' shows no {button} button; nothing was pressed.")
             );
+
+        public System.Drawing.Rectangle? BoundsOf(nint hwnd) => Win32Desktop.GetWindowBounds(hwnd);
 
         public IReadOnlyList<Win32WindowInfo> Windows() =>
             Win32Desktop.GetTopLevelWindows(window.Properties.ProcessId.ValueOrDefault);

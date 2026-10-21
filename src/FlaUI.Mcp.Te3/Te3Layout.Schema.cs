@@ -15,6 +15,7 @@ public sealed partial class Te3Layout
         "maximize-pane",
         "restore-pane",
         "resize",
+        "close-document",
     ];
 
     private string[] Actions => readOnly ? ReadActions : ChangeActions;
@@ -59,6 +60,8 @@ public sealed partial class Te3Layout
                 + "it when done). Pane titles match with or without TE3's \"(Changed)\" suffix. resize: drag the "
                 + "splitter a pane shares with its neighbour until the pane is `width` or `height` physical pixels; a "
                 + "pane more than 4 px off it fails the call with the measured step. "
+                + "close-document: press a document tab's own Close (DAX Query, DAX Package Manager), refused before "
+                + "input for a pane or an unknown title, and read back as gone; a dialog it opens is reported. "
                 + "Every action takes desktop focus and needs an active te3_interaction_begin grant. No model edits. "
                 + "Reads (list, show-pane, plan-preset) are te3_layout_read.";
 

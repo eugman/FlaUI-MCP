@@ -116,4 +116,13 @@ public sealed class LayoutChecksTests
         Assert.Null(LayoutChecks.NewDialog([main, floating, tool, untitled], main.Hwnd, [main.Hwnd, floating.Hwnd]));
         Assert.Equal(dialog, LayoutChecks.NewDialog([main, floating, dialog], main.Hwnd, [main.Hwnd, floating.Hwnd]));
     }
+
+    [Fact]
+    public void TheFloatingDependenciesPaneIsNotAnUnansweredDialog()
+    {
+        var main = new Win32WindowInfo(0x10, "Model - Tabular Editor 3", 7, true, false, false);
+        var dependencies = new Win32WindowInfo(0x30, "Dependencies", 7, true, false, false);
+
+        Assert.Equal([main.Hwnd, dependencies.Hwnd], LayoutChecks.Baseline([main, dependencies], main.Hwnd));
+    }
 }

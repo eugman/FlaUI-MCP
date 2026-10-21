@@ -75,6 +75,7 @@ public sealed partial class Te3Layout(
             "maximize-pane" => await PaneButton(surface, Required(a, "title"), "Maximize"),
             "restore-pane" => await PaneButton(surface, Required(a, "title"), "Restore"),
             "resize" => await Resize(inputs, handle, Live(window), Required(a, "title"), a),
+            "close-document" => await CloseDocument(surface, Required(a, "title")),
             _ => throw new ArgumentException("Unsupported TE3 layout action"),
         };
         return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));

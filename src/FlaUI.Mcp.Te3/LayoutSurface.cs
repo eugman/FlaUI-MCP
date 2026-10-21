@@ -25,6 +25,9 @@ public interface ILayoutSurface
     /// <summary>Presses that button of that part; counted as input once it goes out.</summary>
     Task Press(string title, string button);
 
+    /// <summary>A top-level window's screen bounds, or null when unreadable.</summary>
+    Rectangle? BoundsOf(nint hwnd);
+
     /// <summary>The TE3 process's top-level windows now.</summary>
     IReadOnlyList<Win32WindowInfo> Windows();
 
