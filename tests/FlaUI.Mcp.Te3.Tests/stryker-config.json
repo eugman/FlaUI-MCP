@@ -21,7 +21,7 @@
       "**/PhysicalInputObserver.cs",
       "**/Backlog.cs",
       "**/InputTally.cs",
-      "**/InputProof.cs",
+      "**/CoreCallException.cs",
       "!**/obj/**",
       "!**/*.g.cs",
       "!**/AssemblyInfo.cs"

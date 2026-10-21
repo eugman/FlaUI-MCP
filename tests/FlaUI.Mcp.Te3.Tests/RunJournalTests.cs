@@ -156,8 +156,8 @@ public sealed class RunJournalTests : IDisposable
     [Fact]
     public void AnActivationTimeoutDoesNotClaimNothingWasSent()
     {
-        // te3_focus_window was sent before the wait, so the timeout must not read as a refusal before input.
-        Assert.False(InputProof.NotSent(RunExecutor.ActivationTimeout));
+        // te3_focus_window was sent before the wait, so the timeout must not read as a call that was not dispatched.
+        Assert.False(CoreFailure.NotDispatched(new TimeoutException(RunExecutor.ActivationTimeout)));
         Assert.Contains("focus", RunExecutor.ActivationTimeout);
     }
 
