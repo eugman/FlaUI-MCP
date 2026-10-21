@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- **Breaking:** `te3_layout`'s read-only actions (`list`, `show-pane`, `plan-preset`) moved to the new `te3_layout_read`, so each tool has one MCP annotation (`te3_layout_read` read-only, `te3_layout` destructive). `te3_layout` refuses them and names `te3_layout_read`; callers that list panes or plan a preset must call the new tool. Every TE3 tool now declares annotations.
 - `FlaUI.Mcp.Te3 mcp` is now the one server to configure. It serves the generic `windows_*` tools (including the window-management extensions) alongside the TE3 tools from one registry, so element refs and window handles work across both. Running `FlaUI.Mcp.exe` next to it is no longer needed.
 - A failed `te3_navigate` or `te3_layout` call reports how much input went out the way Core's tools do, in `structuredContent`: `dispatch` (`partial`, `not-dispatched`, or `timed_out_pending` while the failing call may still go out), `inputsSent`, `provider` and the refusal as `failure`. The `actionDispatched` and `inputsSent` fields are no longer in the text. A held TE3 provider is reported as Core's blocked outcome (`not-dispatched`, `provider: pending`).
 - TE3 counts input from Core's `inputsSent`, including the activation and focus Core counts, and reads refusals, retries and cancel fallbacks from Core's outcome instead of matching "no input sent" in the text. `te3_navigate` names `activation-denied` and `desktop-unavailable` blockers from the refusal's code.
@@ -18,8 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - TE3 coverage and mutation testing moved to `scripts/coverage-te3.ps1` and `docs/mutation-te3.md`; `scripts/coverage.ps1`, `scripts/mutation.ps1` and `docs/mutation.md` now belong to the core and cover its own offline tests. `dotnet-stryker` comes from the core's root tool manifest.
 
 ### Added
-- `te3_layout_read` takes `te3_layout`'s read-only actions (`list`, `show-pane`, `plan-preset`), so each tool has one MCP annotation; `te3_layout` refuses them and points to it. Every TE3 tool now declares annotations.
-- `te3_layout` on the TE3 companion server arranges TE3 for a screenshot. `list` shows docked panes and document tabs with bounds. `close` and `keep` close panes or tabs by title, and stop at a save prompt. `maximize-pane` and `restore-pane` use the pane's own buttons. `resize` drags the dock splitter until a pane is a given width or height, and reports the size reached. Pane titles match with or without TE3's " (Changed)" suffix.
+- `te3_layout` on the TE3 companion server arranges TE3 for a screenshot. `close` and `keep` hide docked panes by title (document tabs are never closed), and stop at a dialog such as a save prompt. `maximize-pane` and `restore-pane` use the pane's own buttons. `resize` drags the dock splitter until a pane is a given width or height, and reports the size reached. Pane titles match with or without TE3's " (Changed)" suffix. `te3_layout_read` lists docked panes and document tabs with bounds.
 
 ### Fixed
 - `te3_navigate` works when TOM Explorer is a docked pane rather than a tab.
