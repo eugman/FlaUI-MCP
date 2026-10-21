@@ -30,7 +30,8 @@ public class ScreenshotTool : ToolBase
 
     public override string Name => "windows_screenshot";
 
-    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
+    // Not read-only: parkPointer moves the pointer off the window before capturing, and that is counted.
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
 
     public override string Description =>
         "Capture a window, element or the screen as PNG. Normal capture uses UIA bounds and may omit the title bar; strictNative captures the whole native window. With savePath and includeImage=false only the path is returned; view the saved image before claiming a visual result.";

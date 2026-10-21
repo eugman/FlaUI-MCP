@@ -55,7 +55,7 @@ public sealed class ToolCompositionTests
     [InlineData("windows_get_text", true, false)]
     [InlineData("windows_list_windows", true, false)]
     [InlineData("windows_get_clipboard", true, false)]
-    [InlineData("windows_screenshot", true, false)]
+    [InlineData("windows_screenshot", false, false)]
     [InlineData("windows_close", false, true)]
     [InlineData("windows_fill", false, true)]
     [InlineData("windows_send_keys", false, true)]
