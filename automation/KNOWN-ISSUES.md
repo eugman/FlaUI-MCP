@@ -28,4 +28,4 @@ Fixed in the host: `te3_navigate object` turns Show changes off before it walks,
 
 Seen in TE3 3.27.1 on SpaceParts. Navigating to `Brands[Brand]` walks the filtered tree with Down presses. With and without `folder` (`1. Brand Hierarchy`), the walk was cancelled at the 30-second deadline after 15 inputs, leaving another row selected (`Table "Products"`).
 
-Workaround: none yet for large models. After a timeout, observe the selection with `te3_model_state`. Don't retry blindly.
+The deadline is Core's fixed 30 s per tool call (`ToolRegistry`); a broker `--timeout` does not lift it, and this host cannot change it. The walk now stops itself after 20 s and fails with the rows visited, the inputs sent, the row it stopped on and its table, instead of being cancelled mid-key. A deep object can still be out of reach; raising the limit needs a Core change. After a failure, observe the selection with `te3_model_state`. Don't retry blindly.

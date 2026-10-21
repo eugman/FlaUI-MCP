@@ -2527,6 +2527,10 @@ public sealed class Te3Page(
         await NavigationRetry.Once(() => WalkToObject(table, objectName, objectType), () => Inputs.Sent, reportStep);
     }
 
+    // Core stops every tool call at 30 s (ToolRegistry, not configurable from this host); the walk stops itself first,
+    // leaving time to clear the search and report where it got to.
+    private static readonly TimeSpan WalkBudget = TimeSpan.FromSeconds(20);
+
     // Where the last walk ended; the arrival check compares it with the request.
     private WalkResult? lastWalk;
 
@@ -2541,12 +2545,20 @@ public sealed class Te3Page(
         await SearchTomTyped(objectName);
         await Keys("Home", TomExplorerTarget());
         var cursor = new TomCursor(this);
-        var walk = await PathWalker.Find(cursor, table, objectName, objectType);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var walk = await PathWalker.Find(
+            cursor,
+            table,
+            objectName,
+            objectType,
+            outOfTime: () => clock.Elapsed > WalkBudget
+        );
         if (!walk.Found)
         {
             await ClearTomSearchTyped();
             throw new InvalidOperationException(
-                $"No {objectType} '{objectName}' under table '{table}' in TOM Explorer. {walk.Reason}"
+                $"No {objectType} '{objectName}' under table '{table}' in TOM Explorer after {walk.RowsVisited} rows "
+                    + $"and {Inputs.Sent} inputs. {walk.Reason}"
             );
         }
 

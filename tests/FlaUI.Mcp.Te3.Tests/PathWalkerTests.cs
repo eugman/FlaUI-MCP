@@ -161,4 +161,33 @@ public sealed class PathWalkerTests
         Assert.True(findRow.Found);
         Assert.Equal(4, findRow.RowsVisited);
     }
+
+    [Fact]
+    public async Task ALongWalkStopsBeforeTheToolDeadlineAndSaysWhereItGot()
+    {
+        // Brands[Brand] on SpaceParts: many rows before the column. Each Down costs ~2 s live, so the old walk ran
+        // into Core's 30 s deadline mid-key. A fake clock that runs out after 15 rows stands in for it.
+        var rows = new List<RowObservation> { new("Brands", "Table") };
+        rows.AddRange(Enumerable.Range(1, 40).Select(i => new RowObservation($"Measure {i}", "Measure")));
+        rows.Add(new("Brand", "Data Column"));
+        var tree = new FakeTree([.. rows]);
+        var checks = 0;
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", outOfTime: () => ++checks > 15);
+
+        Assert.False(walk.Found);
+        Assert.Equal(16, walk.RowsVisited);
+        Assert.Equal(15, tree.Downs);
+        Assert.Equal("Brands", walk.Table);
+        Assert.Contains("before the tool deadline", walk.Reason);
+        Assert.Contains("Measure 15", walk.Reason);
+    }
+
+    [Fact]
+    public async Task AWalkWithTimeLeftIsUnchanged()
+    {
+        var walk = await PathWalker.Find(SpaceParts(), "Exchange Rate", "Date", "Column", outOfTime: () => false);
+        Assert.True(walk.Found);
+        Assert.Equal(12, walk.RowsVisited);
+    }
 }

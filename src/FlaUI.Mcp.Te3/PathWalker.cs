@@ -32,12 +32,14 @@ public static class PathWalker
     /// <param name="objectName">The object's name as TOM Explorer shows it.</param>
     /// <param name="objectType">Table, Column or Measure.</param>
     /// <param name="maxRows">Rows to visit before giving up.</param>
+    /// <param name="outOfTime">True once the walk must stop to finish inside the tool deadline.</param>
     public static async Task<WalkResult> Find(
         ITreeCursor cursor,
         string table,
         string objectName,
         string objectType,
-        int maxRows = DefaultMaxRows
+        int maxRows = DefaultMaxRows,
+        Func<bool>? outOfTime = null
     )
     {
         string? currentTable = null;
@@ -57,6 +59,18 @@ public static class PathWalker
             if (visited == maxRows)
             {
                 break;
+            }
+
+            // Stop on our own before Core's fixed tool deadline cancels a key press part-way.
+            if (outOfTime?.Invoke() == true)
+            {
+                return new(
+                    false,
+                    currentTable,
+                    visited,
+                    $"Stopped before the tool deadline after {visited} rows, on '{row.Value}' ({row.Type ?? "unknown type"}) "
+                        + $"under table '{currentTable ?? "none"}'. Narrow the search or retry from here."
+                );
             }
 
             if (await cursor.Down() is not { } next)
