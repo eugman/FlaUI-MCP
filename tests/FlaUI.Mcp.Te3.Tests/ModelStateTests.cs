@@ -6,7 +6,7 @@ using Xunit;
 /// The status bar keeps a stable order while every panel's text changes with state, and no panel
 /// carries an automationId. Matching a particular string would miss: the slot reading
 /// "(No connection)" with a model open reads "(No model loaded)" on an empty instance. All three
-/// fixtures below were observed live on TE3 3.26.3.
+/// fixtures below were observed live on TE3 3.26.3; the two-Button bar is from 3.27.1.
 /// </summary>
 public sealed class ModelStateTests
 {
@@ -83,6 +83,49 @@ public sealed class ModelStateTests
         Assert.Equal("(No model loaded)", state.Connection);
         Assert.Equal("(Nothing selected)", state.Selection);
         Assert.Null(state.Caret);
+    }
+
+    // TE3 3.27.1 (UI-MAP, 2026-10-21): the bar has two Buttons, "<n> BP issues" and "MCP Stopped". Only the Buttons
+    // were recorded, not their order or the text panels, so the text panels here are the 3.26.3 ones and both orders
+    // are tested.
+    private static ElementInfo[] TwoButtons(bool mcpFirst)
+    {
+        var bpa = Panel("Button", "12 BP issues", null);
+        var mcp = Panel("Button", "MCP Stopped", null);
+        return
+        [
+            Text("Model loaded."),
+            Text(null),
+            mcpFirst ? mcp : bpa,
+            mcpFirst ? bpa : mcp,
+            Text(null),
+            Text("Ln 5	Col 38		INS"),
+            Text("Measure \"Gross Sales\""),
+            Text("(No connection)"),
+        ];
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void On3271TheAnalyzerIsTheBpIssuesButtonNotTheMcpOne(bool mcpFirst)
+    {
+        var state = Te3StatusBar.Map(TwoButtons(mcpFirst));
+
+        Assert.Equal("recognized", state.Layout);
+        Assert.Equal("12 BP issues", state.BpaSummary);
+        Assert.Equal("Measure \"Gross Sales\"", state.Selection);
+        Assert.Contains("MCP Stopped", state.Slots);
+    }
+
+    [Fact]
+    public void TwoButtonsNeitherShapedLikeTheAnalyzerGiveNoSummaryRatherThanAGuess()
+    {
+        var panels = TwoButtons(mcpFirst: true)
+            .Select(p => p.ControlType == "Button" && p.Name.EndsWith("BP issues") ? p with { Name = "Item" } : p)
+            .ToArray();
+
+        Assert.Null(Te3StatusBar.Map(panels).BpaSummary);
     }
 
     [Fact]

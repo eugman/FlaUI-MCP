@@ -60,8 +60,7 @@ public static class Te3StatusBar
     public static Te3ModelState Map(IReadOnlyList<ElementInfo> panels)
     {
         var slots = panels.Select(Text).ToArray();
-        // The analyzer summary is the only Button on the bar; its label is the count itself.
-        var bpa = panels.FirstOrDefault(p => p.ControlType == "Button");
+        var bpa = Analyzer(panels);
         var texts = panels.Where(p => p.ControlType != "Button" && Text(p).Length > 0).ToArray();
         // Too few panels to map, or more than the observed layout has: an added panel shifts the
         // right-anchored slots silently, which is the mismapping this check exists to refuse.
@@ -105,6 +104,25 @@ public static class Te3StatusBar
             slots
         );
     }
+
+    /// <summary>
+    /// The analyzer summary Button. On 3.26.3 it is the only Button and its label is the count itself ("7257 BP
+    /// issues", or "Item" with nothing to count). 3.27.1 adds an "MCP Stopped" Button, so with more than one Button the
+    /// summary is the one shaped like a count of BP issues; none or several such is no summary, not a guess.
+    /// </summary>
+    private static ElementInfo? Analyzer(IReadOnlyList<ElementInfo> panels)
+    {
+        var buttons = panels.Where(p => p.ControlType == "Button").ToArray();
+        if (buttons.Length <= 1)
+        {
+            return buttons.FirstOrDefault();
+        }
+
+        var shaped = buttons.Where(b => BpIssues.IsMatch(Text(b))).ToArray();
+        return shaped.Length == 1 ? shaped[0] : null;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex BpIssues = new(@"^\d[\d,.\s]*BP issues?$");
 
     private static string Text(ElementInfo panel) =>
         !string.IsNullOrEmpty(panel.Value) ? panel.Value
