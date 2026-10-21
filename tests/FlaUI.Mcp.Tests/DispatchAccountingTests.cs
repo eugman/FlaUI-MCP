@@ -208,7 +208,7 @@ public sealed class DispatchAccountingTests
         var desktop = new FakeDesktop { FocusLostAfter = 2 };
         using var installed = desktop.Install();
 
-        var counted = Counted(() => MouseTool.Drag(FakeDesktop.Target, new Point(10, 10), new Point(50, 10), 4));
+        var counted = Counted(() => PointerActions.Drag(FakeDesktop.Target, new Point(10, 10), new Point(50, 10), 4));
 
         Assert.Equal(3, desktop.Dispatched);
         Assert.Equal(3, counted);

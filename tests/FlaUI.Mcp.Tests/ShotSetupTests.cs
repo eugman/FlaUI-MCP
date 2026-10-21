@@ -64,7 +64,9 @@ public sealed class ShotSetupTests
     public void CoordinateClickRejectsOffWindowOrOccludedPoint(int hit)
     {
         var target = new InputTarget(42, 1, 1);
-        Assert.Throws<InputRefusedException>(() => MouseTool.RequireHit(target, new Point(10, 20), _ => (nint)hit));
+        Assert.Throws<InputRefusedException>(() =>
+            PointerActions.RequireHit(target, new Point(10, 20), _ => (nint)hit)
+        );
     }
 
     [Fact]
@@ -73,10 +75,10 @@ public sealed class ShotSetupTests
         var target = new InputTarget(42, 1, 1);
         var clicks = 0;
         Assert.Throws<InputRefusedException>(() =>
-            MouseTool.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 99)
+            PointerActions.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 99)
         );
         Assert.Equal(0, clicks);
-        MouseTool.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 42);
+        PointerActions.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 42);
         Assert.Equal(1, clicks);
     }
 
@@ -84,7 +86,7 @@ public sealed class ShotSetupTests
     public void CoordinateClickAcceptsTheCapturedWindowHit()
     {
         var target = new InputTarget(42, 1, 1, 43);
-        Assert.Null(Record.Exception(() => MouseTool.RequireHit(target, new Point(10, 20), _ => 43)));
+        Assert.Null(Record.Exception(() => PointerActions.RequireHit(target, new Point(10, 20), _ => 43)));
     }
 
     [Fact]

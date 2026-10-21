@@ -134,7 +134,7 @@ public sealed class ReviewFollowUpTests
         using var installed = desktop.Install();
 
         var error = Assert.Throws<InputRefusedException>(() =>
-            MouseTool.Drag(FakeDesktop.Target, new System.Drawing.Point(10, 10), to, 4)
+            PointerActions.Drag(FakeDesktop.Target, new System.Drawing.Point(10, 10), to, 4)
         );
 
         Assert.Equal("point-not-on-target", error.Refusal.Code);

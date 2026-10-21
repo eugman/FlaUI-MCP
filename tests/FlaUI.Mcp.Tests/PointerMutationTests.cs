@@ -28,7 +28,7 @@ public sealed class PointerMutationTests
         var desktop = new FakeDesktop();
         using var installed = desktop.Install();
 
-        MouseTool.Drag(FakeDesktop.Target, From, To, 4);
+        PointerActions.Drag(FakeDesktop.Target, From, To, 4);
 
         // Move to the start, press, each path step, release.
         Assert.Equal(PointerPlan.DragPath(From, To, 4).Count + 3, desktop.Dispatched);
@@ -46,7 +46,7 @@ public sealed class PointerMutationTests
         };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InputRefusedException>(() => MouseTool.Drag(FakeDesktop.Target, From, To, 4));
+        var error = Assert.Throws<InputRefusedException>(() => PointerActions.Drag(FakeDesktop.Target, From, To, 4));
 
         Assert.Equal("Point is not on the target window (off-window or covered); no input sent.", error.Message);
         Assert.Equal(0, desktop.Dispatched);
@@ -186,5 +186,33 @@ public sealed class PointerMutationTests
     public void EveryPatternActionCanBeRequested(string action)
     {
         Assert.Equal(action, ClickTool.ChooseAction(action, false, ControlType.Button, _ => true));
+    }
+
+    [Fact]
+    public void PointerPointsAreResolvedUnderTheInputLease()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var held = false;
+
+        PointerActions.Move(
+            FakeDesktop.Target,
+            () =>
+            {
+                var gate = (SemaphoreSlim)
+                    typeof(GuardedInput)
+                        .GetField(
+                            "InputGate",
+                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+                        )!
+                        .GetValue(null)!;
+                held = gate.CurrentCount == 0;
+                return From;
+            },
+            0
+        );
+
+        Assert.True(held);
+        Assert.Equal(1, desktop.Dispatched);
     }
 }
