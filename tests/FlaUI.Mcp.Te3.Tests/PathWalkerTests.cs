@@ -211,4 +211,23 @@ public sealed class PathWalkerTests
         Assert.Equal("Brands", walk.Table);
         Assert.Contains("on 'Sub Brand' (Level) under table 'Brands'", walk.Reason);
     }
+
+    [Fact]
+    public async Task ATableRowWithNoTreeValueIsNamedFromTheStatusBar()
+    {
+        // Live, the Brands TreeItem gave no value mid-scroll; only the status bar named it.
+        var tree = new FakeTree(
+            new("Tables", "Tables"),
+            TomSelection.ObservedRow(null, "Table \"Brands\""),
+            TomSelection.ObservedRow("Brand Hierarchy", "Hierarchy \"Brand Hierarchy\""),
+            TomSelection.ObservedRow("Brand", "Level \"Brand\""),
+            TomSelection.ObservedRow("Brand", "Data Column \"Brand\"")
+        );
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column");
+
+        Assert.True(walk.Found);
+        Assert.Equal("Brands", walk.Table);
+        Assert.Equal(5, walk.RowsVisited);
+    }
 }
