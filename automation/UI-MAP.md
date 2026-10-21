@@ -1,6 +1,6 @@
 # TE3 UI map
 
-Locators and behaviour observed in TE3 3.26.3 and 3.27.0. Treat every label as a release observation: if a selector stops matching, observe the new UI before changing it.
+Locators and behaviour observed in TE3 3.26.3, 3.27.0 and 3.27.1. Treat every label as a release observation: if a selector stops matching, observe the new UI before changing it.
 
 ## General rules
 
@@ -115,8 +115,39 @@ A dialog can disappear between window enumeration and a UIA read. Treat `Element
 | Preferences > AI Features > Permissions | Live UIA tree and pane controls | `preferences/permissions` |
 | Preferences > AI Features > AI Assistant > AI Provider | Live UIA tree and pane controls | `preferences/ai-provider` |
 | Preferences > AI Features > AI Assistant > Preferences | Live UIA tree and pane controls | `preferences/ai-assistant` |
-| View > AI Assistant | [Official AI Assistant docs](https://docs.tabulareditor.com/en/features/ai-assistant.html) | Menu and pane locators still need live observation |
+| View > AI Assistant | Live View popup Button `AI Assistant` and Pane `AI Assistant` (2026-10-21) | Reopen verified by hand; `te3_layout` has no show action yet |
 | TOM Explorer > Show changes | Live UIA CheckBox with Toggle pattern; [official behavior](https://docs.tabulareditor.com/en/features/unsaved-changes.html) | `tom-explorer/changes` |
-| Properties > Show changes | [Official unsaved changes docs](https://docs.tabulareditor.com/en/features/unsaved-changes.html) | Toolbar control still needs live observation |
+| Properties > Show changes | Live CheckBox `Show changes` in `PropertyGridView` > ToolBar `Tools` (2026-10-21) | Observed only |
 
 The MCP Server and Permissions routes inspect settings only. They do not change grants or start the MCP server.
+
+## Docked panes and View menu (3.27.1)
+
+Observed 3.27.1 (2026-10-21) on `localhost/sp-demo-mcp`, main window maximized on a 1920x1200 monitor at 125% (window and monitor DPI 120, not 150%). Bounds are physical pixels.
+
+| Area | Selector | Notes |
+|---|---|---|
+| Main window | Window titled `<database> (Import) - <server> - Tabular Editor 3.27.1 - Enterprise Edition` | UIA BoundingRectangle (0,30,1920,1110); native window bounds (-9,-9,1938,1158). |
+| Main menu | MenuBar `Main menu` | MenuItems File, Edit, View, Expression Editor (only while that document has focus), Model, Tools, Window, Help. |
+| AI Assistant | Pane `AI Assistant` > `AiChatView` | TitleBar `AI Assistant` with Buttons `Close`, `Auto Hide` (no `Maximize`). ToolBar `Tools`: `New conversation`, `Delete conversation`, ComboBox `barConversations`, `Open Custom Instructions Folder`, `AI Assistant Settings`; Button `Send` (`send-button`). Chat is WebView2 (`myapp.local/index.html`). |
+| TOM Explorer | Pane `TOM Explorer` inside Tab `Tabular Editor 3` | Tabs `TOM Explorer` and `Best Practice Analyzer` share the container. TitleBar Buttons `Close`, `Auto Hide`, `Maximize`. Title reads `TOM Explorer (Changed)` while Show changes is on. Search Edit `searchControl1`. |
+| Properties | Pane `Properties` > `PropertyGridView` > Table `propertyGrid` | ToolBar `Tools`: CheckBoxes `Categorized`, `Alphabetical`, `Show changes`, `Property descriptions`. This is the Properties Show changes control. |
+| Expression Editor | Document Pane `Expression Editor` > `QuickEditorView` | ToolBar `DAX Script Tools` with ComboBox `Property`. Listed by `te3_layout_read` as kind `document`. |
+| Status bar | StatusBar `Status bar` | Buttons `<n> BP issues` and `MCP Stopped`. |
+| View menu entries | Buttons in the untitled popup (find with `includeOwned: true`) | `TOM Explorer`, `AI Assistant`, `DAX Package Manager`, `Best Practice Analyzer`, `Messages`, `Data Refresh`, `Expression Editor`, `Macros`, `VertiPaq Analyzer`, `Dependencies`, `DAX Optimizer`, `Calendar Editor`, `Perspective Editor`, `Metadata Translation Editor`, `Properties`; submenu MenuItems `Debug`, `Toolbars`. The popup is not listed by `windows_list_windows`. |
+
+Not open in this layout, so not observed: DAX query, Messages, Macros, Data preview panes.
+
+Reopening a pane: hide it, click MenuItem `View` with `physical: true`, find Button `<pane title>` with `includeOwned: true`, click it with `physical: true`. Verified for Properties, AI Assistant and TOM Explorer; each came back at its previous bounds.
+
+Pane bounds from `te3_layout_read list` (UIA-window-relative): AI Assistant (0,61,1000,1017), Expression Editor document (1000,61,160,1017), TOM Explorer (1160,61,760,590), Properties (1160,651,760,427). `maximize-pane Properties` gave TOM Explorer height 36 and Properties (1160,97,760,981); `restore-pane` returned the original sizes.
+
+Coordinate spaces: `te3_layout_read list` is relative to the UIA window rectangle; a `strictNative` capture's origin is the native window rectangle. Here a listed point maps to PNG pixels at (+9, +39). Use `windows_screenshot` with `locate` instead of converting: located AI Assistant (9,100,1000,1017), Properties (1169,690,760,427) and the menu bar (9,39,1920,29) matched the pixels.
+
+Touching panes: the TOM Explorer and Properties containers share an edge (y 651) with no gap. The splitter sits in TOM Explorer's last rows; y 651 is the top of the Properties title bar.
+
+| Dialog (3.27.1) | Selector | Notes |
+|---|---|---|
+| Open File | owned Window `Open File` from toolbar Button `Open...` | Observed 3.27.1 (2026-10-21): ID `1148` is shared by a Pane, ComboBox `File name:` and Edit `File name:`; keep the Edit constraint. ComboBox `Files of type:` is `1136`. Cancel is Button `Cancel`, ID `2`. |
+| Preferences | Window `Preferences` | Observed 3.27.1: Cancel is Button `Cancel` (numeric ID, unstable). All six `preferences/*` destinations arrived with the Preferences window left open between calls. |
+| MCP Server | Window `MCP Server`, Pane `McpServerDialog` > `layoutControl` | Observed 3.27.1: Buttons `OK`, `Start server`, `Copy`; SplitButton `Export configuration`; read-only Edit `Server URL:`; permission ComboBoxes `Model metadata:` (Deny/Read/Read-Write), `Model data:` (Deny/Read), `Best Practice Analyzer:`, `Documents:`, `Macros:`. Observed only; no permission changed. |
