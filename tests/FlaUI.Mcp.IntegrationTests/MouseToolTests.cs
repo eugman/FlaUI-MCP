@@ -419,11 +419,14 @@ public class MouseToolTests(TestAppFixture fixture, ITestOutputHelper output)
     [Fact]
     public async Task ParkMovesThePointerOffTheWindow()
     {
-        // Kills MouseTool "park" case: the pointer must end outside the window.
+        // Kills MouseTool "park" case: the pointer must end outside the window, on the window's own monitor.
         var reply = await fixture.CallTool(Pointer(), new { action = "park", handle = fixture.WpfHandle });
         var (screen, _, action) = Landed(reply);
+        var window = Origin(fixture.WpfHandle);
         Assert.Equal("park", action);
-        Assert.False(Origin(fixture.WpfHandle).Contains(screen), $"Parked at {screen}, inside the window.");
+        Assert.False(window.Contains(screen), $"Parked at {screen}, inside the window.");
+        var monitor = System.Windows.Forms.Screen.FromRectangle(window).Bounds;
+        Assert.True(monitor.Contains(screen), $"Parked at {screen}, off the window's monitor {monitor}.");
         Assert.Equal(screen, FlaUI.Core.Input.Mouse.Position);
     }
 

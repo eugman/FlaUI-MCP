@@ -31,16 +31,21 @@ public static class PointerPlan
     }
 
     /// <summary>
-    /// A screen point outside <paramref name="window"/>, so no control of it shows hover state or a
-    /// tooltip. Prefers another monitor, then the margins of the window's own monitor; null when the
-    /// window covers every screen pixel.
+    /// Where to park the pointer for <paramref name="window"/>: on the monitor that holds most of it, so the
+    /// pointer never jumps to another screen, and outside the window when that monitor has room beside it.
+    /// When the window covers its monitor, the monitor's bottom-left corner. Null when the window is on no monitor.
     /// </summary>
     public static Point? ParkPoint(Rectangle window, IReadOnlyList<Rectangle> monitors)
     {
         const int Inset = 8;
-        if (monitors.FirstOrDefault(m => !m.IntersectsWith(window)) is { IsEmpty: false } elsewhere)
+        var holder = monitors
+            .Where(m => m.IntersectsWith(window))
+            .OrderByDescending(m => Area(Rectangle.Intersect(m, window)))
+            .Select(m => (Rectangle?)m)
+            .FirstOrDefault();
+        if (holder is not { } monitor)
         {
-            return new Point(elsewhere.X + Inset, elsewhere.Y + Inset);
+            return null;
         }
 
         // A quarter of the way along a bottom taskbar: clear of a centered Windows 11 icon
@@ -52,9 +57,11 @@ public static class PointerPlan
             new(window.X - Inset, window.Y + window.Height / 2),
             new(window.X + window.Width / 2, window.Y - Inset),
         ];
-        var own = monitors.Where(m => m.IntersectsWith(window)).ToList();
-        return candidates.Where(p => own.Any(m => m.Contains(p))).Select(p => (Point?)p).FirstOrDefault();
+        var beside = candidates.Where(monitor.Contains).Select(p => (Point?)p).FirstOrDefault();
+        return beside ?? new Point(monitor.X + Inset, monitor.Bottom - 1 - Inset);
     }
+
+    private static long Area(Rectangle r) => (long)r.Width * r.Height;
 
     public static readonly string[] Edges = ["center", "left", "right", "top", "bottom"];
 
@@ -112,7 +119,7 @@ public static class PointerParking
         var point =
             PointerPlan.ParkPoint(window, monitors)
             ?? throw new InvalidOperationException(
-                "The window covers every screen, so the pointer cannot leave it; restore the window or move the pointer to a quiet spot with windows_mouse."
+                "The window is on no monitor, so there is no screen to park the pointer on; move the window onto a screen first."
             );
         using (GuardedInput.AcquireLease())
         {
