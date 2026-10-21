@@ -14,6 +14,10 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
     private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
 
     public override string Name => name;
+
+    // A status-bar read changes nothing; navigation takes the desktop, types and clicks, but edits nothing.
+    public override McpToolAnnotations Annotations =>
+        name == ModelState ? McpToolAnnotations.ReadOnly : McpToolAnnotations.Input(destructive: false);
     public override string Description =>
         name switch
         {

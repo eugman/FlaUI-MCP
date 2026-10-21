@@ -232,7 +232,9 @@ public sealed class InteractionTests
     [InlineData("show-pane")]
     public async Task ReadOnlyLayoutActionsNeedNoGrant(string action)
     {
-        var result = await new Te3Layout(null!, Grant()).ExecuteAsync(Own(new { action, title = "Properties" }));
+        var result = await new Te3Layout(null!, Grant(), readOnly: true).ExecuteAsync(
+            Own(new { action, title = "Properties" })
+        );
 
         Assert.True(result.IsError);
         Assert.DoesNotContain(Te3InteractionTool.Begin, result.Content[0].Text);
@@ -274,7 +276,9 @@ public sealed class InteractionTests
             arguments["windowHeight"] = height;
         }
 
-        var result = await new Te3Layout(null!, Grant()).ExecuteAsync(JsonSerializer.SerializeToElement(arguments));
+        var result = await new Te3Layout(null!, Grant(), readOnly: true).ExecuteAsync(
+            JsonSerializer.SerializeToElement(arguments)
+        );
 
         Assert.Equal(tooSmall, result.IsError == true);
     }

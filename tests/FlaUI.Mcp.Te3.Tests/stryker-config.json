@@ -7,6 +7,7 @@
       "**/Te3InteractionTool.cs",
       "**/Te3Companion.cs",
       "**/Te3Layout.cs",
+      "**/Te3Layout.Schema.cs",
       "**/LayoutSteps.cs",
       "**/Te3NativePreflightTool.cs",
       "**/NativeMcpPreflight.cs",

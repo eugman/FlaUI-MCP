@@ -4,7 +4,7 @@ Everything here builds on the generic FlaUI MCP server and adds what is specific
 
 | Piece | What it is |
 |---|---|
-| `FlaUI.Mcp.Te3 mcp` | The MCP server: the generic `windows_*` tools plus the TE3 tools `te3_navigate`, `te3_model_state`, `te3_layout` and the `te3_interaction_begin`/`te3_interaction_end` grant, sharing one set of refs and handles. Limited to TE3. |
+| `FlaUI.Mcp.Te3 mcp` | The MCP server: the generic `windows_*` tools plus the TE3 tools `te3_navigate`, `te3_model_state`, `te3_layout`, `te3_layout_read` and the `te3_interaction_begin`/`te3_interaction_end` grant, sharing one set of refs and handles. Limited to TE3. |
 | `FlaUI.Mcp.Te3 run` | A runner that launches its own TE3, stages a disposable model, runs typed C# recipes and saves screenshots. |
 | [skills/te3-ui](skills/te3-ui/SKILL.md) | Agent guidance for driving TE3 with the MCP tools. |
 | [UI-MAP.md](UI-MAP.md) | Locators and behaviour observed in TE3 3.26 and 3.27. |
@@ -36,7 +36,10 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 | `te3_interaction_begin` / `te3_interaction_end` | Start and end the user's grant. In this server it covers every tool that changes the desktop: the `windows_*` input and window tools (`windows_click`, `windows_type`, `windows_fill`, `windows_send_keys`, `windows_paste`, `windows_mouse`, `windows_place_window`, `windows_set_window_state`, `windows_focus`, `windows_close`, `windows_launch`), `te3_navigate` and `te3_layout`'s changes. Begin only after the user says the machine is clear; their own keyboard or mouse input ends it. |
 | `te3_navigate` | Moves to a destination and checks it arrived. Takes focus; needs the grant. |
 | `te3_model_state` | Reads the status bar: whether a model is loaded, its connection, the BPA count, the selected object. Sends no input. |
-| `te3_layout` | Lists docked panes and document tabs; hides, maximizes, restores and resizes docked panes for a screenshot. Those changes take focus and need the grant; no model edits. |
+| `te3_layout_read` | Lists docked panes and document tabs (`list`), confirms a named pane is visible (`show-pane`) and plans the `assistant-model-review` geometry offline (`plan-preset`). Sends no input and needs no grant. |
+| `te3_layout` | Hides, maximizes, restores and resizes docked panes for a screenshot (`close`, `keep`, `hide-pane`, `apply-preset`, `maximize-pane`, `restore-pane`, `resize`). Takes focus and needs the grant; no model edits. |
+
+Every TE3 tool carries MCP annotations: `te3_model_state`, `te3_layout_read` and `te3_native_preflight` are read-only; `te3_navigate` and `te3_layout` change the desktop (`te3_layout` is marked destructive, since it closes panes); `te3_interaction_begin` and `te3_interaction_end` are not read-only either, because the grant unlocks input. A failed `te3_navigate` or `te3_layout` call reports how much input went out in `structuredContent` (`dispatch`, `inputsSent`, `failure`), as Core's tools do.
 
 Destinations: `native-mcp-server` (opens and verifies the native MCP Server dialog without starting it), `tom-explorer`, `tom-explorer/changes` (turns on the TOM Explorer Show changes view filter), `expression-editor`, `object` (with `table`, `objectName`, `objectType` Table/Column/Measure and optional `folder`), `preferences/auto-formatting`, `preferences/code-actions`, `preferences/ai-provider`, `preferences/ai-assistant`, `preferences/mcp-server`, `preferences/permissions`.
 
@@ -174,7 +177,7 @@ or run a model script. Native TE3 tool names and response properties remain
 version-dependent, so configure them from the running server's tools/list result
 and verify live behavior separately under a machine grant. The saved 3.27.1 tool list did not include a workspace response; the adapter accepts a configured identity property from direct JSON, `structuredContent`, or one JSON text content block, while the live response shape remains unverified.
 
-`te3_layout` now distinguishes docked pane hiding from document closing. Its
+`te3_layout` distinguishes docked pane hiding from document closing. Its
 close/keep actions preserve document tabs. Named show/hide accepts AI Assistant,
 TOM Explorer, and Properties. Showing an absent pane currently refuses input
 because the View-menu reopen locator has not been live-verified. The

@@ -9,83 +9,25 @@ using FlaUI.Mcp.Te3;
 /// <summary>
 /// Shot layout for TE3: list panes and document tabs, hide docked panes, and resize a pane
 /// by dragging the splitter it shares with its neighbour. Every action goes through the guarded
-/// core tools; nothing here edits the model.
+/// core tools; nothing here edits the model. Two tools, so one annotation describes each:
+/// te3_layout_read only reads (list, show-pane, plan-preset), and te3_layout changes the layout.
 /// </summary>
-public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction = null) : ToolBase
+/// <param name="readOnly">True for te3_layout_read.</param>
+public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? interaction = null, bool readOnly = false)
+    : ToolBase
 {
     public const string ToolName = "te3_layout";
+    public const string ReadToolName = "te3_layout_read";
 
     private const int MaxCloses = 30;
 
     // Never approved when none is passed, so a tool built without one refuses input.
     private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
 
-    public override string Name => ToolName;
-    public override string Description =>
-        "Arrange TE3 for a screenshot. list: docked panes and document tabs with window-relative bounds. "
-        + "close: hide named docked panes by title; document tabs are never closed. keep: hide every docked pane except these titles (closing a "
-        + "tab-group pane surfaces the next tab, so this repeats until only the kept ones remain). "
-        + "show-pane / hide-pane: named AI Assistant, TOM Explorer, or Properties dock surfaces; show refuses absent panes until their reopen locator is verified. "
-        + "plan-preset: offline assistant-model-review geometry (windowWidth/windowHeight default to 1920x1080). apply-preset: live guarded resizing. "
-        + "maximize-pane / restore-pane: the pane's own Maximize or Restore button (TE3 remembers a maximized "
-        + "pane across restarts, so restore it when done). Pane titles match with or without TE3's \"(Changed)\" "
-        + "suffix. resize: drag the splitter a pane shares with its "
-        + "neighbour until the pane is `width` or `height` physical pixels. Changes take desktop focus and need an active "
-        + "te3_interaction_begin grant; list, plan-preset and show-pane send no input. No model edits.";
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            properties = new
-            {
-                processId = new { type = "integer", minimum = 1 },
-                action = new
-                {
-                    type = "string",
-                    @enum = new[]
-                    {
-                        "list",
-                        "close",
-                        "keep",
-                        "show-pane",
-                        "hide-pane",
-                        "plan-preset",
-                        "apply-preset",
-                        "maximize-pane",
-                        "restore-pane",
-                        "resize",
-                    },
-                },
-                titles = new
-                {
-                    type = "array",
-                    items = new { type = "string" },
-                    description = "close/keep: docked pane titles, exactly as list shows them; document tabs are preserved.",
-                },
-                title = new
-                {
-                    type = "string",
-                    description = "show-pane/hide-pane/maximize-pane/restore-pane/resize: the pane title.",
-                },
-                preset = new { type = "string", @enum = new[] { Te3PanePlan.AssistantModelReview } },
-                windowWidth = new
-                {
-                    type = "integer",
-                    minimum = 1,
-                    description = "plan-preset: physical window width; defaults to 1920.",
-                },
-                windowHeight = new
-                {
-                    type = "integer",
-                    minimum = 1,
-                    description = "plan-preset: physical window height; defaults to 1080.",
-                },
-                width = new { type = "integer", description = "resize: target width in physical pixels." },
-                height = new { type = "integer", description = "resize: target height in physical pixels." },
-            },
-            required = new[] { "action" },
-            additionalProperties = false,
-        };
+    public override string Name => readOnly ? ReadToolName : ToolName;
+
+    public override McpToolAnnotations Annotations =>
+        readOnly ? McpToolAnnotations.ReadOnly : McpToolAnnotations.Input(destructive: true);
 
     private sealed record Part(string Title, string Kind, AutomationElement Close, AutomationElement Container);
 
@@ -95,6 +37,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
     private async Task<McpToolResult> Run(JsonElement? arguments, InputTally inputs)
     {
         var a = arguments ?? JsonSerializer.SerializeToElement(new { });
+        RequireOwnAction(GetStringArgument(a, "action"));
         if (GetStringArgument(a, "action") == "plan-preset")
         {
             var plan = Te3PanePlan.Resolve(
@@ -105,7 +48,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
             return TextResult(JsonSerializer.Serialize(plan, McpProtocol.JsonOptions));
         }
 
-        using var guard = GetStringArgument(a, "action") is "list" or "show-pane" ? null : grant.Guard();
+        using var guard = readOnly ? null : grant.Guard();
         var processId = Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3);
         var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(processId));
         var handle = Bind(host, hwnd, processId);
@@ -125,6 +68,8 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         };
         return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
     }
+
+    internal static string DialogOpened(string closing, string dialog) => LayoutSteps.DialogOpened(closing, dialog);
 
     internal static Task<McpToolResult> Respond(Func<InputTally, Task<McpToolResult>> run) =>
         LayoutSteps.Respond(ToolName, run);
@@ -184,7 +129,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         }
 
         await Click(inputs, handle, pane.Close);
-        await RequireNoDialog(window, pane.Title);
+        await LayoutSteps.RequireNoDialog(window, pane.Title);
         if (Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title)))
         {
             throw new InvalidOperationException("Pane remained visible after Close; inspect before retrying.");
@@ -322,7 +267,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
 
                 attempted.Add(next.Title);
                 await LayoutSteps.Sending(inputs, sent, next.Title, () => Click(inputs, handle, next.Close));
-                await RequireNoDialog(window, next.Title);
+                await LayoutSteps.RequireNoDialog(window, next.Title);
                 return next.Title;
             }
         );
@@ -341,29 +286,6 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
 
     private static bool ShouldClose(Part part, string[] titles, bool keep) =>
         CanCloseKind(part.Kind) && titles.Any(t => TitleMatches(part.Title, t)) != keep;
-
-    // Closing a pane can open a dialog on an unfamiliar build. Watch for ~1s and
-    // stop there: answering it is the caller's decision.
-    private static async Task RequireNoDialog(Window window, string closing)
-    {
-        var pid = window.Properties.ProcessId.ValueOrDefault;
-        var main = window.Properties.NativeWindowHandle.ValueOrDefault;
-        for (var waited = 0; waited <= 1000; waited += 200)
-        {
-            var dialog = Win32Desktop
-                .GetTopLevelWindows(pid)
-                .FirstOrDefault(w => w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow);
-            if (dialog != null)
-            {
-                throw new InvalidOperationException(DialogOpened(closing, dialog.Title));
-            }
-
-            await Task.Delay(200);
-        }
-    }
-
-    internal static string DialogOpened(string closing, string dialog) =>
-        $"Closing '{closing}' opened \"{dialog}\". Answer it, then run keep/close again.";
 
     // TE3 retitles a pane while its Show changes filter is on ("TOM Explorer (Changed)").
     private const string ChangedSuffix = " (Changed)";

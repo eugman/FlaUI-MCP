@@ -1,5 +1,7 @@
 using System.Text.Json;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Mcp;
+using FlaUI.Mcp.Core;
 
 /// <summary>Step loops for te3_layout actions that change several panes: a failure keeps what earlier steps did.</summary>
 internal static class LayoutSteps
@@ -109,4 +111,27 @@ internal static class LayoutSteps
 
         return JsonSerializer.Serialize(reply, McpProtocol.JsonOptions);
     }
+
+    // Closing a pane can open a dialog on an unfamiliar build. Watch for ~1s and
+    // stop there: answering it is the caller's decision.
+    public static async Task RequireNoDialog(Window window, string closing)
+    {
+        var pid = window.Properties.ProcessId.ValueOrDefault;
+        var main = window.Properties.NativeWindowHandle.ValueOrDefault;
+        for (var waited = 0; waited <= 1000; waited += 200)
+        {
+            var dialog = Win32Desktop
+                .GetTopLevelWindows(pid)
+                .FirstOrDefault(w => w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow);
+            if (dialog != null)
+            {
+                throw new InvalidOperationException(DialogOpened(closing, dialog.Title));
+            }
+
+            await Task.Delay(200);
+        }
+    }
+
+    public static string DialogOpened(string closing, string dialog) =>
+        $"Closing '{closing}' opened \"{dialog}\". Answer it, then run keep/close again.";
 }
