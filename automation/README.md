@@ -37,7 +37,7 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 | `te3_navigate` | Moves to a destination and checks it arrived. Takes focus; needs the grant. |
 | `te3_model_state` | Reads the status bar: whether a model is loaded, its connection, the BPA count, the selected object. Sends no input. |
 | `te3_layout_read` | Lists docked panes and document tabs (`list`), confirms a named pane is visible (`show-pane`) and plans the `assistant-model-review` geometry offline (`plan-preset`). Sends no input and needs no grant. |
-| `te3_layout` | Hides, reopens, maximizes, restores and resizes docked panes for a screenshot (`close`, `keep`, `hide-pane`, `reopen-pane`, `apply-preset`, `maximize-pane`, `restore-pane`, `resize`). Takes focus and needs the grant; no model edits. `reopen-pane` clicks View, then the popup Button named after the pane; a pane with no mapped View entry is refused before input. |
+| `te3_layout` | Hides, reopens, maximizes, restores and resizes docked panes for a screenshot (`close`, `keep`, `hide-pane`, `reopen-pane`, `apply-preset`, `maximize-pane`, `restore-pane`, `resize`). Takes focus and needs the grant; no model edits. `reopen-pane` clicks View, then the popup Button named after the pane; a pane with no mapped View entry is refused before input. `resize` fails when the pane ends more than 4 px from the requested size, `keep` refuses a title no visible pane or tab has before any input, and `maximize-pane`/`restore-pane` read the other button back. |
 
 Every TE3 tool carries MCP annotations: `te3_model_state`, `te3_layout_read` and `te3_native_preflight` are read-only (plain reads, not Core status tools: they walk TE3's UI Automation tree or open a session in TE3, so they wait their turn like other calls); `te3_navigate` and `te3_layout` change the desktop (`te3_layout` is marked destructive, since it closes panes); `te3_interaction_begin` and `te3_interaction_end` are not read-only either, because the grant unlocks input. A failed `te3_navigate` or `te3_layout` call reports how much input went out in `structuredContent` (`dispatch`, `inputsSent`, `failure`), as Core's tools do.
 
@@ -56,7 +56,7 @@ Rules:
 
 ## Screenshot runner
 
-The runner launches its own TE3 instance, so close yours first. It stages a model, runs each recipe, and restores your TE3 preferences afterwards. Every run writes a manifest, the PNGs and an `index.html` under the configured output folder.
+The runner launches its own TE3 instance, so close yours first. It stages a model, runs each recipe, and restores your TE3 preferences afterwards. Starting `run` approves the named recipes, like `te3_interaction_begin` in the MCP server: your own keyboard or mouse input revokes that, and the recipe fails at its next input (the run still closes its TE3 and restores your preferences). If Windows refuses to bring TE3 to the front, the runner asks you to click it; input after that click stops the run. Every run writes a manifest, the PNGs and an `index.html` under the configured output folder.
 
 ### Configure
 

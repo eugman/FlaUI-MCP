@@ -25,6 +25,8 @@ Stryker mutates committed code only. It runs on an export of `HEAD` in `local/bu
 - `dotnet-stryker` comes from the root `.config/dotnet-tools.json`, which the core owns and pins.
 - The core's own `scripts/coverage.ps1`, `scripts/mutation.ps1` and [mutation.md](mutation.md) cover the shared core and run `tests/FlaUI.Mcp.Tests`; this page and `scripts/coverage-te3.ps1` are the TE3 equivalents.
 
+Files added to the mutated set since the latest run: `RunGrant.cs`, `Te3Page.Walk.cs` (moved out of `Te3Page.cs`), `WalkPlace.cs`, `LayoutChecks.cs`, `SceneCheck.cs` and `Absence.cs`. `PhysicalInputObserver.IsPhysical` was mutated but had no covering test, so its mutants counted as uncovered and were missing from the covered score; `RunGrantTests.OnlyInputWithoutAnInjectedFlagCountsAsTheUsers` now covers each flag.
+
 A surviving mutant is either a missing test, which you fix with a red-green test, or an equivalent mutant, which you list below with the reason.
 
 ## Latest run
@@ -60,7 +62,8 @@ The run before the merge, at `f463ab9` on 2026-10-20, scored 87.5% covered and 2
 
 - `Te3Interaction.Begin` (`physicalInput == null`) and `Dispose` (`observer?.Dispose()`): only the real keyboard and mouse hook takes these branches, and offline tests never install it.
 - `Te3Companion.ExecuteAsync` and `Attach`, the pending-call check and the `TabularEditor3` process-name check: they run after attaching to a TE3 window. The blocked outcome they produce is tested through `Te3Companion.Failure`.
-- `Te3Page` selector literals (`OpenFileNameTarget`, `PreferencesTarget`, `McpServerMarkerTarget`, `TomChangesTarget`, `IsPreferencesLookup`) and `WaitForAbsenceAsync` timing: the integration tests check these against TE3.
+- `Te3Page` selector literals (`OpenFileNameTarget`, `PreferencesTarget`, `McpServerMarkerTarget`, `TomChangesTarget`, `IsPreferencesLookup`): no test checks these against TE3. `tests/FlaUI.Mcp.IntegrationTests` drives only the WinForms and WPF test apps, and the offline tests that name the literals (`CompanionTests`, `AdaptationMutationTests`) only restate the constants, so a control TE3 renames is caught by a live run and nothing else. Accepted until a live selector smoke recipe exists.
+- `WaitForAbsenceAsync` timing: since this run the wait is `Absence.WaitFor` on an injected clock, and `RunnerTests` and `StabilizationTests` assert its exact times, so the next run should kill these.
 - `Te3Page.ParkPoint` and `ScalarSceneBounds` at a few pixels from the edge: the offline tests check that the point stays inside the window, not its exact offset.
 
 **Accepted: size-cap off-by-ones**
