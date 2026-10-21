@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Outcomes report `dispatch: partial` when some input went out before a call failed or stopped. They count every change in `inputsSent`, including focus, restore, clipboard writes, scroll-into-view and process starts, and carry refusals as `failure` with a code. A batch stopped at a pending step after earlier input is `partial` with `provider: pending`. Hosts that match `completed` or `timed_out_pending` must also handle `partial`. [docs/operation-recovery.md](docs/operation-recovery.md#adapting-a-product-repo) has the full list: refusal codes and texts, JSON-RPC refusals, annotations, the new tool registrations, behaviour and signature changes, and the offline-test switch `FLAUI_OFFLINE_TESTS`.
 - A refusal says "no keys or clicks were sent, but ... first" when guarded input had already activated or restored the target, focused the control or scrolled the element into view.
 - Pointer refusals (`point-not-on-target`, `click-point-unavailable`) are structured `InputRefusedException`s.
-- `ClickGeometry.Read` no longer scrolls. `ClickGeometry.ScrollIntoView` scrolls through the input guards and counts.
+- `ClickGeometry.Read` no longer scrolls. `ClickGeometry.ScrollIntoView` scrolls through the input guards and counts only when the element moved; `windows_mouse` reads the point again under the input lease.
 - A pattern call must count itself through `MutationGuard.Execute`, or a pending call reports `timed_out_pending`. A detected modal always counts as dispatched.
 - A parse or capacity refusal no longer marks an in-flight request id as not dispatched.
 - The core ownership check fails when the branch has no merge-base with `core/main`.

@@ -69,7 +69,7 @@ A product repo that merges this core must check the following.
 - **Annotations.** Every tool declares MCP annotations. Find, wait, snapshot, get-text, get-clipboard, list-windows and operation status are read-only. The input tools are not: click, send-keys, paste, fill, mouse, batch and close are destructive, and window placement, window state and focus are idempotent. Screenshot is not read-only either, because `parkPointer` moves the pointer before capturing and counts that as input; it is idempotent and not destructive.
 - **Registration.** `ToolComposition.Register` adds `windows_set_window_state` (`WindowStateTool(elements, pending, sessions)`) and `windows_mouse` (`MouseTool(elements, pending, sessions)`) for every host. A host that registers its tools itself must add them.
 - **Behaviour.**
-  - Pointer actions press only where an element is visible (`ClickPoint`). They scroll an element into view through `ClickGeometry.ScrollIntoView`, which takes the input lease, revalidates the ref and counts. `ClickGeometry.Read` no longer scrolls.
+  - Pointer actions press only where an element is visible (`ClickPoint`). They scroll an element into view through `ClickGeometry.ScrollIntoView`, which takes the input lease, revalidates the ref and counts only when the element moved (a refusal then says "the view was scrolled first", or "a scroll into view was requested first" when nothing moved). The point is read again under the input lease just before the press. `ClickGeometry.Read` no longer scrolls.
   - The server refuses to start unless per-monitor-v2 DPI awareness is in force.
   - Launch, focus, close, window state and pointer parking take the input lease, the integrity check and the mutation-permission check, like input does.
   - Focusing a minimized window counts as a change even when activation is then denied.
@@ -78,7 +78,7 @@ A product repo that merges this core must check the following.
   - `InputDesktop` gains `SetClipboardText`; a fake desktop must override it.
   - `PatternCallResult` gains `Dispatched`.
   - `GuardedInput` gains `Check(Action)` and `Release(Action)`.
-  - `ClickGeometry.ScrollIntoView(element, processId, pending, validate)` is new.
+  - `ClickGeometry.ScrollIntoView(element, processId, pending, validate)` is new; it returns the note for a later refusal, or null when the element cannot scroll.
   - `MouseTool.Drag` is internal.
   - `ClickTool` is a partial class; its replies are in `ClickToolReplies.cs`.
   - The transport calls the new `McpServer.RecordRefusedRequest`.
