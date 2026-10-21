@@ -25,6 +25,8 @@ Both use only the no-focus tests in `tests/FlaUI.Mcp.Tests`, and build into `loc
 | `pwsh scripts/coverage.ps1` | Runs the tests with coverlet and renders line and branch coverage to `local/build-background/coverage/index.html`. Needs the `reportgenerator` global tool. |
 | `pwsh scripts/mutation.ps1` or `pwsh scripts/check.ps1 -Mutation` | Runs Stryker (local tool in `.config/dotnet-tools.json`) on the guard and protocol files listed in `stryker-config.json`, with concurrency 2. Stryker writes no report for a run it does not finish, so the script tests the files in five parts (guards, state, protocol, pointer, keyboard), each on a fresh worktree of `HEAD` (commit first) and each stopped after 45 minutes (`-Minutes`). `-Part <name>` runs one part, and `-Concurrency 1` lowers the load. Reports and logs go to `local/build-background/StrykerOutput/<part>`. |
 
+Mutation testing never runs the desktop tests. Stryker runs every test once per mutant, and the integration tests launch apps and take the desktop from whoever is using the machine. Started from the repository root, Stryker finds `FlaUI.Mcp.slnx` and runs every test project in it, whatever `test-projects` says. So `mutation.ps1` runs Stryker inside `tests/FlaUI.Mcp.Tests` with that project named explicitly, and it stops the run before its first test if Stryker's log shows a solution context, the integration test project, or more tests than the offline project has. `MutationConfigTests` checks the config and the script for this.
+
 `check.ps1` runs mutation testing only with `-Mutation`; it is off by default. Each surviving mutant gets a test that kills it, or a line in [mutation.md](mutation.md) saying why it is equivalent.
 
 ## Limits
