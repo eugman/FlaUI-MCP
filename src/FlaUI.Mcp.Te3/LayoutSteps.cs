@@ -47,6 +47,13 @@ internal static class LayoutSteps
         return completed;
     }
 
+    /// <summary>Runs one step's input and marks the step sent.</summary>
+    public static async Task Sending(InputTally inputs, Action<object> sent, object item, Func<Task> input)
+    {
+        sent(item);
+        await input();
+    }
+
     /// <summary>The failure text: plain, or JSON naming the steps that completed before it.</summary>
     public static string Describe(string tool, Exception ex) =>
         ex is ProgressException progress

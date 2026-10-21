@@ -139,19 +139,62 @@ public sealed class Te3LayoutTests
         Assert.Contains("Save?", closed[1].GetProperty("error").GetString());
     }
 
-    [Theory]
-    [InlineData("cancel")]
-    [InlineData("com")]
-    public async Task CancellationOrAComFailureKeepsTheProgressRecord(string kind)
+    [Fact]
+    public async Task AComFailureAfterAStepWasSentKeepsTheProgressRecord()
     {
-        Exception failure =
-            kind == "cancel"
-                ? new OperationCanceledException("stopped")
-                : new System.Runtime.InteropServices.COMException("element gone");
-
-        var closed = await FailedProgress(failure);
+        var closed = await FailedProgress(new System.Runtime.InteropServices.COMException("element gone"));
 
         Assert.Equal("Properties", closed[0].GetString());
         Assert.Equal("TOM Explorer", closed[1].GetProperty("attempted").GetString());
+    }
+
+    [Fact]
+    public async Task CancellationIsNotTurnedIntoALayoutFailure()
+    {
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            LayoutSteps.Progress("closed", () => throw new OperationCanceledException("stopped"))
+        );
+    }
+
+    private static Func<Task<FlaUI.Mcp.McpToolResult>> Click(string text, bool error = false) =>
+        () => Task.FromResult(new FlaUI.Mcp.McpToolResult { IsError = error, Content = [new() { Text = text }] });
+
+    [Fact]
+    public async Task AStepIsSentOnlyOnceItsInputWentOut()
+    {
+        var inputs = new InputTally();
+        var sent = new List<object>();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            LayoutSteps.Sending(
+                inputs,
+                sent.Add,
+                "Properties",
+                () =>
+                    inputs.Invoke(
+                        Click("Point is not on the target window (off-window or covered); no input sent.", true)
+                    )
+            )
+        );
+        Assert.Empty(sent);
+
+        await LayoutSteps.Sending(inputs, sent.Add, "TOM Explorer", () => inputs.Invoke(Click("Clicked")));
+        Assert.Equal(["TOM Explorer"], sent);
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(2, true)]
+    public void ALayoutFailureSaysWhetherInputWasSent(int inputsSent, bool dispatched)
+    {
+        var reply = System
+            .Text.Json.JsonDocument.Parse(
+                Te3Layout.Failure(new InvalidOperationException("Pane is gone"), inputsSent).Content[0].Text!
+            )
+            .RootElement;
+
+        Assert.Contains("Pane is gone", reply.GetProperty("error").GetString());
+        Assert.Equal(dispatched, reply.GetProperty("actionDispatched").GetBoolean());
+        Assert.Equal(inputsSent, reply.GetProperty("inputsSent").GetInt32());
     }
 }

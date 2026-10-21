@@ -131,7 +131,8 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         }
     }
 
-    internal static McpToolResult Failure(Exception ex) => ErrorResult(LayoutSteps.Describe(ToolName, ex));
+    internal static McpToolResult Failure(Exception ex, int inputsSent = 0) =>
+        ErrorResult(LayoutSteps.Describe(ToolName, ex));
 
     /// <summary>Registers the TE3 window for the raw descendant refs this tool clicks.</summary>
     internal static string Bind(AutomationHost host, nint hwnd, int processId)
