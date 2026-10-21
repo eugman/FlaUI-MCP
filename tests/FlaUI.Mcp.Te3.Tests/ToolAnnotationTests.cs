@@ -38,19 +38,14 @@ public sealed class ToolAnnotationTests : IDisposable
     [Theory]
     [InlineData("te3_model_state")]
     [InlineData("te3_native_preflight")]
-    public void StatusReadsAreAnsweredAtOnce(string name)
+    [InlineData("te3_layout_read")]
+    public void TheTe3ReadsArePlainReadsNotStatusTools(string name)
     {
-        // Core answers a status tool without the serial slot, so it stays usable while a stranded call holds it.
-        Assert.Equal(McpToolAnnotations.Status, Tool(name).Annotations);
-        Assert.True(Tool(name).Annotations!.ReadOnlyHint);
-    }
-
-    [Fact]
-    public void TheLayoutReadIsAPlainRead()
-    {
-        // A UI Automation walk of TE3's panes: read-only, but it waits its turn like other UIA calls.
-        Assert.Equal(McpToolAnnotations.ReadOnly, Tool("te3_layout_read").Annotations);
-        Assert.False(Tool("te3_layout_read").Annotations!.StatusHint);
+        // Core's status hint is for instant in-memory reports on other calls, run beside live calls without the
+        // serial slot. These walk TE3's UI Automation tree or open a session in TE3 (up to 25 s), so they wait their
+        // turn like any other call.
+        Assert.Equal(McpToolAnnotations.ReadOnly, Tool(name).Annotations);
+        Assert.False(Tool(name).Annotations!.StatusHint);
     }
 
     [Theory]
