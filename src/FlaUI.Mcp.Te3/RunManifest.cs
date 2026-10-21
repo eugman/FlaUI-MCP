@@ -23,6 +23,9 @@ public class RunManifest
     public bool NeedsRecovery { get; set; }
     public string? CleanupError { get; set; }
 
+    /// <summary>Why the failing call's outcome is missing from actions.jsonl; null when the journal has it.</summary>
+    public string? JournalError { get; set; }
+
     /// <summary>Settings files changed by the run beyond the restored four; warnings, not failures.</summary>
     public List<string> SettingsChanges { get; set; } = [];
     public bool Passed { get; set; }

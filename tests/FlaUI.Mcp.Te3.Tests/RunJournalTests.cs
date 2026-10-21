@@ -129,4 +129,27 @@ public sealed class RunJournalTests : IDisposable
         Assert.True(sent);
         Assert.False(File.Exists(journal));
     }
+
+    [Fact]
+    public async Task TheManifestSaysWhenTheFailingCallsOutcomeIsMissingFromTheJournal()
+    {
+        var error = await Assert.ThrowsAsync<TimeoutException>(() =>
+            RunJournal.Tool(
+                journal,
+                "windows_click",
+                new { },
+                () =>
+                {
+                    LockJournal();
+                    return Task.FromException<FlaUI.Mcp.McpToolResult>(new TimeoutException("provider hung"));
+                }
+            )
+        );
+        var manifest = new RunManifest();
+
+        RunExecutor.RecordFailure(manifest, error);
+
+        Assert.Equal("provider hung", manifest.Error);
+        Assert.Contains("could not be recorded", manifest.JournalError);
+    }
 }
