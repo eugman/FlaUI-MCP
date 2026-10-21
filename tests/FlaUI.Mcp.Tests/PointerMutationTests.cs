@@ -174,4 +174,15 @@ public sealed class PointerMutationTests
 
         Assert.EndsWith(ending, result.Content[0].Text);
     }
+
+    [Theory]
+    [InlineData("invoke")]
+    [InlineData("select")]
+    [InlineData("expand")]
+    [InlineData("collapse")]
+    [InlineData("toggle")]
+    public void EveryPatternActionCanBeRequested(string action)
+    {
+        Assert.Equal(action, ClickTool.ChooseAction(action, false, ControlType.Button, _ => true));
+    }
 }

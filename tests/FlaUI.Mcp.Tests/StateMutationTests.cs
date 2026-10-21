@@ -212,4 +212,26 @@ public sealed class StateMutationTests
 
         Assert.Empty(inspected);
     }
+
+    [Fact]
+    public void ASnapshotKeepsTheRefsOfAWindowWhoseHandleItPrefixes()
+    {
+        var refs = new ElementRegistry();
+        var w10 = refs.Register("w10", Element());
+
+        refs.BeginSnapshot("w1");
+
+        Assert.True(refs.HasElement(w10));
+    }
+
+    [Fact]
+    public void ABlockedDescriptionWithoutAModalGoesStraightToTheAdvice()
+    {
+        var info = new PendingInvokeTracker().Begin(42, "Invoke on 'OK'");
+
+        Assert.Matches(
+            @"\('Invoke on 'OK'', \d+s\)\. Ref tools on this app",
+            PendingInvokeTracker.DescribeBlocked(info)
+        );
+    }
 }

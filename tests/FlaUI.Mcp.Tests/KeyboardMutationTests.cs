@@ -14,6 +14,8 @@ namespace FlaUI.Mcp.Tests;
 [Collection(InputLeaseCollection.Name)]
 public sealed class KeyboardMutationTests
 {
+    private const string LineBreak = "\n";
+
     private static JsonElement Args(object value) => JsonSerializer.SerializeToElement(value);
 
     private static JsonElement[] Rows(params object[] rows) => rows.Select(row => Args(row)).ToArray();
@@ -347,5 +349,22 @@ public sealed class KeyboardMutationTests
         var control = type == "Edit" ? ControlType.Edit : ControlType.ComboBox;
 
         Assert.Equal(expected, FillTool.FillMismatch("a", "b", control));
+    }
+
+    [Fact]
+    public async Task ABatchTraceKeepsEveryLineOfAStepsReply()
+    {
+        var result = await BatchTool.ExecuteRows(
+            Rows(new { action = "click", @ref = "w1e1" }),
+            (_, _) =>
+                Task.FromResult(
+                    new McpToolResult
+                    {
+                        Content = [new() { Type = "text", Text = "first" }, new() { Type = "text", Text = "second" }],
+                    }
+                )
+        );
+
+        Assert.Equal(string.Join(LineBreak, "1. click: first", "second"), result.Content[0].Text);
     }
 }
