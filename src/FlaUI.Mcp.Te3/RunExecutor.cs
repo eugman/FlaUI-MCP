@@ -327,7 +327,8 @@ public static class RunExecutor
         throw new TimeoutException("TE3 did not open the owned model");
     }
 
-    internal const string ActivationTimeout = "Manual activation not received; no input sent";
+    internal const string ActivationTimeout =
+        "Manual activation not received within 120 seconds. The run asked Windows to focus TE3; nothing was typed or clicked.";
 
     // Asks Windows to focus the run's TE3, then waits for the user to click it if Windows refused.
     private static async Task ActivateOwnedWindow(
