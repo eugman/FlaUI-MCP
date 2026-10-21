@@ -117,6 +117,19 @@ internal class InputDesktop
     public virtual IReadOnlyList<Rectangle> Monitors() =>
         System.Windows.Forms.Screen.AllScreens.Select(s => s.Bounds).ToList();
 
+    /// <summary>The element UI Automation reports at a screen point (FromPoint); may throw for a blocked provider.</summary>
+    public virtual AutomationElement? ElementAt(AutomationElement target, Point point) =>
+        target.Automation.FromPoint(point);
+
+    public virtual AutomationElement? ParentOf(AutomationElement element) => element.Parent;
+
+    /// <summary>Whether two elements are the same UI Automation element (compared by the provider).</summary>
+    public virtual bool SameElement(AutomationElement a, AutomationElement b) => a.Equals(b);
+
+    /// <summary>An element as a refusal names it: "ControlType 'Name'".</summary>
+    public virtual string DescribeElement(AutomationElement element) =>
+        $"{element.Properties.ControlType.ValueOrDefault} '{element.Properties.Name.ValueOrDefault}'";
+
     /// <summary>The visible top-level windows of a process.</summary>
     public virtual IReadOnlyList<Win32WindowInfo> TopLevelWindows(int processId) =>
         Win32Desktop.GetTopLevelWindows(processId);

@@ -8,7 +8,9 @@ namespace FlaUI.Mcp.Core;
 /// <param name="IsOffscreen">UI Automation's IsOffscreen.</param>
 /// <param name="Clickable">The provider's clickable point, or null when it has none.</param>
 /// <param name="Bounds">The element's bounding rectangle in screen pixels.</param>
-/// <param name="ScrollableAncestors">Bounds of every ancestor that scrolls, up to its window.</param>
+/// <param name="ScrollableAncestors">
+/// The viewport of every ancestor that scrolls, up to its window: its bounds without its own scrollbars and headers.
+/// </param>
 public sealed record ClickGeometry(
     bool IsOffscreen,
     Point? Clickable,
@@ -74,6 +76,42 @@ public sealed record ClickGeometry(
 
     private static bool IsSentinel(Point point) => point.X == int.MinValue || point.Y == int.MinValue;
 
+    // A scroller's bounds include its own scrollbars and column headers, which take a press meant for content.
+    private static Rectangle Viewport(AutomationElement scroller) =>
+        Viewport(
+            scroller.BoundingRectangle,
+            scroller
+                .FindAllChildren(cf => cf.ByControlType(ControlType.ScrollBar).Or(cf.ByControlType(ControlType.Header)))
+                .Select(chrome => chrome.BoundingRectangle)
+        );
+
+    /// <summary>
+    /// <paramref name="bounds"/> without the scrollbars and headers in <paramref name="chrome"/>: each is cut off the
+    /// edge it lies along (a wide one off the top or bottom, a tall one off the left or right). Empty when nothing
+    /// is left.
+    /// </summary>
+    internal static Rectangle Viewport(Rectangle bounds, IEnumerable<Rectangle> chrome)
+    {
+        var (left, top, right, bottom) = (bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+        foreach (var bar in chrome.Where(bar => bar.IntersectsWith(bounds)))
+        {
+            if (bar.Width >= bar.Height)
+            {
+                (top, bottom) = CutAlong(top, bottom, bar.Top, bar.Bottom);
+            }
+            else
+            {
+                (left, right) = CutAlong(left, right, bar.Left, bar.Right);
+            }
+        }
+
+        return right > left && bottom > top ? Rectangle.FromLTRB(left, top, right, bottom) : Rectangle.Empty;
+    }
+
+    /// <summary>Cut a bar off the near end of a span, or off its far end when the bar's middle is past the span's.</summary>
+    private static (int Start, int End) CutAlong(int start, int end, int barStart, int barEnd) =>
+        barStart + barEnd > start + end ? (start, Math.Min(end, barStart)) : (Math.Max(start, barEnd), end);
+
     /// <summary>Read the element's geometry. It does not scroll; see <see cref="ScrollIntoView"/>.</summary>
     public static ClickGeometry Read(AutomationElement element)
     {
@@ -84,7 +122,7 @@ public sealed record ClickGeometry(
         {
             if (ancestor.Patterns.Scroll.IsSupported)
             {
-                scrollers.Add(ancestor.BoundingRectangle);
+                scrollers.Add(Viewport(ancestor));
             }
 
             if (ancestor.Properties.ControlType.ValueOrDefault == ControlType.Window)
@@ -130,13 +168,68 @@ public static class ClickPoint
             throw Refuse($"The point ({point.X},{point.Y}) is outside the element's bounds");
         }
 
-        if (geometry.ScrollableAncestors.Any(viewport => !viewport.Contains(point)))
+        if (geometry.ScrollableAncestors.All(viewport => viewport.Contains(point)))
         {
-            throw Refuse($"The point ({point.X},{point.Y}) is scrolled out of view of a containing list or pane");
+            return point;
         }
 
-        return point;
+        // The element's own point is hidden (under a scrollbar, say): press the middle of what is visible of it.
+        // A requested point, such as an edge, means exactly that point, so it is never moved.
+        if (requested == null && VisiblePart(geometry) is { Width: >= MinVisible, Height: >= MinVisible } visible)
+        {
+            return new Point(visible.X + visible.Width / 2, visible.Y + visible.Height / 2);
+        }
+
+        throw Refuse($"The point ({point.X},{point.Y}) is scrolled out of view of a containing list or pane");
     }
+
+    private const int MinVisible = 4;
+
+    private static Rectangle VisiblePart(ClickGeometry geometry) =>
+        geometry.ScrollableAncestors.Aggregate(geometry.Bounds, Rectangle.Intersect);
+
+    /// <summary>
+    /// Hit-test <paramref name="point"/> just before input: UI Automation must report <paramref name="target"/> or
+    /// one of its descendants there. A sibling, scrollbar, header or overlay in the same window is refused by name
+    /// with nothing sent, and so is a hit test that fails.
+    /// </summary>
+    public static void Verify(Point point, AutomationElement target)
+    {
+        var desktop = InputDesktop.Current;
+        AutomationElement? hit;
+        try
+        {
+            hit = desktop.ElementAt(target, point);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            throw Covered($"The point ({point.X},{point.Y}) could not be hit-tested ({error.Message})");
+        }
+
+        var element = hit;
+        for (var depth = 0; element != null && depth < MaxAncestorWalk; depth++)
+        {
+            if (desktop.SameElement(element, target))
+            {
+                return;
+            }
+
+            element = desktop.ParentOf(element);
+        }
+
+        var covering = hit == null ? "nothing UI Automation can see" : desktop.DescribeElement(hit);
+        throw Covered($"The point ({point.X},{point.Y}) is covered by {covering}");
+    }
+
+    private const int MaxAncestorWalk = 50;
+
+    private static InputRefusedException Covered(string reason) =>
+        InputRefusedException.Record(
+            new InputRefusal(
+                "click-point-covered",
+                $"{reason}; no input sent. Scroll the element into view, then observe again."
+            )
+        );
 
     private static InputRefusedException Refuse(string reason) =>
         InputRefusedException.Record(

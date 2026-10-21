@@ -259,6 +259,26 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override IReadOnlyList<Win32WindowInfo> TopLevelWindows(int processId) => WindowsOf(processId);
 
+    /// <summary>The element UI Automation reports under a point; null for the target itself.</summary>
+    public Func<Point, AutomationElement?>? HitTest { get; set; }
+
+    /// <summary>Each element's parent, for the hit test's ancestor walk.</summary>
+    public Dictionary<AutomationElement, AutomationElement> Parents { get; } = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>How a refusal names an element, as "ControlType 'Name'".</summary>
+    public Dictionary<AutomationElement, string> Descriptions { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override AutomationElement? ElementAt(AutomationElement target, Point point) =>
+        HitTest == null ? target : HitTest(point);
+
+    public override AutomationElement? ParentOf(AutomationElement element) =>
+        Parents.TryGetValue(element, out var parent) ? parent : null;
+
+    public override bool SameElement(AutomationElement a, AutomationElement b) => ReferenceEquals(a, b);
+
+    public override string DescribeElement(AutomationElement element) =>
+        Descriptions.TryGetValue(element, out var description) ? description : "Custom ''";
+
     private sealed class Uninstall : IDisposable
     {
         public void Dispose() => Override.Value = null;

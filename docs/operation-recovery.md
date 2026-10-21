@@ -39,7 +39,8 @@ Operation status (`flaui/operations/status` and `windows_operation_status`) repo
 | `activation-denied` | Windows kept another window in front of the target. |
 | `integrity-blocked` | The target runs at a higher integrity level, or with UIAccess, than the server, or its token cannot be read. |
 | `point-not-on-target` | A pointer point is off the target window or covered, or an element's click point is obscured. `foregroundProcess` names the process under the point. |
-| `click-point-unavailable` | The element is offscreen or has no bounds, or the point (its clickable point, or the centre of its bounds when it reports none) is outside it or scrolled out of a containing pane. |
+| `click-point-unavailable` | The element is offscreen or has no bounds, or the point (its clickable point, or the centre of its bounds when it reports none) is outside it or scrolled out of a containing pane, and no part of the element (at least 4 px each way) is visible. A containing pane's viewport excludes its own scrollbars and headers; when the element's own point is hidden, the centre of its visible part is pressed instead. A requested point (an edge) is never moved. |
+| `click-point-covered` | Just before input, UI Automation's hit test at the press point reports neither the element nor one of its descendants (a scrollbar, header, sibling or overlay inside the same window), or the hit test failed. The message names it: `The point (x,y) is covered by ScrollBar 'Name'`. Checked for windows_click's mouse clicks and windows_mouse points derived from a ref (move, hover, scroll, click, drag start); raw window points are not hit-tested. |
 
 ### Refusal text after a change
 

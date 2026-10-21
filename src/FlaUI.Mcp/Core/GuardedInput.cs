@@ -419,7 +419,12 @@ public sealed class GuardedInput : IDisposable
     public void Click(AutomationElement element, MouseButton button = MouseButton.Left, bool doubleClick = false)
     {
         var point = default(System.Drawing.Point);
-        Check(() => point = ClickPoint.Choose(ClickGeometry.Read(element)));
+        Check(() =>
+        {
+            point = ClickPoint.Choose(ClickGeometry.Read(element));
+            // A scrollbar, header or overlay inside the target window would take the click.
+            ClickPoint.Verify(point, element);
+        });
         Verify();
         var clickRoot = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
         if (desktop.ProcessOf(clickRoot) != target.ProcessId || desktop.WindowAt(point) != clickRoot)

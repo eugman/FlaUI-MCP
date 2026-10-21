@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Text.Json;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Mcp.Core;
 
@@ -145,7 +146,14 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     /// Scroll a ref into view through the guards now, and return a reader for where it is. The reader runs
     /// under the input lease, so the point pressed is the one measured just before the input.
     /// </summary>
-    private Func<ClickGeometry> Geometry(string reference, ref string? scrolled)
+    private Func<ClickGeometry> Geometry(string reference, ref string? scrolled) =>
+        Located(reference, ref scrolled).Read;
+
+    /// <summary>
+    /// Scroll a ref into view through the guards now; the element and a reader for its geometry, which runs
+    /// under the input lease.
+    /// </summary>
+    private (AutomationElement Element, Func<ClickGeometry> Read) Located(string reference, ref string? scrolled)
     {
         var element = refs.ResolveRef(reference);
         scrolled =
@@ -155,7 +163,19 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 pending,
                 () => refs.ValidateReference(reference)
             ) ?? scrolled;
-        return () => ClickGeometry.Read(element);
+        return (element, () => ClickGeometry.Read(element));
+    }
+
+    /// <summary>A point on a ref chosen under the lease, then hit-tested: it must land on the ref itself.</summary>
+    private Func<Point> Pressable(string reference, Func<ClickGeometry, Point> choose, ref string? scrolled)
+    {
+        var (element, read) = Located(reference, ref scrolled);
+        return () =>
+        {
+            var point = choose(read());
+            ClickPoint.Verify(point, element);
+            return point;
+        };
     }
 
     private Func<(Point From, Point To)> DragFromArguments(
@@ -170,7 +190,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         var toRef = GetStringArgument(arguments, "toRef");
         if (fromEdge != null || resizeTo != null)
         {
-            var read = Geometry(
+            var (element, read) = Located(
                 reference ?? throw new ArgumentException("fromEdge and resizeTo need ref"),
                 ref scrolled
             );
@@ -180,6 +200,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 var geometry = read();
                 var bounds = geometry.Bounds;
                 var from = ClickPoint.Choose(geometry, PointerPlan.EdgePoint(bounds, fromEdge ?? "center"));
+                // The button goes down here, so the start must be on the ref, not a neighbouring header or pane.
+                ClickPoint.Verify(from, element);
                 return (from, to?.Invoke() ?? PointerPlan.ResizeTarget(bounds, fromEdge ?? "right", resizeTo!.Value));
             };
         }
@@ -234,8 +256,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         }
 
         // Choose takes the centre only for an on-screen element with bounds; an offscreen one has (0,0), a caption.
-        var read = Geometry(reference, ref scrolled);
-        return () => ClickPoint.Choose(read());
+        return Pressable(reference, geometry => ClickPoint.Choose(geometry), ref scrolled);
     }
 
     private Func<Point> EdgeOf(string reference, string edge, ref string? scrolled)
