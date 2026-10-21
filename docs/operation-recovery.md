@@ -76,13 +76,22 @@ A product repo that merges this core must check the following.
   - Focusing a minimized window counts as a change even when activation is then denied.
   - Paste counts its clipboard write.
 - **Signatures.**
-  - `InputDesktop` gains `SetClipboardText`; a fake desktop must override it.
+  - `InputDesktop` gains `SetClipboardText`, `PreserveAndSetClipboardText`, `StartProcess`, `CallPattern`, `IsNormalWindow`, `WindowBounds` and `PlaceWindow`; a fake desktop overrides the ones its tests reach.
   - `PatternCallResult` gains `Dispatched`.
   - `GuardedInput` gains `Check(Action)` and `Release(Action)`.
   - `ClickGeometry.ScrollIntoView(element, processId, pending, validate)` is new; it returns the note for a later refusal, or null when the element cannot scroll.
   - `MouseTool.Drag` is internal.
   - `ClickTool` is a partial class; its replies are in `ClickToolReplies.cs`.
   - The transport calls the new `McpServer.RecordRefusedRequest`.
+- **Raw calls to switch.** Product code must not start processes, make pattern calls or write the clipboard raw. Use the public guarded calls instead; each takes the lease and the permission check, counts, and is refused under `FLAUI_OFFLINE_TESTS`:
+  - `GuardedDesktop.StartProcess(startInfo)` for `Process.Start`.
+  - `GuardedDesktop.CallPattern(processId, description, call, pending, validate, gracePeriod)` for a UI Automation call that changes the app. It refuses while the provider is blocked, runs `validate` and the integrity check, counts, and runs modal-aware, returning the `PatternCallResult` (pass it to `ToolOutcome.FromPattern`). It takes the lease itself, so do not hold a `GuardedInput` around it.
+  - `GuardedDesktop.SetClipboardText(text)` without a guard, or `GuardedInput.SetClipboardText(text)` and `GuardedInput.PreserveAndSetClipboardText(text)` under one.
+
+  The call sites to switch:
+  - FlaUI-MCP-PBI: `SessionLifecycle.cs:150` (`Process.Start` of Desktop) → `GuardedDesktop.StartProcess`; `ScopedExpand.ExpandByPattern` (its own lease, `ModalAwareInvoker` and `MutationGuard.Execute` around `Expand()`) → `GuardedDesktop.CallPattern`; `DesktopEditor.cs:57` (`Win32Desktop.PreserveAndSetClipboardText` under a `GuardedInput`) → `input.PreserveAndSetClipboardText`. `CommandClient.cs:65` and `RecordingEncoder.cs:68` start helper processes, not the app under test; switch them too if they should be refused offline.
+  - FlaUI-MCP-Camtasia: `SessionWorkflow.cs:69` (Camtasia launch), `RecorderSystem.cs:135` and `RecorderCommandLine.cs:21` (recorder), `CalibrationFiles.cs:223` (cam-CLI) and `RecordingRun.cs:50` (encoder) → `GuardedDesktop.StartProcess`.
+  - FlaUI-MCP-TE3: `CliRunner.cs:24` (TE CLI) and `ArtifactFiles.cs:338` (git) → `GuardedDesktop.StartProcess` where the process changes the desktop or the model; a pure helper such as git may stay raw.
 - **Offline tests.** `InputDesktop` is internal and visible to `FlaUI.Mcp.Tests`, `FlaUI.Mcp.PowerBi.Tests`, `FlaUI.Mcp.Camtasia.Tests` and `FlaUI.Mcp.Te3.Tests`. A product test assembly that drives input tools must derive a fake from it and install it through `InputDesktop.Override` (see `FakeDesktop` in the core tests), and must set `FLAUI_OFFLINE_TESTS=1` before any test runs, as the core test assembly does in a module initializer. The real desktop then refuses the changes it covers (listed below) if a test misses the fake.
 
 ### Changes since the previous core release

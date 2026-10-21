@@ -76,6 +76,13 @@ internal class InputDesktop
         return Win32Desktop.SetClipboardText(text);
     }
 
+    /// <summary>Saves the user's clipboard text, writes ours, and restores theirs when the lease is disposed.</summary>
+    public virtual Win32Desktop.TextClipboardLease? PreserveAndSetClipboardText(string text)
+    {
+        RefuseOffline();
+        return Win32Desktop.PreserveAndSetClipboardText(text);
+    }
+
     /// <summary>Starts a process. Offline, nothing starts.</summary>
     public virtual Process? StartProcess(ProcessStartInfo info)
     {

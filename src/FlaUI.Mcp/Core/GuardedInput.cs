@@ -362,6 +362,31 @@ public sealed class GuardedInput : IDisposable
         desktop.Dispatch(input);
     }
 
+    /// <summary>Replace the clipboard under this guard's lease; counted when written, false when it is busy.</summary>
+    public bool SetClipboardText(string text)
+    {
+        Verify();
+        if (!desktop.SetClipboardText(text))
+        {
+            return false;
+        }
+
+        MutationGuard.RecordDispatch();
+        return true;
+    }
+
+    /// <summary>
+    /// Save the user's clipboard text and write ours under this guard's lease, counted; dispose the result to
+    /// restore theirs. Null only from a fake desktop.
+    /// </summary>
+    public Win32Desktop.TextClipboardLease? PreserveAndSetClipboardText(string text)
+    {
+        Verify();
+        var clipboard = desktop.PreserveAndSetClipboardText(text);
+        MutationGuard.RecordDispatch();
+        return clipboard;
+    }
+
     public void Type(string text)
     {
         // Recheck foreground between chunks, without repeated process-start queries.

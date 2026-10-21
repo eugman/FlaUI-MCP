@@ -29,6 +29,7 @@ public sealed class OfflineDesktopTests
         Assert.Throws<InvalidOperationException>(() => InputDesktop.Current.PostClose(1));
         Assert.Throws<InvalidOperationException>(() => InputDesktop.Current.SetWindowState(1, "normal"));
         Assert.Throws<InvalidOperationException>(() => InputDesktop.Current.SetClipboardText("x"));
+        Assert.Throws<InvalidOperationException>(() => InputDesktop.Current.PreserveAndSetClipboardText("x"));
         Assert.Throws<InvalidOperationException>(() =>
             InputDesktop.Current.FocusElement(
                 (FlaUI.Core.AutomationElements.AutomationElement)

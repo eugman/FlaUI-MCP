@@ -138,6 +138,12 @@ internal sealed class FakeDesktop : InputDesktop
     /// <summary>When true, another process holds the clipboard open and writes fail.</summary>
     public bool ClipboardBusy { get; set; }
 
+    public override Win32Desktop.TextClipboardLease? PreserveAndSetClipboardText(string text)
+    {
+        ClipboardText = text;
+        return null;
+    }
+
     public override bool SetClipboardText(string text)
     {
         if (ClipboardBusy)
