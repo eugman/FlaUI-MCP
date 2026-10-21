@@ -1,18 +1,39 @@
 name: Build
 
+# Lean on purpose: one Windows job that runs the same offline gate as the pre-push hook.
+# Release builds happen only in release.yml, on a tag.
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'plans/**'
+      - 'manifests/**'
+      - '.gitignore'
+      - 'LICENSE'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'plans/**'
+      - 'manifests/**'
+      - '.gitignore'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
       with:
@@ -22,68 +43,8 @@ jobs:
         dotnet-version: 8.0.x  # test runtime
         global-json-file: global.json  # SDK
     # Formatting, analyzers (size and complexity limits) and the no-focus unit tests.
+    # Integration tests are never run here: check.ps1 runs only its allowlist of offline projects.
     - name: Check
       run: pwsh -NoProfile -File scripts/check.ps1
       env:
         DEBT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-
-  build:
-    runs-on: windows-latest
-    
-    strategy:
-      matrix:
-        runtime: [win-x64, win-arm64]
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Full history for GitVersion
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x  # test runtime
-        global-json-file: global.json  # SDK
-
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v1
-      with:
-        versionSpec: '5.x'
-
-    - name: Determine Version
-      id: gitversion
-      uses: gittools/actions/gitversion/execute@v1
-      with:
-        useConfigFile: true
-
-    - name: Display Version
-      run: |
-        echo "SemVer: ${{ steps.gitversion.outputs.semVer }}"
-        echo "NuGetVersion: ${{ steps.gitversion.outputs.nuGetVersion }}"
-
-    - name: Restore dependencies
-      run: dotnet restore src/FlaUI.Mcp/FlaUI.Mcp.csproj
-
-    - name: Build
-      run: |
-        dotnet build src/FlaUI.Mcp/FlaUI.Mcp.csproj `
-          --configuration Release `
-          --no-restore `
-          -p:Version=${{ steps.gitversion.outputs.semVer }}
-
-    - name: Publish
-      run: |
-        dotnet publish src/FlaUI.Mcp/FlaUI.Mcp.csproj `
-          --configuration Release `
-          --runtime ${{ matrix.runtime }} `
-          --self-contained true `
-          --output ./publish/${{ matrix.runtime }} `
-          -p:Version=${{ steps.gitversion.outputs.semVer }} `
-          -p:PublishSingleFile=true `
-          -p:IncludeNativeLibrariesForSelfExtract=true
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: FlaUI-MCP-${{ matrix.runtime }}
-        path: ./publish/${{ matrix.runtime }}/
