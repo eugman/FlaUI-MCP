@@ -93,7 +93,10 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override nint LastActivePopup(nint owner) => ModalHwnd == 0 ? owner : ModalHwnd;
 
-    public override int ProcessOf(nint hwnd) => hwnd == OtherHwnd ? OtherPid : TargetPid;
+    /// <summary>The process that owns the other window.</summary>
+    public int OtherProcessId { get; set; } = OtherPid;
+
+    public override int ProcessOf(nint hwnd) => hwnd == OtherHwnd ? OtherProcessId : TargetPid;
 
     public override bool BelongsTo(nint hwnd, nint target) => hwnd != 0 && hwnd == target;
 

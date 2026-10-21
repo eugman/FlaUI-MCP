@@ -250,4 +250,133 @@ public sealed class GuardMutationTests
 
         Assert.StartsWith(start, error.Message);
     }
+
+    [Fact]
+    public void GuardedInputRevalidatesTheTargetIdentity()
+    {
+        var desktop = new FakeDesktop
+        {
+            ForegroundWindow = FakeDesktop.OtherHwnd,
+            OnEnsureAlive = () => throw new InvalidOperationException("Stale process/window identity."),
+        };
+        using var installed = desktop.Install();
+
+        Assert.Throws<InvalidOperationException>(() => new GuardedInput(FakeDesktop.Target));
+
+        Assert.Equal(0, desktop.FocusAttempts);
+        AssertLeaseReleased();
+    }
+
+    [Fact]
+    public void GuardedInputChecksPermissionBeforeActivating()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd };
+        using var installed = desktop.Install();
+        MutationGuard.BeforeMutation.Value = () => throw new InvalidOperationException("mutation denied");
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => new GuardedInput(FakeDesktop.Target));
+        }
+        finally
+        {
+            MutationGuard.BeforeMutation.Value = null;
+        }
+
+        Assert.Equal(0, desktop.FocusAttempts);
+    }
+
+    [Fact]
+    public void AnActiveTargetIsNotFocusedAgain()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+
+        new GuardedInput(FakeDesktop.Target).Dispose();
+
+        Assert.Equal(0, desktop.FocusAttempts);
+    }
+
+    [Fact]
+    public void EachInputRechecksPermission()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        using var input = new GuardedInput(FakeDesktop.Target);
+        MutationGuard.BeforeMutation.Value = () => throw new InvalidOperationException("mutation denied");
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => input.Send(() => { }));
+        }
+        finally
+        {
+            MutationGuard.BeforeMutation.Value = null;
+        }
+
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void EachInputRechecksCancellation()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        try
+        {
+            using var input = new GuardedInput(FakeDesktop.Target);
+            operation.Stop.Cancel();
+
+            Assert.Throws<OperationCanceledException>(() => input.Send(() => { }));
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
+    public async Task WaitingForTheLeaseStopsWhenTheOperationIsCancelled()
+    {
+        var operation = new OperationContext();
+        operation.Stop.Cancel();
+        using var held = GuardedInput.AcquireLease();
+
+        var waiting = Task.Run(() =>
+        {
+            OperationContext.Current.Value = operation;
+            using var lease = GuardedInput.AcquireLease();
+        });
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => waiting);
+    }
+
+    [Fact]
+    public void AnActivationRefusalNamesTheProcessInFront()
+    {
+        // PID 4 is the System process on every Windows machine.
+        var desktop = new FakeDesktop
+        {
+            ForegroundWindow = FakeDesktop.OtherHwnd,
+            ActivationAllowed = false,
+            OtherProcessId = 4,
+        };
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target));
+
+        Assert.Equal(ProcessPolicy.TryGetProcessName(4), error.Refusal.ForegroundProcess!.Name);
+        Assert.NotNull(error.Refusal.ForegroundProcess.Name);
+    }
+
+    [Fact]
+    public void ThisProcessIsReadWithoutUiAccess()
+    {
+        var self = ProcessIntegrity.Read(Environment.ProcessId)!;
+
+        Assert.False(self.UiAccess);
+        Assert.True(self.Level >= ProcessIntegrity.Medium);
+    }
 }
