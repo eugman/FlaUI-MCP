@@ -44,6 +44,9 @@ internal static class PaneReopen
 
         /// <summary>Click the View popup Button with this name physically.</summary>
         Task ClickEntry(string title);
+
+        /// <summary>Press Escape once to close the open View menu.</summary>
+        Task CloseMenu();
     }
 
     /// <summary>Shows the pane; a visible pane is left alone, and a mapped hidden one is reopened and checked.</summary>
@@ -65,7 +68,17 @@ internal static class PaneReopen
         }
 
         await menu.OpenViewMenu();
-        await menu.ClickEntry(title);
+        try
+        {
+            await menu.ClickEntry(title);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The View click left the menu open, so the next tool's keys would go to it.
+            await menu.CloseMenu();
+            throw new InvalidOperationException(ex.Message + " View menu closed with Escape (1 input).", ex);
+        }
+
         for (var waited = 0; waited <= SettleMs; waited += PollMs)
         {
             if (await menu.IsVisible(title))

@@ -49,6 +49,16 @@ internal sealed class LayoutViewMenu(AutomationHost host, string handle, Window 
             )
         );
 
+    public Task CloseMenu() =>
+        inputs.Invoke(
+            () =>
+                host.Tools.ExecuteToolAsync(
+                    "windows_send_keys",
+                    JsonSerializer.SerializeToElement(new { handle, chord = "Escape" })
+                ),
+            tool: "windows_send_keys"
+        );
+
     /// <summary>The process's visible top-level windows other than the main one: where the View popup can be.</summary>
     private HashSet<long> PopupHwnds()
     {
