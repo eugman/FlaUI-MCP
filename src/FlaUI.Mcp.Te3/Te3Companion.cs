@@ -7,14 +7,15 @@ using FlaUI.Mcp.Core;
 public sealed class Te3Companion(AutomationHost host, string name, Te3Interaction? interaction = null) : ToolBase
 {
     public const string Navigate = "te3_navigate";
-
-    // Never approved when none is passed, so a tool built without one refuses input.
-    private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
     public const string ModelState = "te3_model_state";
+    public static readonly string[] Names = [Navigate, ModelState];
 
     // Tools the page calls that only read; every other call counts as input once it went out.
     private static readonly HashSet<string> ReadOnlyTools = ["windows_screenshot"];
-    public static readonly string[] Names = [Navigate, ModelState];
+
+    // Never approved when none is passed, so a tool built without one refuses input.
+    private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
+
     public override string Name => name;
     public override string Description =>
         name switch
@@ -84,78 +85,96 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         }
     }
 
+    /// <summary>Where a call has got to, reported with its result or failure.</summary>
+    private sealed class Step
+    {
+        public string Phase { get; set; } = "validate";
+        public string Last { get; set; } = "validate request";
+    }
+
     public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
-        var lastStep = "validate request";
-        var phase = "validate";
+        var step = new Step();
         var inputs = new InputTally();
         try
         {
             var a = arguments ?? JsonSerializer.SerializeToElement(new { });
             Validate(a, name);
-            phase = "permission";
+            step.Phase = "permission";
             // Navigation takes the desktop; a status-bar read sends no input and needs no grant.
             using var guard = name == Navigate ? grant.Guard() : null;
-            phase = "attach";
+            step.Phase = "attach";
             var (windows, hwnd, handle, identity) = Attach(a);
-
-            async Task Invoke(string tool, object args)
-            {
-                identity.EnsureAlive();
-                OperationContext.Check();
-                await inputs.Invoke(
-                    () => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)),
-                    ReadOnlyTools.Contains(tool)
-                );
-            }
-
-            var page = new Te3Page(host, handle, Invoke, step => lastStep = step, inputs: inputs);
+            var page = new Te3Page(host, handle, Invoker(identity, inputs), last => step.Last = last, inputs: inputs);
 
             if (name == ModelState)
             {
-                phase = "observe";
-                lastStep = "read status bar";
-                return ReadModelState(page, hwnd, phase, lastStep);
+                step.Phase = "observe";
+                step.Last = "read status bar";
+                return ReadModelState(page, hwnd, step.Phase, step.Last);
             }
 
-            // Validate has already confirmed the id is in the registry.
-            var destination = Te3Destinations.Find(GetStringArgument(a, "destination"))!;
-            var hasPreferences = windows.Any(w => w.Title == "Preferences");
-            RequireNoOtherWindow(windows, hwnd, destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences");
-
-            if (hasPreferences && destination.Section == null)
-            {
-                throw new InvalidOperationException(
-                    "Preferences is open. Cancel it explicitly before navigating elsewhere."
-                );
-            }
-
-            phase = "navigate";
-            lastStep = "navigate " + destination.Id;
-            await NavigateTo(page, destination, a, hasPreferences);
-
-            lastStep = "verify " + destination.Id;
-            phase = "verify-arrival";
-            await page.VerifyCompanionDestination(
-                destination,
-                GetStringArgument(a, "table"),
-                GetStringArgument(a, "objectName"),
-                GetStringArgument(a, "objectType")
-            );
-            return Json(
-                new
-                {
-                    assessment = Assessment(true),
-                    destination = destination.Id,
-                    phase,
-                    lastStep,
-                }
-            );
+            return await NavigateAndVerify(page, windows, hwnd, a, step);
         }
         catch (Exception ex)
         {
-            return Failure(phase, lastStep, ex.Message, inputs.Sent);
+            return Failure(step.Phase, step.Last, ex.Message, inputs.Sent);
         }
+    }
+
+    // The page's tool calls: refused once the window or operation is gone, and counted as input once they went out.
+    private Func<string, object, Task> Invoker(InputTarget identity, InputTally inputs) =>
+        async (tool, args) =>
+        {
+            identity.EnsureAlive();
+            OperationContext.Check();
+            await inputs.Invoke(
+                () => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)),
+                ReadOnlyTools.Contains(tool)
+            );
+        };
+
+    private async Task<McpToolResult> NavigateAndVerify(
+        Te3Page page,
+        IReadOnlyList<Win32WindowInfo> windows,
+        nint hwnd,
+        JsonElement a,
+        Step step
+    )
+    {
+        // Validate has already confirmed the id is in the registry.
+        var destination = Te3Destinations.Find(GetStringArgument(a, "destination"))!;
+        var hasPreferences = windows.Any(w => w.Title == "Preferences");
+        RequireNoOtherWindow(windows, hwnd, destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences");
+
+        if (hasPreferences && destination.Section == null)
+        {
+            throw new InvalidOperationException(
+                "Preferences is open. Cancel it explicitly before navigating elsewhere."
+            );
+        }
+
+        step.Phase = "navigate";
+        step.Last = "navigate " + destination.Id;
+        await NavigateTo(page, destination, a, hasPreferences);
+
+        step.Last = "verify " + destination.Id;
+        step.Phase = "verify-arrival";
+        await page.VerifyCompanionDestination(
+            destination,
+            GetStringArgument(a, "table"),
+            GetStringArgument(a, "objectName"),
+            GetStringArgument(a, "objectType")
+        );
+        return Json(
+            new
+            {
+                assessment = Assessment(true),
+                destination = destination.Id,
+                phase = step.Phase,
+                lastStep = step.Last,
+            }
+        );
     }
 
     // The TE3 process the request names, its one document window, and the input target for it.
