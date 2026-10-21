@@ -45,3 +45,10 @@ The deadline is Core's fixed 30 s per tool call (`ToolRegistry`); a broker `--ti
 Seen in TE3 3.27.1 on SpaceParts (2026-10-21). With `folder: "1. Brand Hierarchy"`, `te3_navigate object` Brands/Brand stopped on the 18 s clock after 7 rows on Table Permission "Brands" under role Brand VPs: the typed search also matches role table permissions, and Roles comes before Tables. Without `folder` it reached Column "Brand" (Node50, depth 4) but reported "unknown type / table none": the status bar's load slot was blank, so the whole bar mapped as unrecognized and the walk saw no type; a selected display folder also leaves the selection slot on the previous object.
 
 Changed in the host: rows are placed by DataItem depth, typed from the selection slot only when it names the row and otherwise from Properties' ObjectType, groups other than Tables are collapsed before walking on, and a walk that stops on the object (confirmed by Properties' Name and ObjectType) is not a miss. Not yet re-run live.
+
+## Filling the Scintilla editors without a focus check
+
+The expression editor and the DAX query editor are Scintilla controls (`daxscilla`). Whether UI Automation reports keyboard focus on the control itself, or on a child, was never checked live, so the host fills them with `verifyFocus: false`: Core's Value pattern is tried first, and if it falls back to the keyboard (Ctrl+A, Backspace, text) it does not first confirm focus reached the editor. Every other field the host fills asks for the check.
+
+Next: once Core's `verifyFocus: "self-or-descendant"` (Core c807de5) is merged here, and the editors are seen to report focus that way live, switch both calls to it.
+

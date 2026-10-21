@@ -1847,7 +1847,8 @@ public sealed partial class Te3Page(
     public async Task SetExpression(string expression)
     {
         await Click(ExpressionTabTarget());
-        await Fill(ExpressionInputTarget(), expression, verifyFocus: true);
+        // Scintilla: whether UIA reports focus on the daxscilla control itself was never verified (KNOWN-ISSUES).
+        await Fill(ExpressionInputTarget(), expression, verifyFocus: false);
         await Expect(ExpressionTarget(), expression);
         await Keys("F5");
     }
@@ -1874,7 +1875,8 @@ public sealed partial class Te3Page(
 
     public async Task RunQuery(string query)
     {
-        await Fill(QueryInputTarget(), query, verifyFocus: true);
+        // Scintilla, as for the expression editor (KNOWN-ISSUES).
+        await Fill(QueryInputTarget(), query, verifyFocus: false);
         await Expect(QueryTextTarget(), query);
         await Keys("F5", QueryInputTarget());
     }
