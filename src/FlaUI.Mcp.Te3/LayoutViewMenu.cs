@@ -14,6 +14,18 @@ internal sealed class LayoutViewMenu(AutomationHost host, string handle, Window 
 
     public Task<bool> IsDocument(string title) => Task.FromResult(Te3Layout.DocumentOpen(window, title));
 
+    // A top-level TE3 window that is a known floating pane by title and AutomationId (LayoutChecks).
+    public Task<bool> IsFloating(string title) =>
+        Task.FromResult(
+            Win32Desktop
+                .GetTopLevelWindows(host.Sessions.GetWindowProcessId(handle))
+                .Any(w =>
+                    w.Title == title
+                    && !w.IsToolWindow
+                    && LayoutChecks.IsFloatingPane(w, Te3Dialogs.AutomationIds(host))
+                )
+        );
+
     private const int PopupWaitMs = 1500;
     private const int PopupPollMs = 150;
 

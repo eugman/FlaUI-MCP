@@ -60,17 +60,24 @@ internal static class PaneReopen
 
         /// <summary>Press Escape once to close the open View menu.</summary>
         Task CloseMenu();
+
+        /// <summary>
+        /// Whether the pane is showing as a floating window of its own (Dependencies opens floating by default, an
+        /// unowned top-level window; 3.27.1).
+        /// </summary>
+        Task<bool> IsFloating(string title) => Task.FromResult(false);
     }
 
     /// <summary>Shows the pane; a visible pane is left alone, and a mapped hidden one is reopened and checked.</summary>
     public static async Task<object> Show(IViewMenu menu, string title)
     {
-        if (await menu.IsVisible(title))
+        if (await menu.IsVisible(title) || await menu.IsFloating(title))
         {
             return new
             {
                 pane = title,
                 visible = true,
+                floating = await menu.IsFloating(title),
                 changed = false,
             };
         }
@@ -99,12 +106,15 @@ internal static class PaneReopen
 
         for (var waited = 0; waited <= SettleMs; waited += PollMs)
         {
-            if (await menu.IsVisible(title))
+            // Docked, or floating as a window of its own: either way the pane is showing.
+            var floating = await menu.IsFloating(title);
+            if (floating || await menu.IsVisible(title))
             {
                 return new
                 {
                     pane = title,
                     visible = true,
+                    floating,
                     changed = true,
                 };
             }
