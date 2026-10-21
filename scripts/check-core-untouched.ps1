@@ -36,6 +36,13 @@ elseif ($CoreRevision -eq 'core/main') {
     # Compare with the point this branch last took from core/main, so a core release that is not merged
     # yet does not fail a branch that touched no core file.
     $base = git merge-base HEAD core/main
+    if ($LASTEXITCODE -ne 0 -or -not $base) {
+        # Without a merge-base the diff below would compare nothing and pass any change.
+        Write-Host 'This branch has no common history with core/main, so core ownership cannot be checked.' -ForegroundColor Red
+        Write-Host 'Run: git fetch core; git merge core/main'
+        exit 1
+    }
+
     $changed = git diff --name-only --no-renames $base HEAD
 }
 else {

@@ -115,4 +115,20 @@ public sealed class MutationConfigTests
 
         Assert.Empty(unguarded);
     }
+
+    [Fact]
+    public void TheCoreOwnershipCheckFailsWithoutAMergeBase()
+    {
+        // With no merge-base, `git diff $base HEAD` compares nothing useful and would pass any change.
+        var script = File.ReadAllText(RepoFile(Path.Combine("scripts", "check-core-untouched.ps1")));
+        var mergeBase = script.IndexOf("$base = git merge-base HEAD core/main", StringComparison.Ordinal);
+
+        Assert.True(mergeBase >= 0);
+        var next = script[mergeBase..];
+        Assert.Matches(
+            @"^\$base = git merge-base HEAD core/main\r?\n\s+if \(\$LASTEXITCODE -ne 0 -or -not \$base\)",
+            next
+        );
+        Assert.Contains("has no common history with core/main", next);
+    }
 }
