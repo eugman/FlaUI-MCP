@@ -84,6 +84,17 @@ internal class InputDesktop
 
     public virtual string WindowState(nint hwnd) => Win32Desktop.GetWindowState(hwnd);
 
+    /// <summary>Visible and neither minimized nor maximized.</summary>
+    public virtual bool IsNormalWindow(nint hwnd) => Win32Desktop.IsNormalWindow(hwnd);
+
+    public virtual Rectangle? WindowBounds(nint hwnd) => Win32Desktop.GetWindowBounds(hwnd);
+
+    public virtual void PlaceWindow(nint hwnd, Rectangle bounds)
+    {
+        RefuseOffline();
+        Win32Desktop.PlaceWindow(hwnd, bounds);
+    }
+
     public virtual void SetWindowState(nint hwnd, string state)
     {
         RefuseOffline();

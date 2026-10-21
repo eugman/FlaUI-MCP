@@ -63,7 +63,7 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
         }
 
         var after = WaitForState(target.Hwnd, requested);
-        var bounds = Win32Desktop.GetWindowBounds(target.Hwnd);
+        var bounds = desktop.WindowBounds(target.Hwnd);
         var result = JsonSerializer.Serialize(
             new
             {

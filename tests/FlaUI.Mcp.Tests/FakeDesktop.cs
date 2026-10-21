@@ -166,6 +166,22 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override void SetWindowState(nint hwnd, string state) => StateRequests.Add(state);
 
+    public bool NormalWindow { get; set; } = true;
+
+    public Rectangle Bounds { get; set; } = new(100, 100, 800, 600);
+
+    public List<Rectangle> Placements { get; } = [];
+
+    public override bool IsNormalWindow(nint hwnd) => NormalWindow;
+
+    public override Rectangle? WindowBounds(nint hwnd) => Bounds;
+
+    public override void PlaceWindow(nint hwnd, Rectangle bounds)
+    {
+        Placements.Add(bounds);
+        Bounds = bounds;
+    }
+
     private sealed class Uninstall : IDisposable
     {
         public void Dispose() => Override.Value = null;
