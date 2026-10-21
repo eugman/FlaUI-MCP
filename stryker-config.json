@@ -15,7 +15,12 @@
       "**/Core/OperationContext.cs",
       "**/Mcp/McpServer.cs",
       "**/Mcp/McpLineTransport.cs",
-      "**/Mcp/ToolRegistry.cs"
+      "**/Mcp/ToolRegistry.cs",
+      "**/Tools/ClickTool.cs",
+      "**/Tools/MouseTool.cs",
+      "**/Tools/SendKeysTool.cs",
+      "**/Tools/TypeTools.cs",
+      "**/Tools/BatchTool.cs"
     ],
     "concurrency": 2,
     "coverage-analysis": "perTest",
