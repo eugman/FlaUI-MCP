@@ -311,7 +311,7 @@ public sealed class CompanionTests
     [InlineData("\"Date\"", null)]
     [InlineData(null, null)]
     public void StatusBarSelectionGivesTheObjectType(string? selection, string? expected) =>
-        Assert.Equal(expected, Te3Page.SelectionType(selection));
+        Assert.Equal(expected, TomSelection.SelectionType(selection));
 
     [Theory]
     [InlineData("Table \"Brands\"", "Brands")]
@@ -320,13 +320,16 @@ public sealed class CompanionTests
     [InlineData("(Nothing selected)", null)]
     [InlineData(null, null)]
     public void StatusBarSelectionGivesTheObjectNameOnlyWhenWhole(string? selection, string? expected) =>
-        Assert.Equal(expected, Te3Page.SelectionName(selection));
+        Assert.Equal(expected, TomSelection.SelectionName(selection));
 
     [Fact]
     public void ASelectedRowWithoutATreeItemValueTakesItsNameFromTheStatusBar()
     {
-        Assert.Equal(new RowObservation("Brands", "Table"), Te3Page.ObservedRow(null, "Table \"Brands\""));
-        Assert.Equal(new RowObservation("Brand", "Data Column"), Te3Page.ObservedRow("Brand", "Data Column \"Brand\""));
+        Assert.Equal(new RowObservation("Brands", "Table"), TomSelection.ObservedRow(null, "Table \"Brands\""));
+        Assert.Equal(
+            new RowObservation("Brand", "Data Column"),
+            TomSelection.ObservedRow("Brand", "Data Column \"Brand\"")
+        );
     }
 
     [Fact]
