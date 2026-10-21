@@ -10,7 +10,7 @@ public sealed class DesktopClaimTests
     public void ARunningHostMakesTheDesktopBusy() =>
         Assert.Equal(
             "FlaUI.Mcp.PowerBi (PID 42) is running and may be driving the desktop; stop it first.",
-            DesktopClaim.BusyReason([("explorer", 1), ("FlaUI.Mcp.PowerBi", 42)], busy: null, self: 7)
+            DesktopClaim.BusyReason([new("explorer", 1, []), new("FlaUI.Mcp.PowerBi", 42, [])], busy: null, self: 7)
         );
 
     [Fact]
@@ -19,7 +19,28 @@ public sealed class DesktopClaimTests
 
     [Fact]
     public void TheTestHostItselfDoesNotCount() =>
-        Assert.Null(DesktopClaim.BusyReason([("FlaUI.Mcp.IntegrationTests", 7), ("testhost", 8)], busy: null, self: 7));
+        Assert.Null(
+            DesktopClaim.BusyReason(
+                [
+                    new("FlaUI.Mcp.IntegrationTests", 7, []),
+                    new("testhost", 8, []),
+                    new("dotnet", 9, [@"C:\sdk\MSBuild.dll"]),
+                ],
+                busy: null,
+                self: 7
+            )
+        );
+
+    [Fact]
+    public void AHostStartedWithDotnetMakesTheDesktopBusy() =>
+        Assert.Equal(
+            "dotnet (PID 9) has FlaUI.Mcp.Camtasia.dll loaded and may be driving the desktop; stop it first.",
+            DesktopClaim.BusyReason(
+                [new("dotnet", 9, [@"C:\hosts\cam\FlaUI.Mcp.Camtasia.dll", @"C:\hosts\cam\FlaUI.Core.dll"])],
+                busy: null,
+                self: 7
+            )
+        );
 
     [Fact]
     public void OnlyTestAppsBuiltFromThisCheckoutAreOurs()
