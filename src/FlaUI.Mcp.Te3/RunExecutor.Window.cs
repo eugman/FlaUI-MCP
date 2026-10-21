@@ -88,7 +88,7 @@ public static partial class RunExecutor
 
         if (waited)
         {
-            interaction.Rebaseline(prompt);
+            interaction.Rebaseline(prompt, Win32Desktop.GetWindowBounds(target.Hwnd));
         }
     }
 

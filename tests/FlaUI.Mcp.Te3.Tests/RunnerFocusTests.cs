@@ -167,10 +167,15 @@ public sealed class RunnerFocusTests : IDisposable
 
         public long Sequence => Keys + ButtonDowns + Moves;
 
-        public InputCounts Counts => new(Keys, ButtonDowns);
+        public System.Drawing.Point? LastButtonDown { get; set; } = new System.Drawing.Point(500, 400);
+
+        public InputCounts Counts => new(Keys, ButtonDowns, LastButtonDown);
 
         public void Dispose() { }
     }
+
+    // The run's TE3 window, placed at (0,0,1920,1080).
+    private static readonly System.Drawing.Rectangle Te3Window = new(0, 0, 1920, 1080);
 
     private static (Te3Interaction Interaction, CountingObserver User) Observed()
     {
@@ -191,7 +196,7 @@ public sealed class RunnerFocusTests : IDisposable
         user.Moves++;
         user.ButtonDowns++;
 
-        interaction.Rebaseline(prompt);
+        interaction.Rebaseline(prompt, Te3Window);
         interaction.Require();
 
         user.Moves++;
@@ -212,11 +217,27 @@ public sealed class RunnerFocusTests : IDisposable
         user.Keys += 40;
         user.ButtonDowns++;
 
-        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt));
+        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt, Te3Window));
 
         Assert.Equal(Te3Interaction.ActivationDenied, error.Refusal.Code);
         Assert.Contains("keyboard", error.Message);
         Assert.Throws<InputRefusedException>(interaction.Require);
+    }
+
+    [Fact]
+    public void AClickOutsideTe3IsNotTheClickTheRunAskedFor()
+    {
+        // The user clicked their own window on a second monitor; TE3 then came forward when that window closed.
+        var (interaction, user) = Observed();
+        using var _ = interaction;
+        var prompt = interaction.Mark();
+        user.ButtonDowns++;
+        user.LastButtonDown = new System.Drawing.Point(2500, 300);
+
+        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt, Te3Window));
+
+        Assert.Equal(Te3Interaction.ActivationDenied, error.Refusal.Code);
+        Assert.Contains("not inside the TE3 window", error.Message);
     }
 
     [Fact]
@@ -228,7 +249,7 @@ public sealed class RunnerFocusTests : IDisposable
         var prompt = interaction.Mark();
         user.Moves += 5;
 
-        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt));
+        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt, Te3Window));
 
         Assert.Equal(Te3Interaction.ActivationDenied, error.Refusal.Code);
         Assert.Contains("without a click", error.Message);
@@ -239,7 +260,7 @@ public sealed class RunnerFocusTests : IDisposable
     {
         using var interaction = Approved();
 
-        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(interaction.Mark()));
+        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(interaction.Mark(), Te3Window));
     }
 
     [Fact]
@@ -252,7 +273,7 @@ public sealed class RunnerFocusTests : IDisposable
         Assert.Throws<InputRefusedException>(interaction.Require);
         user.ButtonDowns++;
 
-        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt));
+        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt, Te3Window));
     }
 
     [Theory]

@@ -8,5 +8,6 @@ internal interface IInputObserver : IDisposable
     InputCounts Counts { get; }
 }
 
-/// <summary>The user's own keyboard events and mouse button-downs so far.</summary>
-internal readonly record struct InputCounts(long Keys, long ButtonDowns);
+/// <summary>The user's own keyboard events and mouse button-downs so far, and where the last button went down.</summary>
+/// <param name="LastButtonDown">The screen point of the last physical button-down, or null before the first.</param>
+internal readonly record struct InputCounts(long Keys, long ButtonDowns, System.Drawing.Point? LastButtonDown = null);

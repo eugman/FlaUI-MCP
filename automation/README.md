@@ -58,7 +58,7 @@ Rules:
 
 ## Screenshot runner
 
-The runner launches its own TE3 instance, so close yours first. It stages a model, runs each recipe, and restores your TE3 preferences afterwards. Starting `run` approves the named recipes, like `te3_interaction_begin` in the MCP server: your own keyboard or mouse input revokes that, and the recipe fails at its next input (the run still closes its TE3 and restores your preferences). If Windows refuses to bring TE3 to the front, the runner asks you to click it: it carries on only if a mouse click, and no typing, came before TE3 reached the front, and any input after that click stops the run. Every run writes a manifest, the PNGs and an `index.html` under the configured output folder.
+The runner launches its own TE3 instance, so close yours first. It stages a model, runs each recipe, and restores your TE3 preferences afterwards. Starting `run` approves the named recipes, like `te3_interaction_begin` in the MCP server: your own keyboard or mouse input revokes that, and the recipe fails at its next input (the run still closes its TE3 and restores your preferences). If Windows refuses to bring TE3 to the front, the runner asks you to click it: it carries on only if a mouse click inside the TE3 window, and no typing, came before TE3 reached the front (checked every 250 ms), and any input after that click stops the run. Every run writes a manifest, the PNGs and an `index.html` under the configured output folder.
 
 ### Configure
 

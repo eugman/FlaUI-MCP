@@ -2,7 +2,8 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 /// <summary>
-/// Counts non-injected input; never records keys, coordinates, or text. The same observer as the Camtasia and
+/// Counts non-injected input; never records keys or text, and of coordinates only where the last button went down
+/// (the run checks that the click it asked for landed in TE3). The same observer as the Camtasia and
 /// Power BI hosts; Core does not expose one. TODO(core): share it from Core.
 /// </summary>
 /// <remarks>
@@ -28,6 +29,7 @@ internal sealed class PhysicalInputObserver : IInputObserver
     private long sequence;
     private long keys;
     private long buttonDowns;
+    private long lastButtonDown = long.MinValue;
     private int disposed;
     private uint threadId;
 
@@ -73,7 +75,12 @@ internal sealed class PhysicalInputObserver : IInputObserver
         get
         {
             RequireAlive();
-            return new(Interlocked.Read(ref keys), Interlocked.Read(ref buttonDowns));
+            var point = Interlocked.Read(ref lastButtonDown);
+            return new(
+                Interlocked.Read(ref keys),
+                Interlocked.Read(ref buttonDowns),
+                point == long.MinValue ? null : new System.Drawing.Point((int)(point >> 32), (int)point)
+            );
         }
     }
 
@@ -100,14 +107,14 @@ internal sealed class PhysicalInputObserver : IInputObserver
             if (IsPhysical(isKeyboard, flags))
             {
                 Interlocked.Increment(ref sequence);
-                Count(isKeyboard, message);
+                Count(isKeyboard, message, data);
             }
         }
 
         return CallNextHookEx(0, code, message, data);
     }
 
-    private void Count(bool isKeyboard, nint message)
+    private void Count(bool isKeyboard, nint message, nint data)
     {
         if (isKeyboard)
         {
@@ -115,6 +122,10 @@ internal sealed class PhysicalInputObserver : IInputObserver
         }
         else if (IsButtonDown(message))
         {
+            // MSLLHOOKSTRUCT starts with the POINT (x, y) in screen coordinates.
+            var x = Marshal.ReadInt32(data, 0);
+            var y = Marshal.ReadInt32(data, 4);
+            Interlocked.Exchange(ref lastButtonDown, ((long)x << 32) | (uint)y);
             Interlocked.Increment(ref buttonDowns);
         }
     }

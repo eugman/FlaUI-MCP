@@ -131,10 +131,13 @@ public sealed class Te3Interaction : IDisposable
     /// <summary>
     /// After the run asked the user to click TE3 (Windows refused to focus it) and TE3 came to the front: counts input
     /// from now on, keeping the batch, only when that was a click. Any keyboard input since <paramref name="prompt"/>
-    /// went to some other window, and with no button-down TE3 came forward on its own (a late foreground grant, the
-    /// user's window closing); either revokes the batch with activation_denied. A revoked grant stays revoked.
+    /// went to some other window, and with no button-down, or with the last one outside TE3's window, TE3 came forward
+    /// on its own (a late foreground grant, the user's window closing); each revokes the batch with activation_denied.
+    /// The run checks the foreground every 250 ms, so "since the prompt" ends at the poll that first saw TE3 in front:
+    /// input in that last quarter second, after the click, is taken as part of it. A revoked grant stays revoked.
     /// </summary>
-    internal void Rebaseline(InputCounts? prompt)
+    /// <param name="te3">The TE3 window's screen bounds now; the click must have landed inside them.</param>
+    internal void Rebaseline(InputCounts? prompt, System.Drawing.Rectangle? te3)
     {
         lock (sync)
         {
@@ -143,7 +146,7 @@ public sealed class Te3Interaction : IDisposable
                 throw Refusal(code, $"No batch to continue: {reason}");
             }
 
-            var why = ActivationProblem(prompt);
+            var why = ActivationProblem(prompt, te3);
             if (why != null)
             {
                 batch = null;
@@ -156,7 +159,7 @@ public sealed class Te3Interaction : IDisposable
         }
     }
 
-    private string? ActivationProblem(InputCounts? prompt)
+    private string? ActivationProblem(InputCounts? prompt, System.Drawing.Rectangle? te3)
     {
         InputCounts now;
         try
@@ -178,7 +181,14 @@ public sealed class Te3Interaction : IDisposable
             return "keyboard input from the user was observed while the run waited, so it went to another window.";
         }
 
-        return now.ButtonDowns == before.ButtonDowns ? "TE3 came to the front without a click from the user." : null;
+        if (now.ButtonDowns == before.ButtonDowns)
+        {
+            return "TE3 came to the front without a click from the user.";
+        }
+
+        return te3 is { } bounds && now.LastButtonDown is { } point && bounds.Contains(point)
+            ? null
+            : "the last click was not inside the TE3 window, so something else brought it to the front.";
     }
 
     /// <summary>Refuses input until <see cref="Observed"/>: a call failed after sending input.</summary>
