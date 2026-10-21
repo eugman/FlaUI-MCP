@@ -34,11 +34,13 @@ public sealed class DirectInputJournalTests
     }
 
     // The line and the call it is an argument of: back to the line whose unclosed '(' encloses it.
+    // Statements inside a lambda argument balance their own parentheses, so the walk passes them and stops at the
+    // unclosed one; a member declaration ends it when nothing encloses the line.
     private static string EnclosingCall(string[] lines, int index)
     {
         var depth = 0;
         var start = index;
-        while (start > 0 && depth <= 0 && !lines[start - 1].TrimEnd().EndsWith(';'))
+        while (start > 0 && depth <= 0 && !IsMember(lines[start]))
         {
             start--;
             depth += lines[start].Count(c => c == '(') - lines[start].Count(c => c == ')');
@@ -46,6 +48,10 @@ public sealed class DirectInputJournalTests
 
         return string.Join(' ', lines[(depth > 0 ? start : index)..(index + 1)]);
     }
+
+    private static readonly Regex Member = new(@"^    (?:public|private|internal) ");
+
+    private static bool IsMember(string line) => Member.IsMatch(line);
 
     [Theory]
     [InlineData("Te3Page.cs")]
