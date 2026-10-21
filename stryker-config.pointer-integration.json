@@ -1,0 +1,29 @@
+{
+  "stryker-config": {
+    "project": "FlaUI.Mcp.csproj",
+    "test-projects": [
+      "FlaUI.Mcp.IntegrationTests.csproj"
+    ],
+    "mutate": [
+      "**/Tools/ClickTool.cs",
+      "**/Tools/ClickToolReplies.cs",
+      "**/Tools/MouseTool.cs",
+      "**/Tools/PointerActions.cs",
+      "**/Core/ClickPoint.cs",
+      "**/Core/GuardedInput.cs"
+    ],
+    "concurrency": 1,
+    "coverage-analysis": "perTest",
+    "reporters": [
+      "html",
+      "json",
+      "progress"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "additional-timeout": 180000
+  }
+}
