@@ -19,38 +19,61 @@ public sealed record ClickGeometry(
     private const int MaxAncestors = 50;
 
     /// <summary>
-    /// Scroll the element into view when it supports that; true when it scrolled. Scrolling changes the app as
-    /// input does, so it takes the input lease, revalidates the target, counts as a dispatch and runs
-    /// modal-aware. Call it before guarded input takes the lease.
+    /// Scroll the element into view when it supports that. Scrolling changes the app as input does, so it takes
+    /// the input lease, revalidates the target and runs modal-aware; it counts as a dispatch only when the
+    /// element moved. Call it before guarded input takes the lease. Returns the note a later refusal carries
+    /// ("the view was scrolled" or "a scroll into view was requested"), or null when the element cannot scroll.
     /// </summary>
-    public static bool ScrollIntoView(
+    public static string? ScrollIntoView(
         AutomationElement element,
         int processId,
         PendingInvokeTracker pending,
         Action validate
     ) =>
         element.Patterns.ScrollItem.TryGetPattern(out var scrollItem)
-        && Scroll(processId, pending, validate, scrollItem.ScrollIntoView);
+            ? Scroll(processId, pending, validate, scrollItem.ScrollIntoView, () => element.BoundingRectangle)
+            : null;
 
-    internal static bool Scroll(int processId, PendingInvokeTracker pending, Action validate, Action scroll)
+    internal static string Scroll(
+        int processId,
+        PendingInvokeTracker pending,
+        Action validate,
+        Action scroll,
+        Func<Rectangle> bounds
+    )
     {
         OperationContext.Check();
         using var lease = GuardedInput.AcquireLease();
+        var before = bounds();
         var result = ModalAwareInvoker.Execute(
             processId,
             "ScrollIntoView",
-            () => MutationGuard.Execute(validate, () => InputDesktop.Current.CallPattern(scroll)),
+            () =>
+            {
+                OperationContext.Check();
+                validate();
+                OperationContext.Check();
+                MutationGuard.CheckPermission();
+                InputDesktop.Current.CallPattern(scroll);
+            },
             pending
         );
         if (result.Outcome != PatternCallOutcome.Completed)
         {
+            // The tracker still holds the call, so the registry marks the outcome's provider pending.
             throw new InvalidOperationException(
                 "ScrollIntoView did not return; the app's UI Automation provider may be blocked. Nothing was "
                     + "pressed. Check windows_operation_status before retrying."
             );
         }
 
-        return true;
+        if (bounds() == before)
+        {
+            return "a scroll into view was requested";
+        }
+
+        MutationGuard.RecordDispatch();
+        return "the view was scrolled";
     }
 
     /// <summary>Read the element's geometry. It does not scroll; see <see cref="ScrollIntoView"/>.</summary>

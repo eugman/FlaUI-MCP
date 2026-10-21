@@ -88,7 +88,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         var target = sessions.GetInputTarget(handle);
         var origin = WindowOrigin(handle, target.Hwnd);
         // Set when resolving a ref scrolled its view, so a later refusal can say so.
-        var scrolled = false;
+        string? scrolled = null;
         Point landed;
         try
         {
@@ -111,9 +111,9 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
             };
         }
-        catch (InvalidOperationException error) when (scrolled)
+        catch (InvalidOperationException error) when (scrolled != null)
         {
-            throw GuardedInput.ChangedFirst(error, "the view was scrolled");
+            throw GuardedInput.ChangedFirst(error, scrolled);
         }
 
         return Task.FromResult(
@@ -131,21 +131,16 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     }
 
     /// <summary>Scroll a ref into view through the guards, then read where it is.</summary>
-    private ClickGeometry Geometry(string reference, ref bool scrolled)
+    private ClickGeometry Geometry(string reference, ref string? scrolled)
     {
         var element = refs.ResolveRef(reference);
-        if (
+        scrolled =
             ClickGeometry.ScrollIntoView(
                 element,
                 refs.GetProcessIdForRef(reference),
                 pending,
                 () => refs.ValidateReference(reference)
-            )
-        )
-        {
-            scrolled = true;
-        }
-
+            ) ?? scrolled;
         return ClickGeometry.Read(element);
     }
 
@@ -154,7 +149,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         InputTarget target,
         string? reference,
         Rectangle origin,
-        ref bool scrolled
+        ref string? scrolled
     )
     {
         var fromEdge = GetStringArgument(arguments, "fromEdge");
@@ -211,7 +206,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         string name,
         string? reference,
         Rectangle origin,
-        ref bool scrolled
+        ref string? scrolled
     )
     {
         if (arguments is { } a && a.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Object)
@@ -231,7 +226,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         return ClickPoint.Choose(Geometry(reference, ref scrolled));
     }
 
-    private Point EdgeOf(string reference, string edge, ref bool scrolled)
+    private Point EdgeOf(string reference, string edge, ref string? scrolled)
     {
         var geometry = Geometry(reference, ref scrolled);
         return ClickPoint.Choose(geometry, PointerPlan.EdgePoint(geometry.Bounds, edge));

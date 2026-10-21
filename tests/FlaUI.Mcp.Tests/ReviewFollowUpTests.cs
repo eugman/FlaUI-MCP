@@ -165,6 +165,7 @@ public sealed class ReviewFollowUpTests
         OperationContext.Current.Value = operation;
         try
         {
+            var bounds = new System.Drawing.Rectangle(0, 0, 10, 10);
             var scrolled = ClickGeometry.Scroll(
                 0,
                 new PendingInvokeTracker(),
@@ -173,10 +174,12 @@ public sealed class ReviewFollowUpTests
                 {
                     order.Add("scroll");
                     leaseHeld = LeaseHeld();
-                }
+                    bounds = new System.Drawing.Rectangle(0, 50, 10, 10);
+                },
+                () => bounds
             );
 
-            Assert.True(scrolled);
+            Assert.Equal("the view was scrolled", scrolled);
             Assert.Equal(["validate", "scroll"], order);
             Assert.Equal(1, operation.InputsSent);
             Assert.True(leaseHeld);
@@ -198,11 +201,69 @@ public sealed class ReviewFollowUpTests
                 0,
                 new PendingInvokeTracker(),
                 () => throw new InvalidOperationException("stale ref"),
-                () => scrolled = true
+                () => scrolled = true,
+                () => System.Drawing.Rectangle.Empty
             )
         );
 
         Assert.False(scrolled);
+    }
+
+    [Fact]
+    public void AScrollThatMovesNothingIsOnlyRequestedAndNotCounted()
+    {
+        using var offlineDesktop = new FakeDesktop().Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        try
+        {
+            var note = ClickGeometry.Scroll(
+                0,
+                new PendingInvokeTracker(),
+                () => { },
+                () => { },
+                () => new System.Drawing.Rectangle(0, 0, 10, 10)
+            );
+
+            Assert.Equal("a scroll into view was requested", note);
+            Assert.Equal(0, operation.InputsSent);
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
+    [Fact]
+    public async Task AScrollThatDoesNotReturnLeavesThePendingMarkerOnTheOutcome()
+    {
+        using var offlineDesktop = new FakeDesktop().Install();
+        using var hold = new ManualResetEventSlim();
+        var pending = new PendingInvokeTracker(_ => 1);
+        var registry = new ToolRegistry { Pending = pending };
+        registry.RegisterTool(
+            new Runs(
+                "scrolls",
+                () =>
+                {
+                    ClickGeometry.Scroll(0, pending, () => { }, hold.Wait, () => System.Drawing.Rectangle.Empty);
+                    return new McpToolResult();
+                }
+            )
+        );
+        try
+        {
+            var result = await registry.ExecuteToolAsync("scrolls", null);
+
+            Assert.True(result.IsError);
+            Assert.StartsWith("Error: ScrollIntoView did not return", result.Content[0].Text);
+            Assert.Equal("pending", result.Outcome!.Provider);
+            Assert.True(result.Outcome.IsPending);
+        }
+        finally
+        {
+            hold.Set();
+        }
     }
 
     [Fact]
@@ -329,6 +390,15 @@ public sealed class ReviewFollowUpTests
                 )!
                 .GetValue(null)!;
         return gate.CurrentCount == 0;
+    }
+
+    private sealed class Runs(string name, Func<McpToolResult> run) : ToolBase
+    {
+        public override string Name => name;
+        public override string Description => "no desktop";
+        public override object InputSchema => new { };
+
+        public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) => Task.FromResult(run());
     }
 
     private sealed class Sends(string name) : ToolBase

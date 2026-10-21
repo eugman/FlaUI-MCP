@@ -135,12 +135,18 @@ public class ToolRegistry
             operation.ProcessId = target?.ProcessId ?? 0;
             operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
             OperationContext.Check();
-            result = WithDispatch(await tool.ExecuteAsync(arguments), operation.InputsSent, operation.Refusal);
+            var returned = await tool.ExecuteAsync(arguments);
+            result = WithDispatch(returned, operation.InputsSent, operation.Refusal, ProviderPending(operation));
         }
         catch (Exception ex)
         {
             // A tool that throws still reports how much of its input went out first.
-            result = WithDispatch(ErrorText($"Error: {ex.Message}"), operation.InputsSent, operation.Refusal);
+            result = WithDispatch(
+                ErrorText($"Error: {ex.Message}"),
+                operation.InputsSent,
+                operation.Refusal,
+                ProviderPending(operation)
+            );
         }
         finally
         {
@@ -163,7 +169,15 @@ public class ToolRegistry
     /// went out (inputsSent, and dispatch when the tool did not report its own). A failed call carries the
     /// refusal guarded input raised during it, so clients read its fields instead of parsing the text.
     /// </summary>
-    internal static McpToolResult WithDispatch(McpToolResult result, int inputsSent, InputRefusal? refusal = null)
+    /// <summary>Whether a pattern call this operation started still holds the app's provider.</summary>
+    private bool ProviderPending(OperationContext operation) => Pending?.ForOperation(operation.Id).Length > 0;
+
+    internal static McpToolResult WithDispatch(
+        McpToolResult result,
+        int inputsSent,
+        InputRefusal? refusal = null,
+        bool providerPending = false
+    )
     {
         var failed = result.IsError == true || result.Outcome?.Status == "failed";
         // A composite call's steps carry their own refusals. The operation keeps only the latest, which
@@ -175,7 +189,7 @@ public class ToolRegistry
 
         var outcome =
             result.Outcome
-            ?? new ToolOutcome(ToolOutcome.DispatchFor(failed, inputsSent), "not-tracked")
+            ?? new ToolOutcome(ToolOutcome.DispatchFor(failed, inputsSent), providerPending ? "pending" : "not-tracked")
             {
                 Verification = "not-established",
             };

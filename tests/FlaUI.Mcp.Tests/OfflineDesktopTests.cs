@@ -72,7 +72,7 @@ public sealed class OfflineDesktopTests
         var called = false;
 
         Assert.ThrowsAny<InvalidOperationException>(() =>
-            ClickGeometry.Scroll(0, new PendingInvokeTracker(), () => { }, () => called = true)
+            ClickGeometry.Scroll(0, new PendingInvokeTracker(), () => { }, () => called = true, () => default)
         );
 
         Assert.False(called);
