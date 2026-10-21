@@ -230,3 +230,13 @@ Verified: yes, unless the row says otherwise.
 | `te3_model_state`, message slot blank | Recognized, with selection and connection read (the caret slot was blank too, so the round-3 "Ln 0 Col 0 INS" case was not reproduced) |
 | Object navigation | Budget Rate[Rate] (14.1 s, 12 inputs) and Orders[Order Lines] (10.1 s, 10 inputs) passed with the keyboard walk; Brands[Brand] failed both ways (see KNOWN-ISSUES). The row strategy that replaced the walk as the primary has not been run live |
 
+## Host actions verified live on te3-ea21625 (TE3 3.27.1, 2026-10-21)
+
+| Action | What was seen |
+|---|---|
+| `te3_layout reopen-pane Dependencies` | completed/ok, 3 inputs, 2.6 s: `visible: true`, `floating: true` |
+| Floating-pane rule | The floating Dependencies window (hwnd A511A2) has owner 0 and class `WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1`, as the host's Win32 owner/class rule requires |
+| TOM Explorer rows | treeList (a Tree, class WindowsForms10.Window.8.app...) has no patterns and realizes only the ~23 on-screen TreeItems (none offscreen) |
+| Properties for a column | 9 rows, no ObjectType row (Name Brand, Folder 1. Brand Hierarchy, Source Column Brand): a column's type comes from the status bar's selection slot (`Column "Brand"`) |
+| Object navigation, row strategy | Brands[Brand] with folder: one read of 23 rows (indent 24 px), Column Brand (Node50) selected in 5.1 s and 8 inputs; then turned down by the Properties-only confirmation (since fixed, not re-run). Not promoted |
+
