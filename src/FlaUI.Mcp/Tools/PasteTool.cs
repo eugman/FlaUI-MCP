@@ -212,7 +212,7 @@ public sealed class PasteTool(
         FlaUI.Core.AutomationElements.AutomationElement? element,
         string expected,
         string? before,
-        int settleMilliseconds = 500
+        int settleMilliseconds = SettleMilliseconds
     )
     {
         if (element == null)
@@ -238,20 +238,42 @@ public sealed class PasteTool(
         }
         // Ctrl+V is posted, not processed, so an immediate read almost always still sees the old
         // value. Poll for the change rather than reporting the race as a failed paste.
-        var deadline = Environment.TickCount64 + settleMilliseconds;
-        string? observed;
-        while (true)
-        {
-            observed = ReadValue(element);
-            if (observed != before || Environment.TickCount64 >= deadline)
-            {
-                break;
-            }
+        var observed = SettledValue(
+            () => ReadValue(element),
+            before,
+            () => Environment.TickCount64,
+            () => Thread.Sleep(25),
+            OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None,
+            settleMilliseconds
+        );
+        return Judge(before, observed, expected);
+    }
 
-            Thread.Sleep(25);
+    /// <summary>How long the read-back waits for the value to change after Ctrl+V.</summary>
+    internal const int SettleMilliseconds = 2000;
+
+    /// <summary>
+    /// Read until the value differs from <paramref name="before"/>, <paramref name="settleMilliseconds"/> pass, or the
+    /// operation is cancelled or times out (<paramref name="stop"/>); the last value read.
+    /// </summary>
+    internal static string? SettledValue(
+        Func<string?> read,
+        string? before,
+        Func<long> now,
+        Action wait,
+        CancellationToken stop,
+        int settleMilliseconds = SettleMilliseconds
+    )
+    {
+        var deadline = now() + settleMilliseconds;
+        var observed = read();
+        while (observed == before && now() < deadline && !stop.IsCancellationRequested)
+        {
+            wait();
+            observed = read();
         }
 
-        return Judge(before, observed, expected);
+        return observed;
     }
 
     /// <summary>The value a control reports, or null when it exposes none or cannot be read.</summary>
@@ -281,9 +303,9 @@ public sealed class PasteTool(
     internal static string DescribeEvidence(string? before, string? observed, string expected) =>
         Judge(before, observed, expected).Sentence;
 
-    /// <summary>The verdict behind <see cref="DescribeEvidence"/>.</summary>
     private static string Lines(string text) => text.ReplaceLineEndings("\n");
 
+    /// <summary>The verdict behind <see cref="DescribeEvidence"/>.</summary>
     internal static PasteVerdict Judge(string? before, string? observed, string expected)
     {
         if (observed == null)
