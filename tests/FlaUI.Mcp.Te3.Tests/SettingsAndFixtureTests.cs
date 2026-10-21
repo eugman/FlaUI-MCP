@@ -91,6 +91,8 @@ public sealed class SettingsAndFixtureTests : IDisposable
 
         Assert.Contains("UiPreferences.json", error.Message);
         Assert.Contains("--force", error.Message);
+        Assert.Contains("changed after the run normalized them", error.Message);
+        Assert.Contains("nothing was restored", error.Message);
         Assert.Equal("""{"Skin":"changed later"}""", File.ReadAllText(preferences));
         SettingsLease.Recover(backup, true, root);
         Assert.Equal(original, File.ReadAllBytes(preferences));
@@ -194,5 +196,103 @@ public sealed class SettingsAndFixtureTests : IDisposable
 
         Assert.Contains("Partial restoration", error.Message);
         Assert.Equal(original, File.ReadAllBytes(preferences));
+        Assert.Empty(Directory.GetFiles(root, "*.tmp"));
+    }
+
+    [Fact]
+    public void TheLeaseCoversTe3sOwnSettingsFolder() =>
+        Assert.Equal("TabularEditor3", Path.GetFileName(SettingsLease.DefaultDirectory));
+
+    [Fact]
+    public void LayoutsAreLeasedAndRestored()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var layouts = Path.Combine(root, "Layouts.json");
+        File.WriteAllText(layouts, "user layouts");
+        var lease = new SettingsLease(root, Path.Combine(root, "backup"));
+        File.WriteAllText(layouts, "run layouts");
+
+        lease.Restore();
+
+        Assert.Equal("user layouts", File.ReadAllText(layouts));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NormalizeSetsTheScreenshotBaseline(bool maximize)
+    {
+        var preferences = Path.Combine(root, "UiPreferences.json");
+        File.WriteAllText(preferences, """{"Skin":"Dark","SkinPalette":"Blue","Language":"de-DE"}""");
+
+        new SettingsLease(root, Path.Combine(root, "backup")).Normalize(maximize);
+
+        using var document = JsonDocument.Parse(File.ReadAllText(preferences));
+        var settings = document.RootElement;
+        Assert.Equal("Basic", settings.GetProperty("Skin").GetString());
+        Assert.Equal("", settings.GetProperty("SkinPalette").GetString());
+        Assert.Equal("en-US", settings.GetProperty("Language").GetString());
+        Assert.Equal(maximize ? "Maximized" : "Normal", settings.GetProperty("MainWindowState").GetString());
+        Assert.True(settings.GetProperty("RememberWindowBounds").GetBoolean());
+        Assert.True(settings.GetProperty("RememberWindowState").GetBoolean());
+        var bounds = settings.GetProperty("MainWindowRectangle");
+        Assert.Equal(
+            [40, 40, 1400, 900],
+            new[] { "X", "Y", "W", "H" }.Select(side => bounds.GetProperty(side).GetInt32())
+        );
+    }
+
+    [Fact]
+    public void AnExistingBackupIsNeverOverwritten()
+    {
+        var preferences = Path.Combine(root, "UiPreferences.json");
+        File.WriteAllText(preferences, """{"Skin":"user"}""");
+        var backup = Path.Combine(root, "backup");
+        new SettingsLease(root, backup);
+        File.WriteAllText(preferences, """{"Skin":"later"}""");
+
+        Assert.Throws<IOException>(() => new SettingsLease(root, backup));
+
+        Assert.Equal("""{"Skin":"user"}""", File.ReadAllText(Path.Combine(backup, "UiPreferences.json")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RecoverWithoutAManifestReportsNothingMarked(bool missingFile)
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var manifest = missingFile ? Path.Combine(root, "gone.json") : null;
+        new SettingsLease(root, backup, manifest).Normalize();
+
+        Assert.False(SettingsLease.Recover(backup, false, root));
+    }
+
+    [Theory]
+    [InlineData("directory")]
+    [InlineData("name")]
+    public void ABackupThatTargetsOtherFilesIsRefused(string change)
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        new SettingsLease(root, backup);
+        var infoPath = Path.Combine(backup, "restore.json");
+        var info = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(infoPath))!.AsObject();
+        if (change == "directory")
+        {
+            info["Directory"] = Path.Combine(root, "elsewhere");
+        }
+        else
+        {
+            var hashes = info["Hashes"]!.AsObject();
+            hashes.Remove("Layouts.json");
+            hashes["Other.json"] = null;
+        }
+
+        File.WriteAllText(infoPath, info.ToJsonString());
+
+        var error = Assert.Throws<InvalidOperationException>(() => SettingsLease.Recover(backup, true, root));
+        Assert.Contains("Invalid recovery targets", error.Message);
     }
 }
