@@ -41,21 +41,16 @@ public sealed class GuardedInput : IDisposable
         this.target = target;
         OperationContext.Check();
         lease = AcquireLease();
+        string? focusedFirst = null;
         try
         {
             target.EnsureAlive();
             MutationGuard.CheckPermission();
             RequireDrivable(target.ProcessId, desktop);
-            if (!IsTargetWindow(desktop.Foreground(), target))
+            focusedFirst = Activate(target);
+            if (element != null && FocusControl(element))
             {
-                // While a modal dialog disables the target, activate the dialog: a disabled window
-                // cannot take input, so focusing it would only fail verification.
-                desktop.Focus(desktop.IsEnabled(target.Hwnd) ? target.Hwnd : desktop.LastActivePopup(target.Hwnd));
-            }
-
-            if (element != null)
-            {
-                desktop.FocusElement(element);
+                focusedFirst ??= "the control was focused";
             }
 
             RequireActivated(target);
@@ -67,11 +62,81 @@ public sealed class GuardedInput : IDisposable
                 );
             }
         }
+        catch (InvalidOperationException error) when (focusedFirst != null)
+        {
+            lease.Dispose();
+            throw FocusedFirst(error, focusedFirst);
+        }
         catch
         {
             lease.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Bring the target to the foreground when another window is in front. Counted as one change when the
+    /// foreground moved; returns a note for a later refusal, or null when nothing changed.
+    /// </summary>
+    private string? Activate(InputTarget target)
+    {
+        var before = desktop.Foreground();
+        if (IsTargetWindow(before, target))
+        {
+            return null;
+        }
+        // While a modal dialog disables the target, activate the dialog: a disabled window
+        // cannot take input, so focusing it would only fail verification.
+        desktop.Focus(desktop.IsEnabled(target.Hwnd) ? target.Hwnd : desktop.LastActivePopup(target.Hwnd));
+        if (desktop.Foreground() == before)
+        {
+            return null;
+        }
+
+        MutationGuard.RecordDispatch();
+        return "the target window was activated";
+    }
+
+    /// <summary>Focus the intended control. Counted as one change, and true, when it gained keyboard focus.</summary>
+    private bool FocusControl(AutomationElement element)
+    {
+        var hadFocus = desktop.HasKeyboardFocus(element);
+        desktop.FocusElement(element);
+        if (hadFocus || !desktop.HasKeyboardFocus(element))
+        {
+            return false;
+        }
+
+        MutationGuard.RecordDispatch();
+        return true;
+    }
+
+    /// <summary>A refusal raised after focus changed: it may not claim that nothing was sent.</summary>
+    private static InvalidOperationException FocusedFirst(InvalidOperationException error, string note)
+    {
+        var message = NoteFocusChange(error.Message, note);
+        return error is InputRefusedException refused
+            ? InputRefusedException.Record(refused.Refusal with { Message = message })
+            : new InvalidOperationException(message, error);
+    }
+
+    /// <summary>Replace "no input sent" with what actually changed, or append it.</summary>
+    internal static string NoteFocusChange(string message, string note)
+    {
+        const string NothingSent = "no input sent";
+        var at = message.IndexOf(NothingSent, StringComparison.OrdinalIgnoreCase);
+        if (at < 0)
+        {
+            return $"{message} Before this, {note}.";
+        }
+
+        var replacement = $"no keys or clicks were sent, but {note} first";
+        if (char.IsUpper(message[at]))
+        {
+            replacement = char.ToUpperInvariant(replacement[0]) + replacement[1..];
+        }
+
+        return message[..at] + replacement + message[(at + NothingSent.Length)..];
     }
 
     private static readonly SemaphoreSlim InputGate = new(1, 1);
