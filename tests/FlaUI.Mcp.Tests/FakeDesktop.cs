@@ -116,13 +116,25 @@ internal sealed class FakeDesktop : InputDesktop
     /// <summary>Whether focusing the control gives it keyboard focus.</summary>
     public bool ElementTakesFocus { get; set; } = true;
 
+    private readonly HashSet<AutomationElement> ignoresFocus = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// Make one control ignore focus requests, as a canvas or tree row that never takes keyboard focus does:
+    /// it never reports focus, while the rest of the desktop keeps whatever focus it had.
+    /// </summary>
+    public void IgnoreFocus(AutomationElement element) => ignoresFocus.Add(element);
+
     public override void FocusElement(AutomationElement element)
     {
         ElementFocusRequests++;
-        KeyboardFocus |= ElementTakesFocus;
+        if (!ignoresFocus.Contains(element))
+        {
+            KeyboardFocus |= ElementTakesFocus;
+        }
     }
 
-    public override bool HasKeyboardFocus(AutomationElement element) => KeyboardFocus;
+    public override bool HasKeyboardFocus(AutomationElement element) =>
+        KeyboardFocus && !ignoresFocus.Contains(element);
 
     public override void Dispatch(Action input) => Interlocked.Increment(ref dispatched);
 

@@ -194,7 +194,9 @@ public class FillTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 
     public override string Description =>
-        "Clear and fill a text field with new value. Prefers Value pattern for reliability.";
+        "Clear and fill a text field with new value. Prefers Value pattern for reliability. "
+        + "Without a writable Value pattern it focuses the control and sends Ctrl+A, then Backspace or the new text; "
+        + "it refuses before any key when the control does not take keyboard focus. Reports Filled only when the control reads back the value.";
 
     public override object InputSchema =>
         new
@@ -209,6 +211,11 @@ public class FillTool : ToolBase
                 },
                 @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },
                 value = new { type = "string", description = "Value to fill" },
+                verifyFocus = new
+                {
+                    type = "boolean",
+                    description = "Keyboard fallback only: require verified keyboard focus on the control before Ctrl+A (default true). Set false only for a control that never reports focus; the keys then go wherever focus is.",
+                },
             },
             required = new[] { "ref", "value" },
         };
@@ -249,14 +256,11 @@ public class FillTool : ToolBase
             // Fall back to focus + select all + type
             OperationContext.Check();
             _elementRegistry.ValidateReference(refId, handle);
-            using var input = new GuardedInput(
-                _elementRegistry.InputForRef(refId),
-                element,
-                GetBoolArgument(arguments, "verifyFocus")
-            );
             return Task.FromResult(
-                FillByKeyboard(
-                    input,
+                FillByKeyboardFallback(
+                    _elementRegistry.InputForRef(refId),
+                    element,
+                    KeyboardVerifiesFocus(arguments),
                     value,
                     elementName,
                     () =>
@@ -348,16 +352,34 @@ public class FillTool : ToolBase
                 .Text;
         }
 
-        return TextResult(
-            $"Filled {elementName} with \"{value}\""
-                + FillMismatch(value, observed, element.Properties.ControlType.ValueOrDefault)
-        ) with
-        {
-            Outcome = ToolOutcome.FromPattern(result) with
-            {
-                Verification = new TextObservation(observed, "Value").Verify(value),
-            },
-        };
+        return FillReply(
+            elementName,
+            value,
+            new TextObservation(observed, "Value"),
+            ToolOutcome.FromPattern(result),
+            element.Properties.ControlType.ValueOrDefault
+        );
+    }
+
+    /// <summary>Whether the keyboard fallback requires verified focus: true unless the caller turns it off.</summary>
+    internal bool KeyboardVerifiesFocus(JsonElement? arguments) => GetBoolArgument(arguments, "verifyFocus", true);
+
+    /// <summary>
+    /// Focus the control and replace its text by keyboard. With <paramref name="verifyFocus"/>, a control that did
+    /// not take keyboard focus is refused before Ctrl+A, which would otherwise select whatever has focus.
+    /// </summary>
+    internal static McpToolResult FillByKeyboardFallback(
+        InputTarget target,
+        AutomationElement element,
+        bool verifyFocus,
+        string value,
+        string elementName,
+        Func<TextObservation> read,
+        Action validate
+    )
+    {
+        using var input = new GuardedInput(target, element, verifyFocus);
+        return FillByKeyboard(input, value, elementName, read, validate);
     }
 
     /// <summary>Select all, replace by typing, then observe the text without retyping.</summary>
@@ -385,10 +407,31 @@ public class FillTool : ToolBase
             },
             () => Thread.Sleep(50)
         );
-        return TextResult($"Filled {elementName} with \"{value}\"") with
+        return FillReply(elementName, value, observation, new ToolOutcome("completed", "returned"));
+    }
+
+    /// <summary>
+    /// "Filled" only when the control reads back the requested value. A different value is a failure (the input
+    /// went out, so dispatch stays completed); a control that cannot be read back is reported as not verified.
+    /// </summary>
+    internal static McpToolResult FillReply(
+        string elementName,
+        string value,
+        TextObservation observed,
+        ToolOutcome outcome,
+        FlaUI.Core.Definitions.ControlType type = FlaUI.Core.Definitions.ControlType.Edit
+    )
+    {
+        var verification = observed.Verify(value);
+        var reply = verification switch
         {
-            Outcome = new ToolOutcome("completed", "returned") { Verification = observation.Verify(value) },
+            "verified" => TextResult($"Filled {elementName} with \"{value}\""),
+            "mismatch" => ErrorResult($"Sent \"{value}\" to {elementName}" + FillMismatch(value, observed.Text, type)),
+            _ => TextResult(
+                $"Sent \"{value}\" to {elementName}; it could not be read back, so the fill is not verified."
+            ),
         };
+        return reply with { Outcome = outcome with { Verification = verification } };
     }
 
     internal static string FillMismatch(string expected, string? observed, FlaUI.Core.Definitions.ControlType type) =>

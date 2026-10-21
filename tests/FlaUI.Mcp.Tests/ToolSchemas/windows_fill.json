@@ -1,6 +1,6 @@
 {
   "name": "windows_fill",
-  "description": "Clear and fill a text field with new value. Prefers Value pattern for reliability.",
+  "description": "Clear and fill a text field with new value. Prefers Value pattern for reliability. Without a writable Value pattern it focuses the control and sends Ctrl\u002BA, then Backspace or the new text; it refuses before any key when the control does not take keyboard focus. Reports Filled only when the control reads back the value.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -15,6 +15,10 @@
       "value": {
         "type": "string",
         "description": "Value to fill"
+      },
+      "verifyFocus": {
+        "type": "boolean",
+        "description": "Keyboard fallback only: require verified keyboard focus on the control before Ctrl\u002BA (default true). Set false only for a control that never reports focus; the keys then go wherever focus is."
       }
     },
     "required": [
