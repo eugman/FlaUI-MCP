@@ -135,8 +135,16 @@ internal sealed class FakeDesktop : InputDesktop
     /// <summary>When true, another window takes the foreground as soon as the clipboard is written.</summary>
     public bool FocusLostOnClipboardWrite { get; set; }
 
+    /// <summary>When true, another process holds the clipboard open and writes fail.</summary>
+    public bool ClipboardBusy { get; set; }
+
     public override bool SetClipboardText(string text)
     {
+        if (ClipboardBusy)
+        {
+            return false;
+        }
+
         ClipboardText = text;
         if (FocusLostOnClipboardWrite)
         {

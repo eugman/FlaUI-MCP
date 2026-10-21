@@ -39,6 +39,9 @@ public sealed class GuardedInput : IDisposable
     // What this guard changed before any input, so a later refusal does not claim nothing was sent.
     private readonly string? changedFirst;
 
+    /// <summary>What this guard changed before any input (such as "the target window was activated"), or null.</summary>
+    public string? Changed => changedFirst;
+
     public GuardedInput(InputTarget target, AutomationElement? element = null, bool verifyFocus = false)
     {
         this.target = target;

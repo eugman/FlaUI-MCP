@@ -241,6 +241,33 @@ public sealed class ReviewFollowUpTests
         }
     }
 
+    [Theory]
+    [InlineData(false, "The clipboard is in use by another process, so nothing was pasted.")]
+    [InlineData(
+        true,
+        "The clipboard is in use by another process, so nothing was pasted. Before this, the target window was activated, so the desktop foreground changed."
+    )]
+    public async Task ABusyClipboardMentionsActivationOnlyWhenItHappened(bool activated, string message)
+    {
+        var desktop = new FakeDesktop
+        {
+            ClipboardBusy = true,
+            ForegroundWindow = activated ? FakeDesktop.OtherHwnd : FakeDesktop.TargetHwnd,
+        };
+        using var installed = desktop.Install();
+        using var sessions = new SessionManager(null, ProcessPolicy.AllowAll);
+        var handle = sessions.PublishWindow(null, FakeDesktop.TargetHwnd, FakeDesktop.TargetPid, FakeDesktop.Target);
+        var registry = new ToolRegistry();
+        registry.RegisterTool(
+            new PasteTool(new ElementRegistry(), new PendingInvokeTracker(), ProcessPolicy.AllowAll, sessions)
+        );
+
+        var result = await registry.ExecuteToolAsync("windows_paste", Args(new { handle, text = "abc" }));
+
+        Assert.Equal(message, result.Content[0].Text);
+        Assert.Equal(activated ? 1 : 0, result.Outcome!.InputsSent);
+    }
+
     private static bool LeaseHeld()
     {
         var gate = (SemaphoreSlim)

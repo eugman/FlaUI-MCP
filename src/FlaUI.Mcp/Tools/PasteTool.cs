@@ -123,9 +123,11 @@ public sealed class PasteTool(
         var clipboardText = text.ReplaceLineEndings("\r\n");
         if (!InputDesktop.Current.SetClipboardText(clipboardText))
         {
+            const string Busy = "The clipboard is in use by another process, so nothing was pasted.";
             return ErrorResult(
-                "The clipboard is in use by another process, so nothing was pasted. The target window was "
-                    + "activated before this failed, so the desktop foreground may have changed."
+                input.Changed is { } changed
+                    ? $"{Busy} Before this, {changed}, so the desktop foreground changed."
+                    : Busy
             );
         }
         // Replacing the user's clipboard is a change of its own, made before Ctrl+V can be refused.
