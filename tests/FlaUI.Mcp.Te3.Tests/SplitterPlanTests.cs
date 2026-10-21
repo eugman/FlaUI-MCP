@@ -36,6 +36,29 @@ public sealed class SplitterPlanTests
     }
 
     [Fact]
+    public void TouchingPanesDragInsideTheUpperPaneNotTheLowerTitleBar()
+    {
+        // Seen live on 3.27.1 at 125%: TOM Explorer ends at y 651 and Properties starts there. Its title bar
+        // starts at 651 and the splitter sits in TOM Explorer's last few rows; a drag from 651 undocked Properties.
+        var tom = new Rectangle(1160, 91, 760, 590);
+        var properties = new Rectangle(1160, 681, 760, 427);
+        var (from, to) = SplitterPlan.Resize(properties, [tom], width: null, height: 320);
+        Assert.Equal(681 - SplitterPlan.TouchingInset, from.Y);
+        Assert.Equal(from.Y + 107, to.Y);
+    }
+
+    [Fact]
+    public void TouchingPanesSideBySideDragInsideTheLeftPane()
+    {
+        // Seen live on 3.27.1: AI Assistant ends at x 1000 and the Expression Editor document starts there.
+        var assistant = new Rectangle(0, 91, 1000, 1017);
+        var editor = new Rectangle(1000, 91, 160, 1017);
+        var (from, to) = SplitterPlan.Resize(assistant, [editor], width: 680, height: null);
+        Assert.Equal(1000 - SplitterPlan.TouchingInset, from.X);
+        Assert.Equal(from.X - 320, to.X);
+    }
+
+    [Fact]
     public void ANeighbourBeyondTheGapIsNotASplitter() =>
         Assert.Throws<InvalidOperationException>(() =>
             SplitterPlan.Resize(

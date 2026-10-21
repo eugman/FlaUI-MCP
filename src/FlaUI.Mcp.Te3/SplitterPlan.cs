@@ -49,7 +49,7 @@ public static class SplitterPlan
             others.FirstOrDefault(o => Near(o.Right, pane.Left) && Spans(o.Top, o.Bottom, y)) is { IsEmpty: false } left
         )
         {
-            var x = (left.Right + pane.Left) / 2;
+            var x = Between(left.Right, pane.Left);
             return (new Point(x, y), new Point(x + pane.Width - width, y));
         }
 
@@ -58,7 +58,7 @@ public static class SplitterPlan
             { IsEmpty: false } right
         )
         {
-            var x = (pane.Right + right.Left) / 2;
+            var x = Between(pane.Right, right.Left);
             return (new Point(x, y), new Point(x + width - pane.Width, y));
         }
 
@@ -73,7 +73,7 @@ public static class SplitterPlan
             { IsEmpty: false } above
         )
         {
-            var y = (above.Bottom + pane.Top) / 2;
+            var y = Between(above.Bottom, pane.Top);
             return (new Point(x, y), new Point(x, y + pane.Height - height));
         }
 
@@ -82,7 +82,7 @@ public static class SplitterPlan
             { IsEmpty: false } below
         )
         {
-            var y = (pane.Bottom + below.Top) / 2;
+            var y = Between(pane.Bottom, below.Top);
             return (new Point(x, y), new Point(x, y + height - pane.Height));
         }
 
@@ -115,6 +115,14 @@ public static class SplitterPlan
             yield return Rectangle.FromLTRB(pane.Left, pane.Bottom + 2 * SplitterOffset, pane.Right, window.Bottom);
         }
     }
+
+    /// <summary>Pixels inside the first pane where the splitter sits when two panes touch.</summary>
+    /// <remarks>Seen live on 3.27.1 at 125%: with no gap the splitter is in the first pane's last rows, and a
+    /// drag on the shared edge itself grabs the second pane's title bar and undocks it.</remarks>
+    public const int TouchingInset = 3;
+
+    private static int Between(int firstEnd, int secondStart) =>
+        firstEnd == secondStart ? firstEnd - TouchingInset : (firstEnd + secondStart) / 2;
 
     private static bool Near(int edge, int other) => other - edge is >= 0 and <= MaxGap;
 
