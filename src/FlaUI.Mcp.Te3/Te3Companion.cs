@@ -280,6 +280,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     + "Stop if the session is locked, disconnected or unattended.",
             _ => "Inspect state before continuing; no uncertain input is automatically replayed.",
         };
+        // How much input went out is in the outcome (structuredContent), not repeated in the text.
         return ErrorResult(
             JsonSerializer.Serialize(
                 new
@@ -290,12 +291,13 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     error = error.Message,
                     blocker,
                     next,
-                    actionDispatched = inputsSent > 0,
-                    inputsSent,
                 },
                 McpProtocol.JsonOptions
             )
-        );
+        ) with
+        {
+            Outcome = CoreFailure.Reply(error, inputsSent),
+        };
     }
 
     internal static void Validate(JsonElement a, string tool)

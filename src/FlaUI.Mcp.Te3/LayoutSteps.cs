@@ -47,13 +47,21 @@ internal static class LayoutSteps
         return completed;
     }
 
-    /// <summary>Runs one step's input; marks the step sent when the tally shows the input went out, even if it then failed.</summary>
+    /// <summary>
+    /// Runs one step's input; marks the step sent when Core counted input for it, even if it then failed, or when
+    /// its failing call is still pending and may yet reach TE3.
+    /// </summary>
     public static async Task Sending(InputTally inputs, Action<object> sent, object item, Func<Task> input)
     {
         var before = inputs.Sent;
         try
         {
             await input();
+        }
+        catch (Exception ex) when (CoreFailure.Outcome(ex)?.IsPending == true)
+        {
+            sent(item);
+            throw;
         }
         finally
         {
@@ -81,18 +89,19 @@ internal static class LayoutSteps
         }
     }
 
+    /// <summary>The failure: its text, and how much input went out as Core's outcome (structuredContent).</summary>
     public static McpToolResult Failure(string tool, Exception ex, int inputsSent) =>
-        new() { Content = [new() { Type = "text", Text = Describe(tool, ex, inputsSent) }], IsError = true };
-
-    /// <summary>The failure as JSON: the error, whether any input went out, and the steps completed before it.</summary>
-    public static string Describe(string tool, Exception ex, int inputsSent)
-    {
-        var reply = new Dictionary<string, object>
+        new()
         {
-            ["error"] = $"{tool}: {ex.Message}",
-            ["actionDispatched"] = inputsSent > 0,
-            ["inputsSent"] = inputsSent,
+            Content = [new() { Type = "text", Text = Describe(tool, ex) }],
+            IsError = true,
+            Outcome = CoreFailure.Reply(ex, inputsSent),
         };
+
+    /// <summary>The failure as JSON: the error and the steps completed before it.</summary>
+    public static string Describe(string tool, Exception ex)
+    {
+        var reply = new Dictionary<string, object> { ["error"] = $"{tool}: {ex.Message}" };
         if (ex is ProgressException progress)
         {
             reply[progress.Name] = progress.Completed;

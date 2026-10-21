@@ -47,6 +47,26 @@ internal static class CoreFailure
     internal static bool NotDispatched(Exception error) =>
         error is CoreCallException { Outcome.Dispatch: "not-dispatched" };
 
+    /// <summary>
+    /// The outcome for a TE3 tool's own failure after <paramref name="inputsSent"/> inputs: partial once any went
+    /// out, otherwise not-dispatched, or timed_out_pending while the failing call may still go out. It carries the
+    /// refusal that stopped it, when guarded input refused.
+    /// </summary>
+    internal static ToolOutcome Reply(Exception error, int inputsSent)
+    {
+        var failing = Outcome(error);
+        var pending = failing?.IsPending == true;
+        var dispatch =
+            pending && inputsSent == 0 ? "timed_out_pending" : ToolOutcome.DispatchFor(failed: true, inputsSent);
+        return new ToolOutcome(dispatch, pending ? "pending" : "not-tracked")
+        {
+            Verification = "not-established",
+            Status = "failed",
+            InputsSent = inputsSent,
+            Failure = failing?.Failure is { } refusal ? refusal with { ActionDispatched = inputsSent > 0 } : null,
+        };
+    }
+
     /// <summary>The desktop condition that refused the input, when retrying cannot help: activation-denied or desktop-unavailable.</summary>
     internal static string? Blocker(Exception error) =>
         Outcome(error)?.Failure?.Code is { } code && DesktopBlockers.Contains(code) ? code : null;
