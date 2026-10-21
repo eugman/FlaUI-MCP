@@ -88,7 +88,12 @@ public sealed class DiagnosticsCaptureTests
             var capture = Diagnostics.Capture(FakeDesktop.TargetHwnd, path, TimeSpan.FromMilliseconds(100));
 
             Assert.False(capture.Saved);
-            Assert.Equal("The window did not render within 100 ms; it may be hung.", capture.SkipReason);
+            Assert.Equal(
+                "The window did not render within the 100 ms capture budget; it may be hung, and its worker was abandoned.",
+                capture.SkipReason
+            );
+            // One budget for the whole capture: the stages after a hung render get none of their own.
+            Assert.Equal("skipped: the 100 ms capture budget was spent", capture.TreeSkipReason);
         }
         finally
         {
