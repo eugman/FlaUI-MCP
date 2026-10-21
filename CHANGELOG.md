@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - `FlaUI.Mcp.Te3 mcp` is now the one server to configure. It serves the generic `windows_*` tools (including the window-management extensions) alongside the TE3 tools from one registry, so element refs and window handles work across both. Running `FlaUI.Mcp.exe` next to it is no longer needed.
+- A failed `te3_navigate` or `te3_layout` call reports how much input went out the way Core's tools do, in `structuredContent`: `dispatch` (`partial`, `not-dispatched`, or `timed_out_pending` while the failing call may still go out), `inputsSent`, `provider` and the refusal as `failure`. The `actionDispatched` and `inputsSent` fields are no longer in the text. A held TE3 provider is reported as Core's blocked outcome (`not-dispatched`, `provider: pending`).
+- TE3 counts input from Core's `inputsSent`, including the activation and focus Core counts, and reads refusals, retries and cancel fallbacks from Core's outcome instead of matching "no input sent" in the text. `te3_navigate` names `activation-denied` and `desktop-unavailable` blockers from the refusal's code.
+- The TE3 server serves Core's own `windows_focus`, `windows_close` and `windows_launch`, which now check the grant themselves and watch for a held provider; the TE3 wrappers are gone. The runner focuses its TE3 through the same pending-aware path and counts it.
+- Te3Page's own menu clicks go through `GuardedInput.Click` and Core's `ClickPoint`; a covered pointer target is refused as `point-not-on-target`.
+- The run journal's result entries carry `isError`, `content` and `structuredContent` explicitly.
+- The TE3 offline tests set `FLAUI_OFFLINE_TESTS=1` and install a fake desktop, so the real desktop refuses input from them.
 - TE3 coverage and mutation testing moved to `scripts/coverage-te3.ps1` and `docs/mutation-te3.md`; `scripts/coverage.ps1`, `scripts/mutation.ps1` and `docs/mutation.md` now belong to the core and cover its own offline tests. `dotnet-stryker` comes from the core's root tool manifest.
 
 ### Added
