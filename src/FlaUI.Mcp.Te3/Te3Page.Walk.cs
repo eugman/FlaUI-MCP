@@ -53,24 +53,16 @@ public sealed partial class Te3Page
         }
 
         await SearchTomTyped(objectName);
-        await Keys("Home", TomExplorerTarget());
         depthScale = null;
         var request = new WalkRequest(table, objectName, objectType, folder);
         var cursor = new TomCursor(this, ObjectWalk.Interesting(request));
-        var walk = await ObjectWalk.Find(
-            cursor,
-            request,
-            WalkClock.OutOfTime(elapsed),
-            WalkClock.CanRead(elapsed),
-            () => PropertiesValue("Name")
-        );
+        var walk = await FindObject(request, cursor, elapsed);
         if (!walk.Found)
         {
             await ClearTomSearchTyped();
             throw new InvalidOperationException(
                 $"No {objectType} '{objectName}' under table '{table}'{(folder.Length > 0 ? $" in folder '{folder}'" : "")} "
-                    + $"in TOM Explorer after {walk.RowsVisited} rows "
-                    + $"and {Inputs.Sent} inputs. {walk.Reason}"
+                    + $"in TOM Explorer ({DescribeWalk()}; {Inputs.Sent} inputs). {walk.Reason}"
             );
         }
 
@@ -88,6 +80,45 @@ public sealed partial class Te3Page
         lastWalk = walk;
         lastRequest = request;
     }
+
+    // The row strategy first: one read of the filtered rows, one select, Properties to confirm. The keyboard walk runs
+    // only when the rows cannot be placed or may not all be realized, and the 18 s stop bounds both.
+    private async Task<WalkResult> FindObject(WalkRequest request, TomCursor cursor, Func<TimeSpan> elapsed)
+    {
+        var picked = await ObjectSelect.Run(new RowTree(this), request, WalkClock.OutOfTime(elapsed));
+        WalkReport = new
+        {
+            strategy = "rows",
+            rowsRead = picked.RowsRead,
+            indentPx = picked.IndentPx,
+            selects = picked.Tried,
+        };
+        if (!picked.FallBack)
+        {
+            return new(picked.Found, picked.Found ? request.Table : null, picked.RowsRead, picked.Reason);
+        }
+
+        reportStep?.Invoke($"Row read could not place the object ({picked.Reason}); walking the tree with keys");
+        await Keys("Home", TomExplorerTarget());
+        var walk = await ObjectWalk.Find(
+            cursor,
+            request,
+            WalkClock.OutOfTime(elapsed),
+            WalkClock.CanRead(elapsed),
+            () => PropertiesValue("Name")
+        );
+        WalkReport = new
+        {
+            strategy = "keys",
+            rowsRead = picked.RowsRead,
+            indentPx = picked.IndentPx,
+            selects = picked.Tried,
+            rowsWalked = walk.RowsVisited,
+        };
+        return walk;
+    }
+
+    private string DescribeWalk() => System.Text.Json.JsonSerializer.Serialize(WalkReport);
 
     /// <summary>te3_navigate object's arrival check: the last walk's object, in its folder, is still selected.</summary>
     private async Task VerifyObjectArrival()
@@ -197,19 +228,7 @@ public sealed partial class Te3Page
     // Also whether the row shown below is deeper (the selection is open, so Left collapses it).
     private async Task<(SelectionSnapshot Snapshot, bool RowBelow, bool ChildBelow)> ReadSelection()
     {
-        var tree = TomExplorerTarget();
-        var rows = await Task.Run(() =>
-                query.Find(
-                    handle,
-                    new(),
-                    tree.Selector,
-                    maxResults: 450,
-                    register: false,
-                    includeBounds: true,
-                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(3))
-                )
-            )
-            .WaitAsync(TimeSpan.FromSeconds(5));
+        var rows = await ReadTree();
         // The indent is measured once per walk, from the root and its first child (in view after Home).
         depthScale ??= TomRows.Calibrate(rows.Elements);
         var (selected, depth) = TomRows.Selected(rows.Elements, depthScale);

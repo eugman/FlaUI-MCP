@@ -185,4 +185,32 @@ public sealed class TomRowsTests
         Assert.False(TomRows.ChildBelow(closed, Live125));
         Assert.False(TomRows.ChildBelow(open, null));
     }
+
+    [Fact]
+    public void OneReadGivesEveryRealizedRowWithItsDepthInTreeOrder()
+    {
+        ElementInfo[] elements =
+        [
+            Item("TreeItem", "Node7", "Brand", 1445, 434),
+            Item("TreeItem", "Node5", "Brands", 1445, 390),
+            Item("TreeItem", "Node6", "1. Brand Hierarchy", 1445, 412),
+            Item("DataItem", "Name row 5", "Brands", 1541, 390),
+            Item("DataItem", "Name row 6", "1. Brand Hierarchy", 1565, 412),
+            Item("DataItem", "Name row 7", "Brand", 1589, 434),
+        ];
+
+        var rows = TomRows.Rows(elements, Live125);
+
+        Assert.Equal(
+            [new TreeRow(5, "Brands", 2), new TreeRow(6, "1. Brand Hierarchy", 3), new TreeRow(7, "Brand", 4)],
+            rows
+        );
+    }
+
+    [Fact]
+    public void AVisibleScrollBarMeansRowsMayBeUnrealized()
+    {
+        Assert.True(TomRows.Scrolls([Item("ScrollBar", "Vertical", "0", 1868, 214)]));
+        Assert.False(TomRows.Scrolls([Item("TreeItem", "Node0", "SpaceParts", 1161, 214)]));
+    }
 }

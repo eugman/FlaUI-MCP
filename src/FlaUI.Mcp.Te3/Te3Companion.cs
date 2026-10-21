@@ -181,6 +181,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                 destination = destination.Id,
                 phase = step.Phase,
                 lastStep = step.Last,
+                walk = destination.Id == "object" ? page.WalkReport : null,
             }
         );
     }

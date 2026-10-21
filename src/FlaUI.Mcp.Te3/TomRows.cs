@@ -78,6 +78,28 @@ internal static class TomRows
         return depth != null && belowDepth > depth;
     }
 
+    /// <summary>Every realized row, in tree order (by y): its NodeN index, its text and its depth.</summary>
+    public static IReadOnlyList<TreeRow> Rows(IReadOnlyList<ElementInfo> elements, Scale? scale) =>
+        [
+            .. elements
+                .Where(e => e.ControlType == "TreeItem" && e.Name.StartsWith("Node", StringComparison.Ordinal))
+                .OrderBy(e => e.Bounds?.Y ?? double.MaxValue)
+                .Select(e =>
+                {
+                    var index = e.Name[4..];
+                    var label = Label(elements, index);
+                    var depth = e.Bounds is { } row && label?.Bounds is { } cell ? Depth(row.X, cell.X, scale) : null;
+                    return new TreeRow(int.TryParse(index, out var n) ? n : -1, e.Value, depth);
+                }),
+        ];
+
+    /// <summary>
+    /// Whether the tree shows a vertical scroll bar, so rows past the viewport may not be realized. treeList offers
+    /// no Scroll pattern (3.27.1), so the caller then falls back to the keyboard walk.
+    /// </summary>
+    public static bool Scrolls(IReadOnlyList<ElementInfo> elements) =>
+        elements.Any(e => e.ControlType == "ScrollBar" && e.Name == "Vertical" && !e.Offscreen);
+
     private static ElementInfo? Label(IReadOnlyList<ElementInfo> elements, string index) =>
         elements.FirstOrDefault(e => e.ControlType == "DataItem" && e.Name == "Name row " + index);
 
