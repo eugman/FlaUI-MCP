@@ -34,6 +34,9 @@ public interface ILayoutSurface
     /// <summary>The TE3 process's top-level windows now.</summary>
     IReadOnlyList<Win32WindowInfo> Windows();
 
+    /// <summary>Closes a top-level TE3 window (a floating pane) through Core's guarded windows_close.</summary>
+    Task CloseWindow(nint hwnd);
+
     /// <summary>A pause between reads.</summary>
     Task Delay(int ms);
 }

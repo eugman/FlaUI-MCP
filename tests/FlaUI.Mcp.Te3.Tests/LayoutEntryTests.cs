@@ -117,6 +117,20 @@ public sealed class LayoutEntryTests : IDisposable
         }
 
         public Task Delay(int ms) => Task.CompletedTask;
+
+        /// <summary>Floating windows whose own Close leaves them open.</summary>
+        public HashSet<nint> StuckWindows { get; } = [];
+
+        public async Task CloseWindow(nint hwnd)
+        {
+            var window = Extra.Single(w => w.Hwnd == hwnd);
+            await inputs.Invoke(() => Task.FromResult(Sent("closed", false)), "windows_close");
+            Presses.Add("CloseWindow " + window.Title);
+            if (!StuckWindows.Contains(hwnd))
+            {
+                Extra.Remove(window);
+            }
+        }
     }
 
     // A Core click result that sent one input; failed when asked, after the input went out.
@@ -394,9 +408,9 @@ public sealed class LayoutEntryTests : IDisposable
     }
 
     [Fact]
-    public async Task CloseNamesAFloatingWindowItCannotCloseInsteadOfIgnoringIt()
+    public async Task CloseClosesAFloatingPaneThroughItsOwnWindowAndReadsItBack()
     {
-        // Live: close ["Dependencies"] replied closed [], unresolved [] while the floating window stayed open.
+        // Live: close ["Dependencies"] first ignored the floating window, then only pointed at windows_close.
         var tool = Tool(inputs =>
         {
             var layout = Standard(inputs);
@@ -408,8 +422,27 @@ public sealed class LayoutEntryTests : IDisposable
         var result = await tool.ExecuteAsync(Args(new { action = "close", titles = new[] { "Dependencies" } }));
         var reply = JsonDocument.Parse(result.Content.Single().Text!).RootElement;
 
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal(["CloseWindow Dependencies"], surface!.Presses);
+        Assert.Contains("Dependencies", reply.GetProperty("closed").EnumerateArray().Select(e => e.GetString()));
+        Assert.Empty(reply.GetProperty("unresolved").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task AFloatingPaneThatStaysOpenIsUnresolved()
+    {
+        var tool = Tool(inputs =>
+        {
+            var layout = Standard(inputs);
+            layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
+            layout.Shapes[0x30] = new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0);
+            layout.StuckWindows.Add(0x30);
+            return layout;
+        });
+
+        var result = await tool.ExecuteAsync(Args(new { action = "close", titles = new[] { "Dependencies" } }));
+        var reply = JsonDocument.Parse(result.Content.Single().Text!).RootElement;
+
         Assert.Contains("Dependencies", reply.GetProperty("unresolved").EnumerateArray().Select(e => e.GetString()));
-        Assert.Contains("Dependencies", reply.GetProperty("floating").EnumerateArray().Select(e => e.GetString()));
-        Assert.Empty(surface!.Presses);
     }
 }

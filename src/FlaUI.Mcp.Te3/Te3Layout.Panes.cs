@@ -26,6 +26,33 @@ public sealed partial class Te3Layout
     }
 
     // Floating panes only (title and AutomationId, LayoutChecks); a dialog is never listed as one.
+    // Floating panes the call closes: named in close, or not kept in keep. Each goes through its window's own Close and
+    // counts as closed only once the window is gone.
+    private static async Task<List<object>> CloseFloating(ILayoutSurface surface, string[] titles, bool keep)
+    {
+        var closed = new List<object>();
+        var targets = surface
+            .Windows()
+            .Where(w => w.Hwnd != surface.MainWindow && LayoutChecks.IsFloatingPane(w, surface.ShapeOf))
+            .Where(w => titles.Any(t => TitleMatches(w.Title, t)) != keep)
+            .ToList();
+        foreach (var window in targets)
+        {
+            await surface.CloseWindow(window.Hwnd);
+            for (var waited = 0; waited <= 1000 && surface.Windows().Any(w => w.Hwnd == window.Hwnd); waited += 200)
+            {
+                await surface.Delay(200);
+            }
+
+            if (surface.Windows().All(w => w.Hwnd != window.Hwnd))
+            {
+                closed.Add(window.Title);
+            }
+        }
+
+        return closed;
+    }
+
     private static List<string> FloatingTitles(ILayoutSurface surface) =>
         surface
             .Windows()
@@ -122,7 +149,7 @@ public sealed partial class Te3Layout
     {
         if (keep)
         {
-            LayoutChecks.RequireKept(titles, surface.Parts().Select(p => p.Title));
+            LayoutChecks.RequireKept(titles, surface.Parts().Select(p => p.Title).Concat(FloatingTitles(surface)));
         }
 
         // One snapshot for the whole call: a dialog that opens late after one close still stops the next.
@@ -152,11 +179,14 @@ public sealed partial class Te3Layout
             }
         );
 
+        // A floating pane is a window of its own: closed through that window's Close, then read back.
+        closed.AddRange(await CloseFloating(surface, titles, keep));
         var remaining = surface.Parts().Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
-        // A floating pane is a window of its own, not a docked pane this action can close: name it, never ignore it.
         var floating = FloatingTitles(surface);
         var unresolved = titles
-            .Where(t => remaining.Any(r => TitleMatches(r, t)) != keep || (!keep && floating.Contains(t)))
+            .Where(t =>
+                remaining.Any(r => TitleMatches(r, t)) != keep || (!keep && floating.Any(f => TitleMatches(f, t)))
+            )
             .ToList();
         return new
         {
@@ -164,7 +194,6 @@ public sealed partial class Te3Layout
             remaining,
             unresolved,
             floating,
-            next = floating.Count > 0 ? "Close a floating window with windows_close on its handle." : null,
         };
     }
 
@@ -200,6 +229,10 @@ public sealed partial class Te3Layout
             : (object)new { restored = pane.Title, readBack = other };
     }
 
+    // Core's windows_close on the floating window's own handle: the input lease, identity and grant apply.
+    private Task CloseFloatingWindow(InputTally inputs, nint hwnd, int processId) =>
+        Tool(inputs, "windows_close", new { handle = host.Sessions.RegisterNativeWindow(hwnd, processId) });
+
     /// <summary>The live TE3 window: its parts through UIA, and presses through Core's guarded click.</summary>
     private sealed class UiaSurface(Te3Layout tool, InputTally inputs, string handle, Window window) : ILayoutSurface
     {
@@ -228,6 +261,9 @@ public sealed partial class Te3Layout
             Win32Desktop.GetTopLevelWindows(window.Properties.ProcessId.ValueOrDefault);
 
         public Task Delay(int ms) => Task.Delay(ms);
+
+        public Task CloseWindow(nint hwnd) =>
+            tool.CloseFloatingWindow(inputs, hwnd, window.Properties.ProcessId.ValueOrDefault);
 
         // Close is the part's own; Maximize and Restore sit beside it on the pane's title bar.
         private AutomationElement? Button(string title, string button)
