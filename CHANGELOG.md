@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed for product repos
+- Modal detection during a pattern call needs a window of the process to become disabled; a tooltip, menu or tool window that appears no longer marks the provider pending.
 - `windows_click` expand, collapse and toggle read the state back: "Expanded X"/"Collapsed X" only when it got there (`verification: verified`); a state that did not move fails with `verification: mismatch`, dispatch completed.
 - `windows_paste` puts its read-back verdict in `verification` (`verified`, `unchanged`, `mismatch`, `unavailable` or `not-established`), not only in the text.
 - `windows_place_window` fails with `verification: mismatch` and the deltas when the window did not land exactly where requested (`verified` when it did). `windows_set_window_state` sends and counts nothing when the window is already in the requested state (`verification: no-op`).

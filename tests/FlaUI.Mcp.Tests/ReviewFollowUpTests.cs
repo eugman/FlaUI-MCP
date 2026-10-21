@@ -60,7 +60,14 @@ public sealed class ReviewFollowUpTests
                 hold.Wait,
                 new PendingInvokeTracker(_ => 1),
                 TimeSpan.FromSeconds(5),
-                _ => calls++ == 0 ? [] : [new Win32WindowInfo(7, "Open", 123, true, false, false)]
+                _ =>
+                    calls++ == 0
+                        ? [new Win32WindowInfo(1, "Main", 123, true, false, false)]
+                        :
+                        [
+                            new Win32WindowInfo(1, "Main", 123, false, false, false),
+                            new Win32WindowInfo(7, "Open", 123, true, false, false) { Owner = 1 },
+                        ]
             );
 
             Assert.Equal(PatternCallOutcome.ModalDetected, result.Outcome);

@@ -20,7 +20,14 @@ public sealed record Win32WindowInfo(
     bool IsEnabled,
     bool IsToolWindow,
     bool IsCloaked
-);
+)
+{
+    /// <summary>The window's Win32 owner (GW_OWNER), or 0 for an unowned window.</summary>
+    public nint Owner { get; init; }
+
+    /// <summary>The window class, such as tooltips_class32; empty when it could not be read.</summary>
+    public string ClassName { get; init; } = "";
+}
 
 /// <summary>
 /// Win32-based desktop window enumeration and manipulation.
@@ -35,6 +42,7 @@ public static partial class Win32Desktop
     private const int DWMWA_CLOAKED = 14;
     private const int SW_RESTORE = 9;
     private const uint WM_CLOSE = 0x0010;
+    private const uint GwOwner = 4;
 
     private delegate bool EnumWindowsProc(nint hWnd, nint lParam);
 
@@ -364,7 +372,7 @@ public static partial class Win32Desktop
         // cannot turn an ownership check into an unbounded traversal.
         for (var depth = 0; hwnd != 0 && depth < 16; depth++)
         {
-            hwnd = GetWindow(hwnd, 4);
+            hwnd = GetWindow(hwnd, GwOwner);
             if (hwnd == owner)
             {
                 return true;

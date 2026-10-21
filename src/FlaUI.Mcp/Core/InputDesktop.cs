@@ -117,6 +117,10 @@ internal class InputDesktop
     public virtual IReadOnlyList<Rectangle> Monitors() =>
         System.Windows.Forms.Screen.AllScreens.Select(s => s.Bounds).ToList();
 
+    /// <summary>The visible top-level windows of a process.</summary>
+    public virtual IReadOnlyList<Win32WindowInfo> TopLevelWindows(int processId) =>
+        Win32Desktop.GetTopLevelWindows(processId);
+
     public virtual string WindowState(nint hwnd) => Win32Desktop.GetWindowState(hwnd);
 
     /// <summary>Visible and neither minimized nor maximized.</summary>

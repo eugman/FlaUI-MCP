@@ -76,7 +76,8 @@ public static class ModalAwareInvoker
     {
         OperationContext.Check();
         var grace = gracePeriod ?? DefaultGracePeriod;
-        windowEnumerator ??= pid => Win32Desktop.GetTopLevelWindows(pid);
+        var desktop = InputDesktop.Current;
+        windowEnumerator ??= desktop.TopLevelWindows;
 
         var windowsBefore =
             processId != 0
@@ -166,39 +167,38 @@ public static class ModalAwareInvoker
     }
 
     /// <summary>
-    /// Detect the modal signature: a new top-level window appeared, or a
-    /// previously enabled window became disabled (modal dialogs disable their owner).
-    /// Returns the best available title for the modal, or null if no modal is detected.
+    /// Detect the modal signature: a previously enabled window of the process became disabled, as a modal dialog
+    /// disables its owner. A new window alone is not one: tooltips, menus and tool windows appear without blocking
+    /// anything. Returns the title of the new dialog (an owned, titled, non-tooltip window preferred), or null
+    /// when no window was disabled.
     /// </summary>
     private static string? DetectModal(
         IReadOnlyDictionary<nint, Win32WindowInfo> before,
         IReadOnlyList<Win32WindowInfo> current
     )
     {
-        Win32WindowInfo? newWindow = null;
-        var ownerDisabled = false;
-
-        foreach (var window in current)
+        var ownerDisabled = current.Any(window =>
+            before.TryGetValue(window.Hwnd, out var previous) && previous.IsEnabled && !window.IsEnabled
+        );
+        if (!ownerDisabled)
         {
-            if (!before.TryGetValue(window.Hwnd, out var previous))
-            {
-                // Prefer a titled new window over an untitled one
-                if (newWindow == null || (newWindow.Title.Length == 0 && window.Title.Length > 0))
-                {
-                    newWindow = window;
-                }
-            }
-            else if (previous.IsEnabled && !window.IsEnabled)
-            {
-                ownerDisabled = true;
-            }
+            return null;
         }
 
-        if (newWindow != null)
+        var dialog = current
+            .Where(window => !before.ContainsKey(window.Hwnd) && CanBeDialog(window))
+            .OrderByDescending(window => window.Owner != 0)
+            .ThenByDescending(window => window.Title.Length > 0)
+            .FirstOrDefault();
+        if (dialog == null)
         {
-            return newWindow.Title.Length > 0 ? newWindow.Title : "(untitled window)";
+            return "(unknown title)";
         }
 
-        return ownerDisabled ? "(unknown title)" : null;
+        return dialog.Title.Length > 0 ? dialog.Title : "(untitled window)";
     }
+
+    // A tooltip or a menu never blocks its owner, and a tool window is a palette, not a dialog.
+    private static bool CanBeDialog(Win32WindowInfo window) =>
+        !window.IsToolWindow && window.ClassName is not ("tooltips_class32" or "#32768");
 }

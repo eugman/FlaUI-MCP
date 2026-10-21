@@ -254,6 +254,11 @@ internal sealed class FakeDesktop : InputDesktop
         Pointer = point;
     }
 
+    /// <summary>The visible top-level windows of a process; none unless a test says otherwise.</summary>
+    public Func<int, IReadOnlyList<Win32WindowInfo>> WindowsOf { get; set; } = _ => [];
+
+    public override IReadOnlyList<Win32WindowInfo> TopLevelWindows(int processId) => WindowsOf(processId);
+
     private sealed class Uninstall : IDisposable
     {
         public void Dispose() => Override.Value = null;
