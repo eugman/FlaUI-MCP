@@ -15,7 +15,11 @@ public sealed class InteractionTests
         using var interaction = Grant();
         var error = Assert.Throws<InvalidOperationException>(interaction.Require);
         Assert.Contains(Te3InteractionTool.Begin, error.Message);
-        Assert.Throws<ArgumentException>(() => interaction.Begin("Open Preferences", userApproved: false));
+        Assert.Contains("has not approved a batch", error.Message);
+        var refusal = Assert.Throws<ArgumentException>(() =>
+            interaction.Begin("Open Preferences", userApproved: false)
+        );
+        Assert.Contains("Ask the user to clear the machine", refusal.Message);
         Assert.Throws<ArgumentException>(() => interaction.Begin(" ", userApproved: true));
         Assert.False(interaction.Active);
     }
@@ -119,6 +123,8 @@ public sealed class InteractionTests
 
         await new Te3InteractionTool(interaction, Te3InteractionTool.End).ExecuteAsync(null);
         Assert.False(interaction.Active);
+        var error = Assert.Throws<InvalidOperationException>(interaction.Require);
+        Assert.Contains("ended by te3_interaction_end.", error.Message);
     }
 
     [Fact]
@@ -171,5 +177,114 @@ public sealed class InteractionTests
         Assert.True(result.IsError);
         Assert.Contains(Te3InteractionTool.Begin, result.Content[0].Text);
         Assert.False(interaction.Active);
+    }
+
+    [Fact]
+    public void StoppingTheHostEndsTheGrant()
+    {
+        var interaction = Grant();
+        interaction.Begin("Open Preferences", userApproved: true);
+
+        interaction.Dispose();
+
+        Assert.False(interaction.Active);
+        var error = Assert.Throws<InvalidOperationException>(interaction.Require);
+        Assert.Contains("the host stopped", error.Message);
+    }
+
+    // The test process's own id is never TE3, so each call stops at attach and nothing reaches the desktop.
+    private static JsonElement Own(object arguments)
+    {
+        var node = JsonSerializer.SerializeToNode(arguments)!.AsObject();
+        node["processId"] = Environment.ProcessId;
+        return JsonSerializer.SerializeToElement(node);
+    }
+
+    private static string Phase(FlaUI.Mcp.McpToolResult result) =>
+        JsonDocument.Parse(result.Content[0].Text!).RootElement.GetProperty("phase").GetString()!;
+
+    [Fact]
+    public async Task TheModelStateReadNeedsNoGrant()
+    {
+        var result = await new Te3Companion(null!, Te3Companion.ModelState, Grant()).ExecuteAsync(Own(new { }));
+
+        Assert.True(result.IsError);
+        Assert.Equal("attach", Phase(result));
+    }
+
+    [Fact]
+    public async Task NavigateUsesTheGrantItWasGiven()
+    {
+        using var interaction = Grant();
+        interaction.Begin("Open TOM Explorer", userApproved: true);
+
+        var result = await new Te3Companion(null!, Te3Companion.Navigate, interaction).ExecuteAsync(
+            Own(new { destination = "tom-explorer" })
+        );
+
+        Assert.True(result.IsError);
+        Assert.Equal("attach", Phase(result));
+    }
+
+    [Theory]
+    [InlineData("list")]
+    [InlineData("show-pane")]
+    public async Task ReadOnlyLayoutActionsNeedNoGrant(string action)
+    {
+        var result = await new Te3Layout(null!, Grant()).ExecuteAsync(Own(new { action, title = "Properties" }));
+
+        Assert.True(result.IsError);
+        Assert.DoesNotContain(Te3InteractionTool.Begin, result.Content[0].Text);
+        Assert.Contains("Expected one visible TE3 document window", result.Content[0].Text);
+    }
+
+    [Fact]
+    public async Task LayoutChangesUseTheGrantTheyWereGiven()
+    {
+        using var interaction = Grant();
+        interaction.Begin("Resize panes", userApproved: true);
+
+        var result = await new Te3Layout(null!, interaction).ExecuteAsync(
+            Own(new { action = "hide-pane", title = "Properties" })
+        );
+
+        Assert.True(result.IsError);
+        Assert.Contains("Expected one visible TE3 document window", result.Content[0].Text);
+    }
+
+    [Fact]
+    public async Task APresetPlanDefaultsToA1080pWindow()
+    {
+        var layout = new Te3Layout(null!, Grant());
+        var preset = FlaUI.Mcp.Te3.Te3PanePlan.AssistantModelReview;
+
+        var defaulted = await layout.ExecuteAsync(
+            JsonSerializer.SerializeToElement(new { action = "plan-preset", preset })
+        );
+        var explicitSize = await layout.ExecuteAsync(
+            JsonSerializer.SerializeToElement(
+                new
+                {
+                    action = "plan-preset",
+                    preset,
+                    windowWidth = 1920,
+                    windowHeight = 1080,
+                }
+            )
+        );
+        var other = await layout.ExecuteAsync(
+            JsonSerializer.SerializeToElement(
+                new
+                {
+                    action = "plan-preset",
+                    preset,
+                    windowWidth = 1280,
+                    windowHeight = 720,
+                }
+            )
+        );
+
+        Assert.Equal(explicitSize.Content[0].Text, defaulted.Content[0].Text);
+        Assert.NotEqual(other.Content[0].Text, defaulted.Content[0].Text);
     }
 }
