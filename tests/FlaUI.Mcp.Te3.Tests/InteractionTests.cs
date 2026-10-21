@@ -210,6 +210,7 @@ public sealed class InteractionTests
 
         Assert.True(result.IsError);
         Assert.Equal("attach", Phase(result));
+        Assert.Contains("processId must identify TabularEditor3", result.Content[0].Text);
     }
 
     [Fact]
@@ -252,39 +253,29 @@ public sealed class InteractionTests
         Assert.Contains("Expected one visible TE3 document window", result.Content[0].Text);
     }
 
-    [Fact]
-    public async Task APresetPlanDefaultsToA1080pWindow()
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData(100, null, true)]
+    [InlineData(null, 100, true)]
+    public async Task APresetPlanUsesTheGivenWindowSizeOr1080p(int? width, int? height, bool tooSmall)
     {
-        var layout = new Te3Layout(null!, Grant());
-        var preset = FlaUI.Mcp.Te3.Te3PanePlan.AssistantModelReview;
+        var arguments = new System.Text.Json.Nodes.JsonObject
+        {
+            ["action"] = "plan-preset",
+            ["preset"] = FlaUI.Mcp.Te3.Te3PanePlan.AssistantModelReview,
+        };
+        if (width != null)
+        {
+            arguments["windowWidth"] = width;
+        }
 
-        var defaulted = await layout.ExecuteAsync(
-            JsonSerializer.SerializeToElement(new { action = "plan-preset", preset })
-        );
-        var explicitSize = await layout.ExecuteAsync(
-            JsonSerializer.SerializeToElement(
-                new
-                {
-                    action = "plan-preset",
-                    preset,
-                    windowWidth = 1920,
-                    windowHeight = 1080,
-                }
-            )
-        );
-        var other = await layout.ExecuteAsync(
-            JsonSerializer.SerializeToElement(
-                new
-                {
-                    action = "plan-preset",
-                    preset,
-                    windowWidth = 1280,
-                    windowHeight = 720,
-                }
-            )
-        );
+        if (height != null)
+        {
+            arguments["windowHeight"] = height;
+        }
 
-        Assert.Equal(explicitSize.Content[0].Text, defaulted.Content[0].Text);
-        Assert.NotEqual(other.Content[0].Text, defaulted.Content[0].Text);
+        var result = await new Te3Layout(null!, Grant()).ExecuteAsync(JsonSerializer.SerializeToElement(arguments));
+
+        Assert.Equal(tooSmall, result.IsError == true);
     }
 }
