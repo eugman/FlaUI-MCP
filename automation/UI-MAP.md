@@ -221,3 +221,12 @@ Verified: yes, unless the row says otherwise.
 | Known-prompt guard | No false positive with only the main window open |
 | Object walk | Not promoted: see KNOWN-ISSUES "Object walk timing on te3-cfa803c" |
 
+## Host actions verified live on te3-97a4512 (TE3 3.27.1, 2026-10-21)
+
+| Action | What was seen |
+|---|---|
+| `te3_layout snapshot` / `restore` without the grant | Snapshot "vte3d-te3-97a4512" before te3_interaction_begin: 0.3 s, the reply carried the three hashes (= the live files). After TE3's close rewrote Layouts.json and Preferences.json, restore after te3_interaction_end returned per-file hashes and verified: true, and the files read back as the snapshot |
+| `apply-preset` at target | From 663/467: AI Assistant and TOM Explorer 15 inputs each, Properties skipped with 0. A second call at target: all three skipped, 0 inputs, 1.9 s |
+| `te3_model_state`, message slot blank | Recognized, with selection and connection read (the caret slot was blank too, so the round-3 "Ln 0 Col 0 INS" case was not reproduced) |
+| Object navigation | Budget Rate[Rate] (14.1 s, 12 inputs) and Orders[Order Lines] (10.1 s, 10 inputs) passed with the keyboard walk; Brands[Brand] failed both ways (see KNOWN-ISSUES). The row strategy that replaced the walk as the primary has not been run live |
+
