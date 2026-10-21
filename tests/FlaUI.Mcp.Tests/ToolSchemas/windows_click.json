@@ -1,0 +1,55 @@
+{
+  "name": "windows_click",
+  "description": "Click an element by its ref (from windows_snapshot). Prefers Invoke pattern for reliability (tree and list rows: select), falls back to mouse click if needed. Menu items and controls whose name ends in \u0022...\u0022 get a physical click by default, because an Invoke that opens a menu or dialog blocks UI Automation until it closes; pass physical=false to force Invoke. If the click opens a modal dialog, returns immediately with the dialog title instead of waiting for the dialog to close. A select fallback click reports whether SelectionItem confirms selection; an unconfirmed click must be inspected before continuing. A right-click after selecting a tree or list row can start inline rename; open context menus with windows_send_keys Shift\u002BF10 or Apps.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "handle": {
+        "type": "string",
+        "description": "Optional window handle; when supplied, the ref must belong to this window."
+      },
+      "physical": {
+        "type": "boolean",
+        "description": "Use a physical mouse click with foreground and native-window hit checks. Defaults to true for menu items and names ending in \u0022...\u0022, otherwise false. These checks do not prove which UIA child receives the click; a container\u0027s clickable point may hit a child control."
+      },
+      "ref": {
+        "type": "string",
+        "description": "Element ref from windows_snapshot (e.g., \u0027w1e5\u0027)"
+      },
+      "button": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right",
+          "middle"
+        ],
+        "description": "Mouse button to click (default: left)"
+      },
+      "doubleClick": {
+        "type": "boolean",
+        "description": "Whether to double-click (default: false)"
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "invoke",
+          "select",
+          "expand",
+          "collapse",
+          "toggle",
+          "click"
+        ],
+        "description": "Pattern to use instead of the default choice. Tree and list rows default to select, because Invoke on a tree row toggles its expansion; expand/collapse open or close a tree node without selecting it; click forces a mouse click."
+      }
+    },
+    "required": [
+      "ref"
+    ]
+  },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false
+  }
+}

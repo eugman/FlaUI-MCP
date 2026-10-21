@@ -1,0 +1,31 @@
+{
+  "name": "windows_fill",
+  "description": "Clear and fill a text field with new value. Prefers Value pattern for reliability.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "handle": {
+        "type": "string",
+        "description": "Optional window handle to validate against the element ref."
+      },
+      "ref": {
+        "type": "string",
+        "description": "Element ref from windows_snapshot (e.g., \u0027w1e5\u0027)"
+      },
+      "value": {
+        "type": "string",
+        "description": "Value to fill"
+      }
+    },
+    "required": [
+      "ref",
+      "value"
+    ]
+  },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false
+  }
+}

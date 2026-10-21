@@ -1,0 +1,42 @@
+{
+  "name": "windows_send_keys",
+  "description": "Send key presses or key chords to an element by ref or the focused element. Supports either \u0060chord\u0060 (single chord, e.g., Ctrl\u002BRight) or \u0060keys\u0060 array (sequence, e.g., [\u0022Ctrl\u002BC\u0022,\u0022Ctrl\u002BV\u0022]).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "handle": {
+        "type": "string",
+        "description": "Optional explicit window handle; otherwise uses the focused element."
+      },
+      "verifyFocus": {
+        "type": "boolean",
+        "description": "Require ref and verified keyboard focus on that exact control before the sequence (default false)."
+      },
+      "expectFocusClass": {
+        "type": "string",
+        "description": "Abort without sending unless the focused control\u0027s window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. Every reply names the focused class, so run once to discover it."
+      },
+      "ref": {
+        "type": "string",
+        "description": "Element ref from windows_snapshot (e.g., \u0027w1e5\u0027). If omitted, sends to focused element."
+      },
+      "chord": {
+        "type": "string",
+        "description": "Single key chord string, e.g. \u0027Ctrl\u002BRight\u0027 or \u0027Alt\u002BF4\u0027."
+      },
+      "keys": {
+        "type": "array",
+        "description": "Sequence of key presses/chords, e.g. [\u0027Ctrl\u002BC\u0027, \u0027Ctrl\u002BV\u0027, \u0027Enter\u0027].",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false
+  }
+}
