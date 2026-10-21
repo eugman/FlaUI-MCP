@@ -78,11 +78,18 @@ internal sealed class FakeDesktop : InputDesktop
             State = WindowStates.Normal;
         }
 
-        if (ActivationAllowed)
+        if (FocusLandsOn != 0)
+        {
+            ForegroundWindow = FocusLandsOn;
+        }
+        else if (ActivationAllowed)
         {
             ForegroundWindow = hwnd;
         }
     }
+
+    /// <summary>When set, focusing any window brings this one to the foreground instead, as a popup can.</summary>
+    public nint FocusLandsOn { get; set; }
 
     /// <summary>When false, the target is disabled, as while it shows a modal dialog.</summary>
     public bool TargetEnabled { get; set; } = true;

@@ -43,7 +43,9 @@ Operation status (`flaui/operations/status` and `windows_operation_status`) repo
 
 ### Refusal text after a change
 
-A refusal says "no input sent" only when nothing changed. When guarded input had already activated or restored the target, focused the control or scrolled the element into view, the phrase becomes, for example, "no keys or clicks were sent, but the target window was activated first". A refusal without that phrase gets a sentence such as "Before this, the control was focused." appended. A refused fallback click after Select says "No keys or clicks were sent, but Select was sent first." The possible notes are `the target window was activated`, `the target window was restored`, `the control was focused` and `the view was scrolled`.
+A refusal says "no input sent" only when nothing changed. When guarded input had already activated or restored the target, focused the control or scrolled the element into view, the phrase becomes, for example, "no keys or clicks were sent, but the target window was activated first". A refusal without that phrase gets a sentence such as "Before this, the control was focused." appended. A refused fallback click after Select says "No keys or clicks were sent, but Select was sent first." The possible notes are `the target window was activated` (only when the target, or its modal dialog, is then in front), `the target window was restored`, `the foreground window changed` (focus moved another window in front; the activation check then refuses), `the control was focused` and `the view was scrolled`.
+
+`windows_focus` by handle is ok (`verification: verified`) only when the target window is in front afterwards; otherwise it fails, with `partial` when the foreground still changed. Focus of a window known only through UI Automation cannot be observed and stays unverified.
 
 ### JSON-RPC refusals
 

@@ -145,12 +145,30 @@ public class FocusWindowTool : ToolBase
         return WindowMutation.Uia(window.Properties.ProcessId.Value, $"Focus on {handle}", window.Focus, _pending);
     }
 
-    private static McpToolResult FocusResult(string handle, nint hwnd) =>
-        TextResult(
-            hwnd != 0 && Win32Desktop.GetForegroundWindow() == hwnd
-                ? $"Focused window {handle}"
-                : $"Focus requested for {handle}, but foreground activation was not observed. Do not send input until the target is active."
-        );
+    /// <summary>
+    /// Ok only when the target window (or its own popup) is in front afterwards. A window known only through UI
+    /// Automation cannot be observed, so its reply says so and stays unverified.
+    /// </summary>
+    private static McpToolResult FocusResult(string handle, nint hwnd)
+    {
+        const string Unobserved =
+            "foreground activation was not observed. Do not send input until the target is active.";
+        if (hwnd == 0)
+        {
+            return TextResult($"Focus requested for {handle}, but {Unobserved}");
+        }
+
+        var desktop = InputDesktop.Current;
+        if (desktop.BelongsTo(desktop.Foreground(), hwnd))
+        {
+            return TextResult($"Focused window {handle}") with
+            {
+                Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "verified" },
+            };
+        }
+
+        return ErrorResult($"Focus requested for {handle}, but another window is in front: {Unobserved}");
+    }
 }
 
 /// <summary>
