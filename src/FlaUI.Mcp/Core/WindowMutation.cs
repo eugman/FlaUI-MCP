@@ -107,10 +107,12 @@ internal static class WindowMutation
     {
         RefuseIfBlocked(processId, pending);
         using var lease = GuardedInput.AcquireLease();
+        var gate = new SendGate(description);
         void Validate()
         {
             validate?.Invoke();
             GuardedInput.RequireDrivable(processId, InputDesktop.Current);
+            gate.Enter();
         }
 
         void Call() => InputDesktop.Current.CallPattern(call);
@@ -132,6 +134,37 @@ internal static class WindowMutation
             return new PatternCallResult(PatternCallOutcome.Completed);
         }
 
-        return ModalAwareInvoker.Execute(processId, description, Guarded, pending, gracePeriod);
+        var result = ModalAwareInvoker.Execute(processId, description, Guarded, pending, gracePeriod);
+        // The lease is released when this returns. A call still in validation then must never go out unleased,
+        // interleaved with other input: close the gate, and it is certain that nothing was or will be sent.
+        return result.Outcome == PatternCallOutcome.StillPending && gate.Abandon()
+            ? result with
+            {
+                Dispatched = false,
+            }
+            : result;
+    }
+
+    /// <summary>Lets a pattern call through to its send only while the tool that started it still waits.</summary>
+    private sealed class SendGate(string description)
+    {
+        private const int Waiting = 0;
+        private const int Sending = 1;
+        private const int Abandoned = 2;
+        private int state = Waiting;
+
+        /// <summary>Called by the call just before it counts and sends; refuses once the tool gave up on it.</summary>
+        public void Enter()
+        {
+            if (Interlocked.CompareExchange(ref state, Sending, Waiting) != Waiting)
+            {
+                throw new InvalidOperationException(
+                    $"{description} was not sent: its tool had already returned and released the input lease."
+                );
+            }
+        }
+
+        /// <summary>Close the gate; true when the call had not reached its send, so it never will.</summary>
+        public bool Abandon() => Interlocked.CompareExchange(ref state, Abandoned, Waiting) == Waiting;
     }
 }
