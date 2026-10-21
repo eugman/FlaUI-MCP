@@ -14,8 +14,10 @@ internal static class WindowMutation
             target,
             () =>
             {
+                // Focusing the window already in front changes nothing, so it is not counted.
+                var before = InputDesktop.Current.Foreground();
                 InputDesktop.Current.Focus(hwnd);
-                return true;
+                return InputDesktop.Current.Foreground() != before;
             }
         );
 
@@ -43,12 +45,17 @@ internal static class WindowMutation
         return InputDesktop.Current.ProcessOf(hwnd) != 0;
     }
 
-    /// <summary>Starting a process changes the desktop like input does: same lease and permission check.</summary>
+    /// <summary>
+    /// Starting a process changes the desktop like input does: same lease and permission check. Counted
+    /// once Windows accepted the start; a start that throws started nothing.
+    /// </summary>
     public static Process? Start(ProcessStartInfo info)
     {
-        Process? started = null;
         using var lease = GuardedInput.AcquireLease();
-        MutationGuard.Execute(OperationContext.Check, () => started = Process.Start(info));
+        OperationContext.Check();
+        MutationGuard.CheckPermission();
+        var started = Process.Start(info);
+        MutationGuard.RecordDispatch();
         return started;
     }
 

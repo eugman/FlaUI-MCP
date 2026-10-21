@@ -218,6 +218,38 @@ public sealed class DispatchAccountingTests
         Assert.Equal("partial", result.Outcome.Dispatch);
     }
 
+    // K5: count only what happened.
+
+    [Fact]
+    public void FocusingTheForegroundWindowCountsNothing()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+
+        Assert.Equal(0, Counted(() => WindowMutation.Focus(FakeDesktop.Target, FakeDesktop.TargetHwnd)));
+    }
+
+    [Fact]
+    public void FocusingABackgroundWindowCountsOne()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd };
+        using var installed = desktop.Install();
+
+        Assert.Equal(1, Counted(() => WindowMutation.Focus(FakeDesktop.Target, FakeDesktop.TargetHwnd)));
+    }
+
+    [Fact]
+    public void AProcessThatFailsToStartCountsNothing()
+    {
+        // A missing executable: Windows starts nothing and Process.Start throws.
+        var missing = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}", "missing.exe");
+        var info = new ProcessStartInfo(missing) { UseShellExecute = false };
+
+        var counted = Counted(() => Assert.Throws<Win32Exception>(() => WindowMutation.Start(info)));
+
+        Assert.Equal(0, counted);
+    }
+
     private sealed class DelegateTool(string name, Func<McpToolResult> run) : ToolBase
     {
         public override string Name => name;
