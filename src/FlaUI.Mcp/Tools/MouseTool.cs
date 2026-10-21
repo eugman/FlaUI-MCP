@@ -173,8 +173,9 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         var (element, read) = Located(reference, ref scrolled);
         return () =>
         {
-            var point = choose(read());
-            ClickPoint.Verify(point, element);
+            var geometry = read();
+            var point = choose(geometry);
+            ClickPoint.Verify(point, element, geometry);
             return point;
         };
     }
@@ -202,7 +203,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 var bounds = geometry.Bounds;
                 var from = ClickPoint.Choose(geometry, PointerPlan.EdgePoint(bounds, fromEdge ?? "center"));
                 // The button goes down here, so the start must be on the ref, not a neighbouring header or pane.
-                ClickPoint.Verify(from, element);
+                ClickPoint.Verify(from, element, geometry);
                 return (from, to?.Invoke() ?? PointerPlan.ResizeTarget(bounds, fromEdge ?? "right", resizeTo!.Value));
             };
         }

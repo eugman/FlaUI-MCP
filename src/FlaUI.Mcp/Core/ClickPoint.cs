@@ -193,7 +193,7 @@ public static class ClickPoint
     /// one of its descendants there. A sibling, scrollbar, header or overlay in the same window is refused by name
     /// with nothing sent, and so is a hit test that fails.
     /// </summary>
-    public static void Verify(Point point, AutomationElement target)
+    public static void Verify(Point point, AutomationElement target, ClickGeometry geometry)
     {
         var desktop = InputDesktop.Current;
         AutomationElement? hit;
@@ -206,15 +206,16 @@ public static class ClickPoint
             throw Covered($"The point ({point.X},{point.Y}) could not be hit-tested ({error.Message})");
         }
 
-        var element = hit;
-        for (var depth = 0; element != null && depth < MaxAncestorWalk; depth++)
+        if (Within(desktop, hit, target))
         {
-            if (desktop.SameElement(element, target))
-            {
-                return;
-            }
+            return;
+        }
 
-            element = desktop.ParentOf(element);
+        // Some providers report the container for a point on its child (a WinForms PropertyGrid row through
+        // MSAA, a Chromium node, a WPF text block): an ancestor counts, but only where the target is visible.
+        if (hit != null && VisiblePart(geometry).Contains(point) && Within(desktop, target, hit))
+        {
+            return;
         }
 
         var covering = hit == null ? "nothing UI Automation can see" : desktop.DescribeElement(hit);
@@ -222,6 +223,22 @@ public static class ClickPoint
     }
 
     private const int MaxAncestorWalk = 50;
+
+    /// <summary>Whether <paramref name="element"/> is <paramref name="ancestor"/> or lies under it.</summary>
+    private static bool Within(InputDesktop desktop, AutomationElement? element, AutomationElement ancestor)
+    {
+        for (var depth = 0; element != null && depth < MaxAncestorWalk; depth++)
+        {
+            if (desktop.SameElement(element, ancestor))
+            {
+                return true;
+            }
+
+            element = desktop.ParentOf(element);
+        }
+
+        return false;
+    }
 
     private static InputRefusedException Covered(string reason) =>
         InputRefusedException.Record(

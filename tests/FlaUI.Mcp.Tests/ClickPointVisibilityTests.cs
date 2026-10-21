@@ -18,6 +18,8 @@ public sealed class ClickPointVisibilityTests
     private static readonly Rectangle HorizontalBar = new(0, 1118, 1600, 22);
     private static readonly Rectangle Clip = new(448, 1101, 200, 40);
 
+    private static ClickGeometry Visible => new(false, null, Clip, [ClickGeometry.Viewport(Timeline, [HorizontalBar])]);
+
     private static AutomationElement Element() =>
         (AutomationElement)RuntimeHelpers.GetUninitializedObject(typeof(AutomationElement));
 
@@ -81,7 +83,7 @@ public sealed class ClickPointVisibilityTests
         var target = Element();
         using var installed = new FakeDesktop { HitTest = _ => target }.Install();
 
-        ClickPoint.Verify(new Point(548, 1109), target);
+        ClickPoint.Verify(new Point(548, 1109), target, Visible);
     }
 
     [Fact]
@@ -93,7 +95,7 @@ public sealed class ClickPointVisibilityTests
         desktop.Parents[label] = target;
         using var installed = desktop.Install();
 
-        ClickPoint.Verify(new Point(548, 1109), target);
+        ClickPoint.Verify(new Point(548, 1109), target, Visible);
     }
 
     [Fact]
@@ -108,7 +110,9 @@ public sealed class ClickPointVisibilityTests
         desktop.Descriptions[scrollbar] = "ScrollBar 'PART_HorizontalScrollBar'";
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(new Point(548, 1121), target));
+        var error = Assert.Throws<InputRefusedException>(() =>
+            ClickPoint.Verify(new Point(548, 1121), target, Visible)
+        );
 
         Assert.Equal("click-point-covered", error.Refusal.Code);
         Assert.Equal(
@@ -119,12 +123,41 @@ public sealed class ClickPointVisibilityTests
     }
 
     [Fact]
+    public void AnAncestorHitInsideTheVisiblePartIsAccepted()
+    {
+        // WinForms PropertyGrid rows (MSAA), Chromium nodes and WPF text children report their container.
+        var target = Element();
+        var grid = Element();
+        var desktop = new FakeDesktop { HitTest = _ => grid };
+        desktop.Parents[target] = grid;
+        using var installed = desktop.Install();
+
+        ClickPoint.Verify(new Point(548, 1109), target, Visible);
+    }
+
+    [Fact]
+    public void AnAncestorHitOutsideTheVisiblePartIsRefused()
+    {
+        var target = Element();
+        var timeline = Element();
+        var desktop = new FakeDesktop { HitTest = _ => timeline };
+        desktop.Parents[target] = timeline;
+        desktop.Descriptions[timeline] = "Pane 'mediaScrollViewer'";
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            ClickPoint.Verify(new Point(548, 1125), target, Visible)
+        );
+        Assert.Contains("covered by Pane 'mediaScrollViewer'", error.Message);
+    }
+
+    [Fact]
     public void AHitTestThatFailsIsARefusalNotAPass()
     {
         var desktop = new FakeDesktop { HitTest = _ => throw new TimeoutException("provider blocked") };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(new Point(1, 1), Element()));
+        var error = Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(new Point(1, 1), Element(), Visible));
 
         Assert.Equal("click-point-covered", error.Refusal.Code);
         Assert.Contains("could not be hit-tested", error.Message);
