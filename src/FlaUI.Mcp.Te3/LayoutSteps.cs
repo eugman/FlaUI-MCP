@@ -12,23 +12,35 @@ internal static class LayoutSteps
         public List<object> Completed => completed;
     }
 
-    /// <summary>Like <see cref="Progress(string, Func{Task{object?}})"/>; the step calls sent before its input goes out.</summary>
-    public static Task<List<object>> Progress(string name, Func<Action<object>, Task<object?>> step) =>
-        Progress(name, () => step(_ => { }));
+    /// <summary>A step whose input went out before it failed: its effect on the layout is unconfirmed.</summary>
+    public sealed record AttemptedStep(object Attempted, string Error);
 
     /// <summary>Runs step until it returns null and collects what each step did, also when a later step fails.</summary>
-    public static async Task<List<object>> Progress(string name, Func<Task<object?>> step)
+    public static Task<List<object>> Progress(string name, Func<Task<object?>> step) => Progress(name, _ => step());
+
+    /// <summary>
+    /// As above; the step calls sent just before its input goes out, so a step that fails after sending is
+    /// recorded as attempted. Every failure keeps the record, cancellation and COM failures included.
+    /// </summary>
+    public static async Task<List<object>> Progress(string name, Func<Action<object>, Task<object?>> step)
     {
         var completed = new List<object>();
+        object? sent = null;
         try
         {
-            while (await step() is { } result)
+            while (await step(item => sent = item) is { } result)
             {
                 completed.Add(result);
+                sent = null;
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            if (sent != null)
+            {
+                completed.Add(new AttemptedStep(sent, ex.Message));
+            }
+
             throw new ProgressException(ex.Message, name, completed, ex);
         }
 

@@ -214,7 +214,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         var next = 0;
         var changes = await LayoutSteps.Progress(
             "changes",
-            async () =>
+            async sent =>
             {
                 if (next == sizes.Length)
                 {
@@ -223,6 +223,8 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
 
                 var size = sizes[next++];
                 var args = JsonSerializer.SerializeToElement(new { width = size.Width, height = size.Height });
+                // Resize may drag before it fails, so the pane is recorded as attempted from here on.
+                sent(size.Pane);
                 return await Resize(handle, window, size.Pane, args, strict: true);
             }
         );
@@ -302,7 +304,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         var closes = 0;
         var closed = await LayoutSteps.Progress(
             "closed",
-            async () =>
+            async sent =>
             {
                 var next =
                     closes++ < MaxCloses
@@ -313,6 +315,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
                     return null;
                 }
 
+                sent(next.Title);
                 await Click(handle, next.Close);
                 await RequireNoDialog(window, next.Title);
                 return next.Title;
