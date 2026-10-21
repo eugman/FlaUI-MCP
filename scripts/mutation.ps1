@@ -1,7 +1,8 @@
 # Mutation testing of the guard and protocol files listed in stryker-config.json, against the no-focus tests.
 # It runs on a worktree of HEAD under local/build-background, so commit first; the report goes to
 # local/build-background/StrykerOutput. Concurrency is 2 and the run stops after -Minutes.
-param([int]$Minutes = 45)
+# -Concurrency overrides the config, e.g. 1 when other suites share the machine.
+param([int]$Minutes = 45, [int]$Concurrency = 0)
 $ErrorActionPreference = 'Stop'
 $root = git rev-parse --show-toplevel
 Set-Location $root
@@ -15,7 +16,9 @@ $code = 1
 Push-Location $work
 try {
     dotnet tool restore | Out-Null
-    $stryker = Start-Process dotnet -ArgumentList 'stryker', '-f', 'stryker-config.json', '--output', $output -NoNewWindow -PassThru
+    $arguments = @("stryker", "-f", "stryker-config.json", "--output", $output)
+    if ($Concurrency -gt 0) { $arguments += @("--concurrency", $Concurrency) }
+    $stryker = Start-Process dotnet -ArgumentList $arguments -NoNewWindow -PassThru
     $null = $stryker.Handle
     if ($stryker.WaitForExit($Minutes * 60 * 1000)) {
         $code = $stryker.ExitCode
