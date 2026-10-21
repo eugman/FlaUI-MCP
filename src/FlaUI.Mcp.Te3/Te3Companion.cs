@@ -11,6 +11,9 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
     // Never approved when none is passed, so a tool built without one refuses input.
     private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
     public const string ModelState = "te3_model_state";
+
+    // Tools the page calls that only read; every other call is counted as input sent.
+    private static readonly HashSet<string> ReadOnlyTools = ["windows_screenshot"];
     public static readonly string[] Names = [Navigate, ModelState];
     public override string Name => name;
     public override string Description =>
@@ -85,6 +88,9 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
     {
         var lastStep = "validate request";
         var phase = "validate";
+        // Counted before each dispatch: an input that then fails may still have gone out.
+        var invoked = 0;
+        Te3Page? page = null;
         try
         {
             var a = arguments ?? JsonSerializer.SerializeToElement(new { });
@@ -99,6 +105,11 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             {
                 identity.EnsureAlive();
                 OperationContext.Check();
+                if (!ReadOnlyTools.Contains(tool))
+                {
+                    invoked++;
+                }
+
                 var result = await host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args));
                 if (result.IsError == true || result.Outcome?.IsPending == true)
                 {
@@ -106,7 +117,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                 }
             }
 
-            var page = new Te3Page(host, handle, Invoke, step => lastStep = step);
+            page = new Te3Page(host, handle, Invoke, step => lastStep = step);
 
             if (name == ModelState)
             {
@@ -151,7 +162,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         }
         catch (Exception ex)
         {
-            return Failure(phase, lastStep, ex.Message);
+            return Failure(phase, lastStep, ex.Message, invoked + (page?.InputsSent ?? 0));
         }
     }
 
@@ -274,6 +285,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     error,
                     blocker,
                     next,
+                    actionDispatched = inputsSent > 0,
                     inputsSent,
                 },
                 McpProtocol.JsonOptions

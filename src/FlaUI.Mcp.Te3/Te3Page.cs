@@ -17,8 +17,14 @@ public sealed class Te3Page(
     /// Sends input this page dispatches itself rather than through a Core tool, journaled like tool calls.
     /// Every caller holds a GuardedInput, and the send completes synchronously inside it.
     /// </summary>
-    private Task SendInput(string action, object arguments, Action send) =>
-        RunJournal.Input(journal, action, arguments, send);
+    private Task SendInput(string action, object arguments, Action send)
+    {
+        InputsSent++;
+        return RunJournal.Input(journal, action, arguments, send);
+    }
+
+    /// <summary>Inputs this page has dispatched itself, counted before each one goes out.</summary>
+    public int InputsSent { get; private set; }
 
     private readonly ElementQuery query = new(host.Sessions, host.Elements, host.Pending);
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
