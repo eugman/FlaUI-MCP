@@ -179,7 +179,7 @@ public sealed class SettingsLease
     }
 
     // Write beside the target, then replace it, so a crash never leaves a half-written settings file.
-    private static void WriteAtomically(string target, Action<string> write)
+    internal static void WriteAtomically(string target, Action<string> write)
     {
         var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try

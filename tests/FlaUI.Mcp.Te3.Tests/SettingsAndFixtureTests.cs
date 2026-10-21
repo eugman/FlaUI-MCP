@@ -295,4 +295,31 @@ public sealed class SettingsAndFixtureTests : IDisposable
         var error = Assert.Throws<InvalidOperationException>(() => SettingsLease.Recover(backup, true, root));
         Assert.Contains("Invalid recovery targets", error.Message);
     }
+
+    [Fact]
+    public void AFailedWriteKeepsItsOwnErrorWhenTheTemporaryFileCannotBeDeleted()
+    {
+        var target = Path.Combine(root, "UiPreferences.json");
+        FileStream? held = null;
+        try
+        {
+            var error = Assert.Throws<InvalidDataException>(() =>
+                SettingsLease.WriteAtomically(
+                    target,
+                    temporary =>
+                    {
+                        // Still open, so deleting it fails too.
+                        held = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                        throw new InvalidDataException("write failed");
+                    }
+                )
+            );
+
+            Assert.Equal("write failed", error.Message);
+        }
+        finally
+        {
+            held?.Dispose();
+        }
+    }
 }
