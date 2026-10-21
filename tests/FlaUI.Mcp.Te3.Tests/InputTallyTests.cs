@@ -76,6 +76,42 @@ public sealed class InputTallyTests
     }
 
     [Fact]
+    public async Task AFailedCallCarriesCoresOutcomeNotJustItsText()
+    {
+        var inputs = new InputTally();
+        var outcome = Outcome("partial", 1) with
+        {
+            Failure = new InputRefusal("activation-denied", "Windows refused."),
+        };
+
+        var error = await Assert.ThrowsAsync<CoreCallException>(() =>
+            inputs.Invoke(
+                Returns("Failed to click w1e3: Windows refused.", outcome, error: true),
+                tool: "windows_click"
+            )
+        );
+
+        Assert.Equal("windows_click", error.Tool);
+        Assert.Equal("partial", error.Outcome.Dispatch);
+        Assert.Equal("activation-denied", error.Outcome.Failure?.Code);
+        Assert.Equal("Failed to click w1e3: Windows refused.", error.Message);
+    }
+
+    [Theory]
+    [InlineData("completed", "pending")]
+    [InlineData("timed_out_pending", "unknown")]
+    public async Task APendingCallIsAFailureThatSaysItIsPending(string dispatch, string provider)
+    {
+        var inputs = new InputTally();
+
+        var error = await Assert.ThrowsAsync<CoreCallException>(() =>
+            inputs.Invoke(Returns("Still running", Outcome(dispatch, 0, provider) with { Status = "ok" }))
+        );
+
+        Assert.True(error.Outcome.IsPending);
+    }
+
+    [Fact]
     public async Task ARefusalAfterTheTargetWasRestoredCounts()
     {
         // The refusal's text says no input was sent, but focusing the minimized target restored it first.

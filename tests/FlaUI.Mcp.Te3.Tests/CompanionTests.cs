@@ -1,4 +1,6 @@
 using System.Text.Json;
+using FlaUI.Mcp;
+using FlaUI.Mcp.Core;
 using Xunit;
 
 public sealed class CompanionTests
@@ -154,7 +156,7 @@ public sealed class CompanionTests
     [InlineData("verify-arrival")]
     public void FailuresDoNotClaimTheSceneOrReplayInput(string phase)
     {
-        var result = Te3Companion.Failure(phase, "provider call", "UIA Timeout");
+        var result = Te3Companion.Failure(phase, "provider call", new TimeoutException("UIA Timeout"));
         Assert.True(result.IsError);
         var response = JsonDocument.Parse(result.Content[0].Text!).RootElement;
         Assert.Equal(phase, response.GetProperty("phase").GetString());
@@ -162,31 +164,46 @@ public sealed class CompanionTests
         Assert.Contains("no uncertain input", response.GetProperty("next").GetString());
     }
 
-    // Core's own wording, not a copy: the classifier has to keep matching it when Core rewords it.
-    private static string CoreActivationFailure(int targetPid, nint foreground, int foregroundPid, string? name) =>
-        (string)
-            typeof(FlaUI.Mcp.Core.GuardedInput)
-                .GetMethod(
-                    "DescribeActivationFailure",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
-                )!
-                .Invoke(null, [targetPid, foreground, foregroundPid, name])!;
+    // A failed Core call as the tally reports it: Core's text for people, and its outcome with the refusal's code.
+    private static CoreCallException CoreRefusal(string code, string text = "Failed to click w1e5: Windows refused.") =>
+        new(
+            "windows_click",
+            new McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Text = text }],
+                Outcome = new ToolOutcome("not-dispatched", "not-tracked")
+                {
+                    Status = "failed",
+                    InputsSent = 0,
+                    Failure = new InputRefusal(code, text),
+                },
+            }
+        );
 
-    public static TheoryData<string, string, string> CoreActivationFailures() =>
+    public static TheoryData<Exception, string, string> CoreActivationFailures() =>
         new()
         {
+            { CoreRefusal("activation-denied"), "activation-denied", "title bar" },
             {
-                "Failed to click w1e5: " + CoreActivationFailure(7, 42, 9, "WindowsTerminal"),
+                // The page's own send, refused by GuardedInput, and a retry that wrapped the refusal.
+                new InvalidOperationException(
+                    "Retry failed",
+                    new InputRefusedException(new InputRefusal("activation-denied", "Windows kept another window."))
+                ),
                 "activation-denied",
                 "title bar"
             },
-            { CoreActivationFailure(7, 42, 7, null), "activation-denied", "title bar" },
-            { "Failed to type w1e2: " + CoreActivationFailure(7, 0, 0, null), "desktop-unavailable", "locked" },
+            { CoreRefusal("desktop-unavailable"), "desktop-unavailable", "locked" },
         };
 
     [Theory]
     [MemberData(nameof(CoreActivationFailures))]
-    public void ActivationBlockersNameTheBlockerInsteadOfSuggestingReplay(string error, string blocker, string guidance)
+    public void ActivationBlockersNameTheBlockerInsteadOfSuggestingReplay(
+        Exception error,
+        string blocker,
+        string guidance
+    )
     {
         var response = JsonDocument
             .Parse(Te3Companion.Failure("navigate", "Open Model menu", error).Content[0].Text!)
@@ -197,14 +214,24 @@ public sealed class CompanionTests
     }
 
     [Theory]
+    [InlineData("activation-denied: Windows kept 'WindowsTerminal' (PID 9) in the foreground instead of target PID 7.")]
     [InlineData("TE3 target {Value=activation-denied: x}: no element matched")]
     [InlineData("Search text 'desktop-unavailable:' was not found")]
     public void TextThatOnlyMentionsABlockerIsNotClassifiedAsOne(string error)
     {
         var response = JsonDocument
-            .Parse(Te3Companion.Failure("navigate", "search", error).Content[0].Text!)
+            .Parse(Te3Companion.Failure("navigate", "search", new InvalidOperationException(error)).Content[0].Text!)
             .RootElement;
         // The reply omits a null blocker.
+        Assert.False(response.TryGetProperty("blocker", out _));
+    }
+
+    [Fact]
+    public void ARefusalThatIsNotADesktopBlockerIsNotOne()
+    {
+        var response = JsonDocument
+            .Parse(Te3Companion.Failure("navigate", "click", CoreRefusal("point-not-on-target")).Content[0].Text!)
+            .RootElement;
         Assert.False(response.TryGetProperty("blocker", out _));
     }
 

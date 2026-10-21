@@ -12,7 +12,14 @@ public sealed class CompanionDispatchTests
     [Fact]
     public void AFailureAfterInputSaysInputWasSent()
     {
-        var reply = Reply(Te3Companion.Failure("navigate", "search", "Search text 'Date' was not found", 3));
+        var reply = Reply(
+            Te3Companion.Failure(
+                "navigate",
+                "search",
+                new InvalidOperationException("Search text 'Date' was not found"),
+                3
+            )
+        );
 
         Assert.True(reply.GetProperty("actionDispatched").GetBoolean());
         Assert.Equal(3, reply.GetProperty("inputsSent").GetInt32());
@@ -21,7 +28,14 @@ public sealed class CompanionDispatchTests
     [Fact]
     public void AFailureBeforeAnyInputSaysNoneWasSent()
     {
-        var reply = Reply(Te3Companion.Failure("attach", "validate request", "Tabular Editor 3 is not running.", 0));
+        var reply = Reply(
+            Te3Companion.Failure(
+                "attach",
+                "validate request",
+                new InvalidOperationException("Tabular Editor 3 is not running."),
+                0
+            )
+        );
 
         Assert.False(reply.GetProperty("actionDispatched").GetBoolean());
         Assert.Equal(0, reply.GetProperty("inputsSent").GetInt32());
