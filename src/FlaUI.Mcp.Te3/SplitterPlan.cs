@@ -12,6 +12,12 @@ public static class SplitterPlan
 
     /// <summary>Drag start and end, in screen pixels, that make <paramref name="pane"/> the requested size.</summary>
     /// <param name="documents">The neighbours that are document areas: a dock pane touching one keeps the splitter.</param>
+    /// <summary>The one size a resize asks for; refused before anything else when it names neither or both.</summary>
+    public static int RequireOne(int? width, int? height) =>
+        width is null == height is null
+            ? throw new ArgumentException("Pass exactly one of width or height; no input sent.")
+            : (width ?? height)!.Value;
+
     public static (Point From, Point To) Resize(
         Rectangle pane,
         IEnumerable<Rectangle> others,
@@ -21,11 +27,7 @@ public static class SplitterPlan
         IEnumerable<Rectangle>? documents = null
     )
     {
-        if (width is null == height is null)
-        {
-            throw new ArgumentException("Pass exactly one of width or height.");
-        }
-
+        RequireOne(width, height);
         var neighbours = others.Where(o => o != pane).ToList();
         var docs = (documents ?? []).ToHashSet();
         (Point, Point)? Plan(List<Rectangle> candidates) =>

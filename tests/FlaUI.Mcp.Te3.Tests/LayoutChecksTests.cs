@@ -160,4 +160,25 @@ public sealed class LayoutChecksTests
             Assert.True(step.GetProperty("skipped").GetBoolean());
         }
     }
+
+    [Theory]
+    [InlineData(480, 320, false)]
+    [InlineData(null, null, false)]
+    [InlineData(480, null, true)]
+    [InlineData(null, 320, true)]
+    public void AResizeNamesExactlyOneOfWidthAndHeightBeforeAnythingElse(int? width, int? height, bool valid)
+    {
+        // The skip for a pane already at its size took the width and ignored a height passed with it.
+        if (valid)
+        {
+            Assert.Equal(width ?? height, SplitterPlan.RequireOne(width, height));
+        }
+        else
+        {
+            Assert.Contains(
+                "exactly one",
+                Assert.Throws<ArgumentException>(() => SplitterPlan.RequireOne(width, height)).Message
+            );
+        }
+    }
 }

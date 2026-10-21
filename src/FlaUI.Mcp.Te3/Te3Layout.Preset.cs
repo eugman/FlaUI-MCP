@@ -57,16 +57,13 @@ public sealed partial class Te3Layout
     // A drag that leaves the pane outside the tolerance fails the call, for resize as for each preset step.
     private async Task<object> Resize(InputTally inputs, string handle, Window window, string title, JsonElement a)
     {
+        var target = SplitterPlan.RequireOne(GetArgument<int?>(a, "width"), GetArgument<int?>(a, "height"));
         var parts = Parts(window);
         var pane = FindPane(window, title);
         var before = pane.Container.BoundingRectangle;
         var others = parts.Where(p => p.Title != pane.Title).Select(p => p.Container.BoundingRectangle).Distinct();
         var documents = parts.Where(p => p.Kind == "document").Select(p => p.Container.BoundingRectangle);
         var width = GetArgument<int?>(a, "width");
-        var target =
-            width
-            ?? GetArgument<int?>(a, "height")
-            ?? throw new ArgumentException("resize needs width or height; no input sent.");
         var current = width is null ? before.Height : before.Width;
         if (LayoutChecks.AlreadyThere(target, current))
         {
