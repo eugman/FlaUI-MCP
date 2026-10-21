@@ -16,13 +16,15 @@ using FlaUI.Mcp.Te3;
 /// <param name="attach">The layout for a call; null attaches to the running TE3. Tests pass a scripted one.</param>
 /// <param name="settings">TE3's settings folder for snapshot and restore; null is the user's. Tests pass their own.</param>
 /// <param name="running">The running TE3 process IDs; null reads them. Tests pass their own.</param>
+/// <param name="snapshots">The folder snapshots must stay under; null is <see cref="LayoutFiles.DefaultRoot"/>.</param>
 public sealed partial class Te3Layout(
     AutomationHost host,
     Te3Interaction? interaction = null,
     bool readOnly = false,
     Func<JsonElement, InputTally, ILayoutSurface>? attach = null,
     string? settings = null,
-    Func<int[]>? running = null
+    Func<int[]>? running = null,
+    string? snapshots = null
 ) : ToolBase
 {
     public const string ToolName = "te3_layout";
@@ -81,11 +83,13 @@ public sealed partial class Te3Layout(
             return TextResult(JsonSerializer.Serialize(plan, McpProtocol.JsonOptions));
         }
 
-        using var guard = readOnly ? null : grant.Guard();
+        // Files only, no desktop: no grant (a restore still refuses while TE3 runs).
         if (GetStringArgument(a, "action") is "snapshot" or "restore")
         {
             return TextResult(JsonSerializer.Serialize(SettingsFiles(a), McpProtocol.JsonOptions));
         }
+
+        using var guard = readOnly ? null : grant.Guard();
 
         var (surface, handle, window) = Attach(a, inputs);
         object result = GetStringArgument(a, "action") switch
@@ -122,19 +126,15 @@ public sealed partial class Te3Layout(
     }
 
     // snapshot / restore: TE3's layout files, with no TE3 window needed (see LayoutFiles).
-    private object SettingsFiles(JsonElement a)
-    {
-        var folder = settings ?? SettingsLease.DefaultDirectory;
-        var path = Path.GetFullPath(Required(a, "path"));
-        return GetStringArgument(a, "action") == "snapshot"
-            ? LayoutFiles.Snapshot(folder, path)
-            : LayoutFiles.Restore(
-                path,
-                folder,
-                te3Running: (running ?? Te3Companion.RunningTe3)().Length > 0,
-                whileRunning: GetArgument<bool?>(a, "whileRunning") ?? false
-            );
-    }
+    private object SettingsFiles(JsonElement a) =>
+        LayoutFiles.Run(
+            GetStringArgument(a, "action") == "snapshot",
+            Required(a, "path"),
+            snapshots ?? LayoutFiles.DefaultRoot,
+            settings ?? SettingsLease.DefaultDirectory,
+            () => (running ?? Te3Companion.RunningTe3)().Length > 0,
+            GetArgument<bool?>(a, "whileRunning") ?? false
+        );
 
     private static Window Live(Window? window) =>
         window ?? throw new InvalidOperationException("This action needs the live TE3 window.");

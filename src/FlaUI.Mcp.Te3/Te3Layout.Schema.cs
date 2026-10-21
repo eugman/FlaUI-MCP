@@ -65,9 +65,10 @@ public sealed partial class Te3Layout
                 + "close-document: press a document tab's own Close (DAX Query, DAX Package Manager), refused before "
                 + "input for a pane or an unknown title, and read back as gone; a dialog it opens is reported. "
                 + "snapshot: copy Layouts.json, UiPreferences.json and Preferences.json from %LocalAppData%/TabularEditor3, which TE3 rewrites on "
-                + "close, into `path` (a new folder) with their hashes; restore: copy a snapshot back and read it back, "
+                + "close, into `path` (a new folder under the host's snapshot folder) with their hashes; restore: copy a snapshot back and read it back, "
                 + "refused while TE3 runs unless `whileRunning` (the user asked) and when the snapshot changed. "
-                + "Every action takes desktop focus and needs an active te3_interaction_begin grant. No model edits. "
+                + "Every other action takes desktop focus and needs an active te3_interaction_begin grant; snapshot and "
+                + "restore touch only files and need none. No model edits. "
                 + "Reads (list, show-pane, plan-preset) are te3_layout_read.";
 
     public override object InputSchema =>

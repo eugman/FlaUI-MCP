@@ -34,7 +34,11 @@ public sealed class LayoutFilesTests : IDisposable
         Assert.Equal(3, Directory.GetFiles(Snapshot, "*.json").Count(f => Path.GetFileName(f) != LayoutFiles.Manifest));
         Assert.True(File.Exists(Path.Combine(Snapshot, LayoutFiles.Manifest)));
         Assert.False(File.Exists(Path.Combine(Snapshot, "RecentFiles.json")));
-        Assert.Equal(3, result.GetProperty("files").GetArrayLength());
+        // The reply carries each file's hash, as the snapshot's own list does.
+        Assert.Equal(
+            ArtifactFiles.Sha256(Path.Combine(settings, "Layouts.json")),
+            result.GetProperty("files").GetProperty("Layouts.json").GetString()
+        );
     }
 
     [Fact]
@@ -89,22 +93,73 @@ public sealed class LayoutFilesTests : IDisposable
     }
 
     [Fact]
-    public async Task TheLayoutToolSnapshotsAndRefusesARestoreWhileTe3RunsBeforeAnyInput()
+    public void RestoreListsTheHashesItVerifiedAndRemovesAFileTheSnapshotDidNotHave()
     {
-        using var interaction = new Te3Interaction(() => 0);
-        interaction.Begin("arrange TE3", userApproved: true);
-        var tool = new Te3Layout(null!, interaction, settings: settings, running: () => [4242]);
+        // Layouts.json did not exist when the snapshot was taken: putting the snapshot back means removing it.
+        File.Delete(Path.Combine(settings, "Layouts.json"));
+        LayoutFiles.Snapshot(settings, Snapshot);
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), """{"Version":2,"Layouts":["new"]}""");
+
+        var result = JsonSerializer.SerializeToElement(
+            LayoutFiles.Restore(Snapshot, settings, te3Running: false, whileRunning: false)
+        );
+
+        Assert.False(File.Exists(Path.Combine(settings, "Layouts.json")));
+        Assert.Equal(["Layouts.json"], result.GetProperty("removed").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal(
+            ArtifactFiles.Sha256(Path.Combine(settings, "Preferences.json")),
+            result.GetProperty("restored").GetProperty("Preferences.json").GetString()
+        );
+    }
+
+    private Te3Layout Tool(Te3Interaction interaction, Func<int[]>? running = null) =>
+        new(null!, interaction, settings: settings, running: running ?? (() => []), snapshots: root);
+
+    [Fact]
+    public async Task SnapshotAndRestoreNeedNoGrantSinceTheyTouchOnlyFiles()
+    {
+        using var noGrant = new Te3Interaction(() => 0);
+        var tool = Tool(noGrant);
 
         var taken = await tool.ExecuteAsync(
-            JsonSerializer.SerializeToElement(new { action = "snapshot", path = Snapshot })
+            JsonSerializer.SerializeToElement(new { action = "snapshot", path = "snapshot" })
         );
-        var refused = await tool.ExecuteAsync(
-            JsonSerializer.SerializeToElement(new { action = "restore", path = Snapshot })
+        var restored = await tool.ExecuteAsync(
+            JsonSerializer.SerializeToElement(new { action = "restore", path = "snapshot" })
         );
 
         Assert.NotEqual(true, taken.IsError);
+        Assert.NotEqual(true, restored.IsError);
         Assert.True(File.Exists(Path.Combine(Snapshot, LayoutFiles.Manifest)));
+    }
+
+    [Fact]
+    public async Task ARestoreWhileTe3RunsIsRefusedBeforeAnyCopy()
+    {
+        using var noGrant = new Te3Interaction(() => 0);
+        var tool = Tool(noGrant, () => [4242]);
+        await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { action = "snapshot", path = "snapshot" }));
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "changed");
+
+        var refused = await tool.ExecuteAsync(
+            JsonSerializer.SerializeToElement(new { action = "restore", path = "snapshot" })
+        );
+
         Assert.Equal(true, refused.IsError);
-        Assert.Equal(0, refused.Outcome?.InputsSent);
+        Assert.Equal("changed", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
+    }
+
+    [Theory]
+    [InlineData("..\\outside")]
+    [InlineData("C:\\Windows\\Temp\\snap")]
+    public async Task ASnapshotPathOutsideTheSnapshotRootIsRefused(string path)
+    {
+        using var noGrant = new Te3Interaction(() => 0);
+
+        var refused = await Tool(noGrant)
+            .ExecuteAsync(JsonSerializer.SerializeToElement(new { action = "snapshot", path }));
+
+        Assert.Equal(true, refused.IsError);
+        Assert.False(Directory.Exists(Path.GetFullPath(Path.Combine(root, path))));
     }
 }
