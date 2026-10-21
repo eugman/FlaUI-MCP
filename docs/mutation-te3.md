@@ -29,7 +29,11 @@ A surviving mutant is either a missing test, which you fix with a red-green test
 
 ## Latest run
 
-On 2026-10-20, run at `f463ab9`, before the input-accounting, journal, retry and cancel fixes that followed it (`93a3e6b` onwards) and before the merge of Core `9b6cdc4`, which moved input counting, retries and refusals onto Core's outcome (`CoreCallException.cs` replaces `InputProof.cs`, and `GrantedTool.cs` is gone). The scores and the survivor list below describe that commit; rerun `pwsh scripts/coverage-te3.ps1 -Mutation` for the current code. That run tested 871 mutants, 757 killed, 5 timed out and 109 survived. The covered-mutant score is 87.5%; the score over all mutants is 28.5%, because 1801 mutants have no covering test. Almost all of the uncovered ones are in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs` and drive the live TE3 desktop, so only the integration tests can reach them. The first run scored 75.6% covered, with 208 survivors; tests killed 99 of them, and `e84d006` kills 6 more.
+On 2026-10-21, run at `e75f4df` (the Core `9b6cdc4` merge and its adaptation, plus the tests below), concurrency 1, 489 offline tests and no desktop tests. Coverage: 35.9% of lines, 30.2% of branches. Stryker tested 1161 mutants: 994 killed, 5 timed out and 162 survived. The covered-mutant score is 86.0%; the score over all mutants is 34.2%, because 1761 mutants have no covering test, almost all in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs`, which drive the live TE3 desktop.
+
+The first run on the adapted code, at `daeb643`, tested 1153 mutants: 936 killed, 6 timed out, 211 survived (81.7% covered, 32.2% overall). `e75f4df` (`AdaptationMutationTests`, plus a backlog-in-a-worktree test and a workspace schema whose `properties` is not an object) kills 49 of those. The survivors that remain are listed below, or are tool descriptions and `InputSchema` text (most of `Te3Layout.Schema.cs`, `Te3InteractionTool.cs`, `Te3NativePreflightTool.cs` and `Te3Companion.cs`'s schema), or need TE3 (`Te3Page.cs`).
+
+The run before the merge, at `f463ab9` on 2026-10-20, scored 87.5% covered and 28.5% overall over 871 mutants.
 
 ## Equivalent and accepted survivors
 
@@ -46,11 +50,16 @@ On 2026-10-20, run at `f463ab9`, before the input-accounting, journal, retry and
 - `Te3Interaction.Begin`, `reason = "approved."`: the reason is shown only once the batch has ended or been revoked, and both overwrite it.
 - `Te3NativePreflightTool.Create`, the `HttpClient.Timeout`: each request already has a 10 s deadline and the whole probe 25 s, so the client timeout never fires first.
 - `Te3Page`'s `Indented` options: the text is used only for the human-readable output.
+- `CoreCallException.Outcome`, the `"unknown"` fallback: Core's registry always sets an outcome, and the fallback is only compared with `not-dispatched` and `pending`, which `""` does not match either.
+- `CoreFailure.Outcome` for an `InputRefusedException`, the `"not-dispatched"` and `"not-tracked"` texts: that outcome is read only for its refusal; `Reply` takes dispatch from the count and `MayStillGoOut` is false for both values.
+- `InputTally.Dispatch`, the counter's `Tool` name: the operation it names is never registered or shown.
+- `DialogCancel.TryResolve`, the catch body removed: the method then falls through to the same `null`.
+- `NavigationRetry.Once`, the plural `s` in "sent N inputs": text only.
 
 **Accepted: needs the desktop or a live TE3**
 
 - `Te3Interaction.Begin` (`physicalInput == null`) and `Dispose` (`observer?.Dispose()`): only the real keyboard and mouse hook takes these branches, and offline tests never install it.
-- `Te3Companion.ExecuteAsync`, the pending-call check: it runs after attaching to a TE3 window.
+- `Te3Companion.ExecuteAsync` and `Attach`, the pending-call check and the `TabularEditor3` process-name check: they run after attaching to a TE3 window. The blocked outcome they produce is tested through `Te3Companion.Failure`.
 - `Te3Page` selector literals (`OpenFileNameTarget`, `PreferencesTarget`, `McpServerMarkerTarget`, `TomChangesTarget`, `IsPreferencesLookup`) and `WaitForAbsenceAsync` timing: the integration tests check these against TE3.
 - `Te3Page.ParkPoint` and `ScalarSceneBounds` at a few pixels from the edge: the offline tests check that the point stays inside the window, not its exact offset.
 
