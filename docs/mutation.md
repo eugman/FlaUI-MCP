@@ -19,19 +19,46 @@ Separately, the offline test assembly sets `FLAUI_OFFLINE_TESTS=1` before any te
 
 - 2026-10-20: the first runs started Stryker from the repository root. Stryker found `FlaUI.Mcp.slnx` and ran every test project in it, including `FlaUI.Mcp.IntegrationTests`, although `test-projects` named only the offline project. Those runs launched the WinForms and WPF test apps and took focus, once while the machine was in use. Two test apps were left running after a run was stopped. The script now runs Stryker inside the offline project and checks its log before any test runs (see above). Scores from those runs are discarded.
 
-## Results
+## Latest run
 
-Run on 2026-10-21 at commit 7fa11b4, concurrency 1, 608 offline tests and no desktop tests. The score counts mutants with no covering test as survivors.
+Run on 2026-10-21 at commit 2352395, concurrency 1, 667 offline tests and no desktop tests. The score counts mutants with no covering test as survivors. One survivor from this run, the cross-process activation text, was killed afterwards with a test in `FinalMutationTests`.
 
 | Part | Files | Score | Killed | Timed out | Survived | No coverage |
 |---|---|---|---|---|---|---|
-| guards | GuardedInput, ProcessIntegrity, WindowMutation, ClickPoint, InputRefusal | 81.51% | 213 | 3 | 9 | 40 |
-| state | ElementRegistry, PendingInvokeTracker, OperationContext | 86.99% | 126 | 1 | 7 | 12 |
-| protocol | McpServer, McpLineTransport, ToolRegistry | 91.63% | 210 | 9 | 8 | 12 |
-| pointer | ClickTool (now with ClickToolReplies), MouseTool | 50.27% | 186 | 2 | 11 | 175 |
-| keyboard | SendKeysTool, TypeTools, BatchTool | 88.03% | 396 | 1 | 17 | 37 |
+| guards | GuardedInput, GuardedDesktop, ProcessIntegrity, WindowMutation, ClickPoint, InputRefusal | 82.43% | 258 | 0 | 16 | 39 |
+| state | ElementRegistry, PendingInvokeTracker, OperationContext | 87.16% | 128 | 1 | 7 | 12 |
+| protocol | McpServer, McpLineTransport, ToolRegistry, ToolBase | 90.51% | 233 | 15 | 8 | 18 |
+| pointer | ClickTool, ClickToolReplies, MouseTool, PointerActions | 49.36% | 192 | 1 | 14 | 184 |
+| keyboard | SendKeysTool, TypeTools, BatchTool | 88.34% | 405 | 4 | 17 | 37 |
 
-The first run with only the offline tests scored 77.74%, 73.29%, 72.38%, 24.87% and 62.97% for the same parts. The tests that killed the difference are in `GuardMutationTests`, `StateMutationTests`, `ProtocolMutationTests`, `StrandedCallMutationTests`, `PointerMutationTests`, `KeyboardMutationTests` and `ToolSchemaTests`.
+The first run with only the offline tests scored 77.74%, 73.29%, 72.38%, 24.87% and 62.97% for the same parts. The tests that killed the difference are in `GuardMutationTests`, `StateMutationTests`, `ProtocolMutationTests`, `StrandedCallMutationTests`, `PointerMutationTests`, `KeyboardMutationTests`, `FinalMutationTests` and `ToolSchemaTests`.
+
+## Coverage
+
+Line and branch coverage of the mutated files at the same commit, from `pwsh scripts/coverage.ps1` (whole assembly: 60.7% of lines, 49.8% of branches). The low tool numbers are the UI Automation paths listed under "Not reachable offline".
+
+| File | Line | Branch |
+|---|---|---|
+| Core/GuardedInput.cs | 85.1% (246/289) | 84.3% (86/102) |
+| Core/ProcessIntegrity.cs | 88.1% (59/67) | 90.5% (38/42) |
+| Core/WindowMutation.cs | 100.0% (80/80) | 100.0% (16/16) |
+| Core/ClickPoint.cs | 73.1% (57/78) | 57.1% (16/28) |
+| Core/InputRefusal.cs | 100.0% (22/22) | 100.0% (2/2) |
+| Core/ElementRegistry.cs | 81.2% (121/149) | 70.5% (31/44) |
+| Core/PendingInvokeTracker.cs | 96.7% (87/90) | 94.4% (17/18) |
+| Core/OperationContext.cs | 100.0% (77/77) | 100.0% (30/30) |
+| Mcp/McpServer.cs | 96.6% (168/174) | 98.5% (67/68) |
+| Mcp/McpLineTransport.cs | 86.4% (108/125) | 90.0% (45/50) |
+| Mcp/ToolRegistry.cs | 98.4% (187/190) | 97.4% (76/78) |
+| Tools/ClickTool.cs | 42.0% (126/300) | 29.5% (43/146) |
+| Tools/MouseTool.cs | 33.2% (62/187) | 12.5% (8/64) |
+| Tools/SendKeysTool.cs | 87.4% (222/254) | 90.9% (80/88) |
+| Tools/TypeTools.cs | 64.3% (191/297) | 71.8% (56/78) |
+| Tools/BatchTool.cs | 100.0% (153/153) | 96.2% (50/52) |
+| Core/GuardedDesktop.cs | 100.0% (12/12) | 100.0% (2/2) |
+| Mcp/ToolBase.cs | 86.9% (73/84) | 66.7% (12/18) |
+| Tools/ClickToolReplies.cs | 100.0% (42/42) | 100.0% (30/30) |
+| Tools/PointerActions.cs | 72.3% (47/65) | 75.0% (9/12) |
 
 ## Equivalent mutants
 
@@ -54,6 +81,8 @@ No test can tell these from the original.
 - `ClickTool.Settled`, `waited < timeoutMs` changed to `<=`: one more 50 ms poll.
 - `MouseTool.Drag` `Thread.Sleep(StepDelay)` and `SendKeysTool` `Thread.Sleep(30)` with its `!hasChord` condition: pacing only.
 - `SendKeysTool.SplitChord`, the blank-input early return: splitting a blank string yields no parts either way.
+- `ClickGeometry.Scroll`, `GuardedDesktop.SetClipboardText`, the `OperationContext.Check()` calls before the lease and inside the pattern call: the lease waits on the operation's token, and `ModalAwareInvoker` checks it again before the call runs.
+- `PointerActions.Move`, the `hoverMs > 0` comparison: the hover is clamped to 0 or more, and a 0 ms sleep is no sleep. `PointerActions.Drag`'s step delay is pacing only.
 
 ## Not reachable offline
 
