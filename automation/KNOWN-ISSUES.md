@@ -18,15 +18,13 @@ Seen in TE3 3.27.1 at 125%. TOM Explorer and Properties touch with no gap. A dra
 
 Changed in the host: `te3_layout resize` starts the drag 3 px inside the upper or left pane when two dock panes touch or are at most 2 px apart, and fails with `undocked: true` and a next action when a new titled window of the TE3 process appears after the drag. Neither is verified live. The host does not check that the pointer is on the splitter before the drag (the resize cursor shape is not read).
 
-## A dock pane touching a document on its left did not resize
+## A dock pane touching a document on its left did not resize (closed)
 
-Seen in TE3 3.27.1 at 125%, window restored at (0,0,1920,1080). `apply-preset assistant-model-review` moved AI Assistant (left of the Expression Editor document) from 638 to 680 with a drag 3 px inside AI Assistant. The next step dragged 3 px inside the document, left of TOM Explorer, to narrow TOM Explorer from 760 to 480. TOM Explorer stayed at 760, nothing undocked, and the preset stopped. The call sent 30 inputs in all, about 15 per drag (Core's drag is a press, 12 moves and a release). The reply did not say what the drag reached.
+Seen in TE3 3.27.1 at 125%, window restored at (0,0,1920,1080): the TOM Explorer drag, 3 px inside the document, left TOM Explorer at 760.
 
-Changed in the host: beside a document the drag now starts 3 px inside the dock pane, since the splitter is the dock pane's border (the AI Assistant drag shows this). Between two dock panes it stays in the upper or left pane. Each preset step is one drag followed by a measured check, and the preset stops at the first miss. The error names the edge dragged, the drag's start and end in window pixels, the requested and reached size and the attempt count. Each step reports requested, reached, attempts and inputs, and after a failure the reply carries `layoutAfterFailure`, the pane list read back after the failure. The new drag point beside a document needs live verification. The reply's Core outcome is still `partial` with verification `not-established`, so the broker still quarantines the host after a failed step.
+Fixed in the host and verified live on 2026-10-21 (te3-d276329): `apply-preset assistant-model-review` passed in 3 steps, 1 attempt and 15 inputs each, 45 in all. AI Assistant 663 -> 680 (drag (661,573)->(678,573)); TOM Explorer 739 -> 480 with the drag starting 3 px inside TOM Explorer, (1183,375)->(1442,375); Properties 397 -> 320 (drag (1679,647)->(1679,724), just above the shared edge). Nothing undocked.
 
-Workaround: after a failed preset, read `layoutAfterFailure` (or `te3_layout_read list`) before retrying. Resize the pane by hand if the host drag misses again.
-
-Workaround: if a resize fails with `undocked: true`, dock the pane again by hand and check `te3_layout_read list` before retrying.
+Side effect: TE3 rewrites `%LocalAppData%\TabularEditor3\Layouts.json`, `UiPreferences.json` and `Preferences.json` when it closes, so the preset (and the window state) persists into the next launch. Snapshot those files before a run and restore them afterwards with TE3 closed.
 
 ## Show changes hides everything else in TOM Explorer
 

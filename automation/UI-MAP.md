@@ -147,7 +147,7 @@ View popup (3.27.1): Button `Properties` shows shortcut F4. Its ancestry is a na
 
 Pane bounds from `te3_layout_read list` (UIA-window-relative): AI Assistant (0,61,1000,1017), Expression Editor document (1000,61,160,1017), TOM Explorer (1160,61,760,590), Properties (1160,651,760,427). `maximize-pane Properties` gave TOM Explorer height 36 and Properties (1160,97,760,981); `restore-pane` returned the original sizes.
 
-Coordinate spaces: `te3_layout_read list` is relative to the UIA window rectangle; a `strictNative` capture's origin is the native window rectangle. Maximized, a listed point maps to PNG pixels at (+9, +39). Restored and placed at (0,0,1920,1080), the UIA root is (1,39,1918,1040) and a listed point maps at about (+1, +39). Use `windows_screenshot` with `locate` instead of converting: located AI Assistant (9,100,1000,1017), Properties (1169,690,760,427) and the menu bar (9,39,1920,29) matched the pixels.
+Coordinate spaces (Verified, 3.27.1, 2026-10-21, host te3-d276329): with the window placed restored at (0,0,1920,1080), `te3_layout_read list` bounds equal window and PNG pixels: AI Assistant lists at (1,100,...) and its title bar is at PNG y about 103, and the located BPA content (1444,132) sits inside the listed TOM/BPA container (1439,100,480,627). The earlier "+1, +39 restored" offset is stale; maximized offsets were (+9, +39) on an earlier build. TE3 remembers its window state (UiPreferences.json `RememberWindowState`), so it can start restored: call `windows_set_window_state` before relying on maximized offsets. Use `windows_screenshot` with `locate` rather than converting.
 
 Touching panes: the TOM Explorer and Properties containers share an edge (y 651) with no gap. The splitter sits in TOM Explorer's last rows; y 651 is the top of the Properties title bar.
 
@@ -164,3 +164,42 @@ TOM Explorer row depth (Verified, 3.27.1, 2026-10-21): every TreeItem `NodeN` sp
 | Open File | owned Window `Open File` from toolbar Button `Open...` | Observed 3.27.1 (2026-10-21): ID `1148` is shared by a Pane, ComboBox `File name:` and Edit `File name:`; keep the Edit constraint. ComboBox `Files of type:` is `1136`. Cancel is Button `Cancel`, ID `2`. |
 | Preferences | Window `Preferences` | Observed 3.27.1: Cancel is Button `Cancel` (numeric ID, unstable). All six `preferences/*` destinations arrived with the Preferences window left open between calls. |
 | MCP Server | Window `MCP Server`, Pane `McpServerDialog` > `layoutControl` | Observed 3.27.1: Buttons `OK`, `Start server`, `Copy`; SplitButton `Export configuration`; read-only Edit `Server URL:`; permission ComboBoxes `Model metadata:` (Deny/Read/Read-Write), `Model data:` (Deny/Read), `Best Practice Analyzer:`, `Documents:`, `Macros:`. Observed only; no permission changed. |
+
+## Verified map, TE3 3.27.1 (2026-10-21)
+
+Every row below was observed live on 3.27.1 Enterprise (SpaceParts, `localhost sp-demo-mcp`, 1920x1200 at 125%, host te3-d276329). Verified: yes.
+
+| Name | ControlType | AutomationId | ClassName | Parent chain | Notes |
+|---|---|---|---|---|---|
+| `NodeN` (Value = label) | TreeItem | - | - | Tree `treeList` > Pane `TabularExplorerView` | Invoke, Value, SelectionItem; no ExpandCollapse; same x and width on every row. `treeList` has no patterns |
+| `Name row N` (Value = label) | DataItem | - | - | TreeItem row N > treeList | x = TreeItem.x + 48 + 24 x depth (model root = depth 0); Invoke and Value only |
+| `Vertical` | ScrollBar | (numeric) | WindowsForms10 | treeList | Value = index of the first visible row. Only rows in view are realized |
+| `Properties` | Pane | `PropertyGrid` | WindowsForms10 | `panelContainer1` > Main | TitleBar Close, Auto Hide, Maximize |
+| category (`Metadata`, `Misc`) | TreeItem | - | - | Table `propertyGrid` | Invoke, SelectionItem |
+| property name | Header | - | - | `propertyGrid` > Row Headers | |
+| property value (named like the property, e.g. `ObjectType`) | DataItem | - | - | `propertyGrid` > Cells | Value pattern. A display folder shows Name, ObjectType `Folder` and Path |
+| `barEditItem1` | ComboBox | - | - | ToolBar `Tools` > Properties | property search box |
+| `Status bar` | StatusBar | (numeric) | - | Main | Text `Static` slots (text in Value), Button `<n> BP issues`, Button `MCP Stopped`. The load slot can be blank; the selection slot does not follow a selected display folder |
+| `Messages` | Pane | `Messages` | WindowsForms10 | Main | `MessagesView` > Table `MainView` (`gridControl1`); Headers Object, Type, Message, Caused by, Line, Column. Docks at the bottom, 200 px |
+| `Macros` | Pane | `ManageMacros` | WindowsForms10 | Main | `ManageMacrosView` > ToolBar `Tools`: Open macro, Edit macro properties, Delete macro. Docks at the bottom only 50 px tall |
+| `Best Practice Analyzer` | Pane | `BestPracticeAnalyzer` | WindowsForms10 | Tab `Tabular Editor 3` (shared with TOM Explorer) | `BestPracticeAnalyzerView` > Tree `treeBpa`; row Value `rule (n objects);;sev;category`. ToolBar: Manage rules..., Go to object, Ignore object (Toggle), Generate fix script, Apply fix, Expand all, Collapse all, Show ignored (Toggle), Refresh |
+| `Data Refresh` | Pane | `ModelProcessing` | WindowsForms10 | Main | `ModelProcessingView` > treeList; Cancel All, Cancel, Clear completed, Clear queued, Pause (Toggle), Expand all, Collapse all. Bottom, 200 px |
+| `VertiPaq Analyzer` | Pane | `VertiPaqAnalyzer` | WindowsForms10 | Main | Buttons Summary, Tables, Columns, Relationships, Partitions, Collect Stats, Import, Export. Bottom, 200 px |
+| `Dependencies` | Window (floating) | `DaxDependencies` | WindowsForms10.Window.8 | top-level, owner 0 | Opens floating from View. Not a tool window: style 0x16010000, exstyle WS_EX_APPWINDOW, no WS_EX_TOOLWINDOW, owner 0 (shows in Alt-Tab); listed by windows_list_windows with its own handle. `DaxDependencyView`; RadioButtons Objects that depend on this, Objects on which this depends, Relationships starting from this table; CheckBoxes `chkTrackTomExplorer`, `chkShowInactive` |
+| `DAX Package Manager` | Window (document) | `DaxPackageManager` | - | Tab document group | Opens as a document from View. `searchControl`; Browse, Installed, Updates (`checkButton_*`); `checkEdit_ShowPreview`; `gridControl_Packages`; Provider `checkedComboBoxEdit_Providers` |
+| `DAX Query 1` | Pane (document) | GUID | - | document group | File > New > New DAX Query. `daxEditor` > `daxscilla`; the menu bar shows `Query` |
+| document tab `Close` | Button | - | - | TabItem `<doc>` > Tab | Invoke closes an unmodified document without a prompt |
+| Window menu entries | Button / MenuItem | - | - | owned popup Menu | New... (submenu), Float, Pin Tab, Close All, Reset Window Layout, `1 <doc>`, Windows..., Capture Layout, Layouts..., Default layout, Classic layout, Theme (submenu), Default palette, Language (submenu) |
+| `Layouts` | Window | `openedWindowsDialog` | WindowsForms10 | owned by Main | Apply Layout, Load Layout..., Remove Layout, Remove All Layouts, Save Layout, Save Layout As..., OK. Rows of list `documentListBox` are not exposed; lists `Default` and `Classic`. Close with TitleBar `Close` (aid `Close`) |
+| Preferences > Keyboard | Pane | `Tabular Editor.Keyboard` | - | `pnlSectionContent` | Edit `Show commands containing:`; List of 388 ListItems named `Area.Command`; ComboBox `Shortcuts for selected command:`; Edit `Press shortcut keys:`; Assign shortcut; Remove shortcut; Reset all |
+| Preferences tree | TreeItem `Node0..17` | - | - | `treePreferences` | Tabular Editor, Power BI, Proxy Settings, Modeling Operations, Updates and Feedback, User Interface, TOM Explorer, DAX Debugger, Keyboard, Miscellaneous, AI Features, AI Assistant, MCP Server, Permissions, Data Browsing, Pivot Grid, DAX Query, Table Preview (more below the scroll) |
+| `MCP Server` | Window | - (Pane `McpServerDialog`) | - | owned | Edit `urlEdit`, Button `urlCopyButton`, permission ComboBoxes, Button `startStopButton` (Start server), SplitButton `exportButton`, Button `Open audit folder`, OK, TitleBar Close. No Cancel and no auto-start control (that is Preferences > AI Features > MCP Server) |
+| `Tabular Editor Deployment Wizard` | Window | `DeploymentWizard` | - | owned | `wizardControl1`; page `pg00Welcome` "Tabular Model Deployment"; `< Back`, `Next >`, `Cancel` |
+| `Open File` | Window | - | - | owned, from toolbar `Open...` | File name `1148` (ComboBox + Edit; keep the Edit constraint), Files of type `1136`, Cancel |
+| Main menu (MSAA) | menu items | hwnd of MenuBar | - | Main | Alt mnemonics: File Alt+F, Edit Alt+E, View Alt+V, Model Alt+M, Tools Alt+O, Window Alt+W, Help Alt+H. The contextual menu (Expression Editor / Query / Table Permission) has none. windows_find does not expose AccessKey |
+| View popup items | Button | - | - | owned popup | No mnemonics; the only shortcut shown is F4 on `Properties` |
+| File menu shortcuts | - | - | - | File popup | Close Document Ctrl+W, Save Ctrl+S, Save All Ctrl+Shift+S, Exit Alt+F4, New > Model... Ctrl+N. The 3.27.1 File menu has `Reload from server` (not Revert) |
+
+Keyboard commands (Preferences > Keyboard): TOM Explorer Show changes is bindable as `TomExplorer.ToggleChangedOnly`; the Properties grid's Show changes has no command. Also bindable: `Window.CaptureLayout`, `Window.Layouts...`, a `View.*` command per pane (including `View.GitChanges`), `StatusBar.BarStatusMcp`, `Tools.McpServerDetails` and the `TomExplorer.Toggle*` filters. No command exists for Reset Window Layout, Default or Classic layout, or Float. `KeyboardCustomizations` in UiPreferences.json is `{"Custom":{}}`.
+
+Settings files: `%LocalAppData%\TabularEditor3\Layouts.json` (Version 2; `Layouts[]` with Panels Dock/Type/SizeFactor/Visibility/FloatPosition, and Menus; `DaxDependencies` and `FindReplace` are `Dock: Float` by default), `UiPreferences.json` (RememberWindowBounds, RememberWindowState, MainWindowState, MainWindowRectangle, ModelSourceDetail, ShowWhatsNew) and `Preferences.json` (`Mcp`: Enabled, Port 42100, AutoStart false). TE3 rewrites all three when it closes, so a preset applied in a session persists into the next launch. No policies were set (`HKCU`/`HKLM\Software\Policies\Tabular Editor ApS\TE3` absent).
