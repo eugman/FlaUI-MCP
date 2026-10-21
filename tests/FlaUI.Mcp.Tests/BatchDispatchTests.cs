@@ -11,7 +11,7 @@ public sealed class BatchDispatchTests
     private static JsonElement[] Rows(string json) => JsonSerializer.Deserialize<JsonElement[]>(json)!;
 
     [Fact]
-    public async Task DispatchesExistingToolsInOrderWithOriginalArguments()
+    public async Task DispatchesExistingToolsInOrderWithTheirOwnArguments()
     {
         var rows = Rows(
             """[{"action":"fill","ref":"target","value":"text"},{"action":"snapshot","handle":"window"}]"""
@@ -27,7 +27,11 @@ public sealed class BatchDispatchTests
         );
         Assert.NotEqual(true, result.IsError);
         Assert.Equal(new[] { "windows_fill", "windows_snapshot" }, calls.Select(c => c.Tool));
-        Assert.Equal(rows.Select(r => r.GetRawText()), calls.Select(c => c.Json));
+        // The step's own arguments, without the batch-only "action".
+        Assert.Equal(
+            new[] { """{"ref":"target","value":"text"}""", """{"handle":"window"}""" },
+            calls.Select(c => c.Json)
+        );
     }
 
     [Theory]

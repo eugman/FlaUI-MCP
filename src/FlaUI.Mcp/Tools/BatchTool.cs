@@ -154,7 +154,7 @@ public sealed class BatchTool : ToolBase
                 "snapshot" => "windows_snapshot",
                 _ => throw new ArgumentException($"Unknown action: {op}"),
             };
-            var result = await invoke(tool, row);
+            var result = await invoke(tool, ToolArguments(row));
             trace.Add($"{number}. {op}: {string.Join("\n", result.Content.Select(c => c.Text ?? ""))}");
             steps.Add(new(number, op, result.IsError == true, result.Outcome));
             if (result.Outcome?.IsPending == true)
@@ -174,6 +174,17 @@ public sealed class BatchTool : ToolBase
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// The row without its batch-only keys. "action" names the batch step; passed on, it would reach
+        /// windows_click as its own action argument and force a mouse click on every click row.
+        /// </summary>
+        private static JsonElement ToolArguments(JsonElement row)
+        {
+            var arguments = System.Text.Json.Nodes.JsonNode.Parse(row.GetRawText())!.AsObject();
+            arguments.Remove("action");
+            return JsonSerializer.SerializeToElement(arguments);
         }
 
         private async Task Wait(JsonElement row, int number)
