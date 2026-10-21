@@ -4,6 +4,9 @@ using FlaUI.Core.AutomationElements;
 
 namespace FlaUI.Mcp.Core;
 
+/// <summary>A child element with the bounds and offscreen state read for it.</summary>
+public sealed record ChildBox(AutomationElement Element, Rectangle Bounds, bool IsOffscreen);
+
 /// <summary>
 /// The desktop that guarded input reads and drives. Production uses Windows. Offline tests install a
 /// fake through <see cref="Override"/>, so an input path runs end to end without sending anything.
@@ -133,9 +136,28 @@ internal class InputDesktop
     public virtual FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         element.Properties.ControlType.ValueOrDefault;
 
-    public virtual Rectangle BoundsOf(AutomationElement element) => element.BoundingRectangle;
-
-    public virtual IReadOnlyList<AutomationElement> ChildrenOf(AutomationElement element) => element.FindAllChildren();
+    /// <summary>
+    /// The children of an element with their bounds and offscreen state, read in one cached request so a list
+    /// with many rows costs one round trip, not two per row.
+    /// </summary>
+    public virtual IReadOnlyList<ChildBox> ChildBoxes(AutomationElement parent)
+    {
+        var properties = parent.Automation.PropertyLibrary.Element;
+        var cache = new FlaUI.Core.CacheRequest();
+        cache.Add(properties.BoundingRectangle);
+        cache.Add(properties.IsOffscreen);
+        using (cache.Activate())
+        {
+            return parent
+                .FindAllChildren()
+                .Select(child => new ChildBox(
+                    child,
+                    child.Properties.BoundingRectangle.ValueOrDefault,
+                    child.Properties.IsOffscreen.ValueOrDefault
+                ))
+                .ToList();
+        }
+    }
 
     /// <summary>An element as a refusal names it: "ControlType 'Name'".</summary>
     public virtual string DescribeElement(AutomationElement element) =>

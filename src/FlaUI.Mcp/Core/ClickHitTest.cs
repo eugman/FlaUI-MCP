@@ -11,10 +11,12 @@ namespace FlaUI.Mcp.Core;
 /// <item>the target itself ("target") or one of its descendants ("descendant"); or</item>
 /// <item>an ancestor at most <see cref="MaxAncestorLevels"/> levels up that is not the top-level window
 /// ("ancestor"), as providers that report the container for a point on its child do (a WinForms PropertyGrid row
-/// through MSAA, a Chromium node, a WPF text block), and no sibling of the target has bounds over the point.</item>
+/// through MSAA, a Chromium node, a WPF text block), and no onscreen sibling of the target or of an ancestor below
+/// the hit has bounds over the point.</item>
 /// </list>
 /// Anything else (a sibling, a scrollbar or overlay, the window, a far container, a failed hit test) is refused
-/// with nothing sent. The returned kind lets the reply show how strong the proof was.
+/// with nothing sent. The returned kind lets the reply show how strong the proof was. The limit of 3 levels is a
+/// working value, pending the live check on TE3 PropertyGrid rows, PBI page tabs and the Camtasia timeline clip.
 /// </summary>
 public static class ClickHitTest
 {
@@ -72,9 +74,10 @@ public static class ClickHitTest
             throw Covered($"The point ({point.X},{point.Y}) is covered by {covering}");
         }
 
-        // The container answered for the point, so check its children: a sibling over the point (z-order is not
-        // available through UI Automation, so any sibling whose bounds hold it) would take the press.
-        if (SiblingOver(desktop, target, point) is { } sibling)
+        // The container answered for the point, so check what lies beside the path down to the target: a sibling of
+        // the target, or of any ancestor below the hit ("uncles"), over the point would take the press. UI
+        // Automation gives no z-order, so any onscreen one whose bounds hold the point refuses.
+        if (OverlayOver(desktop, target, hit, point) is { } sibling)
         {
             throw Covered($"The point ({point.X},{point.Y}) is covered by {desktop.DescribeElement(sibling)}");
         }
@@ -89,16 +92,35 @@ public static class ClickHitTest
         return levels > 0 && desktop.ControlTypeOf(hit) != ControlType.Window;
     }
 
-    private static AutomationElement? SiblingOver(InputDesktop desktop, AutomationElement target, Point point)
+    private static AutomationElement? OverlayOver(
+        InputDesktop desktop,
+        AutomationElement target,
+        AutomationElement hit,
+        Point point
+    )
     {
-        if (desktop.ParentOf(target) is not { } parent)
+        var child = target;
+        for (var level = 0; level < MaxAncestorLevels && desktop.ParentOf(child) is { } parent; level++)
         {
-            return null;
+            var overlay = desktop
+                .ChildBoxes(parent)
+                .FirstOrDefault(box =>
+                    !box.IsOffscreen && box.Bounds.Contains(point) && !desktop.SameElement(box.Element, child)
+                );
+            if (overlay != null)
+            {
+                return overlay.Element;
+            }
+
+            if (desktop.SameElement(parent, hit))
+            {
+                return null;
+            }
+
+            child = parent;
         }
 
-        return desktop
-            .ChildrenOf(parent)
-            .FirstOrDefault(child => !desktop.SameElement(child, target) && desktop.BoundsOf(child).Contains(point));
+        return null;
     }
 
     /// <summary>How many parent steps lead from <paramref name="element"/> up to <paramref name="ancestor"/>

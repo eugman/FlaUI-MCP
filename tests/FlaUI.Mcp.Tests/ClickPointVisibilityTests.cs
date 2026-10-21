@@ -240,6 +240,38 @@ public sealed class ClickPointVisibilityTests
     }
 
     [Fact]
+    public void AnOverlayBesideAnIntermediateAncestorIsRefused()
+    {
+        // The pane two levels up answers; a popup beside the clip's track (a child of the pane) lies over the point.
+        var desktop = new FakeDesktop();
+        var chain = Chain(desktop, ControlType.Custom, ControlType.Group, ControlType.Pane);
+        var popup = Element();
+        desktop.Parents[popup] = chain[2];
+        desktop.ElementBounds[popup] = new Rectangle(Pressed.X - 10, Pressed.Y - 5, 20, 10);
+        desktop.Descriptions[popup] = "ToolTip 'Trim'";
+        desktop.HitTest = _ => chain[2];
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(Pressed, chain[0]));
+        Assert.Contains("covered by ToolTip 'Trim'", error.Message);
+    }
+
+    [Fact]
+    public void AnOffscreenSiblingOverThePointDoesNotRefuse()
+    {
+        var desktop = new FakeDesktop();
+        var chain = Chain(desktop, ControlType.Custom, ControlType.List);
+        var hidden = Element();
+        desktop.Parents[hidden] = chain[1];
+        desktop.ElementBounds[hidden] = new Rectangle(Pressed.X - 10, Pressed.Y - 5, 20, 10);
+        desktop.Offscreen.Add(hidden);
+        desktop.HitTest = _ => chain[1];
+        using var installed = desktop.Install();
+
+        Assert.Equal("ancestor", ClickPoint.Verify(Pressed, chain[0]));
+    }
+
+    [Fact]
     public void ADirectHitIsReportedAsTheTargetAndAChildAsADescendant()
     {
         var desktop = new FakeDesktop();

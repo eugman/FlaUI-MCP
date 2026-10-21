@@ -301,11 +301,18 @@ internal sealed class FakeDesktop : InputDesktop
     public override FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         ControlTypes.TryGetValue(element, out var type) ? type : FlaUI.Core.Definitions.ControlType.Custom;
 
-    public override Rectangle BoundsOf(AutomationElement element) =>
-        ElementBounds.TryGetValue(element, out var bounds) ? bounds : Rectangle.Empty;
+    /// <summary>Elements UI Automation reports as offscreen.</summary>
+    public HashSet<AutomationElement> Offscreen { get; } = new(ReferenceEqualityComparer.Instance);
 
-    public override IReadOnlyList<AutomationElement> ChildrenOf(AutomationElement element) =>
-        Parents.Where(pair => ReferenceEquals(pair.Value, element)).Select(pair => pair.Key).ToList();
+    public override IReadOnlyList<ChildBox> ChildBoxes(AutomationElement parent) =>
+        Parents
+            .Where(pair => ReferenceEquals(pair.Value, parent))
+            .Select(pair => new ChildBox(
+                pair.Key,
+                ElementBounds.TryGetValue(pair.Key, out var bounds) ? bounds : Rectangle.Empty,
+                Offscreen.Contains(pair.Key)
+            ))
+            .ToList();
 
     public override string DescribeElement(AutomationElement element) =>
         Descriptions.TryGetValue(element, out var description) ? description : "Custom ''";
