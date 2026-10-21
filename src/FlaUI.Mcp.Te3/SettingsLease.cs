@@ -187,9 +187,23 @@ public sealed class SettingsLease
             write(temporary);
             File.Move(temporary, target, true);
         }
-        finally
+        catch
         {
-            File.Delete(temporary);
+            DeleteQuietly(temporary);
+            throw;
+        }
+    }
+
+    // Best effort after a failed write: the write's own error is the one to report.
+    private static void DeleteQuietly(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left behind next to the target; the next write uses a new name.
         }
     }
 
