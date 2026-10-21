@@ -276,6 +276,7 @@ public sealed class DispatchAccountingTests
     [Fact]
     public async Task ABatchFailureIsNotBlamedOnAnEarlierStepsRefusal()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var refusal = new InputRefusal("activation-denied", "activation-denied: test. No input sent.");
         var registry = new ToolRegistry();
         registry.RegisterTool(new DelegateTool("windows_type", () => throw InputRefusedException.Record(refusal)));
@@ -294,6 +295,7 @@ public sealed class DispatchAccountingTests
     [Fact]
     public async Task ABatchStoppedByARefusalReportsThatRefusal()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var refusal = new InputRefusal("activation-denied", "activation-denied: test. No input sent.");
         var registry = new ToolRegistry();
         registry.RegisterTool(new DelegateTool("windows_type", () => throw InputRefusedException.Record(refusal)));

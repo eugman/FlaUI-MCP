@@ -95,28 +95,50 @@ public sealed class MutationConfigTests
     [Fact]
     public void EveryTestThatRunsAnInputToolInstallsTheFakeDesktop()
     {
-        var tool = new Regex(@"new (SendKeysTool|TypeTool|FillTool|ClickTool|MouseTool|PasteTool|WindowStateTool)\(");
-        var test = new Regex(@"\[(Fact|Theory)\]");
+        var tool = new Regex(
+            @"new (SendKeysTool|TypeTool|FillTool|ClickTool|MouseTool|PasteTool|WindowStateTool|FocusWindowTool|CloseWindowTool|LaunchTool|WindowPlacementTool|BatchTool|ScreenshotTool)\("
+        );
+        var member = new Regex(
+            @"^    (?:public|private|internal|protected)\b[^\n=;]*?\b(\w+)\s*(?:<[^>]*>)?\(",
+            RegexOptions.Multiline
+        );
         var project = Path.GetDirectoryName(
             RepoFile(Path.Combine("tests", "FlaUI.Mcp.Tests", "FlaUI.Mcp.Tests.csproj"))
         )!;
         var unguarded = new List<string>();
         foreach (var file in Directory.GetFiles(project, "*.cs"))
         {
-            var text = File.ReadAllText(file);
-            var starts = test.Matches(text).Select(m => m.Index).Append(text.Length).ToArray();
-            for (var i = 0; i + 1 < starts.Length; i++)
-            {
-                var body = text[starts[i]..starts[i + 1]];
-                if (tool.IsMatch(body) && !body.Contains(".Install()"))
-                {
-                    var name = Regex.Match(body, @"(?:void|Task)\s+(\w+)\(").Groups[1].Value;
-                    unguarded.Add($"{Path.GetFileNameWithoutExtension(file)}.{name}");
-                }
-            }
+            var members = Members(File.ReadAllText(file), member);
+            // Helpers that build an input tool count as building it in every test that calls them.
+            var helpers = members.Where(m => !m.IsTest && tool.IsMatch(m.Body)).Select(m => m.Name).ToArray();
+            unguarded.AddRange(
+                members
+                    .Where(m => m.IsTest && !m.Body.Contains(".Install()"))
+                    .Where(m => tool.IsMatch(m.Body) || helpers.Any(h => Regex.IsMatch(m.Body, $@"\b{h}\(")))
+                    .Select(m => $"{Path.GetFileNameWithoutExtension(file)}.{m.Name}")
+            );
         }
 
         Assert.Empty(unguarded);
+    }
+
+    /// <summary>Each member of a test file, whether it is a test, and its text up to the next member.</summary>
+    private static List<(string Name, bool IsTest, string Body)> Members(string text, Regex member)
+    {
+        var starts = member.Matches(text).ToArray();
+        var members = new List<(string, bool, string)>();
+        for (var i = 0; i < starts.Length; i++)
+        {
+            var start = starts[i].Index;
+            var end = i + 1 < starts.Length ? starts[i + 1].Index : text.Length;
+            var before = text[(i > 0 ? starts[i - 1].Index : 0)..start];
+            var lastClose = before.LastIndexOf("\n    }", StringComparison.Ordinal);
+            var attributes = lastClose >= 0 ? before[lastClose..] : before;
+            var isTest = attributes.Contains("[Fact") || attributes.Contains("[Theory");
+            members.Add((starts[i].Groups[1].Value, isTest, text[start..end]));
+        }
+
+        return members;
     }
 
     [Fact]

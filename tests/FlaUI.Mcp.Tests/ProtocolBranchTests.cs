@@ -112,6 +112,7 @@ public sealed class ProtocolBranchTests
     [Fact]
     public async Task ABatchMissingActionsIsRefused()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var registry = new ToolRegistry();
         registry.RegisterTool(new BatchTool(registry));
 
@@ -126,6 +127,7 @@ public sealed class ProtocolBranchTests
     [InlineData(101, true)]
     public async Task ABatchHoldsAtMost100Steps(int count, bool refused)
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var registry = new ToolRegistry();
         registry.RegisterTool(new BatchTool(registry));
         var actions = Enumerable.Range(0, count).Select(_ => new { action = "wait", ms = 0 }).ToArray();
@@ -188,6 +190,7 @@ public sealed class ProtocolBranchTests
     [Fact]
     public async Task AStepWhoseToolThrowsIsReportedAndStopsTheBatch()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var registry = new ToolRegistry();
         registry.RegisterTool(new ThrowingTool());
         registry.RegisterTool(new BatchTool(registry));

@@ -54,6 +54,7 @@ public sealed class ToolSchemaTests
     [MemberData(nameof(Tools))]
     public void TheToolDefinitionMatchesItsApprovedCopy(string name)
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var actual = JsonSerializer.Serialize(Definitions()[name].GetDefinition(), Indented) + "\n";
         var path = ApprovedPath(name);
         if (Environment.GetEnvironmentVariable("FLAUI_APPROVE_TOOL_SCHEMAS") == "1")

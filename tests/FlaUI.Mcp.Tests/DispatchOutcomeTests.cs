@@ -182,6 +182,7 @@ public sealed class DispatchOutcomeTests
     [Fact]
     public async Task NestedCallsCountOnlyTheirOwnInputs()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var registry = new ToolRegistry();
         registry.RegisterTool(new DelegateTool("one-input", () => Dispatch(1, fail: false)));
         registry.RegisterTool(new DelegateTool("two-then-fail", () => Dispatch(2, fail: true)));
@@ -208,6 +209,7 @@ public sealed class DispatchOutcomeTests
     [Fact]
     public async Task BatchThatFailsAfterCompletedStepsReportsPartialAndFailedStatus()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var registry = new ToolRegistry();
         registry.RegisterTool(new DelegateTool("windows_click", () => Dispatch(1, fail: false)));
         registry.RegisterTool(new DelegateTool("windows_type", () => Dispatch(0, fail: true)));

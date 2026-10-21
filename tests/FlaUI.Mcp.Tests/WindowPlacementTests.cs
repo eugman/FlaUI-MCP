@@ -10,6 +10,7 @@ public sealed class WindowPlacementTests
     [Fact]
     public async Task HandlePlacementWithoutSessionsReturnsClearError()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new WindowPlacementTool(new ElementRegistry(), new PendingInvokeTracker());
         var result = await tool.ExecuteAsync(
             System.Text.Json.JsonSerializer.SerializeToElement(
@@ -23,6 +24,7 @@ public sealed class WindowPlacementTests
     [Fact]
     public async Task MissingTargetIsRejectedBeforeWindowAccess()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new WindowPlacementTool(new ElementRegistry(), new PendingInvokeTracker());
         var result = await tool.ExecuteAsync(
             System.Text.Json.JsonSerializer.SerializeToElement(new { placement = new WindowPlacement(0, 0, 700, 400) })

@@ -15,6 +15,7 @@ public sealed class ReviewFollowUpTests
     [Fact]
     public async Task ABatchBlockedAfterEarlierInputIsPartialAndStillPending()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var registry = new ToolRegistry();
         registry.RegisterTool(new Sends("windows_type"));
         registry.RegisterTool(new Blocked("windows_click"));
@@ -31,6 +32,7 @@ public sealed class ReviewFollowUpTests
     [Fact]
     public async Task ABatchBlockedBeforeAnyInputIsStillNotDispatched()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var registry = new ToolRegistry();
         registry.RegisterTool(new Blocked("windows_click"));
         registry.RegisterTool(new BatchTool(registry));
