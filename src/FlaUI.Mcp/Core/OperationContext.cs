@@ -64,6 +64,9 @@ public sealed class OperationCoordinator
         }
     }
 
+    /// <summary>Whether a request with this key ran, or still runs, as an operation that is still retained.</summary>
+    public bool Ran(string requestKey) => operations.Values.Any(o => o.RequestKey == requestKey);
+
     public object Status(string? id = null, PendingInvokeTracker? pending = null, string? requestKey = null) =>
         operations
             .Values.Where(o => (id == null || o.Id == id) && (requestKey == null || o.RequestKey == requestKey))

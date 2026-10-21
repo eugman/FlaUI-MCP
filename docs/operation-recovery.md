@@ -48,7 +48,7 @@ A refusal says "no input sent" only when nothing changed. When guarded input had
 
 | Code | Message | Meaning |
 |---|---|---|
-| -32700 | `Parse error; no action dispatched.` | The line was not valid JSON-RPC. `data.notDispatched` is true, and the recovered id is recorded as not dispatched unless a request with that id is in flight. |
+| -32700 | `Parse error; no action dispatched.` | The line was not valid JSON-RPC. `data.notDispatched` is true, and the recovered id is recorded as not dispatched unless a request with that id is in flight or already ran (while its operation is retained). |
 | -32000 | `Request capacity reached; no action dispatched.` | 32 requests were already in flight. The same recording rule applies. |
 | -32603 | The exception message, such as `Unknown method: x` | The request failed in the server. |
 

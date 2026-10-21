@@ -9,6 +9,11 @@ namespace FlaUI.Mcp.Tests;
 /// <summary>Protocol refusals: unknown methods, malformed calls, duplicate IDs and bounded memory.</summary>
 public sealed class ProtocolBranchTests
 {
+    private const string CallJson = "{\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"blocking\"}}";
+
+    // A line that breaks after its id, which the transport recovers and refuses.
+    private const string DamagedLine = "{\"id\":7,\n";
+
     private static JsonRpcRequest Request(string json) => JsonSerializer.Deserialize<JsonRpcRequest>(json)!;
 
     private static JsonElement Args(object value) => JsonSerializer.SerializeToElement(value);
@@ -248,6 +253,25 @@ public sealed class ProtocolBranchTests
             tool.Release.SetResult();
             await first.WaitAsync(TimeSpan.FromSeconds(5));
         }
+    }
+
+    [Fact]
+    public async Task ARefusedLineDoesNotMarkAFinishedRequestAsNotDispatched()
+    {
+        var tool = new BlockingTool();
+        tool.Release.SetResult();
+        var registry = new ToolRegistry();
+        registry.RegisterTool(tool);
+        var server = new McpServer(registry);
+        await server.HandleRequestAsync(Request(CallJson));
+
+        await new McpLineTransport(server).RunAsync(
+            new StringReader(DamagedLine),
+            new StringWriter(),
+            CancellationToken.None
+        );
+
+        Assert.False(await NotDispatched(server, "7"));
     }
 
     private static JsonElement[] Rows(params object[] rows) => rows.Select(row => Args(row)).ToArray();

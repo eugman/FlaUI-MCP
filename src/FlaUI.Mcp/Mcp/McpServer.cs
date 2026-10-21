@@ -151,12 +151,12 @@ public class McpServer
     }
 
     /// <summary>
-    /// Remember a line the transport refused. A refused line that reuses the id of a request still in flight
-    /// says nothing about that request, which may already have sent input, so it is not marked.
+    /// Remember a line the transport refused. A refused line that reuses the id of a request that is in flight
+    /// or already ran says nothing about that request, which may have sent input, so it is not marked.
     /// </summary>
     internal void RecordRefusedRequest(string key)
     {
-        if (!cancellations.ContainsKey(key))
+        if (!cancellations.ContainsKey(key) && !_toolRegistry.Operations.Ran(key))
         {
             RecordNotDispatched(key);
         }
