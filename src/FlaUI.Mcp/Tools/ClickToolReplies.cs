@@ -25,6 +25,68 @@ public partial class ClickTool
             var (b, a) => $"{name}: {b} -> {a}",
         };
 
+    /// <summary>A toggle's reply and its verification: verified when the state moved, mismatch when it did not.</summary>
+    internal static (string Message, string? Verification) ToggleVerdict(
+        string name,
+        ToggleState? before,
+        ToggleState? after
+    ) =>
+        (
+            ToggleOutcome(name, before, after),
+            (before, after) switch
+            {
+                (null, _) or (_, null) => "unavailable",
+                var (b, a) when b == a => "mismatch",
+                _ => "verified",
+            }
+        );
+
+    /// <summary>
+    /// An expand or collapse reply from the state read back: verified when it reached the requested state (an
+    /// expand also when partially expanded), mismatch when it did not, unavailable when it could not be read.
+    /// </summary>
+    internal static (string Message, string? Verification) ExpandVerdict(
+        string name,
+        string action,
+        ExpandCollapseState? state
+    )
+    {
+        if (state is not { } reached)
+        {
+            return ($"Sent {action} request to {name}; its state could not be read", "unavailable");
+        }
+
+        var done =
+            action == "expand"
+                ? reached is ExpandCollapseState.Expanded or ExpandCollapseState.PartiallyExpanded
+                : reached == ExpandCollapseState.Collapsed;
+        if (!done)
+        {
+            return ($"Sent {action} to {name}, but it is still {reached}", "mismatch");
+        }
+
+        return (action == "expand" ? $"Expanded {name}" : $"Collapsed {name}", "verified");
+    }
+
+    /// <summary>
+    /// A completed pattern call's reply with its read-back verification. A state that did not move is a
+    /// failure; the call went out, so the dispatch stays completed.
+    /// </summary>
+    internal static McpToolResult CheckedPatternResult(PatternCallResult result, string message, string? verification)
+    {
+        var reply = PatternResult(result, message);
+        if (verification == null)
+        {
+            return reply;
+        }
+
+        return reply with
+        {
+            IsError = verification == "mismatch" ? true : reply.IsError,
+            Outcome = reply.Outcome! with { Verification = verification },
+        };
+    }
+
     // An empty reason invites a blind retry; name the exception and any dialog that seems to block input.
     internal static string ClickFailure(
         string message,

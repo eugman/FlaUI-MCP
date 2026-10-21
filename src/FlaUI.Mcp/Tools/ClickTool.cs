@@ -375,31 +375,67 @@ public partial class ClickTool : ToolBase
             _invokeTracker,
             validate
         );
-        // Providers may update toggle state asynchronously, so wait briefly for it to move.
-        ToggleState? toggleAfter = null;
-        if (action == "toggle" && result.Outcome == PatternCallOutcome.Completed)
+        if (result.Outcome != PatternCallOutcome.Completed)
         {
-            Settled(
-                () =>
-                {
-                    toggleAfter = ReadToggle(element);
-                    return toggleAfter != toggleBefore;
-                },
-                500
+            return PatternResult(
+                result,
+                action == "toggle" ? $"Sent toggle request to {elementName}" : Done(action, elementName)
             );
         }
 
-        var message = action switch
+        // Read the state back: providers may update it asynchronously, so wait briefly for it to move.
+        var (message, verification) = action switch
         {
-            "toggle" => result.Outcome == PatternCallOutcome.Completed
-                ? ToggleOutcome(elementName, toggleBefore, toggleAfter)
-                : $"Sent toggle request to {elementName}",
+            "toggle" => ToggleVerdict(elementName, toggleBefore, SettledToggle(element, toggleBefore)),
+            "expand" => ExpandVerdict(elementName, action, SettledExpand(element, ExpandCollapseState.Expanded)),
+            "collapse" => ExpandVerdict(elementName, action, SettledExpand(element, ExpandCollapseState.Collapsed)),
+            _ => (Done(action, elementName), (string?)null),
+        };
+        return CheckedPatternResult(result, message, verification);
+    }
+
+    private static string Done(string action, string elementName) =>
+        action switch
+        {
             "invoke" => $"Invoked {elementName}",
             "select" => $"Selected {elementName}",
             "expand" => $"Expanded {elementName}",
             _ => $"Collapsed {elementName}",
         };
-        return PatternResult(result, message);
+
+    private static ToggleState? SettledToggle(AutomationElement element, ToggleState? before)
+    {
+        ToggleState? after = null;
+        Settled(
+            () =>
+            {
+                after = ReadToggle(element);
+                return after != before;
+            },
+            500
+        );
+        return after;
+    }
+
+    private static ExpandCollapseState? ReadExpand(AutomationElement element) =>
+        element.Patterns.ExpandCollapse.TryGetPattern(out var pattern)
+        && pattern.ExpandCollapseState.TryGetValue(out var state)
+            ? state
+            : null;
+
+    private static ExpandCollapseState? SettledExpand(AutomationElement element, ExpandCollapseState expected)
+    {
+        ExpandCollapseState? after = null;
+        Settled(
+            () =>
+            {
+                after = ReadExpand(element);
+                return after == expected
+                    || expected == ExpandCollapseState.Expanded && after == ExpandCollapseState.PartiallyExpanded;
+            },
+            500
+        );
+        return after;
     }
 
     /// <summary>
