@@ -1,4 +1,5 @@
 using System.Drawing;
+using FlaUI.Mcp.Core;
 using Xunit;
 
 public sealed class SplitterPlanTests
@@ -56,6 +57,51 @@ public sealed class SplitterPlanTests
         var (from, to) = SplitterPlan.Resize(assistant, [editor], width: 680, height: null);
         Assert.Equal(1000 - SplitterPlan.TouchingInset, from.X);
         Assert.Equal(from.X - 320, to.X);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void AOneOrTwoPixelGapIsTreatedAsTouching(int gap)
+    {
+        // The midpoint of a 1-2 px gap is the shared edge itself, where a drag grabs the lower title bar.
+        var tom = new Rectangle(1160, 91, 760, 590);
+        var properties = new Rectangle(1160, 681 + gap, 760, 427);
+        var (from, _) = SplitterPlan.Resize(properties, [tom], width: null, height: 320);
+        Assert.Equal(681 - SplitterPlan.TouchingInset, from.Y);
+    }
+
+    [Fact]
+    public void ANewTitledWindowAfterTheDragMeansThePaneUndocked()
+    {
+        nint[] before = [0x10, 0x20];
+        var after = new[]
+        {
+            new Win32WindowInfo(0x10, "Model - Tabular Editor 3", 7, true, false, false),
+            new Win32WindowInfo(0x20, "", 7, true, true, false),
+            new Win32WindowInfo(0x30, "Properties", 7, true, true, false),
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            SplitterPlan.ThrowIfUndocked(before, after, "Properties")
+        );
+
+        Assert.Contains("undocked: true", error.Message);
+        Assert.Contains("'Properties'", error.Message);
+        Assert.Contains("Next:", error.Message);
+    }
+
+    [Fact]
+    public void AnUntitledPopupOrTheSameWindowsAreNotAnUndock()
+    {
+        nint[] before = [0x10];
+        var after = new[]
+        {
+            new Win32WindowInfo(0x10, "Model - Tabular Editor 3", 7, true, false, false),
+            new Win32WindowInfo(0x40, "", 7, true, true, false),
+        };
+
+        SplitterPlan.ThrowIfUndocked(before, after, "Properties");
     }
 
     [Fact]

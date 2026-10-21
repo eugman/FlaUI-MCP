@@ -16,7 +16,9 @@ Workaround: don't click pane centres to focus them. Focus a known focusable cont
 
 Seen in TE3 3.27.1 at 125%. TOM Explorer and Properties touch with no gap. A drag that starts on the shared edge grabs the Properties title bar, and Properties became a floating `Properties` window. The splitter is in the upper pane's last few rows.
 
-Workaround: start splitter drags a few pixels inside the upper or left pane. Check `windows_list_windows` for a floating pane window after any failed resize.
+Changed in the host: `te3_layout resize` now starts the drag 3 px inside the upper or left pane when the panes touch or are at most 2 px apart, and fails with `undocked: true` and a next action when a new titled window of the TE3 process appears after the drag. Neither is verified live, and side-by-side touching panes were never tried. The host does not check that the pointer is on the splitter before the drag (the resize cursor shape is not read).
+
+Workaround: if a resize fails with `undocked: true`, dock the pane again by hand and check `te3_layout_read list` before retrying.
 
 ## Show changes hides everything else in TOM Explorer
 

@@ -1,4 +1,5 @@
 using System.Drawing;
+using FlaUI.Mcp.Core;
 
 /// <summary>
 /// Where to drag to resize a docked pane. Dock splitters are invisible to UI Automation, so the
@@ -121,8 +122,30 @@ public static class SplitterPlan
     /// drag on the shared edge itself grabs the second pane's title bar and undocks it.</remarks>
     public const int TouchingInset = 3;
 
+    /// <summary>A gap this narrow is handled as touching: its midpoint is the shared edge itself.</summary>
+    public const int TouchingGap = 2;
+
     private static int Between(int firstEnd, int secondStart) =>
-        firstEnd == secondStart ? firstEnd - TouchingInset : (firstEnd + secondStart) / 2;
+        secondStart - firstEnd <= TouchingGap ? firstEnd - TouchingInset : (firstEnd + secondStart) / 2;
+
+    /// <summary>
+    /// Fails when the drag opened a new titled top-level window in the process: the drag grabbed a pane's title bar
+    /// and floated it instead of moving the splitter.
+    /// </summary>
+    /// <param name="before">The process's top-level window handles before the drag.</param>
+    /// <param name="after">The process's top-level windows after the drag.</param>
+    /// <param name="title">The pane being resized.</param>
+    public static void ThrowIfUndocked(IEnumerable<nint> before, IEnumerable<Win32WindowInfo> after, string title)
+    {
+        var known = before.ToHashSet();
+        if (after.FirstOrDefault(w => !known.Contains(w.Hwnd) && w.Title.Length > 0) is { } floating)
+        {
+            throw new InvalidOperationException(
+                $"Resize of '{title}' undocked: true; the drag grabbed a title bar and TE3 opened floating window "
+                    + $"'{floating.Title}'. Next: dock the pane again by hand, check te3_layout_read list, then retry."
+            );
+        }
+    }
 
     private static bool Near(int edge, int other) => other - edge is >= 0 and <= MaxGap;
 

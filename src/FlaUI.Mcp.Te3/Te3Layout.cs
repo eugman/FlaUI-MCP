@@ -343,6 +343,8 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
             window.BoundingRectangle
         );
         var origin = window.BoundingRectangle;
+        var pid = host.Sessions.GetWindowProcessId(handle);
+        var windowsBefore = Win32Desktop.GetTopLevelWindows(pid).Select(w => w.Hwnd).ToList();
         await Tool(
             inputs,
             "windows_mouse",
@@ -355,6 +357,7 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
             }
         );
         await Task.Delay(300);
+        SplitterPlan.ThrowIfUndocked(windowsBefore, Win32Desktop.GetTopLevelWindows(pid), title);
         var after = FindPane(window, title).Container.BoundingRectangle;
         var requested = GetArgument<int?>(a, "width") ?? GetArgument<int?>(a, "height");
         var reached = GetArgument<int?>(a, "width") is null ? after.Height : after.Width;
