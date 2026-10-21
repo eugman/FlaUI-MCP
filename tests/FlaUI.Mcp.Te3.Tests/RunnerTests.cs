@@ -251,12 +251,12 @@ public sealed class RunnerTests : IDisposable
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             RunExecutor.Execute(
-                new RunConfig(),
+                new RunConfig { Output = root },
                 new Recipe("test", "page", false, _ => Task.CompletedTask),
                 grant,
                 cancellation.Token,
                 heldRunnerLock: null,
-                lockPath: LockPath
+                new RunPaths(LockPath, Path.Combine(root, "settings"))
             )
         );
     }
@@ -272,12 +272,12 @@ public sealed class RunnerTests : IDisposable
         // Reacquiring the same path would throw IOException; cancellation proves the held lock was accepted.
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             RunExecutor.Execute(
-                new RunConfig(),
+                new RunConfig { Output = root },
                 new Recipe("test", "page", false, _ => Task.CompletedTask),
                 grant,
                 cancellation.Token,
                 held,
-                LockPath
+                new RunPaths(LockPath, Path.Combine(root, "settings"))
             )
         );
     }

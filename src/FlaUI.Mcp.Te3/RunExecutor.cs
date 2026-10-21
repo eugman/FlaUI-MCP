@@ -5,6 +5,9 @@ using FlaUI.Mcp.Core;
 
 public sealed record RunExecutionResult(string ManifestPath, RunManifest Manifest);
 
+/// <summary>The machine-wide places a run uses: its lock, and TE3's settings folder. Tests pass their own.</summary>
+internal sealed record RunPaths(string LockPath, string SettingsDirectory);
+
 public static partial class RunExecutor
 {
     /// <summary>The machine-wide lock every runner and recovery takes; tests pass their own path.</summary>
@@ -80,17 +83,18 @@ public static partial class RunExecutor
         CancellationToken cancellationToken = default
     ) => Execute(config, recipe, interaction, cancellationToken, heldRunnerLock: null);
 
-    // A batch passes its held lock so no other runner can start between recipes; tests pass a lock path of their own.
+    // A batch passes its held lock so no other runner can start between recipes; tests pass paths of their own.
     internal static async Task<RunExecutionResult> Execute(
         RunConfig config,
         Recipe recipe,
         Te3Interaction interaction,
         CancellationToken cancellationToken,
         FileStream? heldRunnerLock,
-        string? lockPath = null
+        RunPaths? paths = null
     )
     {
-        using var runnerGate = heldRunnerLock == null ? AcquireRunnerLock(lockPath) : null;
+        using var runnerGate = heldRunnerLock == null ? AcquireRunnerLock(paths?.LockPath) : null;
+        var settingsDirectory = paths?.SettingsDirectory ?? SettingsLease.DefaultDirectory;
         cancellationToken.ThrowIfCancellationRequested();
         // Every input, focus and launch below checks the grant first; the user's own input revokes it.
         using var grant = interaction.Guard();
@@ -143,8 +147,12 @@ public static partial class RunExecutor
 
             cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3();
-            settingsBefore = SettingsChanges.Snapshot(SettingsLease.DefaultDirectory);
-            settings = AcquireSettings(manifest, Save);
+            settingsBefore = SettingsChanges.Snapshot(settingsDirectory);
+            settings = AcquireSettings(
+                manifest,
+                Save,
+                () => new SettingsLease(settingsDirectory, manifestPath: Path.Combine(manifest.Output, "manifest.json"))
+            );
             settings.Normalize(config.MaximizeWindow);
             cancellationToken.ThrowIfCancellationRequested();
             host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]));
@@ -236,7 +244,7 @@ public static partial class RunExecutor
                 {
                     manifest.SettingsChanges = SettingsChanges.Compare(
                         settingsBefore,
-                        SettingsChanges.Snapshot(SettingsLease.DefaultDirectory)
+                        SettingsChanges.Snapshot(settingsDirectory)
                     );
                 }
                 catch (Exception error)

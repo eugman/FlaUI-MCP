@@ -121,7 +121,7 @@ public sealed class RunGrantTests : IDisposable
                 interaction,
                 CancellationToken.None,
                 heldRunnerLock: null,
-                lockPath: Path.Combine(root, "runner.lock")
+                new RunPaths(Path.Combine(root, "runner.lock"), Path.Combine(root, "settings"))
             )
         );
 
