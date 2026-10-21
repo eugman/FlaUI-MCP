@@ -50,10 +50,8 @@ internal sealed class WalkPlace(string table, string? folder)
     /// </summary>
     public string? Enter(RowObservation row)
     {
-        var isTable = PathWalker.IsTable(row.Type) && InTables;
-        // A row back at the table's own depth (or above) has left the table, typed or not.
-        var leaves = Table != null && row.Depth is { } depth && tableDepth is { } own && depth <= own;
-        if (row.Depth == 1 || isTable || leaves)
+        var isTable = IsTableRow(row);
+        if (row.Depth == 1 || isTable || Leaves(row))
         {
             var left = HasFolder && Table == table ? LeftTable() : null;
             group = row.Depth == 1 ? row.Value : group;
@@ -72,6 +70,19 @@ internal sealed class WalkPlace(string table, string? folder)
     }
 
     private bool InTables => group is null or TablesGroup;
+
+    private bool IsTableRow(RowObservation row) => InTables && (PathWalker.IsTable(row.Type) || TableByDepth(row));
+
+    // A row back at the table's own depth (or above) has left the table, typed or not.
+    private bool Leaves(RowObservation row) =>
+        Table != null && row.Depth is { } depth && tableDepth is { } own && depth <= own;
+
+    // A row at table depth directly under the Tables group is a table whatever its type reads (an untyped row: a
+    // table's Properties grid may show no ObjectType); a role's table permission sits under Roles instead.
+    private bool TableByDepth(RowObservation row) =>
+        row.Depth == TableDepthUnderTables && group == TablesGroup && row.Type == null;
+
+    private const int TableDepthUnderTables = 2;
 
     // The path's folders are matched by name and exact depth: segment n sits at the table's depth + 1 + n. Rows off
     // the path are left untyped by the walk, so an outer folder may not be known as one; the exact depth is what

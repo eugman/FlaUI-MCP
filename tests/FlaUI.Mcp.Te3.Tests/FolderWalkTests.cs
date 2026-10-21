@@ -337,4 +337,22 @@ public sealed class FolderWalkTests
 
         Assert.Contains("on 'Sub Brand Name' (Column) under table 'Products'", walk.Reason);
     }
+
+    [Fact]
+    public async Task AnUntypedRowAtTableDepthUnderTablesIsTheTable()
+    {
+        // Live, Measure "Order Lines" was selected but reported "under table 'none'": the Orders row came untyped
+        // (a table's Properties grid showed no ObjectType), so the walk never took it for a table.
+        var tree = new FakeTree(
+            At(1, "Tables", null),
+            At(2, "Orders", null),
+            At(3, "3. Lines", null),
+            At(4, "Order Lines", "Measure")
+        );
+
+        var walk = await PathWalker.Find(tree, "Orders", "Order Lines", "Measure");
+
+        Assert.True(walk.Found, walk.Reason);
+        Assert.Equal("Orders", walk.Table);
+    }
 }
