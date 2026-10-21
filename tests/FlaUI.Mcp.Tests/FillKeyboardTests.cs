@@ -18,7 +18,7 @@ public sealed class FillKeyboardTests
     private static AutomationElement Element() =>
         (AutomationElement)RuntimeHelpers.GetUninitializedObject(typeof(AutomationElement));
 
-    private static McpToolResult Fallback(AutomationElement element, bool verifyFocus, string reads) =>
+    private static McpToolResult Fallback(AutomationElement element, FocusRule verifyFocus, string reads) =>
         FillTool.FillByKeyboardFallback(
             FakeDesktop.Target,
             element,
@@ -38,7 +38,9 @@ public sealed class FillKeyboardTests
         desktop.IgnoreFocus(field);
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() => Fallback(field, verifyFocus: true, reads: ""));
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Fallback(field, verifyFocus: FocusRule.SelfOrDescendant, reads: "")
+        );
 
         Assert.Contains("no input sent", error.Message);
         Assert.Equal(1, desktop.ElementFocusRequests);
@@ -51,7 +53,7 @@ public sealed class FillKeyboardTests
         var desktop = new FakeDesktop { KeyboardFocus = false };
         using var installed = desktop.Install();
 
-        var result = Fallback(Element(), verifyFocus: true, reads: "");
+        var result = Fallback(Element(), verifyFocus: FocusRule.SelfOrDescendant, reads: "");
 
         Assert.NotEqual(true, result.IsError);
         Assert.Equal("Filled field with \"\"", result.Content[0].Text);
@@ -62,12 +64,15 @@ public sealed class FillKeyboardTests
     [Fact]
     public void KeyboardFillVerifiesFocusUnlessTheCallerTurnsItOff()
     {
-        using var installed = new FakeDesktop().Install();
-        var tool = new FillTool(new ElementRegistry());
-
-        Assert.True(tool.KeyboardVerifiesFocus(null));
-        Assert.True(tool.KeyboardVerifiesFocus(JsonSerializer.SerializeToElement(new { @ref = "w1e1" })));
-        Assert.False(tool.KeyboardVerifiesFocus(JsonSerializer.SerializeToElement(new { verifyFocus = false })));
+        Assert.Equal(FocusRule.SelfOrDescendant, FillTool.KeyboardVerifiesFocus(null));
+        Assert.Equal(
+            FocusRule.SelfOrDescendant,
+            FillTool.KeyboardVerifiesFocus(JsonSerializer.SerializeToElement(new { @ref = "w1e1" }))
+        );
+        Assert.Equal(
+            FocusRule.None,
+            FillTool.KeyboardVerifiesFocus(JsonSerializer.SerializeToElement(new { verifyFocus = false }))
+        );
     }
 
     [Fact]
@@ -77,7 +82,7 @@ public sealed class FillKeyboardTests
         var schema = JsonSerializer.SerializeToElement(new FillTool(new ElementRegistry()).GetDefinition().InputSchema);
 
         Assert.True(schema.GetProperty("properties").TryGetProperty("verifyFocus", out var verifyFocus));
-        Assert.Contains("default true", verifyFocus.GetProperty("description").GetString());
+        Assert.Contains("Default \"self-or-descendant\"", verifyFocus.GetProperty("description").GetString());
     }
 
     [Fact]
@@ -117,17 +122,27 @@ public sealed class FillKeyboardTests
         var desktop = new FakeDesktop { KeyboardFocus = false, ElementFocusLostAfter = 1 };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() => Fallback(Element(), verifyFocus: true, reads: ""));
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Fallback(Element(), verifyFocus: FocusRule.SelfOrDescendant, reads: "")
+        );
 
         Assert.Contains("left the control after Ctrl+A", error.Message);
         Assert.Equal(1, desktop.Dispatched);
     }
 
     [Theory]
-    [InlineData("w1e1", null, true)]
-    [InlineData("w1e1", false, false)]
-    [InlineData(null, null, false)]
-    [InlineData(null, true, true)]
-    public void SendKeysWithARefVerifiesFocusUnlessTurnedOff(string? refId, bool? requested, bool verifies) =>
-        Assert.Equal(verifies, SendKeysTool.VerifiesFocus(refId, requested));
+    [InlineData("w1e1", null, FocusRule.SelfOrDescendant)]
+    [InlineData("w1e1", false, FocusRule.None)]
+    [InlineData(null, null, FocusRule.None)]
+    [InlineData(null, true, FocusRule.Exact)]
+    public void SendKeysWithARefVerifiesFocusUnlessTurnedOff(string? refId, bool? requested, FocusRule rule) =>
+        Assert.Equal(
+            rule,
+            FocusRules.Parse(
+                requested is { } r
+                    ? JsonSerializer.SerializeToElement(new { verifyFocus = r })
+                    : JsonSerializer.SerializeToElement(new { }),
+                refId
+            )
+        );
 }

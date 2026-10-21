@@ -215,11 +215,9 @@ public partial class FillTool : ToolBase
                 },
                 @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },
                 value = new { type = "string", description = "Value to fill" },
-                verifyFocus = new
-                {
-                    type = "boolean",
-                    description = "Keyboard fallback only: require verified keyboard focus on the control before Ctrl+A (default true). Set false only for a control that never reports focus; the keys then go wherever focus is.",
-                },
+                verifyFocus = FocusRules.Schema(
+                    "Keyboard fallback only: require verified keyboard focus before Ctrl+A, true for the exact control, \"self-or-descendant\" for it or a descendant (an editable ComboBox focuses its Edit child). Default \"self-or-descendant\"; set false only for a control that never reports focus, and the keys then go wherever focus is."
+                ),
             },
             required = new[] { "ref", "value" },
         };
@@ -360,7 +358,8 @@ public partial class FillTool : ToolBase
     }
 
     /// <summary>Whether the keyboard fallback requires verified focus: true unless the caller turns it off.</summary>
-    internal bool KeyboardVerifiesFocus(JsonElement? arguments) => GetBoolArgument(arguments, "verifyFocus", true);
+    internal static FocusRule KeyboardVerifiesFocus(JsonElement? arguments) =>
+        FocusRules.Parse(arguments, "ref", FocusRule.SelfOrDescendant);
 
     /// <summary>
     /// Focus the control and replace its text by keyboard. With <paramref name="verifyFocus"/>, a control that did
@@ -369,7 +368,7 @@ public partial class FillTool : ToolBase
     internal static McpToolResult FillByKeyboardFallback(
         InputTarget target,
         AutomationElement element,
-        bool verifyFocus,
+        FocusRule verifyFocus,
         string value,
         string elementName,
         Func<TextObservation> read,
@@ -377,7 +376,14 @@ public partial class FillTool : ToolBase
     )
     {
         using var input = new GuardedInput(target, element, verifyFocus);
-        return FillByKeyboard(input, value, elementName, read, validate, verifyFocus ? element : null);
+        return FillByKeyboard(
+            input,
+            value,
+            elementName,
+            read,
+            validate,
+            verifyFocus == FocusRule.None ? null : (element, verifyFocus)
+        );
     }
 
     /// <summary>The SetValue call through the guarded pattern call: lease, integrity check, counted, modal-aware.</summary>
@@ -391,7 +397,7 @@ public partial class FillTool : ToolBase
         string elementName,
         Func<TextObservation> read,
         Action validate,
-        AutomationElement? focused = null
+        (AutomationElement Element, FocusRule Rule)? focused = null
     )
     {
         ReplaceByKeyboard(

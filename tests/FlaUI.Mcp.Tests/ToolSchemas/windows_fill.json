@@ -18,8 +18,16 @@
         "description": "Value to fill"
       },
       "verifyFocus": {
-        "type": "boolean",
-        "description": "Keyboard fallback only: require verified keyboard focus on the control before Ctrl\u002BA (default true). Set false only for a control that never reports focus; the keys then go wherever focus is."
+        "type": [
+          "boolean",
+          "string"
+        ],
+        "enum": [
+          true,
+          false,
+          "self-or-descendant"
+        ],
+        "description": "Keyboard fallback only: require verified keyboard focus before Ctrl\u002BA, true for the exact control, \u0022self-or-descendant\u0022 for it or a descendant (an editable ComboBox focuses its Edit child). Default \u0022self-or-descendant\u0022; set false only for a control that never reports focus, and the keys then go wherever focus is."
       }
     },
     "required": [

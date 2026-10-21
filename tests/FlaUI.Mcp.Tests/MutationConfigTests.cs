@@ -18,6 +18,7 @@ public sealed class MutationConfigTests
         "Core/WindowMutation.cs",
         "Core/ClickPoint.cs",
         "Core/ClickHitTest.cs",
+        "Core/FocusRule.cs",
         "Core/InputRefusal.cs",
         "Core/ElementRegistry.cs",
         "Core/PendingInvokeTracker.cs",

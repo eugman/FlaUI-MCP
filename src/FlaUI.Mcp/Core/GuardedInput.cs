@@ -43,6 +43,9 @@ public sealed class GuardedInput : IDisposable
     public string? Changed => changedFirst;
 
     public GuardedInput(InputTarget target, AutomationElement? element = null, bool verifyFocus = false)
+        : this(target, element, verifyFocus ? FocusRule.Exact : FocusRule.None) { }
+
+    public GuardedInput(InputTarget target, AutomationElement? element, FocusRule focus)
     {
         this.target = target;
         OperationContext.Check();
@@ -61,7 +64,7 @@ public sealed class GuardedInput : IDisposable
 
             RequireActivated(target);
             Verify();
-            if (verifyFocus && (element == null || !desktop.HasKeyboardFocus(element)))
+            if (focus != FocusRule.None && (element == null || !FocusRules.Holds(focus, element, desktop)))
             {
                 throw new InvalidOperationException(
                     "Intended control did not receive verified keyboard focus; no input sent."

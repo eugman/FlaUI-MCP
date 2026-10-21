@@ -10,8 +10,16 @@
         "description": "Optional explicit window handle; otherwise uses the focused element."
       },
       "verifyFocus": {
-        "type": "boolean",
-        "description": "Require verified keyboard focus on the ref\u0027s exact control before the sequence. Default true when a ref is given (keys such as Ctrl\u002BA or Delete go wherever focus is); set false for a control that never reports focus."
+        "type": [
+          "boolean",
+          "string"
+        ],
+        "enum": [
+          true,
+          false,
+          "self-or-descendant"
+        ],
+        "description": "Require verified keyboard focus before the sequence: true for the ref\u0027s exact control, \u0022self-or-descendant\u0022 for it or a descendant (an editable ComboBox focuses its Edit child), false for no check. Default \u0022self-or-descendant\u0022 when a ref is given, since keys such as Ctrl\u002BA or Delete go wherever focus is."
       },
       "expectFocusClass": {
         "type": "string",

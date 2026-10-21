@@ -79,6 +79,15 @@ public sealed partial class SchemaParityTests
         var source = ClassSource(tool.GetType().Name);
         Assert.False(string.IsNullOrEmpty(source), $"No source found for {tool.GetType().Name}");
         var read = ArgumentRead().Matches(source).Select(m => m.Groups[1].Value).ToHashSet();
+        // FocusRules.Parse reads verifyFocus (true, false or "self-or-descendant") for the tool.
+        if (
+            source.Contains("FocusRules.Parse(", StringComparison.Ordinal)
+            || source.Contains("KeyboardVerifiesFocus(arguments)", StringComparison.Ordinal)
+        )
+        {
+            read.Add("verifyFocus");
+        }
+
         var touched = read.Union(PropertyRead().Matches(source).Select(m => m.Groups[1].Value)).ToHashSet();
 
         Assert.True(schema.TryGetProperty("additionalProperties", out var closed), $"{name} schema is open");

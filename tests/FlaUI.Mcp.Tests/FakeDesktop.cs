@@ -286,6 +286,11 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override bool SameElement(AutomationElement a, AutomationElement b) => ReferenceEquals(a, b);
 
+    /// <summary>The element UI Automation reports as focused; null for none.</summary>
+    public AutomationElement? FocusedOn { get; set; }
+
+    public override AutomationElement? FocusedElement(AutomationElement reference) => FocusedOn;
+
     /// <summary>Each element's control type; Custom unless a test says otherwise.</summary>
     public Dictionary<AutomationElement, FlaUI.Core.Definitions.ControlType> ControlTypes { get; } =
         new(ReferenceEqualityComparer.Instance);

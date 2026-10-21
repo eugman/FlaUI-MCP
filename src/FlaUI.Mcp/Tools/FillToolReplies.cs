@@ -10,9 +10,9 @@ public partial class FillTool
     /// Ctrl+A selected the control's text; Backspace or typing then replaces whatever is selected where focus is
     /// now, so a control that lost focus in between (a popup took it) stops the fill.
     /// </summary>
-    internal static void RequireStillFocused(AutomationElement? focused)
+    internal static void RequireStillFocused((AutomationElement Element, FocusRule Rule)? focused)
     {
-        if (focused != null && !InputDesktop.Current.HasKeyboardFocus(focused))
+        if (focused is { } f && !FocusRules.Holds(f.Rule, f.Element, InputDesktop.Current))
         {
             throw new InvalidOperationException(
                 "Keyboard focus left the control after Ctrl+A, so the selection was not replaced; no further input sent."

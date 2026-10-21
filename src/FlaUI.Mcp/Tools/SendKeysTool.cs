@@ -78,11 +78,9 @@ public class SendKeysTool : ToolBase
                     type = "string",
                     description = "Optional explicit window handle; otherwise uses the focused element.",
                 },
-                verifyFocus = new
-                {
-                    type = "boolean",
-                    description = "Require verified keyboard focus on the ref's exact control before the sequence. Default true when a ref is given (keys such as Ctrl+A or Delete go wherever focus is); set false for a control that never reports focus.",
-                },
+                verifyFocus = FocusRules.Schema(
+                    "Require verified keyboard focus before the sequence: true for the ref's exact control, \"self-or-descendant\" for it or a descendant (an editable ComboBox focuses its Edit child), false for no check. Default \"self-or-descendant\" when a ref is given, since keys such as Ctrl+A or Delete go wherever focus is."
+                ),
                 expectFocusClass = new
                 {
                     type = "string",
@@ -115,15 +113,12 @@ public class SendKeysTool : ToolBase
     /// </summary>
     /// <param name="arguments">Tool arguments containing optional target ref and either chord or keys.</param>
     /// <returns>An MCP result with operation status or error details.</returns>
-    /// <summary>Whether a sequence requires verified focus: as requested, else whenever it targets a ref.</summary>
-    internal static bool VerifiesFocus(string? refId, bool? requested) =>
-        requested ?? !string.IsNullOrWhiteSpace(refId);
-
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var refId = GetStringArgument(arguments, "ref");
-        var verifyFocus = VerifiesFocus(refId, GetArgument<bool?>(arguments, "verifyFocus"));
-        if (verifyFocus && string.IsNullOrWhiteSpace(refId))
+        // Verified focus by default whenever the keys target a ref (on the ref or a descendant).
+        var verifyFocus = FocusRules.Parse(arguments, refId);
+        if (verifyFocus != FocusRule.None && string.IsNullOrWhiteSpace(refId))
         {
             return Task.FromResult(ErrorResult("verifyFocus requires an element ref; no input sent."));
         }
