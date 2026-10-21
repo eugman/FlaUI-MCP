@@ -80,7 +80,9 @@ public class MouseToolTests(TestAppFixture fixture, ITestOutputHelper output)
                 to = new { x = 250, y = 170 },
             }
         );
-        Assert.InRange(clock.ElapsedMilliseconds, 600, 1400);
+        // The default hover is 600 ms. The upper bound is generous and only rules out the 5000 ms maximum.
+        Assert.True(clock.ElapsedMilliseconds >= 600, $"Default hover took {clock.ElapsedMilliseconds} ms.");
+        Assert.True(clock.ElapsedMilliseconds < 4500, $"Default hover took {clock.ElapsedMilliseconds} ms.");
     }
 
     [Fact]

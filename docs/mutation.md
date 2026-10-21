@@ -30,7 +30,7 @@ Latest pointer-integration run, 2026-10-21 at 4b2a697: the first full run. Start
 | MouseTool | 0 | 0 | 0 | 123 |
 | PointerActions | 0 | 0 | 0 | 28 |
 
-No integration test covers MouseTool or PointerActions yet. The survivors are mostly string mutations (36), logical mutations (19), equality mutations (16) and removed statements (14). The ten lines with the most survivors, for the next kill tests:
+That run predates 4fb89da, which added desktop kill tests for MouseTool and PointerActions (`MouseToolTests`, `ClickReplyTests`) and so the 0-covered rows above are out of date; the rerun that measures them is **pending the desktop**. The survivors are mostly string mutations (36), logical mutations (19), equality mutations (16) and removed statements (14). The ten lines with the most survivors, for the next kill tests:
 
 1. `ClickTool` line 259, `PatternActions` (5): each action name emptied; nothing checks the list's names.
 2. `ClickToolReplies` line 43, the modal check `windows.Any(w => !w.IsEnabled && !w.IsToolWindow)` (5): `true`/`false`, `All`, `||`, a dropped `!`.
@@ -93,9 +93,8 @@ Line and branch coverage of the mutated files at the same commit, from `pwsh scr
 
 ## Equivalent mutants
 
-No test can tell these from the original.
+No test can tell these from the original. (`InputTarget.Capture`'s `hwnd == 0` check was listed here; it reads the owner through the desktop seam now, and `InputTargetCaptureTests` kills it offline.)
 
-- `GuardedInput.Capture`, `hwnd == 0` changed to `hwnd != 0` or to `&&`: a zero handle still fails the ownership check, because `GetProcessId(0)` is 0.
 - `GuardedInput` constructor, `WindowMutation.Start` and `WindowMutation.Native`, the `OperationContext.Check()` right after the lease is taken: acquiring the lease already waits on the operation's token, so a cancelled operation never gets past it.
 - `SendKeysTool.ExecuteAsync` and `TypeTool.ExecuteAsync`, the `OperationContext.Check()` before the target is chosen: `GuardedInput` checks again before anything is focused or sent.
 - `GuardedInput.RequireActivated`, the foreground PID and name lookups when there is no foreground window: that refusal is desktop-unavailable, which uses neither.
@@ -110,10 +109,9 @@ No test can tell these from the original.
 - `ToolRegistry.SettledOrTimedOut`, `remaining > 0` changed to `>=` or dropped: `Task.Delay(TimeSpan.Zero)` and a cancel that arrives after the timeout cannot be told apart.
 - `ClickTool.ObserveSelection`, the general `catch` body: removing `return null` returns null.
 - `ClickTool.Settled`, `waited < timeoutMs` changed to `<=`: one more 50 ms poll.
-- `MouseTool.Drag` `Thread.Sleep(StepDelay)` and `SendKeysTool` `Thread.Sleep(30)` with its `!hasChord` condition: pacing only.
 - `SendKeysTool.SplitChord`, the blank-input early return: splitting a blank string yields no parts either way.
 - `ClickGeometry.Scroll`, `GuardedDesktop.SetClipboardText`, the `OperationContext.Check()` calls before the lease and inside the pattern call: the lease waits on the operation's token, and `ModalAwareInvoker` checks it again before the call runs.
-- `PointerActions.Move`, the `hoverMs > 0` comparison: the hover is clamped to 0 or more, and a 0 ms sleep is no sleep. `PointerActions.Drag`'s step delay is pacing only.
+- `PointerActions.Move`, the `hoverMs > 0` comparison: the hover is clamped to 0 or more, and a 0 ms sleep is no sleep.
 
 ## Not reachable offline
 
@@ -129,4 +127,6 @@ These need a real window, element, process or input device. The integration test
 - `MouseTool` after the blocked-provider check (`WindowOrigin`, `ResolvePoint`, `Move`, `Scroll`, `Click`, `DragFromArguments`, `Ticks`, `HoverMs`): need the window's real bounds.
 - `SendKeysTool` and `TypeTool` with a ref that has an identity (the element passed to `GuardedInput`, the ref named in the reply), and ref-less, handle-less input (`ForegroundTarget`): need a real window.
 - `SendKeysTool`'s "focus afterwards" note: compares live focus before and after, which another process can move.
-- `SendKeysTool.PressKeys` and `FillTool.FillByValuePattern`: send real keys or call a real Value pattern.
+- `SendKeysTool.PressKeys` and `FillTool.FillByValuePattern`: send real keys or call a real Value pattern. (The SetValue call itself, `FillTool.SetValue`, and the keyboard fallback, `FillTool.FillByKeyboardFallback`, are tested offline.)
+- `PointerActions.Drag`'s `Thread.Sleep(StepDelay)` and `SendKeysTool`'s `Thread.Sleep(30)` with its `!hasChord` condition: not equivalent, since real apps drop a drag or a chord sent too fast, but not observable offline, where the fake records input without timing it.
+- `ClickGeometry.Read`'s viewport reduction (`Viewport(AutomationElement)`) and `ClickPoint.Verify`'s real `FromPoint`: read UI Automation; the pure parts (`ClickGeometry.Viewport(Rectangle, ...)`, the visible-part fallback and Verify's ancestor walk on the fake) are tested offline. `ClickGeometry` and `ClickPoint` live in `Core/ClickPoint.cs`.

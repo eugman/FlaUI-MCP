@@ -14,10 +14,12 @@ internal static class PointerTestSupport
     /// <summary>Show a tab by its AutomationId; controls on hidden tabs are not in the tree.</summary>
     public static void SelectTab(TestAppFixture fixture, string handle, string tabId)
     {
-        Query(fixture)
-            .Resolve(handle, new(AutomationId: tabId, ControlType: "TabItem"))
-            .Patterns.SelectionItem.Pattern.Select();
-        Thread.Sleep(200);
+        var tab = Query(fixture).Resolve(handle, new(AutomationId: tabId, ControlType: "TabItem"));
+        tab.Patterns.SelectionItem.Pattern.Select();
+        if (!WaitFor(() => tab.Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault))
+        {
+            throw new InvalidOperationException($"Tab {tabId} was not selected within 3 s.");
+        }
     }
 
     public static AutomationElement Resolve(

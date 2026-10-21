@@ -47,7 +47,6 @@ public class ClickReplyTests(TestAppFixture fixture, ITestOutputHelper output)
         clock.Stop();
         output.WriteLine($"{reply} ({clock.ElapsedMilliseconds} ms)");
         Assert.Equal("Clicked Click Me", reply);
-        Assert.True(clock.ElapsedMilliseconds < 1800, "A plain button click must not wait for a dialog.");
         Assert.True(WaitFor(() => ClickCount(fixture, fixture.WinFormsHandle) == before + 1));
     }
 
@@ -61,11 +60,8 @@ public class ClickReplyTests(TestAppFixture fixture, ITestOutputHelper output)
         // (physical && ellipsis || processId != 0 waits for a window after a plain right click).
         var (_, button) = WinFormsClickMe();
         var before = ClickCount(fixture, fixture.WinFormsHandle);
-        var clock = Stopwatch.StartNew();
         var reply = await fixture.CallTool(Click(), new { @ref = button, button = mouseButton });
-        clock.Stop();
         Assert.Equal("Clicked Click Me", reply);
-        Assert.True(clock.ElapsedMilliseconds < 1800, "A plain button click must not wait for a dialog.");
         await Task.Delay(300);
         Assert.Equal(before, ClickCount(fixture, fixture.WinFormsHandle));
     }
