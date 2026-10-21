@@ -64,4 +64,58 @@ public sealed class ServerGrantTests : IDisposable
 
         Assert.DoesNotContain(Te3InteractionTool.Begin, string.Join(" ", result.Content.Select(c => c.Text)));
     }
+
+    /// <summary>A form that is never shown, owned by its own message loop so UI Automation can answer for it.</summary>
+    private sealed class HiddenForm : IDisposable
+    {
+        private readonly Thread thread;
+        private readonly ManualResetEventSlim created = new();
+        private System.Windows.Forms.ApplicationContext? context;
+
+        public HiddenForm()
+        {
+            thread = new Thread(() =>
+            {
+                using var form = new System.Windows.Forms.Form { Text = "fla grant test" };
+                Handle = form.Handle;
+                context = new System.Windows.Forms.ApplicationContext();
+                created.Set();
+                System.Windows.Forms.Application.Run(context);
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.IsBackground = true;
+            thread.Start();
+            created.Wait();
+        }
+
+        public nint Handle { get; private set; }
+
+        public void Dispose()
+        {
+            context?.ExitThread();
+            thread.Join(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AClickThroughTheRegistryIsRefusedWithoutTheGrant(bool physical)
+    {
+        // A real ref to a window that is never shown; the grant check comes before any focus or input.
+        using var allowAll = new AutomationHost(ProcessPolicy.AllowAll, includeDesktopTools: true);
+        using var owner = new Te3Interaction(() => 0);
+        Te3McpServer.Install(allowAll, owner);
+        using var form = new HiddenForm();
+        var handle = Te3Layout.Bind(allowAll, form.Handle, Environment.ProcessId);
+        var reference = allowAll.Elements.Register(handle, allowAll.Sessions.GetWindow(handle)!);
+
+        var result = await allowAll.Tools.ExecuteToolAsync(
+            "windows_click",
+            JsonSerializer.SerializeToElement(new { @ref = reference, physical })
+        );
+
+        Assert.True(result.IsError);
+        Assert.Contains(Te3InteractionTool.Begin, string.Join(" ", result.Content.Select(c => c.Text)));
+    }
 }
