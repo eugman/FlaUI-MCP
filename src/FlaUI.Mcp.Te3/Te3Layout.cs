@@ -116,6 +116,9 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
     internal static bool PaneVisible(Window window, string title) =>
         Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title));
 
+    internal static bool DocumentOpen(Window window, string title) =>
+        Parts(window).Any(part => part.Kind == "document" && TitleMatches(part.Title, title));
+
     private async Task<object> HidePane(InputTally inputs, string handle, Window window, string title)
     {
         if (!Te3PanePlan.IsNamedPane(title))

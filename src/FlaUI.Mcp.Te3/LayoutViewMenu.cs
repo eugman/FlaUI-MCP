@@ -12,6 +12,8 @@ internal sealed class LayoutViewMenu(AutomationHost host, string handle, Window 
 {
     public Task<bool> IsVisible(string title) => Task.FromResult(Te3Layout.PaneVisible(window, title));
 
+    public Task<bool> IsDocument(string title) => Task.FromResult(Te3Layout.DocumentOpen(window, title));
+
     private const int PopupWaitMs = 1500;
     private const int PopupPollMs = 150;
 

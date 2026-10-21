@@ -35,11 +35,22 @@ internal static class PaneReopen
 
     public static bool IsMapped(string title) => ViewMenuPanes.Contains(title);
 
+    /// <summary>View popup entries observed on TE3 3.27.1 that open a document, not a docked pane.</summary>
+    internal static readonly string[] ViewMenuDocuments = ["Expression Editor"];
+
+    /// <summary>The refusal for a document title: reopen-pane only opens docked panes.</summary>
+    public static string NotAPane(string title) =>
+        $"'{title}' is a document, not a dockable pane in the View menu map; reopen-pane opens only docked panes. "
+        + "No input sent.";
+
     /// <summary>The View menu as te3_layout drives it.</summary>
     public interface IViewMenu
     {
         /// <summary>Whether a docked pane with this title is showing.</summary>
         Task<bool> IsVisible(string title);
+
+        /// <summary>Whether an open document tab has this title.</summary>
+        Task<bool> IsDocument(string title);
 
         /// <summary>Click MenuItem View physically.</summary>
         Task OpenViewMenu();
@@ -62,6 +73,11 @@ internal static class PaneReopen
                 visible = true,
                 changed = false,
             };
+        }
+
+        if (ViewMenuDocuments.Contains(title) || await menu.IsDocument(title))
+        {
+            throw new InvalidOperationException(NotAPane(title));
         }
 
         if (!IsMapped(title))
