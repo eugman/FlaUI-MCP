@@ -155,6 +155,80 @@ public sealed class ReviewFollowUpTests
         Assert.StartsWith("The element is offscreen", error.Refusal.Message);
     }
 
+    [Fact]
+    public void ScrollingIntoViewIsValidatedCountedAndHoldsTheLease()
+    {
+        var operation = new OperationContext();
+        var order = new List<string>();
+        var leaseHeld = false;
+        OperationContext.Current.Value = operation;
+        try
+        {
+            var scrolled = ClickGeometry.Scroll(
+                0,
+                new PendingInvokeTracker(),
+                () => order.Add("validate"),
+                () =>
+                {
+                    order.Add("scroll");
+                    leaseHeld = LeaseHeld();
+                }
+            );
+
+            Assert.True(scrolled);
+            Assert.Equal(["validate", "scroll"], order);
+            Assert.Equal(1, operation.InputsSent);
+            Assert.True(leaseHeld);
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
+    [Fact]
+    public void AScrollWhoseTargetFailsValidationIsNotSent()
+    {
+        var scrolled = false;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            ClickGeometry.Scroll(
+                0,
+                new PendingInvokeTracker(),
+                () => throw new InvalidOperationException("stale ref"),
+                () => scrolled = true
+            )
+        );
+
+        Assert.False(scrolled);
+    }
+
+    [Fact]
+    public void ARefusalAfterScrollingSaysTheViewWasScrolled()
+    {
+        var error = GuardedInput.ChangedFirst(
+            new InvalidOperationException("Point is not on the target window; no input sent."),
+            "the view was scrolled"
+        );
+
+        Assert.Equal(
+            "Point is not on the target window; no keys or clicks were sent, but the view was scrolled first.",
+            error.Message
+        );
+    }
+
+    private static bool LeaseHeld()
+    {
+        var gate = (SemaphoreSlim)
+            typeof(GuardedInput)
+                .GetField(
+                    "InputGate",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+                )!
+                .GetValue(null)!;
+        return gate.CurrentCount == 0;
+    }
+
     private sealed class Sends(string name) : ToolBase
     {
         public override string Name => name;

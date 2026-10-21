@@ -18,15 +18,45 @@ public sealed record ClickGeometry(
 {
     private const int MaxAncestors = 50;
 
-    /// <summary>Scroll the element into view when it supports that, then read its geometry.</summary>
+    /// <summary>
+    /// Scroll the element into view when it supports that; true when it scrolled. Scrolling changes the app as
+    /// input does, so it takes the input lease, revalidates the target, counts as a dispatch and runs
+    /// modal-aware. Call it before guarded input takes the lease.
+    /// </summary>
+    public static bool ScrollIntoView(
+        AutomationElement element,
+        int processId,
+        PendingInvokeTracker pending,
+        Action validate
+    ) =>
+        element.Patterns.ScrollItem.TryGetPattern(out var scrollItem)
+        && Scroll(processId, pending, validate, scrollItem.ScrollIntoView);
+
+    internal static bool Scroll(int processId, PendingInvokeTracker pending, Action validate, Action scroll)
+    {
+        OperationContext.Check();
+        using var lease = GuardedInput.AcquireLease();
+        var result = ModalAwareInvoker.Execute(
+            processId,
+            "ScrollIntoView",
+            () => MutationGuard.Execute(validate, scroll),
+            pending
+        );
+        if (result.Outcome != PatternCallOutcome.Completed)
+        {
+            throw new InvalidOperationException(
+                "ScrollIntoView did not return; the app's UI Automation provider may be blocked. Nothing was "
+                    + "pressed. Check windows_operation_status before retrying."
+            );
+        }
+
+        return true;
+    }
+
+    /// <summary>Read the element's geometry. It does not scroll; see <see cref="ScrollIntoView"/>.</summary>
     public static ClickGeometry Read(AutomationElement element)
     {
         OperationContext.Check();
-        if (element.Patterns.ScrollItem.TryGetPattern(out var scrollItem))
-        {
-            scrollItem.ScrollIntoView();
-        }
-
         var scrollers = new List<Rectangle>();
         var ancestor = element.Parent;
         for (var depth = 0; ancestor != null && depth < MaxAncestors; depth++)

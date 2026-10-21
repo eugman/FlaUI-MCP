@@ -87,16 +87,35 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         OperationContext.Check();
         var target = sessions.GetInputTarget(handle);
         var origin = WindowOrigin(handle, target.Hwnd);
-        var landed = action switch
+        // Set when resolving a ref scrolled its view, so a later refusal can say so.
+        var scrolled = false;
+        Point landed;
+        try
         {
-            "park" => PointerParking.Park(origin),
-            "move" => Move(target, ResolvePoint(arguments, "to", reference, origin), hoverMs: 0),
-            "hover" => Move(target, ResolvePoint(arguments, "to", reference, origin), HoverMs(arguments)),
-            "scroll" => Scroll(target, ResolvePoint(arguments, "to", reference, origin), Ticks(arguments)),
-            "click" => Click(target, ResolvePoint(arguments, "to", reference, origin)),
-            "drag" => DragFromArguments(arguments, target, reference, origin),
-            _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
-        };
+            landed = action switch
+            {
+                "park" => PointerParking.Park(origin),
+                "move" => Move(target, ResolvePoint(arguments, "to", reference, origin, ref scrolled), hoverMs: 0),
+                "hover" => Move(
+                    target,
+                    ResolvePoint(arguments, "to", reference, origin, ref scrolled),
+                    HoverMs(arguments)
+                ),
+                "scroll" => Scroll(
+                    target,
+                    ResolvePoint(arguments, "to", reference, origin, ref scrolled),
+                    Ticks(arguments)
+                ),
+                "click" => Click(target, ResolvePoint(arguments, "to", reference, origin, ref scrolled)),
+                "drag" => DragFromArguments(arguments, target, reference, origin, ref scrolled),
+                _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
+            };
+        }
+        catch (InvalidOperationException error) when (scrolled)
+        {
+            throw GuardedInput.ChangedFirst(error, "the view was scrolled");
+        }
+
         return Task.FromResult(
             TextResult(
                 JsonSerializer.Serialize(
@@ -111,7 +130,32 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         );
     }
 
-    private Point DragFromArguments(JsonElement? arguments, InputTarget target, string? reference, Rectangle origin)
+    /// <summary>Scroll a ref into view through the guards, then read where it is.</summary>
+    private ClickGeometry Geometry(string reference, ref bool scrolled)
+    {
+        var element = refs.ResolveRef(reference);
+        if (
+            ClickGeometry.ScrollIntoView(
+                element,
+                refs.GetProcessIdForRef(reference),
+                pending,
+                () => refs.ValidateReference(reference)
+            )
+        )
+        {
+            scrolled = true;
+        }
+
+        return ClickGeometry.Read(element);
+    }
+
+    private Point DragFromArguments(
+        JsonElement? arguments,
+        InputTarget target,
+        string? reference,
+        Rectangle origin,
+        ref bool scrolled
+    )
     {
         var fromEdge = GetStringArgument(arguments, "fromEdge");
         var resizeTo = GetArgument<int?>(arguments, "resizeTo");
@@ -120,8 +164,9 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         Point to;
         if (fromEdge != null || resizeTo != null)
         {
-            var geometry = ClickGeometry.Read(
-                refs.ResolveRef(reference ?? throw new ArgumentException("fromEdge and resizeTo need ref"))
+            var geometry = Geometry(
+                reference ?? throw new ArgumentException("fromEdge and resizeTo need ref"),
+                ref scrolled
             );
             var bounds = geometry.Bounds;
             from = ClickPoint.Choose(geometry, PointerPlan.EdgePoint(bounds, fromEdge ?? "center"));
@@ -129,7 +174,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         }
         else
         {
-            from = ResolvePoint(arguments, "from", reference, origin);
+            from = ResolvePoint(arguments, "from", reference, origin, ref scrolled);
             to = default;
         }
 
@@ -137,8 +182,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         {
             to =
                 toRef != null
-                    ? EdgeOf(toRef, GetStringArgument(arguments, "toEdge") ?? "center")
-                    : ResolvePoint(arguments, "to", null, origin);
+                    ? EdgeOf(toRef, GetStringArgument(arguments, "toEdge") ?? "center", ref scrolled)
+                    : ResolvePoint(arguments, "to", null, origin, ref scrolled);
         }
 
         return Drag(target, from, to, GetArgument<int?>(arguments, "steps") ?? PointerPlan.DefaultDragSteps);
@@ -161,7 +206,13 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         return Win32Desktop.GetWindowBounds(hwnd) ?? throw new InvalidOperationException("Window bounds unavailable");
     }
 
-    private Point ResolvePoint(JsonElement? arguments, string name, string? reference, Rectangle origin)
+    private Point ResolvePoint(
+        JsonElement? arguments,
+        string name,
+        string? reference,
+        Rectangle origin,
+        ref bool scrolled
+    )
     {
         if (arguments is { } a && a.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Object)
         {
@@ -177,12 +228,12 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         }
 
         // Never the centre of the bounds: for an offscreen element that is (0,0), a maximized window's caption.
-        return ClickPoint.Choose(ClickGeometry.Read(refs.ResolveRef(reference)));
+        return ClickPoint.Choose(Geometry(reference, ref scrolled));
     }
 
-    private Point EdgeOf(string reference, string edge)
+    private Point EdgeOf(string reference, string edge, ref bool scrolled)
     {
-        var geometry = ClickGeometry.Read(refs.ResolveRef(reference));
+        var geometry = Geometry(reference, ref scrolled);
         return ClickPoint.Choose(geometry, PointerPlan.EdgePoint(geometry.Bounds, edge));
     }
 

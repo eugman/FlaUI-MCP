@@ -70,7 +70,7 @@ public sealed class GuardedInput : IDisposable
         catch (InvalidOperationException error) when (focusedFirst != null)
         {
             lease.Dispose();
-            throw FocusedFirst(error, focusedFirst);
+            throw ChangedFirst(error, focusedFirst);
         }
         catch
         {
@@ -122,7 +122,7 @@ public sealed class GuardedInput : IDisposable
     }
 
     /// <summary>A refusal raised after focus changed: it may not claim that nothing was sent.</summary>
-    private static InvalidOperationException FocusedFirst(InvalidOperationException error, string note)
+    internal static InvalidOperationException ChangedFirst(InvalidOperationException error, string note)
     {
         var message = NoteFocusChange(error.Message, note);
         return error is InputRefusedException refused
@@ -142,7 +142,7 @@ public sealed class GuardedInput : IDisposable
         }
         catch (InvalidOperationException error) when (changedFirst != null)
         {
-            throw FocusedFirst(error, changedFirst);
+            throw ChangedFirst(error, changedFirst);
         }
     }
 

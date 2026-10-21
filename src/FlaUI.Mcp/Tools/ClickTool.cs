@@ -9,7 +9,7 @@ namespace FlaUI.Mcp.Tools;
 /// <summary>
 /// Click an element by ref
 /// </summary>
-public class ClickTool : ToolBase
+public partial class ClickTool : ToolBase
 {
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
@@ -185,7 +185,16 @@ public class ClickTool : ToolBase
             request.PatternSent = true;
         }
 
-        return MouseClick(request, element, elementName, physical, selectionFallback);
+        // Scrolling the row into view changes the app, so it goes through the guards before the click's lease.
+        var scrolled = ClickGeometry.ScrollIntoView(element, request.ProcessId, _invokeTracker, Validate);
+        try
+        {
+            return MouseClick(request, element, elementName, physical, selectionFallback);
+        }
+        catch (InvalidOperationException error) when (scrolled)
+        {
+            throw GuardedInput.ChangedFirst(error, "the view was scrolled");
+        }
     }
 
     /// <summary>Fall back to a guarded mouse click, and report a dialog it opens.</summary>
@@ -290,16 +299,6 @@ public class ClickTool : ToolBase
         && selection.IsSelected.TryGetValue(out var selected)
         && selected;
 
-    internal static string SelectionClickOutcome(string name, bool? selected) =>
-        selected switch
-        {
-            true => $"Selected {name} after fallback click (SelectionItem confirmed)",
-            false =>
-                $"Clicked {name} after Select changed nothing; selection was not observed. Inspect the current selection before continuing; do not repeat the click blindly.",
-            _ =>
-                $"Clicked {name} after Select changed nothing; selection could not be read. Inspect the current selection before continuing; do not repeat the click blindly.",
-        };
-
     internal static bool? ObserveSelection(Func<bool> isSelected)
     {
         try
@@ -333,15 +332,6 @@ public class ClickTool : ToolBase
         element.Patterns.Toggle.TryGetPattern(out var toggle) && toggle.ToggleState.TryGetValue(out var state)
             ? state
             : null;
-
-    /// <summary>What a toggle did, from the state read before and after it.</summary>
-    internal static string ToggleOutcome(string name, ToggleState? before, ToggleState? after) =>
-        (before, after) switch
-        {
-            (null, _) or (_, null) => $"Sent toggle request to {name}; its state could not be read",
-            var (b, a) when b == a => $"Toggled {name}, but it is still {b}",
-            var (b, a) => $"{name}: {b} -> {a}",
-        };
 
     private static bool Supports(AutomationElement element, string action) =>
         action switch
@@ -406,29 +396,6 @@ public class ClickTool : ToolBase
         return PatternResult(result, message);
     }
 
-    // An empty reason invites a blind retry; name the exception and any dialog that seems to block input.
-    internal static string ClickFailure(
-        string message,
-        string exceptionType,
-        IReadOnlyList<Win32WindowInfo> windows,
-        bool patternSent = false
-    )
-    {
-        var reason = string.IsNullOrWhiteSpace(message) ? exceptionType : message;
-        if (patternSent)
-        {
-            // The fallback click was refused, but the Select before it went out and is counted.
-            reason = GuardedInput.NoteFocusChange(reason, "Select was sent");
-        }
-
-        var modal = windows.Any(w => !w.IsEnabled && !w.IsToolWindow)
-            ? windows.FirstOrDefault(w => w.IsEnabled && !w.IsToolWindow && !w.IsCloaked && w.Title.Length > 0)
-            : null;
-        return modal == null
-            ? reason
-            : $"{reason.TrimEnd('.')}. Window \"{modal.Title}\" appears to be a modal dialog blocking input; handle it first (see windows_list_windows).";
-    }
-
     /// <summary>
     /// Menus and "..." commands usually open a popup or modal. Invoke on them does not return
     /// until it closes, which blocks the provider the agent needs to inspect that popup.
@@ -440,12 +407,6 @@ public class ClickTool : ToolBase
     {
         var trimmed = name?.TrimEnd() ?? "";
         return trimmed.EndsWith("...") || trimmed.EndsWith('…');
-    }
-
-    internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after)
-    {
-        var known = before.Select(w => w.Hwnd).ToHashSet();
-        return after.FirstOrDefault(w => !known.Contains(w.Hwnd) && w.Title.Length > 0)?.Title;
     }
 
     /// <summary>
