@@ -121,13 +121,7 @@ public static partial class Win32Desktop
     public static int GetClipboardOwnerProcessId()
     {
         var owner = GetClipboardOwner();
-        if (owner == 0)
-        {
-            return 0;
-        }
-
-        GetWindowThreadProcessId(owner, out var pid);
-        return (int)pid;
+        return owner == 0 ? 0 : OwnerProcessId(owner, GetWindowThreadProcessId);
     }
 
     /// <summary>
@@ -383,11 +377,8 @@ public static partial class Win32Desktop
     [DllImport("user32.dll")]
     private static extern nint WindowFromPoint(System.Drawing.Point point);
 
-    public static int GetProcessId(nint hwnd)
-    {
-        GetWindowThreadProcessId(hwnd, out var pid);
-        return (int)pid;
-    }
+    /// <summary>The window's owning process, or 0 when it cannot be read.</summary>
+    public static int GetProcessId(nint hwnd) => OwnerProcessId(hwnd, GetWindowThreadProcessId);
 
     public static nint WindowAt(System.Drawing.Point point) => GetAncestor(WindowFromPoint(point), 2);
 
@@ -521,13 +512,7 @@ public static partial class Win32Desktop
     public static int GetForegroundWindowProcessId()
     {
         var hwnd = GetForegroundWindow();
-        if (hwnd == 0)
-        {
-            return 0;
-        }
-
-        GetWindowThreadProcessId(hwnd, out var pid);
-        return (int)pid;
+        return hwnd == 0 ? 0 : OwnerProcessId(hwnd, GetWindowThreadProcessId);
     }
 
     /// <summary>
