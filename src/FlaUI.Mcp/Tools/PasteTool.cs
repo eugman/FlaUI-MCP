@@ -184,11 +184,12 @@ public sealed class PasteTool(
     }
 
     /// <summary>
-    /// The reply with its verdict. A read-back that shows the paste did not apply (unchanged, or changed
-    /// without the text) is a failure; Ctrl+V went out, so the dispatch stays completed.
+    /// The reply with its verdict. A read-back that shows the paste did not apply (unchanged without the text,
+    /// or changed without it) is a failure; Ctrl+V went out, so the dispatch stays completed. An unchanged value
+    /// that already holds the text (identical text re-pasted) is not.
     /// </summary>
     internal static McpToolResult PasteReply(string text, PasteVerdict verdict) =>
-        (verdict.Verification is "unchanged" or "mismatch" ? ErrorResult(text) : TextResult(text)) with
+        (verdict.Verification is "not-applied" or "mismatch" ? ErrorResult(text) : TextResult(text)) with
         {
             Outcome = new ToolOutcome("completed", "not-tracked") { Verification = verdict.Verification },
         };
@@ -281,6 +282,8 @@ public sealed class PasteTool(
         Judge(before, observed, expected).Sentence;
 
     /// <summary>The verdict behind <see cref="DescribeEvidence"/>.</summary>
+    private static string Lines(string text) => text.ReplaceLineEndings("\n");
+
     internal static PasteVerdict Judge(string? before, string? observed, string expected)
     {
         if (observed == null)
@@ -302,9 +305,20 @@ public sealed class PasteTool(
             );
         }
 
+        // Compare without line endings: the clipboard holds CRLF, and a control may report LF.
+        (observed, before, expected) = (Lines(observed), Lines(before), Lines(expected));
         if (observed == before)
         {
-            return new("unchanged", " Warning: the control's value did not change, so the paste may not have applied.");
+            // Re-pasting identical selected text leaves the value the same: not evidence, but not a failure.
+            return observed.Contains(expected, StringComparison.Ordinal)
+                ? new(
+                    "unchanged",
+                    " Not verified: the control's value did not change, but it already contains the pasted text (re-pasting identical text changes nothing)."
+                )
+                : new(
+                    "not-applied",
+                    " Warning: the control's value did not change and does not contain the pasted text, so the paste did not apply."
+                );
         }
 
         if (observed.Contains(expected, StringComparison.Ordinal))

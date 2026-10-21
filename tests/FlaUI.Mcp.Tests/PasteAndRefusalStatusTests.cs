@@ -13,7 +13,8 @@ namespace FlaUI.Mcp.Tests;
 public sealed class PasteAndRefusalStatusTests
 {
     [Theory]
-    [InlineData("unchanged", true)]
+    [InlineData("unchanged", false)]
+    [InlineData("not-applied", true)]
     [InlineData("mismatch", true)]
     [InlineData("verified", false)]
     [InlineData("not-established", false)]
