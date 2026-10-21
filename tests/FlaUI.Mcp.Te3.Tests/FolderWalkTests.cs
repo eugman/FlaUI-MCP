@@ -249,4 +249,22 @@ public sealed class FolderWalkTests
 
         Assert.Empty(tree.Collapsed);
     }
+
+    [Fact]
+    public async Task AnUntypedRowBackAtTheTablesDepthLeavesTheTable()
+    {
+        // The walk now reads Properties only for rows that could matter (the object, its table, its folders), so a
+        // later table can arrive untyped: its depth alone must end the requested table.
+        var tree = new FakeTree(
+            At(1, "Tables", null),
+            At(2, "Brands", "Table"),
+            At(3, "Sub Brand", "Column"),
+            At(2, "Products", null),
+            At(3, "Brand", "Column")
+        );
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column");
+
+        Assert.False(walk.Found);
+    }
 }

@@ -33,6 +33,7 @@ internal sealed class WalkPlace(string table, string? folder)
     private string? group;
     private bool seenFolder;
     private bool placed = true;
+    private int? tableDepth;
 
     /// <summary>The table the current row belongs to, or null before the first table row or outside Tables.</summary>
     public string? Table { get; private set; }
@@ -51,11 +52,15 @@ internal sealed class WalkPlace(string table, string? folder)
     /// </summary>
     public string? Enter(RowObservation row)
     {
-        if (row.Depth == 1 || (PathWalker.IsTable(row.Type) && InTables))
+        var isTable = PathWalker.IsTable(row.Type) && InTables;
+        // A row back at the table's own depth (or above) has left the table, typed or not.
+        var leaves = Table != null && row.Depth is { } depth && tableDepth is { } own && depth <= own;
+        if (row.Depth == 1 || isTable || leaves)
         {
             var left = HasFolder && Table == table ? LeftTable() : null;
             group = row.Depth == 1 ? row.Value : group;
-            Table = row.Depth == 1 ? null : row.Value;
+            Table = isTable ? row.Value : null;
+            tableDepth = isTable ? row.Depth : null;
             inside.Clear();
             matched = 0;
             return left;

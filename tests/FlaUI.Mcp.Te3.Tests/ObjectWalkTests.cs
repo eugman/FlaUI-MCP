@@ -125,4 +125,15 @@ public sealed class ObjectWalkTests
                 () => "Brand"
             )
         );
+
+    [Theory]
+    [InlineData("Brand", true)]
+    [InlineData("Brands", true)]
+    [InlineData("1. Brand Hierarchy", true)]
+    [InlineData("Sub Brand", false)]
+    [InlineData("Products", false)]
+    [InlineData(null, false)]
+    public void PropertiesAreReadOnlyForRowsTheWalkIsLookingFor(string? value, bool read) =>
+        // Live, a Properties read on every settled row made each step 3.5-4 s and lost to the 18 s clock.
+        Assert.Equal(read, ObjectWalk.Interesting(InFolder)(value));
 }

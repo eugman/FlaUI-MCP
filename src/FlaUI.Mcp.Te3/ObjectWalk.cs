@@ -8,6 +8,22 @@ public sealed record WalkRequest(string Table, string ObjectName, string ObjectT
 internal static class ObjectWalk
 {
     /// <summary>
+    /// The row texts whose type the walk needs: the object, its table and each folder of the path. Any other row is
+    /// placed by its depth alone, which spares a Properties read for it.
+    /// </summary>
+    public static Func<string?, bool> Interesting(WalkRequest request)
+    {
+        var names = new HashSet<string>(
+            request.Folder.Split('\\', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        )
+        {
+            request.ObjectName,
+            request.Table,
+        };
+        return value => value != null && names.Contains(value);
+    }
+
+    /// <summary>
     /// Walks the tree. A stop the walk did not decide (<see cref="WalkResult.Rescuable"/>) is rescued only when time is
     /// left for the read and the selection is the object; a miss the walk decided is never turned into arrival.
     /// </summary>

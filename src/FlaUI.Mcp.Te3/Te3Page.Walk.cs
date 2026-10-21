@@ -55,8 +55,8 @@ public sealed partial class Te3Page
         await SearchTomTyped(objectName);
         await Keys("Home", TomExplorerTarget());
         depthScale = null;
-        var cursor = new TomCursor(this);
         var request = new WalkRequest(table, objectName, objectType, folder);
+        var cursor = new TomCursor(this, ObjectWalk.Interesting(request));
         var walk = await ObjectWalk.Find(
             cursor,
             request,
@@ -129,9 +129,13 @@ public sealed partial class Te3Page
     /// reads (about 2 s live), so a long filtered tree can exceed the 30 s tool timeout (see <see cref="WalkClock"/>). A
     /// version that cached the tree element timed out live; speed this up with care.
     /// </summary>
-    private sealed class TomCursor(Te3Page page) : ITreeCursor
+    // Each step's cost is its reads (about 0.5 s each), so the cursor keeps the last settled read and reuses it as the
+    // next key's "before", and reads Properties only for a row that could matter to the walk.
+    private sealed class TomCursor(Te3Page page, Func<string?, bool>? interesting = null) : ITreeCursor
     {
-        public async Task<RowObservation> Current() => await page.Typed((await page.ObserveSelection()).Row);
+        private (SelectionSnapshot Snapshot, bool RowBelow, bool ChildBelow)? last;
+
+        public async Task<RowObservation> Current() => await Typed((await Observe()).Row);
 
         public bool Stalled { get; private set; }
 
@@ -143,20 +147,20 @@ public sealed partial class Te3Page
         }
 
         /// <summary>
-        /// Press Left on the selected row, which collapses it when it is expanded. True once the selection read back
-        /// unchanged: Left on a collapsed row would move to its parent instead, and then nothing is assumed.
+        /// Press Left on the selected row, only when the row below it is deeper (it is open). True once the selection
+        /// read back unchanged: Left on a collapsed row would move to its parent instead, and then nothing is assumed.
         /// </summary>
         public async Task<bool> Collapse()
         {
-            var (before, _, open) = await page.ReadSelection();
-            if (!open)
+            var before = last ?? await Read();
+            if (!before.ChildBelow)
             {
                 return false;
             }
 
             await page.Keys("Left", TomExplorerTarget());
             await Task.Delay(WalkClock.CollapseSettleMs);
-            return (await page.ObserveSelection()).Row == before.Row;
+            return (await Observe()).Row == before.Snapshot.Row;
         }
 
         /// <summary>Press Up and return the row above once it has settled; null at the top.</summary>
@@ -165,16 +169,20 @@ public sealed partial class Te3Page
         // The row the key moved to, and whether a row was shown below the selection before the key.
         private async Task<(RowObservation? Row, bool RowBelow)> Move(string key)
         {
-            var (before, rowBelow, _) = await page.ReadSelection();
+            var before = last ?? await Read();
             await page.Keys(key, TomExplorerTarget());
-            var moved = await WalkClock.AwaitMove(
-                before,
-                page.ObserveSelection,
-                WalkClock.Start(),
-                ms => Task.Delay(ms)
-            );
-            return (moved == null ? null : await page.Typed(moved.Row), rowBelow);
+            var moved = await WalkClock.AwaitMove(before.Snapshot, Observe, WalkClock.Start(), ms => Task.Delay(ms));
+            return (moved == null ? null : await Typed(moved.Row), before.RowBelow);
         }
+
+        private async Task<(SelectionSnapshot Snapshot, bool RowBelow, bool ChildBelow)> Read() =>
+            (last = await page.ReadSelection()).Value;
+
+        private async Task<SelectionSnapshot> Observe() => (await Read()).Snapshot;
+
+        // Groups and the model root need no type; nor does a row whose text the walk is not looking for.
+        private Task<RowObservation> Typed(RowObservation row) =>
+            row.Depth <= 1 || interesting?.Invoke(row.Value) == false ? Task.FromResult(row) : page.Typed(row);
     }
 
     /// <summary>One observation of the selection: the row, plus the raw bar text and row position to detect movement.</summary>
