@@ -7,6 +7,7 @@ namespace FlaUI.Mcp.Tests;
 public sealed class Win32ReadFailureTests
 {
     private const uint StaleProcessId = 4242;
+    private const uint OwnerProcessIdValue = 5151;
 
     // Windows returned no thread id, but the out parameter still holds a process id.
     private static uint FailedOwnerRead(nint hwnd, out uint processId)
@@ -17,7 +18,7 @@ public sealed class Win32ReadFailureTests
 
     private static uint OwnerRead(nint hwnd, out uint processId)
     {
-        processId = StaleProcessId;
+        processId = OwnerProcessIdValue;
         return 1;
     }
 
@@ -30,7 +31,7 @@ public sealed class Win32ReadFailureTests
     [Fact]
     public void AnOwnerReadReportsItsProcess()
     {
-        Assert.Equal((int)StaleProcessId, Win32Desktop.OwnerProcessId(100, OwnerRead));
+        Assert.Equal((int)OwnerProcessIdValue, Win32Desktop.OwnerProcessId(100, OwnerRead));
     }
 
     // Windows copied nothing, but the buffer already holds text.
@@ -70,11 +71,11 @@ public sealed class Win32ReadFailureTests
     [Fact]
     public void EnumerationKeepsAnUntitledWindowOfTheRequestedProcess()
     {
-        var window = Win32Desktop.ReadWindow(0, (int)StaleProcessId, OwnerRead, FailedTextRead);
+        var window = Win32Desktop.ReadWindow(0, (int)OwnerProcessIdValue, OwnerRead, FailedTextRead);
 
         Assert.NotNull(window);
         Assert.Equal(string.Empty, window.Title);
-        Assert.Equal((int)StaleProcessId, window.ProcessId);
+        Assert.Equal((int)OwnerProcessIdValue, window.ProcessId);
         Assert.Null(Win32Desktop.ReadWindow(0, 1, OwnerRead, ShortTextRead));
     }
 
