@@ -36,9 +36,27 @@ public sealed class InputObserverTests
         Assert.True(started[0].Disposed);
     }
 
-    [Theory]
-    [InlineData(4_900, 5_000, true)]
-    [InlineData(0, 5_000, false)]
-    public void AHookThreadThatStoppedBeatingIsNotTrusted(long lastBeat, long now, bool responsive) =>
-        Assert.Equal(responsive, PhysicalInputObserver.IsResponsive(lastBeat, now));
+    [Fact]
+    public void AMissedHeartbeatIsNeverForgiven()
+    {
+        // At or below Windows' LowLevelHooksTimeout: a gap that long may already have cost the hooks.
+        var heartbeat = new Heartbeat(0);
+        heartbeat.Beat(250);
+        Assert.True(heartbeat.Alive(900));
+
+        Assert.False(heartbeat.Alive(1_300));
+        heartbeat.Beat(1_350);
+
+        Assert.False(heartbeat.Alive(1_400));
+    }
+
+    [Fact]
+    public void ALateBeatStillPoisonsTheObserver()
+    {
+        var heartbeat = new Heartbeat(0);
+
+        heartbeat.Beat(1_200);
+
+        Assert.False(heartbeat.Alive(1_250));
+    }
 }
