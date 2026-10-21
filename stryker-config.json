@@ -2,7 +2,7 @@
   "stryker-config": {
     "project": "FlaUI.Mcp.csproj",
     "test-projects": [
-      "tests/FlaUI.Mcp.Tests/FlaUI.Mcp.Tests.csproj"
+      "FlaUI.Mcp.Tests.csproj"
     ],
     "mutate": [
       "**/Core/GuardedInput.cs",

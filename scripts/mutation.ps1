@@ -31,10 +31,12 @@ function RunPart($name, $files) {
     RemoveWorktree $work
     git worktree add --detach $work HEAD | Out-Null
     $code = 1
-    Push-Location $work
+    # Run from the offline test project: from the repo root Stryker finds FlaUI.Mcp.slnx and runs every
+    # test project in it, including the integration tests, which launch apps and take the desktop.
+    Push-Location (Join-Path $work 'tests/FlaUI.Mcp.Tests')
     try {
         dotnet tool restore | Out-Null
-        $arguments = @('stryker', '-f', 'stryker-config.json', '--output', $output, '--log-to-file')
+        $arguments = @('stryker', '-f', '../../stryker-config.json', '--output', $output, '--log-to-file')
         foreach ($file in $files) { $arguments += @('--mutate', "**/$file.cs") }
         if ($Concurrency -gt 0) { $arguments += @('--concurrency', $Concurrency) }
         $stryker = Start-Process dotnet -ArgumentList $arguments -NoNewWindow -PassThru
