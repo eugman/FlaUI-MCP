@@ -93,20 +93,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             // Navigation takes the desktop; a status-bar read sends no input and needs no grant.
             using var guard = name == Navigate ? grant.Guard() : null;
             phase = "attach";
-            using var process = Process.GetProcessById(ResolveProcessId(a, RunningTe3));
-            if (!string.Equals(process.ProcessName, "TabularEditor3", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new ArgumentException("processId must identify TabularEditor3.");
-            }
-
-            var windows = Win32Desktop.GetTopLevelWindows(process.Id);
-            var hwnd = MainWindow(windows);
-            var handle = host.Sessions.RegisterNativeWindow(hwnd, process.Id);
-            var identity = host.Sessions.GetInputTarget(handle);
-            if (host.Pending.TryGetPending(process.Id, out var pendingCall))
-            {
-                throw new InvalidOperationException(PendingInvokeTracker.DescribeBlocked(pendingCall));
-            }
+            var (windows, hwnd, handle, identity) = Attach(a);
 
             async Task Invoke(string tool, object args)
             {
@@ -123,23 +110,9 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
 
             if (name == ModelState)
             {
-                // No extra-window guard: an open dialog is exactly when a caller wants to read the
-                // status bar, and this reads without touching anything.
                 phase = "observe";
                 lastStep = "read status bar";
-                RequireRestored(hwnd);
-
-                // Assessment(false): no scene was matched. This read a status bar, and claiming a
-                // matched scene would assert a verification that never happened.
-                return Json(
-                    new
-                    {
-                        assessment = Assessment(false),
-                        state = page.ObserveModelState(),
-                        phase,
-                        lastStep,
-                    }
-                );
+                return ReadModelState(page, hwnd, phase, lastStep);
             }
 
             // Validate has already confirmed the id is in the registry.
@@ -156,40 +129,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
 
             phase = "navigate";
             lastStep = "navigate " + destination.Id;
-            switch (destination)
-            {
-                case { Section: { } section }:
-                    if (!hasPreferences)
-                    {
-                        await page.OpenPreferences();
-                    }
-
-                    await page.SearchPreferences(section);
-                    await page.SelectPreferencesSection(section);
-                    break;
-                case { Id: "object" }:
-                    await page.SelectObjectPath(
-                        GetStringArgument(a, "table")!,
-                        GetStringArgument(a, "objectName")!,
-                        GetStringArgument(a, "objectType")!,
-                        GetStringArgument(a, "folder") ?? ""
-                    );
-                    break;
-                case { Id: "tom-explorer" }:
-                    await page.OpenTom();
-                    break;
-                case { Id: "tom-explorer/changes" }:
-                    await page.OpenTomChanges();
-                    break;
-                case { Id: "native-mcp-server" }:
-                    await page.OpenNativeMcpServer();
-                    break;
-                case { Id: "expression-editor" }:
-                    await page.SelectDocument("Expression Editor");
-                    break;
-                default:
-                    throw new ArgumentException("No navigation for destination " + destination.Id);
-            }
+            await NavigateTo(page, destination, a, hasPreferences);
 
             lastStep = "verify " + destination.Id;
             phase = "verify-arrival";
@@ -212,6 +152,86 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         catch (Exception ex)
         {
             return Failure(phase, lastStep, ex.Message);
+        }
+    }
+
+    // The TE3 process the request names, its one document window, and the input target for it.
+    private (IReadOnlyList<Win32WindowInfo> Windows, nint Hwnd, string Handle, InputTarget Identity) Attach(
+        JsonElement a
+    )
+    {
+        using var process = Process.GetProcessById(ResolveProcessId(a, RunningTe3));
+        if (!string.Equals(process.ProcessName, "TabularEditor3", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("processId must identify TabularEditor3.");
+        }
+
+        var windows = Win32Desktop.GetTopLevelWindows(process.Id);
+        var hwnd = MainWindow(windows);
+        var handle = host.Sessions.RegisterNativeWindow(hwnd, process.Id);
+        var identity = host.Sessions.GetInputTarget(handle);
+        if (host.Pending.TryGetPending(process.Id, out var pendingCall))
+        {
+            throw new InvalidOperationException(PendingInvokeTracker.DescribeBlocked(pendingCall));
+        }
+
+        return (windows, hwnd, handle, identity);
+    }
+
+    // No extra-window guard: an open dialog is exactly when a caller wants to read the status bar,
+    // and this reads without touching anything.
+    private static McpToolResult ReadModelState(Te3Page page, nint hwnd, string phase, string lastStep)
+    {
+        RequireRestored(hwnd);
+
+        // Assessment(false): no scene was matched. This read a status bar, and claiming a
+        // matched scene would assert a verification that never happened.
+        return Json(
+            new
+            {
+                assessment = Assessment(false),
+                state = page.ObserveModelState(),
+                phase,
+                lastStep,
+            }
+        );
+    }
+
+    private async Task NavigateTo(Te3Page page, Te3Destination destination, JsonElement a, bool hasPreferences)
+    {
+        switch (destination)
+        {
+            case { Section: { } section }:
+                if (!hasPreferences)
+                {
+                    await page.OpenPreferences();
+                }
+
+                await page.SearchPreferences(section);
+                await page.SelectPreferencesSection(section);
+                break;
+            case { Id: "object" }:
+                await page.SelectObjectPath(
+                    GetStringArgument(a, "table")!,
+                    GetStringArgument(a, "objectName")!,
+                    GetStringArgument(a, "objectType")!,
+                    GetStringArgument(a, "folder") ?? ""
+                );
+                break;
+            case { Id: "tom-explorer" }:
+                await page.OpenTom();
+                break;
+            case { Id: "tom-explorer/changes" }:
+                await page.OpenTomChanges();
+                break;
+            case { Id: "native-mcp-server" }:
+                await page.OpenNativeMcpServer();
+                break;
+            case { Id: "expression-editor" }:
+                await page.SelectDocument("Expression Editor");
+                break;
+            default:
+                throw new ArgumentException("No navigation for destination " + destination.Id);
         }
     }
 
