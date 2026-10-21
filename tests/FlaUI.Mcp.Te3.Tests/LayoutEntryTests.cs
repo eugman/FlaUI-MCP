@@ -385,4 +385,24 @@ public sealed class LayoutEntryTests : IDisposable
             Assert.Throws<InputRefusedException>(interaction.Require).Refusal.Code
         );
     }
+
+    [Fact]
+    public async Task CloseNamesAFloatingWindowItCannotCloseInsteadOfIgnoringIt()
+    {
+        // Live: close ["Dependencies"] replied closed [], unresolved [] while the floating window stayed open.
+        var tool = Tool(inputs =>
+        {
+            var layout = Standard(inputs);
+            layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
+            layout.AutomationIds[0x30] = "DaxDependencies";
+            return layout;
+        });
+
+        var result = await tool.ExecuteAsync(Args(new { action = "close", titles = new[] { "Dependencies" } }));
+        var reply = JsonDocument.Parse(result.Content.Single().Text!).RootElement;
+
+        Assert.Contains("Dependencies", reply.GetProperty("unresolved").EnumerateArray().Select(e => e.GetString()));
+        Assert.Contains("Dependencies", reply.GetProperty("floating").EnumerateArray().Select(e => e.GetString()));
+        Assert.Empty(surface!.Presses);
+    }
 }

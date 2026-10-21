@@ -25,6 +25,13 @@ public sealed partial class Te3Layout
         return docked.Concat(floating).ToList();
     }
 
+    private static List<string> FloatingTitles(ILayoutSurface surface) =>
+        surface
+            .Windows()
+            .Where(w => w.Hwnd != surface.MainWindow && w.Title.Length > 0 && !w.IsToolWindow)
+            .Select(w => w.Title)
+            .ToList();
+
     private sealed record ListedPart(string Title, string Kind, object? Bounds);
 
     // A document's own tab Close (Invoke closes an unmodified document without a prompt, 3.27.1). Refused before input
@@ -145,12 +152,18 @@ public sealed partial class Te3Layout
         );
 
         var remaining = surface.Parts().Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
-        var unresolved = titles.Where(t => remaining.Any(r => TitleMatches(r, t)) != keep).ToList();
+        // A floating pane is a window of its own, not a docked pane this action can close: name it, never ignore it.
+        var floating = FloatingTitles(surface);
+        var unresolved = titles
+            .Where(t => remaining.Any(r => TitleMatches(r, t)) != keep || (!keep && floating.Contains(t)))
+            .ToList();
         return new
         {
             closed,
             remaining,
             unresolved,
+            floating,
+            next = floating.Count > 0 ? "Close a floating window with windows_close on its handle." : null,
         };
     }
 
