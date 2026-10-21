@@ -5,33 +5,41 @@ using Xunit;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
-/// <summary>A window placement Core says was not exact is read back and reported; scripted calls only.</summary>
+/// <summary>A placement Core reports as a mismatch is accepted only as OS minimum-size growth; scripted calls only.</summary>
 public sealed class PlacementReadBackTests
 {
     private static readonly Rectangle Requested = new(96, 192, 555, 254);
 
-    private static CoreCallException Refused(int inputsSent) =>
+    // Core's windows_place_window when the window did not land exactly: completed, verification "mismatch".
+    private static CoreCallException Mismatch() =>
         new(
             "windows_place_window",
             new McpToolResult
             {
                 IsError = true,
-                Content = [new() { Text = "Window placed at (96,192,569,261), not exactly as requested." }],
-                Outcome = new ToolOutcome(ToolOutcome.DispatchFor(true, inputsSent), "not-tracked")
-                {
-                    InputsSent = inputsSent,
-                },
+                Content = [new() { Text = "Window did not land where requested" }],
+                Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "mismatch", InputsSent = 1 },
+            }
+        );
+
+    private static CoreCallException OtherFailure() =>
+        new(
+            "windows_place_window",
+            new McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Text = "refused" }],
+                Outcome = new ToolOutcome("partial", "not-tracked") { InputsSent = 1 },
             }
         );
 
     [Fact]
-    public async Task APlacementThatMovedTheWindowButNotExactlyIsReadBackWithItsDeltas()
+    public async Task GrowthToTheMinimumSizeAtTheSamePlaceIsReadBackWithItsDeltas()
     {
-        // Core now fails a placement that does not land exactly; the OS minimum size of the dialog is kept on purpose.
         var steps = new List<string>();
 
         var observed = await PlacementReadBack.Place(
-            () => throw Refused(1),
+            () => throw Mismatch(),
             () => new Rectangle(96, 192, 569, 261),
             Requested,
             steps.Add
@@ -41,23 +49,30 @@ public sealed class PlacementReadBackTests
         Assert.Contains(steps, s => s.Contains("dw +14") && s.Contains("dh +7"));
     }
 
-    [Fact]
-    public async Task APlacementThatSentNothingIsStillAFailure() =>
+    [Theory]
+    [InlineData(100, 192, 569, 261)] // moved
+    [InlineData(96, 192, 500, 254)] // shrank
+    public async Task AMismatchThatMovedOrShrankTheWindowIsAFailure(int x, int y, int width, int height) =>
         await Assert.ThrowsAsync<CoreCallException>(() =>
-            PlacementReadBack.Place(() => throw Refused(0), () => Requested, Requested, null)
+            PlacementReadBack.Place(() => throw Mismatch(), () => new Rectangle(x, y, width, height), Requested, null)
+        );
+
+    [Fact]
+    public async Task AnyOtherPlacementFailureIsStillAFailure() =>
+        await Assert.ThrowsAsync<CoreCallException>(() =>
+            PlacementReadBack.Place(() => throw OtherFailure(), () => Requested, Requested, null)
         );
 
     [Fact]
     public async Task AWindowThatCannotBeReadBackIsAFailure() =>
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            PlacementReadBack.Place(() => throw Refused(1), () => null, Requested, null)
+            PlacementReadBack.Place(() => throw Mismatch(), () => null, Requested, null)
         );
 
     [Fact]
-    public async Task AnExactPlacementReturnsTheReadBack()
-    {
-        var observed = await PlacementReadBack.Place(() => Task.CompletedTask, () => Requested, Requested, null);
-
-        Assert.Equal(Requested, observed);
-    }
+    public async Task AnExactPlacementReturnsTheReadBack() =>
+        Assert.Equal(
+            Requested,
+            await PlacementReadBack.Place(() => Task.CompletedTask, () => Requested, Requested, null)
+        );
 }
