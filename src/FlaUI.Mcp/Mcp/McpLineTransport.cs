@@ -77,7 +77,7 @@ internal sealed class McpLineTransport(McpServer server)
 
         // Notifications, liveness and status never dispatch input, so they answer at once and are never
         // refused for capacity: a broker reconciling a busy server must still reach them.
-        if (request.Id == null || request.Method is "ping" or "flaui/operations/status")
+        if (request.Id == null || request.Method is "ping" or "flaui/operations/status" || IsStatusTool(request))
         {
             await Respond(request, output);
             return;
@@ -91,6 +91,18 @@ internal sealed class McpLineTransport(McpServer server)
         }
 
         requests.Add(Respond(request, output));
+    }
+
+    private static bool IsStatusTool(JsonRpcRequest request)
+    {
+        if (request.Method != "tools/call" || request.Params is not { ValueKind: JsonValueKind.Object } parameters)
+        {
+            return false;
+        }
+
+        return parameters.TryGetProperty("name", out var name)
+            && name.ValueKind == JsonValueKind.String
+            && name.GetString() == Tools.OperationStatusTool.ToolName;
     }
 
     private static JsonRpcRequest? Parse(string line)

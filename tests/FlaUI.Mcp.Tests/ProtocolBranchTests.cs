@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FlaUI.Mcp;
+using FlaUI.Mcp.Core;
 using FlaUI.Mcp.Tools;
 using Xunit;
 
@@ -218,6 +219,35 @@ public sealed class ProtocolBranchTests
         await first.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.False(notDispatched);
+    }
+
+    [Fact]
+    public async Task OperationStatusIsAnsweredWhileASerializedCallHoldsTheSlot()
+    {
+        var tool = new BlockingTool();
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        registry.RegisterTool(tool);
+        registry.RegisterTool(new OperationStatusTool(registry.Operations, new PendingInvokeTracker()));
+        var server = new McpServer(registry);
+        var first = server.HandleRequestAsync(
+            Request("{\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"blocking\"}}")
+        );
+        await tool.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            var status = await server
+                .HandleRequestAsync(
+                    Request("{\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"windows_operation_status\"}}")
+                )
+                .WaitAsync(TimeSpan.FromSeconds(3));
+
+            Assert.Null(status!.Error);
+        }
+        finally
+        {
+            tool.Release.SetResult();
+            await first.WaitAsync(TimeSpan.FromSeconds(5));
+        }
     }
 
     private static JsonElement[] Rows(params object[] rows) => rows.Select(row => Args(row)).ToArray();

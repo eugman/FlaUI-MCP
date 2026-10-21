@@ -5,7 +5,10 @@ namespace FlaUI.Mcp.Tools;
 
 public sealed class OperationStatusTool(OperationCoordinator operations, PendingInvokeTracker pending) : ToolBase
 {
-    public override string Name => "windows_operation_status";
+    /// <summary>Read-only and never blocked: it is how a client inspects the calls that are.</summary>
+    public const string ToolName = "windows_operation_status";
+
+    public override string Name => ToolName;
 
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
     public override string Description =>

@@ -110,9 +110,11 @@ public class McpServer
         }
 
         notDispatched.TryRemove(key, out _);
+        // Operation status is read-only and must answer while a stranded call still holds the serial slot.
+        var serialized = !_concurrentRequests && callParams.Name != Tools.OperationStatusTool.ToolName;
         try
         {
-            if (!_concurrentRequests)
+            if (serialized)
             {
                 await serialRequests.WaitAsync(stop.Token);
             }
@@ -131,7 +133,7 @@ public class McpServer
             }
             finally
             {
-                if (!_concurrentRequests)
+                if (serialized)
                 {
                     ReleaseSerialSlot(stranded);
                 }
