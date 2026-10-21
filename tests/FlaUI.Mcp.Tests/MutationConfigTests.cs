@@ -170,4 +170,22 @@ public sealed class MutationConfigTests
         Assert.Contains("$env:UseSharedCompilation = $saved.UseSharedCompilation", restore);
         Assert.Contains("$env:MSBUILDDISABLENODEREUSE = $saved.MSBUILDDISABLENODEREUSE", restore);
     }
+
+    [Fact]
+    public void ThePointerIntegrationConfigIsTheOnlyOneThatNamesTheIntegrationTests()
+    {
+        var path = RepoFile("stryker-config.pointer-integration.json");
+        var config = JsonDocument.Parse(File.ReadAllText(path)).RootElement.GetProperty("stryker-config");
+        var script = File.ReadAllText(RepoFile(Path.Combine("scripts", "mutation.ps1")));
+
+        Assert.Equal(
+            ["FlaUI.Mcp.IntegrationTests.csproj"],
+            config.GetProperty("test-projects").EnumerateArray().Select(p => p.GetString()).ToArray()
+        );
+        Assert.Equal(1, config.GetProperty("concurrency").GetInt32());
+        Assert.Equal(180000, config.GetProperty("additional-timeout").GetInt32());
+        Assert.Contains("if ($Part -eq 'pointer-integration')", script);
+        Assert.Contains("'stryker-config.pointer-integration.json' 180", script);
+        Assert.Contains("if ($project -ne $offlineProject) { CloseTestApps }", script);
+    }
 }

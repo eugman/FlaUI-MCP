@@ -15,8 +15,13 @@ Separately, the offline test assembly sets `FLAUI_OFFLINE_TESTS=1` before any te
 
 `MutationConfigTests` fails if the config names another test project, the script loses these checks, the variable is not set, or a test constructs an input tool without installing the fake desktop.
 
+### The one deliberate exception
+
+The pointer code (ClickTool, MouseTool, PointerActions, ClickPoint, GuardedInput.Click) mostly runs against real UI Automation elements, so offline tests cannot reach most of its mutants. `pwsh scripts/mutation.ps1 -Part pointer-integration` mutates those files against `tests/FlaUI.Mcp.IntegrationTests` instead, using `stryker-config.pointer-integration.json`. It waives the offline-only rule for that part alone, and only when asked for by name: it is never part of `-Part all`. Run it only with the desktop free and the person at the machine agreeing. It runs one test session at a time, gives each mutant 180 s beyond the normal timeout, stops after 3 hours, and runs with the real desktop (`FLAUI_OFFLINE_TESTS` unset). The guard still checks Stryker's options, here for the integration project alone. Every test session must leave no test app or other stray window behind: the fixture closes apps a killed test host left running before it launches its own, and the script closes any that remain when the part ends.
+
 ## Run log
 
+- 2026-10-21, about 05:40: a Windows Run dialog appeared on the desktop while automated runs were active. Its origin is unknown; none of the core's tests send Win+R, and the Windows key is refused under an allowlist. Integration and mutation runs must leave no stray windows: check the desktop after each run.
 - 2026-10-20: the first runs started Stryker from the repository root. Stryker found `FlaUI.Mcp.slnx` and ran every test project in it, including `FlaUI.Mcp.IntegrationTests`, although `test-projects` named only the offline project. Those runs launched the WinForms and WPF test apps and took focus, once while the machine was in use. Two test apps were left running after a run was stopped. The script now runs Stryker inside the offline project and checks its log before any test runs (see above). Scores from those runs are discarded.
 
 ## Latest run

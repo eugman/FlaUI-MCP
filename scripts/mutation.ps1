@@ -9,12 +9,21 @@
 # says. So Stryker runs inside tests/FlaUI.Mcp.Tests with that project named explicitly, and the run is
 # stopped before its first test when its log shows a solution context, another test project, or more
 # tests than the offline project has.
-param([string]$Part = 'all', [int]$Minutes = 45, [int]$Concurrency = 0)
+#
+# The one deliberate exception is -Part pointer-integration. The pointer code's mutants need real UI
+# Automation, so that part mutates the pointer files against tests/FlaUI.Mcp.IntegrationTests, which
+# launches the WinForms and WPF test apps and takes the desktop. Run it only with the desktop free and the
+# person at the machine agreeing. It is never part of -Part all, uses stryker-config.pointer-integration.json
+# (one test session, 180 s extra per-mutant timeout), defaults to a 3-hour cap, runs with the real desktop
+# (FLAUI_OFFLINE_TESTS unset), and closes any test app left behind when it ends.
+param([string]$Part = 'all', [int]$Minutes = 0, [int]$Concurrency = 0)
 $ErrorActionPreference = 'Stop'
 $root = git rev-parse --show-toplevel
 Set-Location $root
 
 $offlineProject = 'FlaUI.Mcp.Tests.csproj'
+$integrationProject = 'FlaUI.Mcp.IntegrationTests.csproj'
+$testApps = 'WinFormsTestApp', 'WpfTestApp'
 $parts = [ordered]@{
     guards = 'GuardedInput', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'InputRefusal'
     state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext'
@@ -32,26 +41,28 @@ function RemoveWorktree($path) {
     git worktree prune
 }
 
-# The number of tests in the offline project, as vstest discovers them (theory rows included).
-function OfflineTestCount {
-    $listing = dotnet test tests/FlaUI.Mcp.Tests --artifacts-path local/build-background -m:1 -nologo --list-tests 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "Could not list the offline tests:`n$($listing -join "`n")" }
+# The number of tests in a project, as vstest discovers them (theory rows included).
+function TestCount($project, [string[]]$extra) {
+    $listing = dotnet test $project -m:1 -nologo --list-tests @extra 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Could not list the tests of ${project}:`n$($listing -join "`n")" }
     $names = $listing | Where-Object { $_ -match '^\s{4}\S' }
     return @($names).Count
 }
 
-# Why this run must stop, or $null while its log shows only the offline project.
-function UnsafeRun($logs, $expected) {
+function OfflineTestCount { TestCount 'tests/FlaUI.Mcp.Tests' @('--artifacts-path', 'local/build-background') }
+
+# Why this run must stop, or $null while its log shows only the expected test project.
+function UnsafeRun($logs, $expected, $allowed = $offlineProject) {
     $text = Get-ChildItem $logs -Filter '*.txt' -ErrorAction SilentlyContinue |
         ForEach-Object { Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue }
     $text = $text -join "`n"
     if ($text -match 'IsSolutionContext: True') { return 'Stryker is in solution mode and would run every test project.' }
-    if ($text -match 'IntegrationTests') { return 'The integration test project appears in the run.' }
-    # Stryker logs its options before it builds anything. Until they are seen and name only the offline
+    if ($allowed -eq $offlineProject -and $text -match 'IntegrationTests') { return 'The integration test project appears in the run.' }
+    # Stryker logs its options before it builds anything. Until they are seen and name only the expected
     # project, nothing else may happen: a build or a test run first means the check came too late.
     if ($text -match 'TestProjects: \[([^\]]*)\]') {
         $projects = @($Matches[1] -split ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })
-        $others = @($projects | Where-Object { (Split-Path $_ -Leaf) -ne $offlineProject })
+        $others = @($projects | Where-Object { (Split-Path $_ -Leaf) -ne $allowed })
         if ($projects.Count -eq 0 -or $others.Count -gt 0) { return "Stryker would run these test projects: $($projects -join ', ')." }
     }
     elseif ($text -match 'Building|Number of tests found') {
@@ -59,41 +70,58 @@ function UnsafeRun($logs, $expected) {
     }
 
     if ($text -match 'Number of tests found: (\d+)' -and [int]$Matches[1] -gt $expected) {
-        return "Stryker found $($Matches[1]) tests; the offline project has $expected."
+        return "Stryker found $($Matches[1]) tests; the project has $expected."
     }
 
     return $null
 }
 
-function RunPart($name, $files, $expected) {
+# Close test apps a timed-out test host left behind.
+function CloseTestApps {
+    foreach ($app in $testApps) {
+        Get-Process -Name $app -ErrorAction SilentlyContinue | ForEach-Object {
+            $_.Kill($true)
+            $null = $_.WaitForExit(5000)
+        }
+    }
+}
+
+function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $project = $offlineProject, $config = 'stryker-config.json', $cap = 45) {
     # A fresh name each run: a folder left busy by an earlier run must not break this one.
     $work = Join-Path $root "local/build-background/stryker-wt-$name-$(Get-Date -Format 'HHmmss')"
     $output = Join-Path $root "local/build-background/StrykerOutput/$name"
     RemoveWorktree $work
     if (Test-Path $output) { Remove-Item -Recurse -Force $output }
     git worktree add --detach $work HEAD | Out-Null
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $work "tests/FlaUI.Mcp.Tests/$offlineProject"))) {
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $work "$testDir/$project"))) {
         throw "Could not create the worktree for part $name at $work."
     }
 
     $code = 1
-    Push-Location (Join-Path $work 'tests/FlaUI.Mcp.Tests')
+    if ($project -eq $offlineProject) {
+        # Run from the offline test project with that project named explicitly.
+        Push-Location (Join-Path $work 'tests/FlaUI.Mcp.Tests')
+        $arguments = @('stryker', '-f', "../../$config", '--test-project', $offlineProject)
+    }
+    else {
+        Push-Location (Join-Path $work $testDir)
+        $arguments = @('stryker', '-f', "../../$config", '--test-project', $project)
+    }
+
     try {
         dotnet tool restore | Out-Null
-        $arguments = @(
-            'stryker', '-f', '../../stryker-config.json', '--test-project', $offlineProject,
-            '--output', $output, '--log-to-file'
-        )
+        $arguments += @('--output', $output, '--log-to-file')
         foreach ($file in $files) { $arguments += @('--mutate', "**/$file.cs") }
         if ($Concurrency -gt 0) { $arguments += @('--concurrency', $Concurrency) }
         $stryker = Start-Process dotnet -ArgumentList $arguments -NoNewWindow -PassThru
         $null = $stryker.Handle
-        $deadline = (Get-Date).AddMinutes($Minutes)
+        $limit = if ($Minutes -gt 0) { $Minutes } else { $cap }
+        $deadline = (Get-Date).AddMinutes($limit)
         $checked = $false
         while (-not $stryker.WaitForExit(200)) {
             # Until the discovered test count is known and safe, watch the log five times a second.
             if (-not $checked) {
-                $reason = UnsafeRun (Join-Path $output 'logs') $expected
+                $reason = UnsafeRun (Join-Path $output 'logs') $expected $project
                 if ($reason) {
                     $stryker.Kill($true)
                     $stryker.WaitForExit()
@@ -108,7 +136,7 @@ function RunPart($name, $files, $expected) {
             if ((Get-Date) -gt $deadline) {
                 $stryker.Kill($true)
                 $stryker.WaitForExit()
-                Write-Host "Mutation testing ($name) stopped after $Minutes minutes; no report." -ForegroundColor Red
+                Write-Host "Mutation testing ($name) stopped after $limit minutes; no report." -ForegroundColor Red
                 break
             }
         }
@@ -117,6 +145,7 @@ function RunPart($name, $files, $expected) {
     }
     finally {
         Pop-Location
+        if ($project -ne $offlineProject) { CloseTestApps }
         RemoveWorktree $work
     }
 
@@ -134,14 +163,25 @@ $saved = @{
 }
 $failed = 0
 try {
-    $env:FLAUI_OFFLINE_TESTS = '1'
     $env:UseSharedCompilation = 'false'
     $env:MSBUILDDISABLENODEREUSE = '1'
-    $expected = OfflineTestCount
-    Write-Host "Offline project: $expected tests."
-    foreach ($name in $parts.Keys) {
-        if ($Part -ne 'all' -and $Part -ne $name) { continue }
-        if ((RunPart $name $parts[$name] $expected) -ne 0) { $failed = 1 }
+    if ($Part -eq 'pointer-integration') {
+        # The deliberate exception: real UI Automation and the real desktop, so the switch is unset.
+        $env:FLAUI_OFFLINE_TESTS = $null
+        $expected = TestCount 'tests/FlaUI.Mcp.IntegrationTests' @()
+        Write-Host "Integration project: $expected tests. This part takes the desktop."
+        $files = $parts.pointer + 'ClickPoint', 'GuardedInput'
+        $code = RunPart 'pointer-integration' $files $expected 'tests/FlaUI.Mcp.IntegrationTests' $integrationProject 'stryker-config.pointer-integration.json' 180
+        if ($code -ne 0) { $failed = 1 }
+    }
+    else {
+        $env:FLAUI_OFFLINE_TESTS = '1'
+        $expected = OfflineTestCount
+        Write-Host "Offline project: $expected tests."
+        foreach ($name in $parts.Keys) {
+            if ($Part -ne 'all' -and $Part -ne $name) { continue }
+            if ((RunPart $name $parts[$name] $expected) -ne 0) { $failed = 1 }
+        }
     }
 }
 finally {

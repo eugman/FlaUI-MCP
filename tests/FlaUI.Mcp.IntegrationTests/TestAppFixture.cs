@@ -33,6 +33,7 @@ public class TestAppFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        CloseStrayTestApps();
         var winFormsPath =
             FindTestAppPath("WinFormsTestApp")
             ?? throw new Exception(
@@ -89,6 +90,25 @@ public class TestAppFixture : IAsyncLifetime
         CloseProcess(_wpfProcess);
         Session.Dispose();
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Close test apps an earlier test host left running. A host killed by a timeout (as mutation runs do)
+    /// never reaches DisposeAsync, and its apps would stay on the desktop.
+    /// </summary>
+    private static void CloseStrayTestApps()
+    {
+        foreach (var name in new[] { "WinFormsTestApp", "WpfTestApp" })
+        {
+            foreach (var stray in Process.GetProcessesByName(name))
+            {
+                using (stray)
+                {
+                    stray.Kill(entireProcessTree: true);
+                    stray.WaitForExit(5000);
+                }
+            }
+        }
     }
 
     private static Process LaunchTestApp(string path)
