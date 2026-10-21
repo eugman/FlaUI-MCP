@@ -218,8 +218,13 @@ public class ScreenshotTool : ToolBase
             return Task.FromResult(ErrorResult(pathError));
         }
 
-        // Park only once the call is known to be valid, so a refused call never moves the real mouse.
-        if (GetBoolArgument(arguments, "parkPointer", false) && ParkPointer(handle, refId) is { } parkError)
+        // Park only once the call is known to be valid, so a refused call never moves the real mouse. A park the
+        // guards refuse (a revoked grant, a busy lease) still captures, with a warning: the image is the evidence.
+        string? parkWarning = null;
+        if (
+            GetBoolArgument(arguments, "parkPointer", false)
+            && ParkPointer(handle, refId, out parkWarning) is { } parkError
+        )
         {
             return Task.FromResult(ErrorResult(parkError));
         }
@@ -275,6 +280,11 @@ public class ScreenshotTool : ToolBase
                 if (verdict.Refusal is { } refusal)
                 {
                     return ErrorResult(refusal);
+                }
+
+                if (parkWarning != null)
+                {
+                    verdict = verdict with { Warnings = [parkWarning, .. verdict.Warnings] };
                 }
 
                 List<LocatedElement>? located = null;
@@ -631,8 +641,14 @@ public class ScreenshotTool : ToolBase
         }
     }
 
-    private string? ParkPointer(string? handle, string? refId)
+    /// <summary>The warning for a park the guards refused; the capture goes ahead without it.</summary>
+    internal static string ParkRefused(Exception error) =>
+        $"parkPointer was refused, so the pointer was not moved: {error.Message} "
+        + "The capture was taken anyway; a hover state or tooltip may show in it.";
+
+    private string? ParkPointer(string? handle, string? refId, out string? warning)
     {
+        warning = null;
         var window = handle ?? (refId == null ? null : _elementRegistry.WindowForRef(refId));
         var hwnd = window == null ? Win32Desktop.GetForegroundWindow() : _sessionManager.GetWindowHwnd(window);
         if (window != null && WindowIsGone(hwnd))
@@ -653,12 +669,13 @@ public class ScreenshotTool : ToolBase
         try
         {
             PointerParking.Park(bounds);
-            return null;
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
         {
-            return $"parkPointer: {ex.Message} No screenshot was taken.";
+            warning = ParkRefused(ex);
         }
+
+        return null;
     }
 
     // A cached handle can outlive its window (a dialog that closed, an app that exited). Report that,

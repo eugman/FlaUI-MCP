@@ -279,6 +279,16 @@ internal sealed class FakeDesktop : InputDesktop
     public override string DescribeElement(AutomationElement element) =>
         Descriptions.TryGetValue(element, out var description) ? description : "Custom ''";
 
+    /// <summary>What rendering a window by handle returns; null for a render that fails.</summary>
+    public byte[]? WindowImage { get; set; } = [];
+
+    public override bool CaptureWindow(nint hwnd, out byte[] image, out string? reason)
+    {
+        image = WindowImage ?? [];
+        reason = WindowImage == null ? "no image (fake)" : null;
+        return WindowImage != null;
+    }
+
     private sealed class Uninstall : IDisposable
     {
         public void Dispose() => Override.Value = null;

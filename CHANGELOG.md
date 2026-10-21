@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed for product repos
+- New grant-free `Diagnostics.Capture(hwnd, path)` for failure screenshots: PrintWindow by handle, no lease, permission check, cancellation, focus or pointer move, and a `SkipReason` instead of an exception. `windows_screenshot` with `parkPointer` captures anyway, with a warning, when the guards refuse the park (revoked grant, busy lease, a window covering its screen). `InputDesktop` gains `CaptureWindow`.
 - A pattern call still in validation when its tool returns as pending is never sent afterwards (the lease is gone). A late failure of a pending call is kept as `lateError` on operation status, which then reports `failed`. New `WaitOutcome<T>` (`Done`, `TimedOut(last, lastError)`, `Changed`) for polls.
 - New `WindowBaseline` (`Take`, `Opened`, `OwnerDisabled`, `NewModal`, `BlockingDialog`, `CanBeDialog`) judges opened and blocking windows against a before-list, with tooltip, menu, tool-window and cloaked filters. windows_click's failure text names a modal only when a dialog is owned by a disabled window, and its "window opened" note ignores tooltips. Variants can replace their own window diffs with it.
 - `SessionManager.ResolveTarget` resolves a `windows_batch` to the target of its first targeted step, so a stranded batch marks that app's provider pending like a single tool.

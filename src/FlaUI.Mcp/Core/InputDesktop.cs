@@ -130,6 +130,10 @@ internal class InputDesktop
     public virtual string DescribeElement(AutomationElement element) =>
         $"{element.Properties.ControlType.ValueOrDefault} '{element.Properties.Name.ValueOrDefault}'";
 
+    /// <summary>Renders a window by handle (PrintWindow); a read, so it needs no lease or grant.</summary>
+    public virtual bool CaptureWindow(nint hwnd, out byte[] image, out string? reason) =>
+        NativeWindowCapture.TryCaptureHwnd(hwnd, out image, out reason);
+
     /// <summary>The visible top-level windows of a process.</summary>
     public virtual IReadOnlyList<Win32WindowInfo> TopLevelWindows(int processId) =>
         Win32Desktop.GetTopLevelWindows(processId);
