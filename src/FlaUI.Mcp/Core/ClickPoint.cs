@@ -192,64 +192,10 @@ public static class ClickPoint
         geometry.ScrollableAncestors.Aggregate(geometry.Bounds, Rectangle.Intersect);
 
     /// <summary>
-    /// Hit-test <paramref name="point"/> just before input: UI Automation must report <paramref name="target"/> or
-    /// one of its descendants there. A sibling, scrollbar, header or overlay in the same window is refused by name
-    /// with nothing sent, and so is a hit test that fails.
+    /// Hit-test <paramref name="point"/> just before input; see <see cref="ClickHitTest.Verify"/>. Returns how the
+    /// point was proven to be on the element: "target", "descendant" or "ancestor".
     /// </summary>
-    public static void Verify(Point point, AutomationElement target, ClickGeometry geometry)
-    {
-        var desktop = InputDesktop.Current;
-        AutomationElement? hit;
-        try
-        {
-            hit = desktop.ElementAt(target, point);
-        }
-        catch (Exception error) when (error is not OperationCanceledException)
-        {
-            throw Covered($"The point ({point.X},{point.Y}) could not be hit-tested ({error.Message})");
-        }
-
-        if (Within(desktop, hit, target))
-        {
-            return;
-        }
-
-        // Some providers report the container for a point on its child (a WinForms PropertyGrid row through
-        // MSAA, a Chromium node, a WPF text block): an ancestor counts, but only where the target is visible.
-        if (hit != null && VisiblePart(geometry).Contains(point) && Within(desktop, target, hit))
-        {
-            return;
-        }
-
-        var covering = hit == null ? "nothing UI Automation can see" : desktop.DescribeElement(hit);
-        throw Covered($"The point ({point.X},{point.Y}) is covered by {covering}");
-    }
-
-    private const int MaxAncestorWalk = 50;
-
-    /// <summary>Whether <paramref name="element"/> is <paramref name="ancestor"/> or lies under it.</summary>
-    private static bool Within(InputDesktop desktop, AutomationElement? element, AutomationElement ancestor)
-    {
-        for (var depth = 0; element != null && depth < MaxAncestorWalk; depth++)
-        {
-            if (desktop.SameElement(element, ancestor))
-            {
-                return true;
-            }
-
-            element = desktop.ParentOf(element);
-        }
-
-        return false;
-    }
-
-    private static InputRefusedException Covered(string reason) =>
-        InputRefusedException.Record(
-            new InputRefusal(
-                "click-point-covered",
-                $"{reason}; no input sent. Scroll the element into view, then observe again."
-            )
-        );
+    public static string Verify(Point point, AutomationElement target) => ClickHitTest.Verify(point, target);
 
     private static InputRefusedException Refuse(string reason) =>
         InputRefusedException.Record(

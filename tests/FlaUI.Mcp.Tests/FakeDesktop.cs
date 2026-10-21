@@ -286,6 +286,22 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override bool SameElement(AutomationElement a, AutomationElement b) => ReferenceEquals(a, b);
 
+    /// <summary>Each element's control type; Custom unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, FlaUI.Core.Definitions.ControlType> ControlTypes { get; } =
+        new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Each element's bounds; empty unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, Rectangle> ElementBounds { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
+        ControlTypes.TryGetValue(element, out var type) ? type : FlaUI.Core.Definitions.ControlType.Custom;
+
+    public override Rectangle BoundsOf(AutomationElement element) =>
+        ElementBounds.TryGetValue(element, out var bounds) ? bounds : Rectangle.Empty;
+
+    public override IReadOnlyList<AutomationElement> ChildrenOf(AutomationElement element) =>
+        Parents.Where(pair => ReferenceEquals(pair.Value, element)).Select(pair => pair.Key).ToList();
+
     public override string DescribeElement(AutomationElement element) =>
         Descriptions.TryGetValue(element, out var description) ? description : "Custom ''";
 

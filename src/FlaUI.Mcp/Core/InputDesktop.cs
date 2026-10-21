@@ -126,6 +126,13 @@ internal class InputDesktop
     /// <summary>Whether two elements are the same UI Automation element (compared by the provider).</summary>
     public virtual bool SameElement(AutomationElement a, AutomationElement b) => a.Equals(b);
 
+    public virtual FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
+        element.Properties.ControlType.ValueOrDefault;
+
+    public virtual Rectangle BoundsOf(AutomationElement element) => element.BoundingRectangle;
+
+    public virtual IReadOnlyList<AutomationElement> ChildrenOf(AutomationElement element) => element.FindAllChildren();
+
     /// <summary>An element as a refusal names it: "ControlType 'Name'".</summary>
     public virtual string DescribeElement(AutomationElement element) =>
         $"{element.Properties.ControlType.ValueOrDefault} '{element.Properties.Name.ValueOrDefault}'";

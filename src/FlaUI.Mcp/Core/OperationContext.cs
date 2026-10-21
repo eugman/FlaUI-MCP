@@ -27,6 +27,9 @@ public sealed class OperationContext
     /// </summary>
     public string? LateError { get; set; }
 
+    /// <summary>The weakest hit-test proof of a press in this operation: target, descendant or ancestor.</summary>
+    public string? HitTest { get; set; }
+
     /// <summary>The last refusal guarded input raised in this operation.</summary>
     public InputRefusal? Refusal { get; set; }
     private int inputsSent;

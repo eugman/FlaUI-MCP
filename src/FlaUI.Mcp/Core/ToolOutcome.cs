@@ -28,6 +28,10 @@ public sealed record ToolOutcome(
     [JsonPropertyName("failure"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public InputRefusal? Failure { get; init; }
 
+    /// <summary>How the press point was proven on the element (target, descendant or ancestor), when it was hit-tested.</summary>
+    [JsonPropertyName("hitTest"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? HitTest { get; init; }
+
     /// <summary>The tool's text result, repeated here for clients that only show structuredContent.</summary>
     [JsonPropertyName("message"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; init; }

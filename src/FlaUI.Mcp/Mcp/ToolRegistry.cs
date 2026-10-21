@@ -211,6 +211,7 @@ public class ToolRegistry
             OperationContext.Check();
             var returned = await tool.ExecuteAsync(arguments);
             result = WithDispatch(returned, operation.InputsSent, operation.Refusal, ProviderPending(operation));
+            result = result with { Outcome = result.Outcome! with { HitTest = operation.HitTest } };
         }
         catch (Exception ex)
         {
