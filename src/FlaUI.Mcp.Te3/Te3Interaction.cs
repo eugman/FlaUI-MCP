@@ -21,6 +21,9 @@ public sealed class Te3Interaction : IDisposable
     /// <summary>The refusal code once the user's own input revoked the batch.</summary>
     public const string FocusRevoked = "focus_revoked";
 
+    /// <summary>The refusal code when the run's TE3 came to the front by anything but the user's click on it.</summary>
+    public const string ActivationDenied = "activation_denied";
+
     /// <param name="physicalInput">Counts non-injected input; null hooks the real keyboard and mouse once a batch begins.</param>
     public Te3Interaction(Func<long>? physicalInput = null)
     {
@@ -102,21 +105,66 @@ public sealed class Te3Interaction : IDisposable
         }
     }
 
+    /// <summary>The user's keys and clicks now, read when the run asks them to click TE3; null without an observer.</summary>
+    internal InputCounts? Mark()
+    {
+        lock (sync)
+        {
+            return observer?.Counts;
+        }
+    }
+
     /// <summary>
-    /// Counts the user's input from now on, keeping the batch: for the run, after the user clicked TE3 because Windows
-    /// refused to focus it, as the run asked. A grant already revoked stays revoked.
+    /// After the run asked the user to click TE3 (Windows refused to focus it) and TE3 came to the front: counts input
+    /// from now on, keeping the batch, only when that was a click. Any keyboard input since <paramref name="prompt"/>
+    /// went to some other window, and with no button-down TE3 came forward on its own (a late foreground grant, the
+    /// user's window closing); either revokes the batch with activation_denied. A revoked grant stays revoked.
     /// </summary>
-    internal void Rebaseline()
+    internal void Rebaseline(InputCounts? prompt)
     {
         lock (sync)
         {
             if (batch == null)
             {
-                throw new InvalidOperationException($"No batch to continue: {reason}");
+                throw Refusal(code, $"No batch to continue: {reason}");
+            }
+
+            var why = ActivationProblem(prompt);
+            if (why != null)
+            {
+                batch = null;
+                reason = why;
+                code = ActivationDenied;
+                throw Refusal(code, $"TE3 activation not accepted: {why} Ask the user before resuming.");
             }
 
             inputAtApproval = InputSequence();
         }
+    }
+
+    private string? ActivationProblem(InputCounts? prompt)
+    {
+        InputCounts now;
+        try
+        {
+            now = observer?.Counts ?? throw new InvalidOperationException("no observer");
+        }
+        catch (InvalidOperationException)
+        {
+            return "the input observer cannot tell a click from typing.";
+        }
+
+        if (prompt is not { } before)
+        {
+            return "no input count was taken when the user was asked to click TE3.";
+        }
+
+        if (now.Keys != before.Keys)
+        {
+            return "keyboard input from the user was observed while the run waited, so it went to another window.";
+        }
+
+        return now.ButtonDowns == before.ButtonDowns ? "TE3 came to the front without a click from the user." : null;
     }
 
     // A typed refusal, noted on the running operation so Core's outcome carries the code; it sent nothing itself.

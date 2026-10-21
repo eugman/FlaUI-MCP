@@ -158,19 +158,111 @@ public sealed class RunnerFocusTests : IDisposable
         Assert.Equal(1, desktop.StartRequests);
     }
 
+    /// <summary>The user's keys and clicks, counted apart as the real observer counts them.</summary>
+    private sealed class CountingObserver : IInputObserver
+    {
+        public long Keys { get; set; }
+        public long ButtonDowns { get; set; }
+        public long Moves { get; set; }
+
+        public long Sequence => Keys + ButtonDowns + Moves;
+
+        public InputCounts Counts => new(Keys, ButtonDowns);
+
+        public void Dispose() { }
+    }
+
+    private static (Te3Interaction Interaction, CountingObserver User) Observed()
+    {
+        var user = new CountingObserver();
+        var interaction = new Te3Interaction(() => user);
+        interaction.Begin("run model-open", userApproved: true);
+        return (interaction, user);
+    }
+
     [Fact]
-    public void AManualActivationCountsTheUsersInputFromTheClickOnward()
+    public void AClickThatBroughtTe3ForwardCountsTheUsersInputFromThere()
     {
         // Windows refused the focus and the run asked the user to click TE3: that click is the go-ahead, so the grant
         // counts input from it; any input after it still stops the run.
-        using var interaction = Approved();
-        Interlocked.Increment(ref userInput);
+        var (interaction, user) = Observed();
+        using var _ = interaction;
+        var prompt = interaction.Mark();
+        user.Moves++;
+        user.ButtonDowns++;
 
-        interaction.Rebaseline();
+        interaction.Rebaseline(prompt);
         interaction.Require();
 
-        Interlocked.Increment(ref userInput);
-        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
-        Assert.Throws<InvalidOperationException>(interaction.Rebaseline);
+        user.Moves++;
+        Assert.Equal(
+            Te3Interaction.FocusRevoked,
+            Assert.Throws<InputRefusedException>(interaction.Require).Refusal.Code
+        );
     }
+
+    [Fact]
+    public void TypingElsewhereWhileTe3CameForwardIsRefusedNotAbsorbed()
+    {
+        // The user answered mail in Outlook during the 120 s wait, closed it, and TE3 came to the front; a click had
+        // happened too. Every key went somewhere the run cannot see, so the run must not carry on.
+        var (interaction, user) = Observed();
+        using var _ = interaction;
+        var prompt = interaction.Mark();
+        user.Keys += 40;
+        user.ButtonDowns++;
+
+        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt));
+
+        Assert.Equal(Te3Interaction.ActivationDenied, error.Refusal.Code);
+        Assert.Contains("keyboard", error.Message);
+        Assert.Throws<InputRefusedException>(interaction.Require);
+    }
+
+    [Fact]
+    public void Te3ComingForwardWithoutAClickIsRefused()
+    {
+        // A late foreground grant, or the user's own window closing, brought TE3 forward: nobody clicked it.
+        var (interaction, user) = Observed();
+        using var _ = interaction;
+        var prompt = interaction.Mark();
+        user.Moves += 5;
+
+        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt));
+
+        Assert.Equal(Te3Interaction.ActivationDenied, error.Refusal.Code);
+        Assert.Contains("without a click", error.Message);
+    }
+
+    [Fact]
+    public void AGrantWithoutAnObserverThatCountsClicksCannotBeContinued()
+    {
+        using var interaction = Approved();
+
+        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(interaction.Mark()));
+    }
+
+    [Fact]
+    public void ARevokedGrantIsNotContinuedByAClick()
+    {
+        var (interaction, user) = Observed();
+        using var _ = interaction;
+        var prompt = interaction.Mark();
+        user.Keys++;
+        Assert.Throws<InputRefusedException>(interaction.Require);
+        user.ButtonDowns++;
+
+        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt));
+    }
+
+    [Theory]
+    [InlineData(0x0201, true)] // WM_LBUTTONDOWN
+    [InlineData(0x0204, true)] // WM_RBUTTONDOWN
+    [InlineData(0x0207, true)] // WM_MBUTTONDOWN
+    [InlineData(0x020B, true)] // WM_XBUTTONDOWN
+    [InlineData(0x0200, false)] // WM_MOUSEMOVE
+    [InlineData(0x0202, false)] // WM_LBUTTONUP
+    [InlineData(0x020A, false)] // WM_MOUSEWHEEL
+    public void OnlyAButtonGoingDownCountsAsAClick(int message, bool down) =>
+        Assert.Equal(down, PhysicalInputObserver.IsButtonDown(message));
 }

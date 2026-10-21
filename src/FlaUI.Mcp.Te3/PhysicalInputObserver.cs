@@ -26,6 +26,8 @@ internal sealed class PhysicalInputObserver : IInputObserver
     private readonly Hook mouse;
     private Exception? failure;
     private long sequence;
+    private long keys;
+    private long buttonDowns;
     private int disposed;
     private uint threadId;
 
@@ -61,14 +63,30 @@ internal sealed class PhysicalInputObserver : IInputObserver
     {
         get
         {
-            if (!thread.IsAlive || Volatile.Read(ref disposed) != 0 || !heartbeat.Alive(Environment.TickCount64))
-            {
-                throw new InvalidOperationException("Physical input observer is unavailable");
-            }
-
+            RequireAlive();
             return Interlocked.Read(ref sequence);
         }
     }
+
+    public InputCounts Counts
+    {
+        get
+        {
+            RequireAlive();
+            return new(Interlocked.Read(ref keys), Interlocked.Read(ref buttonDowns));
+        }
+    }
+
+    private void RequireAlive()
+    {
+        if (!thread.IsAlive || Volatile.Read(ref disposed) != 0 || !heartbeat.Alive(Environment.TickCount64))
+        {
+            throw new InvalidOperationException("Physical input observer is unavailable");
+        }
+    }
+
+    // WM_LBUTTONDOWN, WM_RBUTTONDOWN, WM_MBUTTONDOWN, WM_XBUTTONDOWN.
+    internal static bool IsButtonDown(nint message) => message is 0x0201 or 0x0204 or 0x0207 or 0x020B;
 
     // LLKHF_INJECTED / LLKHF_LOWER_IL_INJECTED and LLMHF equivalents.
     internal static bool IsPhysical(bool keyboard, uint flags) => (flags & (keyboard ? 0x12u : 0x03u)) == 0;
@@ -82,10 +100,23 @@ internal sealed class PhysicalInputObserver : IInputObserver
             if (IsPhysical(isKeyboard, flags))
             {
                 Interlocked.Increment(ref sequence);
+                Count(isKeyboard, message);
             }
         }
 
         return CallNextHookEx(0, code, message, data);
+    }
+
+    private void Count(bool isKeyboard, nint message)
+    {
+        if (isKeyboard)
+        {
+            Interlocked.Increment(ref keys);
+        }
+        else if (IsButtonDown(message))
+        {
+            Interlocked.Increment(ref buttonDowns);
+        }
     }
 
     private void Run()

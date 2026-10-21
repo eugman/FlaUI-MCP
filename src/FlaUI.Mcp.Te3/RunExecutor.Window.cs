@@ -48,15 +48,15 @@ public static partial class RunExecutor
         return RunJournal.Launch(manifest, save, start, GuardedDesktop.StartProcess);
     }
 
-    // Asks Windows to focus the run's TE3, then waits for the user to click it if Windows refused. True when the run
-    // waited for that click.
-    private static async Task<bool> ActivateOwnedWindow(
+    // Asks Windows to focus the run's TE3, then waits for the user to click it if Windows refused; after that wait the
+    // grant continues only when a click, and no typing, brought TE3 forward.
+    private static async Task ActivateOwnedWindow(
         AutomationHost host,
         string handle,
-        int processId,
         string label,
         string journal,
         InputTally inputs,
+        Te3Interaction interaction,
         CancellationToken cancellationToken
     )
     {
@@ -64,6 +64,8 @@ public static partial class RunExecutor
         var target = host.Sessions.GetInputTarget(handle);
         var activation = Stopwatch.StartNew();
         var waited = Win32Desktop.GetForegroundWindow() != target.Hwnd;
+        // The user's keys and clicks when asked: only a click may bring TE3 forward (Te3Interaction.Rebaseline).
+        var prompt = waited ? interaction.Mark() : null;
         if (waited)
         {
             Console.WriteLine(
@@ -74,7 +76,7 @@ public static partial class RunExecutor
 
         while (Win32Desktop.GetForegroundWindow() != target.Hwnd)
         {
-            RunSafety.RequireExclusiveTe3(processId);
+            RunSafety.RequireExclusiveTe3(target.ProcessId);
             target.EnsureAlive();
             if (activation.Elapsed > TimeSpan.FromSeconds(120))
             {
@@ -84,7 +86,10 @@ public static partial class RunExecutor
             await Task.Delay(250, cancellationToken);
         }
 
-        return waited;
+        if (waited)
+        {
+            interaction.Rebaseline(prompt);
+        }
     }
 
     /// <summary>

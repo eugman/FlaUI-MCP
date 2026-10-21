@@ -11,6 +11,8 @@ public sealed class InputObserverTests
         public long Sequence =>
             Dead ? throw new InvalidOperationException("Physical input observer is unavailable") : 0;
 
+        public InputCounts Counts => new(Sequence, 0);
+
         public void Dispose() => Disposed = true;
     }
 

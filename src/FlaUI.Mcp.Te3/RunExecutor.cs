@@ -163,21 +163,15 @@ public static partial class RunExecutor
             manifest.Te3Version = app.MainModule?.FileVersionInfo.ProductVersion;
             var marker = manifest.Database.Length > 0 ? manifest.Database : id;
             handle = await WaitForOwnedWindow(host, app, marker, cancellationToken);
-            if (
-                await ActivateOwnedWindow(
-                    host,
-                    handle,
-                    app.Id,
-                    $"{manifest.Database} {id}",
-                    journal,
-                    inputs,
-                    cancellationToken
-                )
-            )
-            {
-                // The user clicked TE3 as asked; their input counts from that click on.
-                interaction.Rebaseline();
-            }
+            await ActivateOwnedWindow(
+                host,
+                handle,
+                $"{manifest.Database} {id}",
+                journal,
+                inputs,
+                interaction,
+                cancellationToken
+            );
 
             cancellationToken.ThrowIfCancellationRequested();
             var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken), journal, inputs);
