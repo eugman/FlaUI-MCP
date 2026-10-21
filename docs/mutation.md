@@ -27,7 +27,7 @@ A surviving mutant is either a missing test, which you fix with a red-green test
 
 ## Latest run
 
-On 2026-10-20, run at `f463ab9`: 871 mutants tested, 757 killed, 5 timed out and 109 survived. The covered-mutant score is 87.5%; the score over all mutants is 28.5%, because 1801 mutants have no covering test. Almost all of the uncovered ones are in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs` and drive the live TE3 desktop, so only the integration tests can reach them. The first run scored 75.6% covered, with 208 survivors; tests killed 99 of them, and `e84d006` kills 6 more.
+On 2026-10-20, run at `f463ab9`, before the input-accounting, journal, retry and cancel fixes that followed it (`93a3e6b` onwards). The scores and the survivor list below describe that commit; rerun `pwsh scripts/coverage.ps1 -Mutation` for the current code. That run tested 871 mutants, 757 killed, 5 timed out and 109 survived. The covered-mutant score is 87.5%; the score over all mutants is 28.5%, because 1801 mutants have no covering test. Almost all of the uncovered ones are in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs` and drive the live TE3 desktop, so only the integration tests can reach them. The first run scored 75.6% covered, with 208 survivors; tests killed 99 of them, and `e84d006` kills 6 more.
 
 ## Equivalent and accepted survivors
 
@@ -37,9 +37,8 @@ On 2026-10-20, run at `f463ab9`: 871 mutants tested, 757 killed, 5 timed out and
 - `NativeMcpPreflight.TryProperty` and `TryTextProperty`, the initial `value = ""`: callers read `value` only when the method returns true, and every true return assigns it.
 - `NativeMcpProbeSession.Send`, `SingleOrDefault()` changed to `Single()`: the header is read only inside `TryGetValues`, so it has a value, and two values throw either way.
 - `NativeMcpProbeSession.ReadResult`, `detectEncodingFromByteOrderMarks` and `leaveOpen`: responses are UTF-8, and the stream is disposed with the response.
-- `NativeMcpProbeSession.AppendData`, the `'
-'` between `data:` lines: the payload is JSON, so a newline between lines is whitespace.
-- `SettingsLease.WriteAtomically`, the temporary name's parts: any unique name next to the target works.
+- `NativeMcpProbeSession.AppendData`, the newline (`'\n'`) between `data:` lines: the payload is JSON, so a newline between lines is whitespace.
+- `SettingsLease.WriteAtomically`, the temporary name's parts: any unique name next to the target works. (Since `ef7ba61`, a failed write deletes its temporary file quietly and keeps the write's own error; that path postdates the run.)
 - `SettingsLease.Validate`, the `JsonException` text: it is the inner exception, and only the wrapping message is shown.
 - `SettingsLease.Recover`, the `", "` separator: the tests change one file, and the separator only appears between names.
 - `Te3Interaction.Begin`, `reason = "approved."`: the reason is shown only once the batch has ended or been revoked, and both overwrite it.

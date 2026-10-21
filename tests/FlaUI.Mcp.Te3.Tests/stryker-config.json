@@ -16,6 +16,13 @@
       "**/SettingsLease.cs",
       "**/PathWalker.cs",
       "**/Te3Page.cs",
+      "**/NavigationRetry.cs",
+      "**/DialogCancel.cs",
+      "**/PhysicalInputObserver.cs",
+      "**/Backlog.cs",
+      "**/InputTally.cs",
+      "**/InputProof.cs",
+      "**/GrantedTool.cs",
       "!**/obj/**",
       "!**/*.g.cs",
       "!**/AssemblyInfo.cs"
