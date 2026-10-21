@@ -29,12 +29,13 @@ public sealed class InputTallyTests
     [InlineData("Point is not on the target window (off-window or covered); no input sent.")]
     [InlineData("Desktop input needs the user's approval: keyboard or mouse input from the user was observed.")]
     [InlineData("Failed to click w1e3: Stale element reference.")]
-    [InlineData("Input target/focus changed or is disabled; no further input sent.")]
     public async Task ARefusedFirstClickSendsNothing(string refusal)
     {
         var inputs = new InputTally();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => inputs.Invoke(Returns(refusal, error: true)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            inputs.Invoke(Returns(refusal, error: true), tool: "windows_click")
+        );
 
         Assert.Equal(0, inputs.Sent);
         Assert.False(
@@ -138,5 +139,83 @@ public sealed class InputTallyTests
 
         Assert.False(called);
         Assert.Equal(0, inputs.Sent);
+    }
+
+    // Core's own wording when a multi-part tool stops part-way (SendKeysTool, TypeTools).
+    private const string SecondChordRefused =
+        "Failed to send keys: Input target/focus changed or is disabled; no further input sent. Completed 1 chord(s). "
+        + "A failing chord may have partially executed; inspect state before replaying input.";
+
+    [Theory]
+    [InlineData("windows_send_keys", SecondChordRefused)]
+    [InlineData(
+        "windows_send_keys",
+        "Failed to send keys: Stale element reference. Completed 2 chord(s). A failing chord may have partially executed; inspect state before replaying input."
+    )]
+    [InlineData(
+        "windows_type",
+        "Failed to type: Desktop input needs the user's approval: keyboard or mouse input from the user was observed; ask them before resuming. Ask the user, then call te3_interaction_begin. Typed 0 of 1 line(s); line 1 may be partly typed."
+    )]
+    [InlineData(
+        "windows_type",
+        "Failed to type: Input target/focus changed or is disabled; no further input sent. Typed 1 of 2 line(s); line 2 may be partly typed."
+    )]
+    [InlineData(
+        "windows_fill",
+        "Failed to fill w1e2: Desktop input needs the user's approval: keyboard or mouse input from the user was observed."
+    )]
+    [InlineData(
+        "windows_click",
+        "Failed to click w1e3: Input target/focus changed or is disabled; no further input sent."
+    )]
+    public async Task APartlySentCallCountsAsSent(string tool, string failure)
+    {
+        var inputs = new InputTally();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            inputs.Invoke(Returns(failure, error: true), tool: tool)
+        );
+
+        Assert.Equal(1, inputs.Sent);
+    }
+
+    [Fact]
+    public async Task KeysRefusedBeforeTheFirstChordSendNothing()
+    {
+        var inputs = new InputTally();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            inputs.Invoke(
+                Returns(
+                    "Failed to send keys: Desktop input is busy; no input sent. Completed 0 chord(s). No keyboard input was dispatched.",
+                    error: true
+                ),
+                tool: "windows_send_keys"
+            )
+        );
+
+        Assert.Equal(0, inputs.Sent);
+    }
+
+    [Fact]
+    public async Task ASearchClearThatLostFocusBetweenItsKeysIsNotRetried()
+    {
+        // ClearTomSearchTyped sends Ctrl+A then Backspace in one call; focus moved between them.
+        var inputs = new InputTally();
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            NavigationRetry.Once(
+                () =>
+                {
+                    attempts++;
+                    return inputs.Invoke(Returns(SecondChordRefused, error: true), tool: "windows_send_keys");
+                },
+                () => inputs.Sent,
+                null
+            )
+        );
+
+        Assert.Equal(1, attempts);
     }
 }

@@ -21,7 +21,9 @@ internal static class InputProof
     );
 
     /// <summary>Whether the failure says no input went out.</summary>
-    internal static bool NotSent(string message) => NotSentText.IsMatch(message) || Blocker(message) != null;
+    /// <param name="tool">The Core tool that failed, when known.</param>
+    internal static bool NotSent(string message, string? tool = null) =>
+        NotSentText.IsMatch(message) || Blocker(message) != null;
 
     /// <summary>The desktop condition that refused the input, when retrying cannot help: activation-denied or desktop-unavailable.</summary>
     internal static string? Blocker(string message) =>

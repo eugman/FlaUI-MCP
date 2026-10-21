@@ -11,7 +11,7 @@ public sealed class InputTally
     public int Sent { get; private set; }
 
     /// <summary>Runs one Core tool call unless the operation was stopped, and counts it; throws on an error or pending result.</summary>
-    public async Task Invoke(Func<Task<McpToolResult>> call, bool readOnly = false)
+    public async Task Invoke(Func<Task<McpToolResult>> call, bool readOnly = false, string? tool = null)
     {
         FlaUI.Mcp.Core.OperationContext.Check();
         McpToolResult result;
