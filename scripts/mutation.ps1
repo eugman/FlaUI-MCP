@@ -55,11 +55,16 @@ function UnsafeRun($logs, $expected) {
 }
 
 function RunPart($name, $files, $expected) {
-    $work = Join-Path $root "local/build-background/stryker-wt-$name"
+    # A fresh name each run: a folder left busy by an earlier run must not break this one.
+    $work = Join-Path $root "local/build-background/stryker-wt-$name-$(Get-Date -Format 'HHmmss')"
     $output = Join-Path $root "local/build-background/StrykerOutput/$name"
     RemoveWorktree $work
     if (Test-Path $output) { Remove-Item -Recurse -Force $output }
     git worktree add --detach $work HEAD | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $work "tests/FlaUI.Mcp.Tests/$offlineProject"))) {
+        throw "Could not create the worktree for part $name at $work."
+    }
+
     $code = 1
     Push-Location (Join-Path $work 'tests/FlaUI.Mcp.Tests')
     try {
@@ -108,6 +113,10 @@ function RunPart($name, $files, $expected) {
     return $code
 }
 
+# Stryker's builds must not leave a compiler server or build nodes running with a worktree as their
+# working directory: that keeps the folder busy after the run.
+$env:UseSharedCompilation = 'false'
+$env:MSBUILDDISABLENODEREUSE = '1'
 $expected = OfflineTestCount
 Write-Host "Offline project: $expected tests."
 $failed = 0
