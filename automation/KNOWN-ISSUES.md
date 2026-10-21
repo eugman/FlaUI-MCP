@@ -24,7 +24,7 @@ Workaround: if a resize fails with `undocked: true`, dock the pane again by hand
 
 Seen in TE3 3.27.1. With the TOM Explorer `Show changes` filter on and no unsaved changes, the tree is empty and the title reads `TOM Explorer (Changed)`. Object navigation then reports that the table is missing.
 
-Fixed in the host: `te3_navigate object` turns Show changes off before it walks, and reports "show-changes filter active" with a next action if it stays on. Needs live verification.
+Fixed in the host: `te3_navigate object` turns Show changes off before it walks, and reports "show-changes filter active" with a next action if it stays on. Verified live.
 
 ## Object navigation can outrun the 30-second tool deadline
 

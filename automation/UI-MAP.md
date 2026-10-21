@@ -18,7 +18,7 @@ Locators and behaviour observed in TE3 3.26.3, 3.27.0 and 3.27.1. Treat every la
 |---|---|---|
 | Main menu | MenuBar `Main menu` | MenuItems File … Help. Popup entries are Buttons; only submenu parents are MenuItems. |
 | TOM Explorer | `treeList` in `TabularExplorerView` | Rows expose names as Value. Qualify the table. |
-| TOM Explorer Show changes | CheckBox `Show changes` in `TabularExplorerView` > ToolBar `TOM Explorer` | Observed 3.27.1 with Toggle pattern; the companion only turns it on and verifies it is on. |
+| TOM Explorer Show changes | CheckBox `Show changes` in `TabularExplorerView` > ToolBar `TOM Explorer` | Observed 3.27.1 with Toggle pattern; `tom-explorer/changes` turns it on and verifies it is on, and `te3_navigate object` turns it off before walking the tree. |
 | Properties | `PropertyGridView` | Categories are TreeItems, properties DataItems with values. |
 | Expression editor | `DaxEditor` / `daxscilla` in `QuickEditorView` | A Property ComboBox picks which DAX property is edited. |
 | DAX query | `daxEditor` / `daxscilla` | Result cell: DataItem `[Value] row 1`. |

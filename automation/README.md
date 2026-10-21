@@ -180,7 +180,7 @@ and verify live behavior separately under a machine grant. The saved 3.27.1 tool
 `te3_layout` distinguishes docked pane hiding from document closing. Its
 close/keep actions preserve document tabs. Named show/hide accepts AI Assistant,
 TOM Explorer, and Properties. Showing an absent pane still refuses input. The View-menu reopen
-locator was verified by hand on 3.27.1 (see UI-MAP), but the tool does not use it yet. Best Practice
+locator was verified by hand on 3.27.1 (see UI-MAP), and `te3_layout reopen-pane` uses it. Best Practice
 Analyzer shares TOM Explorer's tab container (UI-MAP), so reopening either one can change which of
 the two tabs shows; check `te3_layout_read list` afterwards. The View popup's Expression Editor entry
 opens a document, not a pane, so `reopen-pane` does not accept it. The
