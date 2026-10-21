@@ -130,7 +130,8 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             OperationContext.Check();
             await inputs.Invoke(
                 () => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)),
-                ReadOnlyTools.Contains(tool)
+                ReadOnlyTools.Contains(tool),
+                tool
             );
         };
 

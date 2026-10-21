@@ -452,5 +452,5 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         Tool("windows_click", new { @ref = host.Elements.Register(handle, element), handle });
 
     private Task Tool(string tool, object args) =>
-        inputs.Invoke(() => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)));
+        inputs.Invoke(() => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)), tool: tool);
 }

@@ -21,12 +21,12 @@ public sealed class InputTally
         }
         catch (Exception error)
         {
-            Count(readOnly, error.Message);
+            Count(readOnly, error.Message, tool);
             throw;
         }
 
         var text = string.Join("; ", result.Content.Select(c => c.Text));
-        Count(readOnly, result.IsError == true ? text : null);
+        Count(readOnly, result.IsError == true ? text : null, tool);
         if (result.IsError == true || result.Outcome?.IsPending == true)
         {
             throw new InvalidOperationException(text);
@@ -41,9 +41,9 @@ public sealed class InputTally
     }
 
     // failure: null when the call returned normally; otherwise its text, which may prove nothing was sent.
-    private void Count(bool readOnly, string? failure)
+    private void Count(bool readOnly, string? failure, string? tool)
     {
-        if (!readOnly && (failure == null || !InputProof.NotSent(failure)))
+        if (!readOnly && (failure == null || !InputProof.NotSent(failure, tool)))
         {
             Sent++;
         }

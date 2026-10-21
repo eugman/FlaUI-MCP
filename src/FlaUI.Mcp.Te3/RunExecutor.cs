@@ -291,7 +291,8 @@ public static class RunExecutor
                         arguments,
                         () => host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(arguments))
                     ),
-                tool is "windows_screenshot" or "windows_find"
+                tool is "windows_screenshot" or "windows_find",
+                tool
             );
         }
     }
