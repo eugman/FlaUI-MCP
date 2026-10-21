@@ -48,7 +48,10 @@ public sealed record ToolOutcome(
 
     public static ToolOutcome FromPattern(PatternCallResult result) =>
         new(
-            "completed",
+            // A call still waiting in validation has not been sent: pending, never safe to replay.
+            result.Dispatched
+                ? "completed"
+                : "timed_out_pending",
             result.Outcome == PatternCallOutcome.Completed ? "returned" : "pending",
             result.PendingPatternId,
             result.ModalTitle,

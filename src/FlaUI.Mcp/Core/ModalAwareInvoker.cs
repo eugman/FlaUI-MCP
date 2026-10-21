@@ -22,6 +22,7 @@ public enum PatternCallOutcome
 /// </summary>
 /// <param name="Outcome">What happened within the grace period.</param>
 /// <param name="ModalTitle">Title of the detected modal window, if any.</param>
+/// <param name="Dispatched">False while the call is still validating, before it counted its dispatch.</param>
 public sealed record PatternCallResult(
     PatternCallOutcome Outcome,
     string? ModalTitle = null,
@@ -78,6 +79,8 @@ public static class ModalAwareInvoker
                 ? windowEnumerator(processId).ToDictionary(w => w.Hwnd)
                 : new Dictionary<nint, Win32WindowInfo>();
 
+        var operation = OperationContext.Current.Value;
+        var sentBefore = operation?.InputsSent ?? 0;
         var info = tracker.Begin(processId, description);
         var task = Task.Run(() =>
         {
@@ -97,7 +100,15 @@ public static class ModalAwareInvoker
             TaskScheduler.Default
         );
 
-        return AwaitResult(task, info, processId, windowsBefore, windowEnumerator, DateTime.UtcNow + grace);
+        var result = AwaitResult(task, info, processId, windowsBefore, windowEnumerator, DateTime.UtcNow + grace);
+        // The call records its dispatch only after validation, which a hung provider can hold up. Without
+        // an operation to count against, keep the cautious answer that it may have been sent.
+        return result.Outcome == PatternCallOutcome.Completed || operation == null
+            ? result
+            : result with
+            {
+                Dispatched = operation.InputsSent > sentBefore,
+            };
     }
 
     /// <summary>Wait for the call until it returns, a modal appears, or the deadline passes.</summary>

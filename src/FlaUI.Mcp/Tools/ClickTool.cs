@@ -449,6 +449,10 @@ public class ClickTool : ToolBase
                 $"{completedMessage}; a modal dialog \"{result.ModalTitle}\" opened and blocks UI Automation on this app until it closes. "
                     + "Find it with windows_list_windows, then use windows_screenshot or windows_send_keys (no ref) with its handle."
             ),
+            _ when !result.Dispatched => TextResult(
+                "Not sent yet: the request is still waiting on the app, whose UI Automation provider has not answered. "
+                    + "Check windows_operation_status or take a screenshot by handle before continuing; do not repeat the click."
+            ),
             _ => TextResult(
                 $"{completedMessage}; the app's handler is still running. Check windows_operation_status or take a screenshot "
                     + "by handle before continuing; do not repeat the click."

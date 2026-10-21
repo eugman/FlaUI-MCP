@@ -111,6 +111,74 @@ public sealed class DispatchAccountingTests
         Assert.DoesNotContain("no input sent", error.Message);
     }
 
+    // K2: a pattern call still waiting in validation has not been dispatched.
+
+    [Fact]
+    public void APatternCallStillValidatingIsTimedOutPendingNotCompleted()
+    {
+        using var hold = new ManualResetEventSlim();
+        PatternCallResult result = null!;
+        var counted = Counted(() =>
+            result = ModalAwareInvoker.Execute(
+                0,
+                "Invoke on 'OK'",
+                () => MutationGuard.Execute(() => hold.Wait(), () => { }),
+                new PendingInvokeTracker(),
+                TimeSpan.FromMilliseconds(100)
+            )
+        );
+        hold.Set();
+
+        Assert.Equal(PatternCallOutcome.StillPending, result.Outcome);
+        Assert.Equal(0, counted);
+        Assert.Equal("timed_out_pending", ToolOutcome.FromPattern(result).Dispatch);
+    }
+
+    [Fact]
+    public void APatternCallDispatchedButNotReturnedIsCompletedWithAPendingProvider()
+    {
+        using var hold = new ManualResetEventSlim();
+        PatternCallResult result = null!;
+        var counted = Counted(() =>
+            result = ModalAwareInvoker.Execute(
+                0,
+                "Invoke on 'OK'",
+                () => MutationGuard.Execute(() => { }, () => hold.Wait()),
+                new PendingInvokeTracker(),
+                TimeSpan.FromMilliseconds(100)
+            )
+        );
+        hold.Set();
+
+        Assert.Equal(1, counted);
+        var outcome = ToolOutcome.FromPattern(result);
+        Assert.Equal("completed", outcome.Dispatch);
+        Assert.Equal("pending", outcome.Provider);
+    }
+
+    [Theory]
+    [InlineData(PatternCallOutcome.StillPending, false, "is still waiting on the app")]
+    [InlineData(PatternCallOutcome.StillPending, true, "the app's handler is still running")]
+    public void AStillPendingClickSaysWhetherItWasSent(PatternCallOutcome outcome, bool dispatched, string text)
+    {
+        var result = ClickTool.PatternResult(new PatternCallResult(outcome, Dispatched: dispatched), "Invoked OK");
+
+        Assert.Contains(text, result.Content[0].Text);
+        Assert.Equal(dispatched ? "completed" : "timed_out_pending", result.Outcome!.Dispatch);
+    }
+
+    [Theory]
+    [InlineData(false, "SetValue has not been sent yet")]
+    [InlineData(true, "SetValue dispatched")]
+    public void APendingFillSaysWhetherSetValueWasSent(bool dispatched, string text)
+    {
+        var result = FillTool.PendingSetValueResult(
+            new PatternCallResult(PatternCallOutcome.StillPending, Dispatched: dispatched)
+        );
+
+        Assert.StartsWith(text, result.Content[0].Text);
+    }
+
     private sealed class DelegateTool(string name, Func<McpToolResult> run) : ToolBase
     {
         public override string Name => name;

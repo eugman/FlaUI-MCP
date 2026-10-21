@@ -183,7 +183,9 @@ public class FillTool : ToolBase
     /// <summary>The reply when SetValue has not returned within the grace period.</summary>
     internal static McpToolResult PendingSetValueResult(PatternCallResult result) =>
         TextResult(
-            "SetValue dispatched; the provider call is still pending. The final value is not verified. Inspect the dialog before continuing; do not repeat the fill."
+            result.Dispatched
+                ? "SetValue dispatched; the provider call is still pending. The final value is not verified. Inspect the dialog before continuing; do not repeat the fill."
+                : "SetValue has not been sent yet: it is still waiting on the app's UI Automation provider. Check windows_operation_status before continuing; do not repeat the fill."
         ) with
         {
             Outcome = ToolOutcome.FromPattern(result),
