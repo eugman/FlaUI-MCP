@@ -47,7 +47,7 @@ public sealed class PopupWindowsTests
     {
         var sources = DirectInputJournalTests.Sources();
         var menu = File.ReadAllText(Path.Combine(sources, "LayoutViewMenu.cs"));
-        var page = File.ReadAllText(Path.Combine(sources, "Te3Page.cs"));
+        var page = string.Concat(Directory.GetFiles(sources, "Te3Page*.cs").Select(File.ReadAllText));
 
         Assert.Contains("PopupWindows.Baseline(", menu);
         Assert.Contains(".New(", menu);

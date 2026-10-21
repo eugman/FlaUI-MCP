@@ -18,6 +18,8 @@
       "**/PathWalker.cs",
       "**/Te3Page.cs",
       "**/Te3Page.Walk.cs",
+      "**/Te3Page.Tom.cs",
+      "**/ObjectWalk.cs",
       "**/RunGrant.cs",
       "**/WalkPlace.cs",
       "**/LayoutChecks.cs",

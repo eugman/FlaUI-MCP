@@ -1089,38 +1089,6 @@ public sealed partial class Te3Page(
     private sealed record PopupObservation(long Hwnd, string Title, System.Drawing.Rectangle? Bounds, QueryResult Tree);
 
     // Popups are separate top-level windows; searching them directly avoids spending the budget on the editor.
-    // The windows open just before the input that opens a popup; ObservePopups considers only windows opened since.
-    private IReadOnlyCollection<nint>? popupBaseline;
-
-    private void MarkPopups() => popupBaseline = PopupWindows.Baseline(host.Sessions.GetInputTarget(handle).ProcessId);
-
-    private async Task<PopupObservation[]> ObservePopups(int processId, int? maxWindows)
-    {
-        var windows = PopupWindows.New(Win32Desktop.GetTopLevelWindows(processId), popupBaseline);
-        if (windows.Length > maxWindows)
-        {
-            throw new InvalidOperationException($"Popup discovery incomplete: {windows.Length} candidate windows");
-        }
-
-        return await Task.Run(() =>
-                windows
-                    .Select(w => new PopupObservation(
-                        w.Hwnd.ToInt64(),
-                        w.Title,
-                        Win32Desktop.GetWindowBounds(w.Hwnd),
-                        query.Find(
-                            host.Sessions.RegisterNativeWindow(w.Hwnd, processId),
-                            new(Visible: true),
-                            maxDepth: 5,
-                            maxResults: 100,
-                            budget: new SearchBudget(1000, TimeSpan.FromSeconds(3))
-                        )
-                    ))
-                    .ToArray()
-            )
-            .WaitAsync(TimeSpan.FromSeconds(5));
-    }
-
     // UIA can report keyboard focus shortly after the key press, so poll briefly before failing.
     private async Task RequireKeyboardFocus(Target target, string failure)
     {
@@ -1207,23 +1175,6 @@ public sealed partial class Te3Page(
         var reference = await Reference(target);
         reportStep?.Invoke($"Click {target.Selector}");
         await invoke("windows_click", new { @ref = reference, physical });
-    }
-
-    // verifyFocus: Core's keyboard fallback (Ctrl+A, Backspace, text) first checks that focus reached the field and
-    // refuses otherwise. Every TE3 field filled here is a single focusable edit, so each call site asks for it.
-    private async Task Fill(Target target, string value, bool verifyFocus)
-    {
-        var reference = await Reference(target);
-        reportStep?.Invoke($"Fill {target.Selector}");
-        await invoke(
-            "windows_fill",
-            new
-            {
-                @ref = reference,
-                value,
-                verifyFocus,
-            }
-        );
     }
 
     private async Task Keys(string chord, Target? target = null)
@@ -1326,33 +1277,6 @@ public sealed partial class Te3Page(
         var scene = ScalarSceneBounds(ownerBounds, observed, Screen.FromHandle(owner.Hwnd).WorkingArea);
         CaptureScene(path, owner, dialog, scene, modal: true);
     }
-
-    // A placement Core reports as not exact, after the window moved, is read back and reported (PlacementReadBack).
-    private Task<System.Drawing.Rectangle> PlaceWindow(
-        string reference,
-        nint hwnd,
-        System.Drawing.Rectangle requested
-    ) =>
-        PlacementReadBack.Place(
-            () =>
-                invoke(
-                    "windows_place_window",
-                    new
-                    {
-                        @ref = reference,
-                        placement = new
-                        {
-                            x = requested.X,
-                            y = requested.Y,
-                            width = requested.Width,
-                            height = requested.Height,
-                        },
-                    }
-                ),
-            () => Win32Desktop.GetWindowBounds(hwnd),
-            requested,
-            reportStep
-        );
 
     private void CaptureScene(
         string path,
@@ -1658,52 +1582,6 @@ public sealed partial class Te3Page(
         await Click(TomTabTarget());
     }
 
-    public async Task OpenTomChanges()
-    {
-        await OpenTom();
-        if (await TomChangesOn())
-        {
-            return;
-        }
-
-        await Click(TomChangesTarget());
-        if (!await TomChangesOn())
-        {
-            throw new InvalidOperationException("Show changes did not turn on in TOM Explorer.");
-        }
-    }
-
-    /// <summary>
-    /// Turns TOM Explorer's Show changes filter off (the Toggle CheckBox; the bindable command is
-    /// TomExplorer.ToggleChangedOnly). Properties' own Show changes has no bindable command and is not driven here.
-    /// </summary>
-    public async Task CloseTomChanges()
-    {
-        await OpenTom();
-        if (await TomChangesState() is null)
-        {
-            throw new InvalidOperationException("TOM Explorer shows no Show changes checkbox; no input sent.");
-        }
-
-        await ShowChangesGate.TurnOff(TomChangesState, () => Click(TomChangesTarget()));
-    }
-
-    // Null when the checkbox is not on screen (builds without it, or the TOM Explorer toolbar hidden).
-    private async Task<bool?> TomChangesState() => await IsOnScreen(TomChangesTarget()) ? await TomChangesOn() : null;
-
-    private async Task<bool> TomChangesOn()
-    {
-        var control = await Resolve(TomChangesTarget());
-        if (!control.Patterns.Toggle.IsSupported)
-        {
-            throw new InvalidOperationException("TOM Explorer Show changes has no Toggle pattern.");
-        }
-
-        var state = await Task.Run(() => control.Patterns.Toggle.Pattern.ToggleState.Value)
-            .WaitAsync(TimeSpan.FromSeconds(5));
-        return state == ToggleState.On;
-    }
-
     private string McpDialogHandle()
     {
         var pid = host.Sessions.GetWindowProcessId(handle);
@@ -1764,24 +1642,6 @@ public sealed partial class Te3Page(
             throw new InvalidOperationException("MCP Server controls are not inside the visible dialog.");
         }
     }
-
-    /// <summary>One lookup, no retries: whether the target exists and is not offscreen; a failed read throws.</summary>
-    private async Task<bool> IsOnScreen(Target target) =>
-        await Task.Run(() =>
-            ScreenPresence.Read(
-                () =>
-                    !query
-                        .Resolve(
-                            handle,
-                            target.Selector,
-                            target.Within,
-                            target.IncludeOwned,
-                            budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
-                        )
-                        .Properties.IsOffscreen.ValueOrDefault,
-                target.Selector.ToString()
-            )
-        );
 
     public async Task SetProperty(string property, string value)
     {

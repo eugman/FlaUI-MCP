@@ -60,6 +60,8 @@ public sealed class DirectInputJournalTests
 
     [Theory]
     [InlineData("Te3Page.cs")]
+    [InlineData("Te3Page.Tom.cs")]
+    [InlineData("Te3Page.Walk.cs")]
     [InlineData("RunExecutor.cs")]
     [InlineData("RunExecutor.Window.cs")]
     [InlineData("RunSafety.cs")]
@@ -104,7 +106,7 @@ public sealed class DirectInputJournalTests
     {
         // Core's windows_fill keyboard fallback types Ctrl+A, Backspace and the text; whether it first checks that focus
         // reached the field is a per-call decision, never left to Core's default.
-        var page = File.ReadAllText(Path.Combine(Sources(), "Te3Page.cs"));
+        var page = string.Concat(Directory.GetFiles(Sources(), "Te3Page*.cs").Select(File.ReadAllText));
         var fills = Regex.Matches(page, @"invoke\(\s*""windows_fill"",\s*new\s*\{[^}]*\}");
 
         Assert.NotEmpty(fills);
