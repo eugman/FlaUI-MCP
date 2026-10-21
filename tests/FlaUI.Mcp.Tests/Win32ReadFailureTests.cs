@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FlaUI.Mcp.Core;
 using Xunit;
 
@@ -88,5 +89,40 @@ public sealed class Win32ReadFailureTests
     public void DescribeSaysWhenAWindowCannotBeRead()
     {
         Assert.Equal($"hwnd={NoWindow}, pid=0, class=unreadable", Win32Desktop.Describe(NoWindow));
+    }
+
+    // The fakes above only prove the helpers; this proves the real reads go through them. A direct call such as
+    // GetWindowThreadProcessId(hwnd, out pid) would hand back the stale out value these helpers refuse, so the
+    // only call-shaped mention of each import must be its extern declaration; everywhere else it is a method group.
+    [Fact]
+    public void RealWin32ReadsOnlyGoThroughTheFailureAwareHelpers()
+    {
+        var source = SourceDirectory();
+        var calls = Directory
+            .EnumerateFiles(source, "*.cs", SearchOption.AllDirectories)
+            .Where(file =>
+                !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+            )
+            .SelectMany(file => File.ReadLines(file).Select(line => (file, line)))
+            .Where(entry => Regex.IsMatch(entry.line, @"\b(GetWindowThreadProcessId|GetWindowText|GetClassName)\s*\("))
+            .ToArray();
+
+        Assert.Equal(3, calls.Length);
+        Assert.All(calls, entry => Assert.Contains("static extern", entry.line));
+    }
+
+    private static string SourceDirectory()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "src", "FlaUI.Mcp");
+            if (File.Exists(Path.Combine(candidate, "Core", "Win32Desktop.cs")))
+            {
+                return candidate;
+            }
+        }
+
+        throw new DirectoryNotFoundException("src/FlaUI.Mcp");
     }
 }
