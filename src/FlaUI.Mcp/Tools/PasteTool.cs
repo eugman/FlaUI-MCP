@@ -112,7 +112,7 @@ public sealed class PasteTool(
     }
 
     /// <summary>Put the text on the clipboard, send Ctrl+V through guarded input, and report what arrived.</summary>
-    private McpToolResult Paste(
+    internal McpToolResult Paste(
         GuardedInput input,
         FlaUI.Core.AutomationElements.AutomationElement? element,
         string text,
@@ -121,7 +121,11 @@ public sealed class PasteTool(
     {
         // Clipboard text uses CRLF; edit controls don't break lines on a bare LF.
         var clipboardText = text.ReplaceLineEndings("\r\n");
-        if (!InputDesktop.Current.SetClipboardText(clipboardText))
+        // Replacing the user's clipboard is a change of its own, made before Ctrl+V can be refused, so it is
+        // checked again (permission, foreground) right before the write and counted once written.
+        var written = false;
+        input.Check(() => written = input.SetClipboardText(clipboardText));
+        if (!written)
         {
             const string Busy = "The clipboard is in use by another process, so nothing was pasted.";
             return ErrorResult(
@@ -130,8 +134,7 @@ public sealed class PasteTool(
                     : Busy
             );
         }
-        // Replacing the user's clipboard is a change of its own, made before Ctrl+V can be refused.
-        MutationGuard.RecordDispatch();
+
         try
         {
             return SendPaste(input, element, clipboardText, target);

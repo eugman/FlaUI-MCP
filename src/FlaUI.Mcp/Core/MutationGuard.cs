@@ -12,11 +12,23 @@ public static class MutationGuard
 
     public static void Execute(Action validateIdentity, Action mutation)
     {
+        ExecuteUncounted(
+            validateIdentity,
+            () =>
+            {
+                RecordDispatch();
+                mutation();
+            }
+        );
+    }
+
+    /// <summary>The checks of <see cref="Execute"/> without the count, for a change counted once it is seen.</summary>
+    internal static void ExecuteUncounted(Action validateIdentity, Action mutation)
+    {
         OperationContext.Check();
         validateIdentity();
         OperationContext.Check();
         CheckPermission();
-        RecordDispatch();
         mutation();
     }
 }

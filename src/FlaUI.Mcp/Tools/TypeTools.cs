@@ -309,16 +309,10 @@ public class FillTool : ToolBase
         }
 
         OperationContext.Check();
-        using var lease = GuardedInput.AcquireLease();
-        var result = ModalAwareInvoker.Execute(
+        var result = SetValue(
             _elementRegistry.GetProcessIdForRef(refId),
-            "SetValue",
-            () =>
-                MutationGuard.Execute(
-                    () => _elementRegistry.ValidateReference(refId, handle),
-                    () => InputDesktop.Current.CallPattern(() => valuePattern.SetValue(value))
-                ),
-            _invokeTracker
+            () => valuePattern.SetValue(value),
+            () => _elementRegistry.ValidateReference(refId, handle)
         );
         if (result.Outcome != PatternCallOutcome.Completed)
         {
@@ -381,6 +375,10 @@ public class FillTool : ToolBase
         using var input = new GuardedInput(target, element, verifyFocus);
         return FillByKeyboard(input, value, elementName, read, validate);
     }
+
+    /// <summary>The SetValue call through the guarded pattern call: lease, integrity check, counted, modal-aware.</summary>
+    internal PatternCallResult SetValue(int processId, Action setValue, Action validate) =>
+        GuardedDesktop.CallPattern(processId, "SetValue", setValue, _invokeTracker, validate);
 
     /// <summary>Select all, replace by typing, then observe the text without retyping.</summary>
     internal static McpToolResult FillByKeyboard(

@@ -43,21 +43,9 @@ public sealed record ClickGeometry(
     )
     {
         OperationContext.Check();
-        using var lease = GuardedInput.AcquireLease();
         var before = bounds();
-        var result = ModalAwareInvoker.Execute(
-            processId,
-            "ScrollIntoView",
-            () =>
-            {
-                OperationContext.Check();
-                validate();
-                OperationContext.Check();
-                MutationGuard.CheckPermission();
-                InputDesktop.Current.CallPattern(scroll);
-            },
-            pending
-        );
+        // The guarded pattern call (lease, validation, integrity, permission), counted below only when it moved.
+        var result = WindowMutation.Uia(processId, "ScrollIntoView", scroll, pending, validate, counted: false);
         if (result.Outcome != PatternCallOutcome.Completed)
         {
             // The tracker still holds the call, so the registry marks the outcome's provider pending.

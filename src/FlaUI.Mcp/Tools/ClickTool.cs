@@ -348,7 +348,7 @@ public partial class ClickTool : ToolBase
             _ => false,
         };
 
-    private McpToolResult RunPattern(
+    internal McpToolResult RunPattern(
         AutomationElement element,
         string action,
         int processId,
@@ -366,13 +366,14 @@ public partial class ClickTool : ToolBase
         };
 
         var toggleBefore = action == "toggle" ? ReadToggle(element) : null;
-        // Pattern mutations share the input lease so they cannot interleave with physical input.
-        using var lease = GuardedInput.AcquireLease();
-        var result = ModalAwareInvoker.Execute(
+        // The guarded call takes the input lease, so it cannot interleave with physical input, and runs the
+        // integrity check: Windows drops a pattern call into a higher-integrity app as it drops input.
+        var result = GuardedDesktop.CallPattern(
             processId,
             $"{verb} on '{elementName}'",
-            () => MutationGuard.Execute(validate, () => InputDesktop.Current.CallPattern(call)),
-            _invokeTracker
+            call,
+            _invokeTracker,
+            validate
         );
         // Providers may update toggle state asynchronously, so wait briefly for it to move.
         ToggleState? toggleAfter = null;

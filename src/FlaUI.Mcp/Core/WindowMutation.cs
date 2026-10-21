@@ -101,7 +101,8 @@ internal static class WindowMutation
         Action call,
         PendingInvokeTracker? pending,
         Action? validate = null,
-        TimeSpan? gracePeriod = null
+        TimeSpan? gracePeriod = null,
+        bool counted = true
     )
     {
         RefuseIfBlocked(processId, pending);
@@ -113,18 +114,24 @@ internal static class WindowMutation
         }
 
         void Call() => InputDesktop.Current.CallPattern(call);
+        void Guarded()
+        {
+            if (counted)
+            {
+                MutationGuard.Execute(Validate, Call);
+            }
+            else
+            {
+                MutationGuard.ExecuteUncounted(Validate, Call);
+            }
+        }
+
         if (pending == null)
         {
-            MutationGuard.Execute(Validate, Call);
+            Guarded();
             return new PatternCallResult(PatternCallOutcome.Completed);
         }
 
-        return ModalAwareInvoker.Execute(
-            processId,
-            description,
-            () => MutationGuard.Execute(Validate, Call),
-            pending,
-            gracePeriod
-        );
+        return ModalAwareInvoker.Execute(processId, description, Guarded, pending, gracePeriod);
     }
 }
