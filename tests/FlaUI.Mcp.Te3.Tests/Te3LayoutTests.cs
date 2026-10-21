@@ -198,20 +198,55 @@ public sealed class Te3LayoutTests
         Assert.Equal(["TOM Explorer"], sent);
     }
 
+    [Fact]
+    public async Task AStepWhoseCallIsStillPendingIsAttempted()
+    {
+        // Core has not counted the pattern call yet, but it may still reach TE3.
+        var inputs = new InputTally();
+        var sent = new List<object>();
+
+        var error = await Assert.ThrowsAsync<CoreCallException>(() =>
+            LayoutSteps.Sending(
+                inputs,
+                sent.Add,
+                "Properties",
+                () =>
+                    inputs.Invoke(
+                        () =>
+                            Task.FromResult(
+                                new FlaUI.Mcp.McpToolResult
+                                {
+                                    IsError = true,
+                                    Content = [new() { Text = "Not sent yet." }],
+                                    Outcome = new FlaUI.Mcp.Core.ToolOutcome("timed_out_pending", "pending")
+                                    {
+                                        InputsSent = 0,
+                                    },
+                                }
+                            ),
+                        tool: "windows_click"
+                    )
+            )
+        );
+
+        Assert.Equal(0, inputs.Sent);
+        Assert.Equal(["Properties"], sent);
+        Assert.Equal("timed_out_pending", Te3Layout.Failure(error, inputs.Sent).Outcome?.Dispatch);
+    }
+
     [Theory]
     [InlineData(0, false)]
     [InlineData(2, true)]
     public void ALayoutFailureSaysWhetherInputWasSent(int inputsSent, bool dispatched)
     {
-        var reply = System
-            .Text.Json.JsonDocument.Parse(
-                Te3Layout.Failure(new InvalidOperationException("Pane is gone"), inputsSent).Content[0].Text!
-            )
-            .RootElement;
+        var result = Te3Layout.Failure(new InvalidOperationException("Pane is gone"), inputsSent);
+        var reply = System.Text.Json.JsonDocument.Parse(result.Content[0].Text!).RootElement;
 
         Assert.Contains("Pane is gone", reply.GetProperty("error").GetString());
-        Assert.Equal(dispatched, reply.GetProperty("actionDispatched").GetBoolean());
-        Assert.Equal(inputsSent, reply.GetProperty("inputsSent").GetInt32());
+        Assert.False(reply.TryGetProperty("actionDispatched", out _));
+        Assert.False(reply.TryGetProperty("inputsSent", out _));
+        Assert.Equal(dispatched ? "partial" : "not-dispatched", result.Outcome?.Dispatch);
+        Assert.Equal(inputsSent, result.Outcome?.InputsSent);
     }
 
     [Fact]
@@ -223,10 +258,9 @@ public sealed class Te3LayoutTests
             throw new OperationCanceledException("stopped");
         });
 
-        var reply = System.Text.Json.JsonDocument.Parse(result.Content[0].Text!).RootElement;
         Assert.True(result.IsError);
-        Assert.True(reply.GetProperty("actionDispatched").GetBoolean());
-        Assert.Equal(1, reply.GetProperty("inputsSent").GetInt32());
+        Assert.Equal("partial", result.Outcome?.Dispatch);
+        Assert.Equal(1, result.Outcome?.InputsSent);
     }
 
     [Fact]
@@ -243,17 +277,8 @@ public sealed class Te3LayoutTests
         var quick = await Te3Layout.Respond(_ => throw new InvalidOperationException("No TE3 window"));
         first.SetResult();
 
-        Assert.Equal(
-            0,
-            System.Text.Json.JsonDocument.Parse(quick.Content[0].Text!).RootElement.GetProperty("inputsSent").GetInt32()
-        );
-        Assert.Equal(
-            1,
-            System
-                .Text.Json.JsonDocument.Parse((await slow).Content[0].Text!)
-                .RootElement.GetProperty("inputsSent")
-                .GetInt32()
-        );
+        Assert.Equal(0, quick.Outcome?.InputsSent);
+        Assert.Equal(1, (await slow).Outcome?.InputsSent);
     }
 
     [Fact]
@@ -283,11 +308,9 @@ public sealed class Te3LayoutTests
 
         Assert.True(inputs.Sent >= 1);
         Assert.Equal(["Properties"], sent);
-        var reply = System
-            .Text.Json.JsonDocument.Parse(
-                Te3Layout.Failure(new InvalidOperationException("drag refused"), inputs.Sent).Content[0].Text!
-            )
-            .RootElement;
-        Assert.True(reply.GetProperty("actionDispatched").GetBoolean());
+        Assert.Equal(
+            "partial",
+            Te3Layout.Failure(new InvalidOperationException("drag refused"), inputs.Sent).Outcome?.Dispatch
+        );
     }
 }
