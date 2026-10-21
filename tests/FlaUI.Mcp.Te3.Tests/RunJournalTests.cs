@@ -152,4 +152,12 @@ public sealed class RunJournalTests : IDisposable
         Assert.Equal("provider hung", manifest.Error);
         Assert.Contains("could not be recorded", manifest.JournalError);
     }
+
+    [Fact]
+    public void AnActivationTimeoutDoesNotClaimNothingWasSent()
+    {
+        // te3_focus_window was sent before the wait, so the timeout must not read as a refusal before input.
+        Assert.False(InputProof.NotSent(RunExecutor.ActivationTimeout));
+        Assert.Contains("focus", RunExecutor.ActivationTimeout);
+    }
 }

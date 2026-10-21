@@ -327,6 +327,8 @@ public static class RunExecutor
         throw new TimeoutException("TE3 did not open the owned model");
     }
 
+    internal const string ActivationTimeout = "Manual activation not received; no input sent";
+
     // Asks Windows to focus the run's TE3, then waits for the user to click it if Windows refused.
     private static async Task ActivateOwnedWindow(
         AutomationHost host,
@@ -351,7 +353,7 @@ public static class RunExecutor
             target.EnsureAlive();
             if (activation.Elapsed > TimeSpan.FromSeconds(120))
             {
-                throw new TimeoutException("Manual activation not received; no input sent");
+                throw new TimeoutException(ActivationTimeout);
             }
 
             await Task.Delay(250, cancellationToken);
