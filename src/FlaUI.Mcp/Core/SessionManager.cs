@@ -37,9 +37,17 @@ public class SessionManager : IDisposable
     public ProcessIdentity? ResolveTarget(System.Text.Json.JsonElement? args, ElementRegistry refs)
     {
         // Diagnostic metadata only: no provider/process reads and no input validation.
-        if (args is not { ValueKind: System.Text.Json.JsonValueKind.Object } a || a.TryGetProperty("actions", out _))
+        if (args is not { ValueKind: System.Text.Json.JsonValueKind.Object } a)
         {
             return null;
+        }
+
+        // A batch targets what its steps target: the first that names one, so a stranded batch blocks that app.
+        if (a.TryGetProperty("actions", out var actions))
+        {
+            return actions.ValueKind == System.Text.Json.JsonValueKind.Array
+                ? actions.EnumerateArray().Select(step => ResolveTarget(step, refs)).FirstOrDefault(t => t != null)
+                : null;
         }
 
         string? handle = null;
