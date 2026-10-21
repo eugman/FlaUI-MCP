@@ -28,6 +28,9 @@ public interface ILayoutSurface
     /// <summary>A top-level window's screen bounds, or null when unreadable.</summary>
     Rectangle? BoundsOf(nint hwnd);
 
+    /// <summary>A top-level window's UIA AutomationId, or null when it cannot be read.</summary>
+    string? AutomationIdOf(nint hwnd);
+
     /// <summary>The TE3 process's top-level windows now.</summary>
     IReadOnlyList<Win32WindowInfo> Windows();
 

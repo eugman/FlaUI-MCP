@@ -66,6 +66,11 @@ public sealed class LayoutEntryTests : IDisposable
 
         public Rectangle? BoundsOf(nint hwnd) => new Rectangle(200, 200, 400, 600);
 
+        /// <summary>AutomationIds of the extra windows; the floating Dependencies window's is DaxDependencies.</summary>
+        public Dictionary<nint, string> AutomationIds { get; } = [];
+
+        public string? AutomationIdOf(nint hwnd) => AutomationIds.TryGetValue(hwnd, out var id) ? id : null;
+
         public bool ButtonShown(string title, string button) =>
             Documents.Contains(title) ? button == "Close" : PaneShows(title, button);
 
@@ -193,7 +198,8 @@ public sealed class LayoutEntryTests : IDisposable
         var tool = Tool(inputs =>
         {
             var layout = Standard(inputs);
-            layout.Extra.Add(new(0x30, "Properties", 7, true, false, false));
+            layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
+            layout.AutomationIds[0x30] = "DaxDependencies";
             return layout;
         });
 

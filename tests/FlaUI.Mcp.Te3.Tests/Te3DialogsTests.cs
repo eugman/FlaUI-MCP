@@ -16,7 +16,9 @@ public sealed class Te3DialogsTests
     {
         var prompt = new Win32WindowInfo(0x40, title, 7, true, false, false);
 
-        var error = Assert.Throws<InvalidOperationException>(() => LayoutChecks.Baseline([Main, prompt], Main.Hwnd));
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            LayoutChecks.Baseline([Main, prompt], Main.Hwnd, _ => null)
+        );
 
         Assert.Contains(title, error.Message);
         Assert.Contains(advice, error.Message);
@@ -32,7 +34,7 @@ public sealed class Te3DialogsTests
         var prompt = new Win32WindowInfo(0x40, "External changes detected", 7, true, false, false);
 
         var error = Assert.Throws<InvalidOperationException>(() =>
-            Te3Dialogs.RequireNoOtherWindow([Main, prompt], Main.Hwnd, "Preferences")
+            Te3Dialogs.RequireNoOtherWindow([Main, prompt], Main.Hwnd, "Preferences", _ => null)
         );
 
         Assert.Contains("Reload or Ignore", error.Message);
@@ -43,6 +45,18 @@ public sealed class Te3DialogsTests
         Te3Dialogs.RequireNoOtherWindow(
             [Main, new Win32WindowInfo(0x30, "Dependencies", 7, true, false, false)],
             Main.Hwnd,
-            "Preferences"
+            "Preferences",
+            _ => "DaxDependencies"
+        );
+
+    [Fact]
+    public void NavigationRefusesAWindowTitledLikeAPaneWithoutItsAutomationId() =>
+        Assert.Throws<InvalidOperationException>(() =>
+            Te3Dialogs.RequireNoOtherWindow(
+                [Main, new Win32WindowInfo(0x30, "Dependencies", 7, true, false, false)],
+                Main.Hwnd,
+                "Preferences",
+                _ => null
+            )
         );
 }

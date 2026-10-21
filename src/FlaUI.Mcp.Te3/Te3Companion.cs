@@ -151,7 +151,8 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         Te3Dialogs.RequireNoOtherWindow(
             windows,
             hwnd,
-            destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences"
+            destination.Id == "native-mcp-server" ? "MCP Server" : "Preferences",
+            Te3Dialogs.AutomationIds(host)
         );
 
         if (hasPreferences && destination.Section == null)

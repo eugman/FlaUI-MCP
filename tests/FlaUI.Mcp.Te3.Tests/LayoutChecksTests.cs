@@ -123,6 +123,25 @@ public sealed class LayoutChecksTests
         var main = new Win32WindowInfo(0x10, "Model - Tabular Editor 3", 7, true, false, false);
         var dependencies = new Win32WindowInfo(0x30, "Dependencies", 7, true, false, false);
 
-        Assert.Equal([main.Hwnd, dependencies.Hwnd], LayoutChecks.Baseline([main, dependencies], main.Hwnd));
+        Assert.Equal(
+            [main.Hwnd, dependencies.Hwnd],
+            LayoutChecks.Baseline([main, dependencies], main.Hwnd, _ => "DaxDependencies")
+        );
+    }
+
+    [Theory]
+    [InlineData("Dependencies", null)]
+    [InlineData("Dependencies", "SomethingElse")]
+    [InlineData("Properties", "PropertyGrid")]
+    public void ATitleAloneDoesNotMakeAWindowAFloatingPane(string title, string? automationId)
+    {
+        // A dialog titled like a pane must not be waved through: only a window with the pane's own AutomationId,
+        // observed for the floating Dependencies window (DaxDependencies, 3.27.1), is a floating pane.
+        var main = new Win32WindowInfo(0x10, "Model - Tabular Editor 3", 7, true, false, false);
+        var window = new Win32WindowInfo(0x30, title, 7, true, false, false);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            LayoutChecks.Baseline([main, window], main.Hwnd, _ => automationId)
+        );
     }
 }

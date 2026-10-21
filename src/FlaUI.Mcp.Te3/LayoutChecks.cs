@@ -116,11 +116,16 @@ internal static class LayoutChecks
     /// The TE3 windows when a layout call starts, which later checks compare with. Refuses, before any input, a titled
     /// window already open that is not the main window or a floating pane: a dialog nobody has answered.
     /// </summary>
-    public static IReadOnlyCollection<nint> Baseline(IReadOnlyList<Win32WindowInfo> windows, nint main)
+    /// <param name="automationIdOf">A window's UIA AutomationId, or null when it cannot be read.</param>
+    public static IReadOnlyCollection<nint> Baseline(
+        IReadOnlyList<Win32WindowInfo> windows,
+        nint main,
+        Func<nint, string?> automationIdOf
+    )
     {
         if (
             windows.FirstOrDefault(w =>
-                w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow && !IsFloatingPane(w.Title)
+                w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow && !IsFloatingPane(w, automationIdOf)
             ) is
             { } open
         )
@@ -133,8 +138,10 @@ internal static class LayoutChecks
         return windows.Select(w => w.Hwnd).ToList();
     }
 
-    // A dock pane TE3 floated (see KNOWN-ISSUES), titled like the pane; Dependencies opens floating by default
-    // (Layouts.json, observed 3.27.1).
-    internal static bool IsFloatingPane(string title) =>
-        Te3PanePlan.IsNamedPane(title) || PaneReopen.IsMapped(title) || title == "Dependencies";
+    // Floating dock panes observed on 3.27.1, by title and the window's own AutomationId: a window is one only when
+    // both match, so a dialog titled like a pane is never waved through.
+    private static readonly (string Title, string AutomationId)[] FloatingPanes = [("Dependencies", "DaxDependencies")];
+
+    internal static bool IsFloatingPane(Win32WindowInfo window, Func<nint, string?> automationIdOf) =>
+        FloatingPanes.Any(p => p.Title == window.Title && p.AutomationId == automationIdOf(window.Hwnd));
 }
