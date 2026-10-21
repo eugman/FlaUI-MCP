@@ -19,8 +19,8 @@ internal static class LayoutSteps
     public static Task<List<object>> Progress(string name, Func<Task<object?>> step) => Progress(name, _ => step());
 
     /// <summary>
-    /// As above; the step calls sent just before its input goes out, so a step that fails after sending is
-    /// recorded as attempted. Every failure keeps the record, cancellation and COM failures included.
+    /// As above; the step calls sent once its input went out (see <see cref="Sending"/>), so a step that fails after
+    /// that is recorded as attempted. Every failure keeps the record, COM failures included; cancellation propagates.
     /// </summary>
     public static async Task<List<object>> Progress(string name, Func<Action<object>, Task<object?>> step)
     {
@@ -34,7 +34,7 @@ internal static class LayoutSteps
                 sent = null;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             if (sent != null)
             {
@@ -47,23 +47,37 @@ internal static class LayoutSteps
         return completed;
     }
 
-    /// <summary>Runs one step's input and marks the step sent.</summary>
+    /// <summary>Runs one step's input; marks the step sent when the tally shows the input went out, even if it then failed.</summary>
     public static async Task Sending(InputTally inputs, Action<object> sent, object item, Func<Task> input)
     {
-        sent(item);
-        await input();
+        var before = inputs.Sent;
+        try
+        {
+            await input();
+        }
+        finally
+        {
+            if (inputs.Sent > before)
+            {
+                sent(item);
+            }
+        }
     }
 
-    /// <summary>The failure text: plain, or JSON naming the steps that completed before it.</summary>
-    public static string Describe(string tool, Exception ex) =>
-        ex is ProgressException progress
-            ? JsonSerializer.Serialize(
-                new Dictionary<string, object>
-                {
-                    ["error"] = $"{tool}: {ex.Message}",
-                    [progress.Name] = progress.Completed,
-                },
-                McpProtocol.JsonOptions
-            )
-            : $"{tool}: {ex.Message}";
+    /// <summary>The failure as JSON: the error, whether any input went out, and the steps completed before it.</summary>
+    public static string Describe(string tool, Exception ex, int inputsSent)
+    {
+        var reply = new Dictionary<string, object>
+        {
+            ["error"] = $"{tool}: {ex.Message}",
+            ["actionDispatched"] = inputsSent > 0,
+            ["inputsSent"] = inputsSent,
+        };
+        if (ex is ProgressException progress)
+        {
+            reply[progress.Name] = progress.Completed;
+        }
+
+        return JsonSerializer.Serialize(reply, McpProtocol.JsonOptions);
+    }
 }
