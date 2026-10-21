@@ -90,14 +90,33 @@ public sealed class ToolOutcomeTests
 
         public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
         {
+            using var counted = new ManualResetEventSlim();
+            var polls = 0;
             var outcome = ModalAwareInvoker.Execute(
                 123,
                 "fake pending provider",
                 // Like every real pattern call: validated and counted, then held by the provider.
-                () => MutationGuard.Execute(() => { }, release.Wait),
+                () =>
+                    MutationGuard.Execute(
+                        () => { },
+                        () =>
+                        {
+                            counted.Set();
+                            release.Wait();
+                        }
+                    ),
                 tracker,
                 TimeSpan.Zero,
-                _ => Array.Empty<Win32WindowInfo>()
+                // The first poll waits until the call has counted itself, so the result never races it.
+                _ =>
+                {
+                    if (polls++ > 0)
+                    {
+                        counted.Wait(TimeSpan.FromSeconds(10));
+                    }
+
+                    return Array.Empty<Win32WindowInfo>();
+                }
             );
             return Task.FromResult(TextResult("arbitrary text") with { Outcome = ToolOutcome.FromPattern(outcome) });
         }

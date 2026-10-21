@@ -138,14 +138,34 @@ public sealed class DispatchAccountingTests
     public void APatternCallDispatchedButNotReturnedIsCompletedWithAPendingProvider()
     {
         using var hold = new ManualResetEventSlim();
+        using var sent = new ManualResetEventSlim();
+        var polls = 0;
         PatternCallResult result = null!;
         var counted = Counted(() =>
             result = ModalAwareInvoker.Execute(
-                0,
+                42,
                 "Invoke on 'OK'",
-                () => MutationGuard.Execute(() => { }, () => hold.Wait()),
-                new PendingInvokeTracker(),
-                TimeSpan.FromMilliseconds(100)
+                () =>
+                    MutationGuard.Execute(
+                        () => { },
+                        () =>
+                        {
+                            sent.Set();
+                            hold.Wait();
+                        }
+                    ),
+                new PendingInvokeTracker(_ => 1),
+                TimeSpan.Zero,
+                // The first poll waits until the call has counted itself, so the result never races it.
+                _ =>
+                {
+                    if (polls++ > 0)
+                    {
+                        sent.Wait(TimeSpan.FromSeconds(10));
+                    }
+
+                    return [];
+                }
             )
         );
         hold.Set();
