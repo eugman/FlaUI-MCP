@@ -77,26 +77,60 @@ public sealed record ClickGeometry(
     private static bool IsSentinel(Point point) => point.X == int.MinValue || point.Y == int.MinValue;
 
     // A scroller's bounds include its own scrollbars and column headers, which take a press meant for content.
-    private static Rectangle Viewport(AutomationElement scroller, Rectangle element) =>
+    // An element that is the bar or lies in its subtree (a column header, a scrollbar thumb) keeps it.
+    private static Rectangle Viewport(AutomationElement scroller, AutomationElement element, Rectangle bounds) =>
         Viewport(
             scroller.BoundingRectangle,
             scroller
                 .FindAllChildren(cf => cf.ByControlType(ControlType.ScrollBar).Or(cf.ByControlType(ControlType.Header)))
-                .Select(chrome => chrome.BoundingRectangle),
-            element
+                .Select(chrome => (chrome.BoundingRectangle, InSubtree(element, chrome, scroller))),
+            bounds
         );
+
+    /// <summary>Whether <paramref name="element"/> is <paramref name="bar"/> or under it, below <paramref name="scroller"/>.</summary>
+    private static bool InSubtree(AutomationElement element, AutomationElement bar, AutomationElement scroller)
+    {
+        var desktop = InputDesktop.Current;
+        AutomationElement? current = element;
+        for (var depth = 0; current != null && depth < MaxAncestors; depth++)
+        {
+            if (desktop.SameElement(current, bar))
+            {
+                return true;
+            }
+
+            if (desktop.SameElement(current, scroller))
+            {
+                return false;
+            }
+
+            current = desktop.ParentOf(current);
+        }
+
+        return false;
+    }
+
+    internal static Rectangle Viewport(Rectangle bounds, IEnumerable<Rectangle> chrome, Rectangle? element = null) =>
+        Viewport(bounds, chrome.Select(bar => (bar, false)), element);
 
     /// <summary>
     /// <paramref name="bounds"/> without the scrollbars and headers in <paramref name="chrome"/>: each is cut off the
     /// edge it lies along (a wide one off the top or bottom, a tall one off the left or right). Empty when nothing
-    /// is left. The cut is for content: a scrollbar or header that holds <paramref name="element"/> itself (a column
-    /// header, the resize handle of a header drag) is kept, since the element lives in it.
+    /// is left. The cut is for content: a bar is kept when <paramref name="element"/> is that bar or in its subtree
+    /// (HoldsElement, a column header or a resize handle) or lies fully inside its bounds. A row merely half under a
+    /// scrollbar still loses the bar.
     /// </summary>
-    internal static Rectangle Viewport(Rectangle bounds, IEnumerable<Rectangle> chrome, Rectangle? element = null)
+    internal static Rectangle Viewport(
+        Rectangle bounds,
+        IEnumerable<(Rectangle Bounds, bool HoldsElement)> chrome,
+        Rectangle? element = null
+    )
     {
         var (left, top, right, bottom) = (bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
-        var centre = element is { } e ? new Point(e.X + e.Width / 2, e.Y + e.Height / 2) : (Point?)null;
-        foreach (var bar in chrome.Where(bar => bar.IntersectsWith(bounds) && !(centre is { } c && bar.Contains(c))))
+        var cut = chrome
+            .Where(bar => !bar.HoldsElement && !(element is { } e && bar.Bounds.Contains(e)))
+            .Select(bar => bar.Bounds);
+        foreach (var bar in cut.Where(bar => bar.IntersectsWith(bounds)))
         {
             if (bar.Width >= bar.Height)
             {
@@ -126,7 +160,7 @@ public sealed record ClickGeometry(
         {
             if (ancestor.Patterns.Scroll.IsSupported)
             {
-                scrollers.Add(Viewport(ancestor, bounds));
+                scrollers.Add(Viewport(ancestor, element, bounds));
             }
 
             if (ancestor.Properties.ControlType.ValueOrDefault == ControlType.Window)

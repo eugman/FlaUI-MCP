@@ -59,6 +59,25 @@ public sealed class ClickPointVisibilityTests
     }
 
     [Fact]
+    public void ARowHalfUnderTheScrollbarStillLosesTheBar()
+    {
+        // Its centre (548,1120) lies on the scrollbar, but the row is not part of the bar.
+        var row = new Rectangle(448, 1110, 200, 20);
+
+        Assert.Equal(1118, ClickGeometry.Viewport(Timeline, [HorizontalBar], row).Bottom);
+    }
+
+    [Fact]
+    public void AnElementInsideTheBarsSubtreeKeepsTheBar()
+    {
+        // The scrollbar's own thumb, which overhangs the bar's bounds by a pixel, is part of the bar.
+        var thumb = new Rectangle(300, 1117, 80, 24);
+
+        Assert.Equal(Timeline.Bottom, ClickGeometry.Viewport(Timeline, [(HorizontalBar, true)], thumb).Bottom);
+        Assert.Equal(1118, ClickGeometry.Viewport(Timeline, [(HorizontalBar, false)], thumb).Bottom);
+    }
+
+    [Fact]
     public void ACentreUnderTheScrollbarFallsBackToTheCentreOfTheVisiblePart()
     {
         var geometry = new ClickGeometry(false, null, Clip, [ClickGeometry.Viewport(Timeline, [HorizontalBar])]);
