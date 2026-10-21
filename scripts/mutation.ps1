@@ -29,7 +29,7 @@ $parts = [ordered]@{
     state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext', 'WaitOutcome'
     protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolBase'
     pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'PointerActions'
-    keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'BatchTool'
+    keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
 }
 
 function RemoveWorktree($path) {

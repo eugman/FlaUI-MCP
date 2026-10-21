@@ -33,6 +33,7 @@ public sealed class MutationConfigTests
         "Tools/PointerActions.cs",
         "Tools/SendKeysTool.cs",
         "Tools/TypeTools.cs",
+        "Tools/PasteTool.cs",
         "Tools/FillToolReplies.cs",
         "Tools/BatchTool.cs",
         "Core/WindowBaseline.cs",
