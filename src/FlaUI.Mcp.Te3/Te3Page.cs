@@ -1717,6 +1717,9 @@ public sealed class Te3Page(
         }
     }
 
+    // Null when the checkbox is not on screen (builds without it, or the TOM Explorer toolbar hidden).
+    private async Task<bool?> TomChangesState() => await IsOnScreen(TomChangesTarget()) ? await TomChangesOn() : null;
+
     private async Task<bool> TomChangesOn()
     {
         var control = await Resolve(TomChangesTarget());
@@ -2530,6 +2533,11 @@ public sealed class Te3Page(
     private async Task WalkToObject(string table, string objectName, string objectType)
     {
         await OpenTom();
+        if (await ShowChangesGate.TurnOff(TomChangesState, () => Click(TomChangesTarget())))
+        {
+            reportStep?.Invoke("Turned TOM Explorer Show changes off before walking the tree");
+        }
+
         await SearchTomTyped(objectName);
         await Keys("Home", TomExplorerTarget());
         var cursor = new TomCursor(this);

@@ -22,7 +22,7 @@ Workaround: start splitter drags a few pixels inside the upper or left pane. Che
 
 Seen in TE3 3.27.1. With the TOM Explorer `Show changes` filter on and no unsaved changes, the tree is empty and the title reads `TOM Explorer (Changed)`. Object navigation then reports that the table is missing.
 
-Workaround: turn Show changes off before navigating to an object.
+Fixed in the host: `te3_navigate object` turns Show changes off before it walks, and reports "show-changes filter active" with a next action if it stays on. Needs live verification.
 
 ## Object navigation can outrun the 30-second tool deadline
 
