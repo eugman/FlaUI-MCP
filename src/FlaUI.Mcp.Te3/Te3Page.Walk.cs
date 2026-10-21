@@ -31,6 +31,9 @@ public sealed partial class Te3Page
         );
     }
 
+    // The TOM Explorer label indent, measured during the walk; null until the root and its first child were read.
+    private TomRows.Scale? depthScale;
+
     // Where the last walk ended and what it was asked for; the arrival check compares them with the selection.
     private WalkResult? lastWalk;
     private WalkRequest? lastRequest;
@@ -51,6 +54,7 @@ public sealed partial class Te3Page
 
         await SearchTomTyped(objectName);
         await Keys("Home", TomExplorerTarget());
+        depthScale = null;
         var cursor = new TomCursor(this);
         var request = new WalkRequest(table, objectName, objectType, folder);
         var walk = await ObjectWalk.Find(
@@ -192,7 +196,9 @@ public sealed partial class Te3Page
                 )
             )
             .WaitAsync(TimeSpan.FromSeconds(5));
-        var (selected, depth) = TomRows.Selected(rows.Elements);
+        // The indent is measured once per walk, from the root and its first child (in view after Home).
+        depthScale ??= TomRows.Calibrate(rows.Elements);
+        var (selected, depth) = TomRows.Selected(rows.Elements, depthScale);
         var bar = await Task.Run(() => Te3StatusBar.SelectionSlot(ObserveModelState().Slots));
         var value = selected?.Value ?? TomSelection.SelectionName(bar);
         var type = TomRows.Type(value, bar, () => null);

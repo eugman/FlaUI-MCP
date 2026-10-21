@@ -25,6 +25,9 @@ public sealed class TomRowsTests
             Bounds = new ElementBounds(x, y, 700, 22),
         };
 
+    // The 125% scale measured live: model root label 48 px right of its TreeItem, 24 px more per level.
+    private static readonly TomRows.Scale Live125 = new(48, 24);
+
     [Theory]
     // TreeItem x 1161 before the preset, 1445 after it.
     [InlineData(1161, 1209, 0)] // model root SpaceParts
@@ -34,12 +37,53 @@ public sealed class TomRowsTests
     [InlineData(1445, 1589, 4)] // column Brand inside the folder
     [InlineData(1445, 1613, 5)] // hierarchy levels
     public void TheLabelsIndentGivesTheDepth(double tree, double label, int depth) =>
-        Assert.Equal(depth, TomRows.Depth(tree, label));
+        Assert.Equal(depth, TomRows.Depth(tree, label, Live125));
 
     [Theory]
     [InlineData(1161, 1161)]
     [InlineData(1161, 1220)]
-    public void AnOffsetOffTheIndentGridIsNoDepth(double tree, double label) => Assert.Null(TomRows.Depth(tree, label));
+    public void AnOffsetOffTheIndentGridIsNoDepth(double tree, double label) =>
+        Assert.Null(TomRows.Depth(tree, label, Live125));
+
+    [Theory]
+    // TreeItem x, model root label x, its first child's label x, a column-in-folder label x (depth 4).
+    [InlineData(1161, 1209, 1233, 1305)] // 125%, measured live
+    [InlineData(929, 967, 986, 1043)] // 100%: 38.4 and 19.2 px, rounded by UIA
+    [InlineData(1393, 1451, 1480, 1566)] // 150%: 57.6 and 28.8 px
+    public void TheIndentIsMeasuredFromTheRootAndItsFirstChildAtAnyScale(
+        double tree,
+        double root,
+        double child,
+        double column
+    )
+    {
+        ElementInfo[] elements =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", tree, 214),
+            Item("TreeItem", "Node1", "Data Sources", tree, 236),
+            Item("DataItem", "Name row 0", "SpaceParts", root, 214),
+            Item("DataItem", "Name row 1", "Data Sources", child, 236),
+        ];
+
+        var scale = TomRows.Calibrate(elements);
+
+        Assert.NotNull(scale);
+        Assert.Equal(4, TomRows.Depth(tree, column, scale));
+    }
+
+    [Fact]
+    public void WithoutTheRootInViewThereIsNoScaleAndNoDepth()
+    {
+        ElementInfo[] elements =
+        [
+            Item("TreeItem", "Node50", "Brand", 1445, 434, selected: true),
+            Item("DataItem", "Name row 50", "Brand", 1589, 434),
+        ];
+
+        Assert.Null(TomRows.Calibrate(elements));
+        Assert.Null(TomRows.Selected(elements, null).Depth);
+        Assert.Null(TomRows.Depth(1445, 1589, null));
+    }
 
     [Fact]
     public void TheSelectedTreeItemPairsWithItsDataItemByRowIndex()
@@ -52,7 +96,7 @@ public sealed class TomRowsTests
             Item("DataItem", "Name row 50", "Brand", 1589, 434),
         ];
 
-        var (selected, depth) = TomRows.Selected(elements);
+        var (selected, depth) = TomRows.Selected(elements, Live125);
 
         Assert.Equal("Brand", selected?.Value);
         Assert.Equal(4, depth);
@@ -63,7 +107,7 @@ public sealed class TomRowsTests
     {
         ElementInfo[] elements = [Item("TreeItem", "Node50", "Brand", 1445, 434, selected: true)];
 
-        Assert.Null(TomRows.Selected(elements).Depth);
+        Assert.Null(TomRows.Selected(elements, Live125).Depth);
     }
 
     [Fact]
