@@ -73,4 +73,27 @@ internal static class LayoutChecks
             );
         }
     }
+
+    private const int ReadBackMs = 1000;
+    private const int PollMs = 100;
+
+    /// <summary>
+    /// After pressing a pane's Maximize or Restore: waits up to a second for <paramref name="flipped"/> (the title bar
+    /// now shows the other button), and throws when it never does, since the press may have been lost.
+    /// </summary>
+    public static async Task ConfirmPaneButton(string pane, string pressed, Func<bool> flipped, Func<int, Task> delay)
+    {
+        for (var waited = 0; !flipped(); waited += PollMs)
+        {
+            if (waited >= ReadBackMs)
+            {
+                throw new InvalidOperationException(
+                    $"Pressed {pressed} on '{pane}', but its title bar still shows {pressed} after {ReadBackMs} ms: the "
+                        + "press may have been lost. Read the layout with te3_layout_read list before retrying."
+                );
+            }
+
+            await delay(PollMs);
+        }
+    }
 }

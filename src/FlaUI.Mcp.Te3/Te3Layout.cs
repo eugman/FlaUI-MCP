@@ -290,8 +290,24 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
                     : $"Pane '{pane.Title}' has no Restore button; it is not maximized."
             );
         await Click(inputs, handle, target);
-        return button == "Maximize" ? new { maximized = pane.Title } : (object)new { restored = pane.Title };
+        // Maximize and Restore are one button renamed, so the other name showing is the read-back.
+        var other = button == "Maximize" ? "Restore" : "Maximize";
+        await LayoutChecks.ConfirmPaneButton(
+            pane.Title,
+            button,
+            () => PaneButtonShown(window, title, other),
+            ms => Task.Delay(ms)
+        );
+        return button == "Maximize"
+            ? new { maximized = pane.Title, readBack = other }
+            : (object)new { restored = pane.Title, readBack = other };
     }
+
+    private static bool PaneButtonShown(Window window, string title, string button) =>
+        Parts(window)
+            .FirstOrDefault(p => p.Kind == "pane" && TitleMatches(p.Title, title))
+            ?.Close.Parent?.FindFirstChild(cf => cf.ByControlType(ControlType.Button).And(cf.ByName(button)))
+            is not null;
 
     private Task Click(InputTally inputs, string handle, AutomationElement element) =>
         Tool(inputs, "windows_click", new { @ref = host.Elements.Register(handle, element), handle });

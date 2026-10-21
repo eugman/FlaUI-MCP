@@ -55,10 +55,10 @@ public sealed partial class Te3Layout
                 + "Properties dock surfaces. reopen-pane: reopen a hidden pane from the View menu (View, then the popup "
                 + "entry named after the pane); a visible pane is left alone and a pane without a mapped View entry is "
                 + "refused before input. apply-preset: live guarded resizing. maximize-pane / restore-pane: the "
-                + "pane's own Maximize or Restore button (TE3 remembers a maximized pane across restarts, so restore "
+                + "pane's own Maximize or Restore button, read back as the other button showing (TE3 remembers a maximized pane across restarts, so restore "
                 + "it when done). Pane titles match with or without TE3's \"(Changed)\" suffix. resize: drag the "
                 + "splitter a pane shares with its neighbour until the pane is `width` or `height` physical pixels; a "
-                + "pane more than 4 px short of it fails the call with the measured step. "
+                + "pane more than 4 px off it fails the call with the measured step. "
                 + "Every action takes desktop focus and needs an active te3_interaction_begin grant. No model edits. "
                 + "Reads (list, show-pane, plan-preset) are te3_layout_read.";
 

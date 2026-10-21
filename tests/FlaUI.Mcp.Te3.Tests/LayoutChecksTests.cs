@@ -69,4 +69,37 @@ public sealed class LayoutChecksTests
         Assert.Contains("no input sent", error.Message);
         LayoutChecks.RequireKept(["TOM Explorer", "Expression Editor"], visible);
     }
+
+    [Fact]
+    public async Task APaneButtonPressIsConfirmedWhenTheOppositeButtonShows()
+    {
+        var reads = 0;
+
+        await LayoutChecks.ConfirmPaneButton("Properties", "Maximize", () => ++reads >= 3, _ => Task.CompletedTask);
+
+        Assert.Equal(3, reads);
+    }
+
+    [Fact]
+    public async Task APaneButtonPressThatChangedNothingIsAFailure()
+    {
+        // The reply said "maximized" with nothing read back, and TE3 keeps a maximized pane across restarts.
+        var waited = 0;
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            LayoutChecks.ConfirmPaneButton(
+                "Properties",
+                "Maximize",
+                () => false,
+                ms =>
+                {
+                    waited += ms;
+                    return Task.CompletedTask;
+                }
+            )
+        );
+
+        Assert.Contains("still shows Maximize", error.Message);
+        Assert.InRange(waited, 1000, 1200);
+    }
 }
