@@ -24,30 +24,92 @@ internal static class DialogCancel
         new(Name: "Close", AutomationId: "Close", ControlType: "Button"),
     ];
 
+    /// <summary>
+    /// Tries each button only while nothing has been sent: a missing button or a refusal that sent no input moves on
+    /// to the next one. Once a click may have gone out, nothing else is clicked; if the dialog stays open the click's
+    /// outcome is reported for inspection.
+    /// </summary>
     public static async Task Run(Steps steps)
     {
         await steps.Escape();
         foreach (var button in Buttons)
         {
-            try
+            if (await ClosedWithin(steps, TimeSpan.FromSeconds(2)))
             {
-                await steps.WaitClosed(TimeSpan.FromSeconds(2));
                 return;
             }
-            catch (TimeoutException) { }
+
+            if (await TryResolve(steps, button) is not { } reference)
+            {
+                continue;
+            }
 
             try
             {
-                await steps.Click(await steps.Resolve(button));
+                await steps.Click(reference);
             }
-            catch (Exception error)
-                when (error
-                        is InvalidOperationException
-                            or TimeoutException
-                            or System.Reflection.AmbiguousMatchException
-                ) { }
+            catch (Exception error) when (NavigationRetry.SentNoInput(error))
+            {
+                continue;
+            }
+            catch (Exception error) when (error is InvalidOperationException or TimeoutException)
+            {
+                await ReportIfStillOpen(steps, button, error);
+                return;
+            }
+
+            await ReportIfStillOpen(steps, button, null);
+            return;
         }
 
         await steps.WaitClosed(TimeSpan.FromSeconds(5));
+    }
+
+    private static async Task<bool> ClosedWithin(Steps steps, TimeSpan timeout)
+    {
+        try
+        {
+            await steps.WaitClosed(timeout);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+    }
+
+    // A button that cannot be found was never clicked.
+    private static async Task<string?> TryResolve(Steps steps, ElementSelector button)
+    {
+        try
+        {
+            return await steps.Resolve(button);
+        }
+        catch (Exception error)
+            when (error is InvalidOperationException or TimeoutException or System.Reflection.AmbiguousMatchException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task ReportIfStillOpen(Steps steps, ElementSelector button, Exception? clickError)
+    {
+        if (await ClosedWithin(steps, TimeSpan.FromSeconds(5)))
+        {
+            return;
+        }
+
+        if (clickError == null)
+        {
+            throw new TimeoutException(
+                $"{button.Name} was clicked but the dialog is still open; nothing else was clicked. Inspect it."
+            );
+        }
+
+        throw new InvalidOperationException(
+            $"{button.Name} may have been clicked ({clickError.Message}) and the dialog is still open; "
+                + "nothing else was clicked. Inspect it.",
+            clickError
+        );
     }
 }
