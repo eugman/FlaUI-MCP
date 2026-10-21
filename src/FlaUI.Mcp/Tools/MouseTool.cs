@@ -233,7 +233,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             throw new ArgumentException($"{name} point or ref required");
         }
 
-        // Never the centre of the bounds: for an offscreen element that is (0,0), a maximized window's caption.
+        // Choose takes the centre only for an on-screen element with bounds; an offscreen one has (0,0), a caption.
         var read = Geometry(reference, ref scrolled);
         return () => ClickPoint.Choose(read());
     }

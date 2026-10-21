@@ -235,21 +235,14 @@ public sealed class GuardMutationTests
         );
     }
 
-    [Theory]
-    [InlineData(true, "The element has no on-screen bounds; no input sent.")]
-    [InlineData(false, "The element reports no clickable point; no input sent.")]
-    public void ClickPointRefusalsSayWhatIsMissing(bool emptyBounds, string start)
+    [Fact]
+    public void ClickPointRefusalsSayWhatIsMissing()
     {
-        var geometry = new ClickGeometry(
-            false,
-            emptyBounds ? new Point(5, 5) : null,
-            emptyBounds ? Rectangle.Empty : new Rectangle(0, 0, 10, 10),
-            []
-        );
+        var geometry = new ClickGeometry(false, new Point(5, 5), Rectangle.Empty, []);
 
         var error = Assert.Throws<InputRefusedException>(() => ClickPoint.Choose(geometry));
 
-        Assert.StartsWith(start, error.Message);
+        Assert.StartsWith("The element has no on-screen bounds; no input sent.", error.Message);
     }
 
     [Fact]

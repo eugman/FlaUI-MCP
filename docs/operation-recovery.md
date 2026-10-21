@@ -39,7 +39,7 @@ Operation status (`flaui/operations/status` and `windows_operation_status`) repo
 | `activation-denied` | Windows kept another window in front of the target. |
 | `integrity-blocked` | The target runs at a higher integrity level, or with UIAccess, than the server, or its token cannot be read. |
 | `point-not-on-target` | A pointer point is off the target window or covered, or an element's click point is obscured. `foregroundProcess` names the process under the point. |
-| `click-point-unavailable` | The element is offscreen, has no bounds or clickable point, or the point is outside it or scrolled out of a containing pane. |
+| `click-point-unavailable` | The element is offscreen or has no bounds, or the point (its clickable point, or the centre of its bounds when it reports none) is outside it or scrolled out of a containing pane. |
 
 ### Refusal text after a change
 
