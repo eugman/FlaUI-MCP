@@ -181,7 +181,7 @@ public sealed class Te3LayoutTests
         var inputs = new InputTally();
         var sent = new List<object>();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<CoreCallException>(() =>
             LayoutSteps.Sending(
                 inputs,
                 sent.Add,
@@ -264,7 +264,7 @@ public sealed class Te3LayoutTests
         var inputs = new InputTally();
         var sent = new List<object>();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<CoreCallException>(() =>
             LayoutSteps.Sending(
                 inputs,
                 sent.Add,

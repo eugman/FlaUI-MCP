@@ -10,10 +10,12 @@ public sealed class InputTally
 {
     public int Sent { get; private set; }
 
-    /// <summary>Runs one Core tool call unless the operation was stopped, and counts it; throws on an error or pending result.</summary>
+    /// <summary>
+    /// Runs one Core tool call unless the operation was stopped, and counts it. An error or pending result throws a
+    /// <see cref="CoreCallException"/> that carries Core's outcome: completed but pending, partial or not-dispatched.
+    /// </summary>
     public async Task Invoke(Func<Task<McpToolResult>> call, string? tool = null)
     {
-        _ = tool;
         OperationContext.Check();
         // Inside a running operation (a te3_* tool call), Core counts the step against it; otherwise the call is
         // its own operation and reports its count in the outcome.
@@ -31,7 +33,7 @@ public sealed class InputTally
 
         if (result.IsError == true || result.Outcome?.Status == "failed" || result.Outcome?.IsPending == true)
         {
-            throw new InvalidOperationException(string.Join("; ", result.Content.Select(c => c.Text)));
+            throw new CoreCallException(tool, result);
         }
     }
 

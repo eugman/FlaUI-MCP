@@ -115,7 +115,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         }
         catch (Exception ex)
         {
-            return Failure(step.Phase, step.Last, ex.Message, inputs.Sent);
+            return Failure(step.Phase, step.Last, ex, inputs.Sent);
         }
     }
 
@@ -267,9 +267,9 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         }
     }
 
-    internal static McpToolResult Failure(string phase, string lastStep, string error, int inputsSent = 0)
+    internal static McpToolResult Failure(string phase, string lastStep, Exception error, int inputsSent = 0)
     {
-        var blocker = InputProof.Blocker(error);
+        var blocker = CoreFailure.Blocker(error);
         var next = blocker switch
         {
             "activation-denied" =>
@@ -287,7 +287,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     assessment = Assessment(false),
                     phase,
                     lastStep,
-                    error,
+                    error = error.Message,
                     blocker,
                     next,
                     actionDispatched = inputsSent > 0,
