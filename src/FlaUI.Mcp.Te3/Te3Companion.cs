@@ -107,6 +107,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
     {
         var step = new Step();
         var inputs = new InputTally();
+        Te3Page? page = null;
         try
         {
             var a = arguments ?? JsonSerializer.SerializeToElement(new { });
@@ -116,7 +117,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             using var guard = name == Navigate ? grant.Guard() : null;
             step.Phase = "attach";
             var (windows, hwnd, handle, identity) = Attach(a);
-            var page = new Te3Page(host, handle, Invoker(identity, inputs), last => step.Last = last, inputs: inputs);
+            page = new Te3Page(host, handle, Invoker(identity, inputs), last => step.Last = last, inputs: inputs);
 
             if (name == ModelState)
             {
@@ -129,7 +130,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         }
         catch (Exception ex)
         {
-            return Failure(step.Phase, step.Last, ex, inputs.Sent);
+            return Failure(step.Phase, step.Last, ex, inputs.Sent, page?.WalkReport);
         }
     }
 
@@ -273,7 +274,14 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         }
     }
 
-    internal static McpToolResult Failure(string phase, string lastStep, Exception error, int inputsSent = 0)
+    /// <param name="walk">What an object navigation read and selected (Te3Page.WalkReport), or null.</param>
+    internal static McpToolResult Failure(
+        string phase,
+        string lastStep,
+        Exception error,
+        int inputsSent = 0,
+        object? walk = null
+    )
     {
         var blocker = CoreFailure.Blocker(error);
         var next = blocker switch
@@ -297,6 +305,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     error = error.Message,
                     blocker,
                     next,
+                    walk,
                 },
                 McpProtocol.JsonOptions
             )

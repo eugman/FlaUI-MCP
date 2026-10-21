@@ -405,4 +405,26 @@ public sealed class CompanionTests
         Te3Companion.Validate(nullId, Te3Companion.Navigate);
         Assert.Equal(42, Te3Companion.ResolveProcessId(nullId, () => [42]));
     }
+
+    [Fact]
+    public void AFailedObjectNavigationCarriesItsWalkAsAField()
+    {
+        // Live, the walk's rowsRead and indentPx came back only inside the error text.
+        var result = Te3Companion.Failure(
+            "navigate",
+            "Select TOM Explorer row 11",
+            new InvalidOperationException("No Column 'Brand'"),
+            8,
+            new
+            {
+                strategy = "rows",
+                rowsRead = 23,
+                indentPx = 24.0,
+            }
+        );
+
+        var reply = JsonDocument.Parse(result.Content.Single().Text!).RootElement;
+        Assert.Equal(23, reply.GetProperty("walk").GetProperty("rowsRead").GetInt32());
+        Assert.Equal("rows", reply.GetProperty("walk").GetProperty("strategy").GetString());
+    }
 }
