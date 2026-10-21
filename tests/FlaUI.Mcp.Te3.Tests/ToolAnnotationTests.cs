@@ -92,4 +92,25 @@ public sealed class ToolAnnotationTests : IDisposable
         Assert.Contains("te3_layout_read", result.Content[0].Text);
         Assert.Equal("not-dispatched", result.Outcome?.Dispatch);
     }
+
+    [Fact]
+    public void TheReadmeListsEveryTe3ToolTheServerRegisters()
+    {
+        var readme = File.ReadAllText(
+            Path.Combine(DirectInputJournalTests.Sources(), "..", "..", "automation", "README.md")
+        );
+        var inventory = readme
+            .Split('\n')
+            .First(line => line.StartsWith("| `FlaUI.Mcp.Te3 mcp`", StringComparison.Ordinal));
+        var table = readme[readme.IndexOf("| Tool | Does |", StringComparison.Ordinal)..];
+
+        var missing = host
+            .Tools.GetToolDefinitions()
+            .Select(t => t.Name)
+            .Where(n => n.StartsWith("te3_", StringComparison.Ordinal))
+            .Where(n => !inventory.Contains($"`{n}`") || !table.Contains($"`{n}`"))
+            .ToList();
+
+        Assert.Empty(missing);
+    }
 }
