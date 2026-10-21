@@ -30,8 +30,11 @@ public sealed class StabilizationTests
     [Fact]
     public async Task DisappearingElementRestartsAbsenceSettlement()
     {
+        // Absent at 0, unreadable at 100 (the clock restarts), absent from 200: settled at 400, the fifth read. On
+        // the wall clock this needed every 100 ms delay to finish inside the 150 ms settle time.
         var calls = 0;
-        await Te3Page.WaitForAbsence(
+        var clock = new FakeClock();
+        await Absence.WaitFor(
             () =>
             {
                 calls++;
@@ -40,12 +43,15 @@ public sealed class StabilizationTests
                     throw new System.Runtime.InteropServices.COMException("gone", unchecked((int)0x80040201));
                 }
 
-                return false;
+                return Task.FromResult(false);
             },
             timeoutMs: 2000,
-            settleMs: 150
+            settleMs: 150,
+            clock.Elapsed,
+            clock.Delay
         );
-        Assert.True(calls >= 5);
+        Assert.Equal(5, calls);
+        Assert.Equal(400, clock.Now.TotalMilliseconds);
     }
 
     [Fact]

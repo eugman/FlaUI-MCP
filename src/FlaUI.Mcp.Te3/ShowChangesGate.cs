@@ -14,11 +14,13 @@ internal static class ShowChangesGate
     /// <param name="click">Clicks the checkbox once.</param>
     /// <param name="waitMs">How long the checkbox may still read on after the click.</param>
     /// <param name="pollMs">Pause between reads.</param>
+    /// <param name="delay">The pause, Task.Delay when null; tests pass one that does not sleep.</param>
     public static async Task<bool> TurnOff(
         Func<Task<bool?>> isOn,
         Func<Task> click,
         int waitMs = SettleMs,
-        int pollMs = PollMs
+        int pollMs = PollMs,
+        Func<int, Task>? delay = null
     )
     {
         if (await isOn() != true)
@@ -39,7 +41,7 @@ internal static class ShowChangesGate
                 throw new InvalidOperationException(StillActive);
             }
 
-            await Task.Delay(pollMs);
+            await (delay ?? Task.Delay)(pollMs);
         }
     }
 

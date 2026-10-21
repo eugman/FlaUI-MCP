@@ -64,7 +64,11 @@ public sealed class ShowChangesGateTests
     {
         var box = new FakeCheckBox(true, staleReads: 2);
 
-        Assert.True(await ShowChangesGate.TurnOff(box.IsOn, box.Click, waitMs: 50, pollMs: 1));
+        var clock = new FakeClock();
+
+        Assert.True(await ShowChangesGate.TurnOff(box.IsOn, box.Click, waitMs: 1000, pollMs: 200, clock.Delay));
+
+        Assert.Equal(400, clock.Now.TotalMilliseconds);
 
         Assert.Equal(1, box.Clicks);
     }
@@ -73,10 +77,13 @@ public sealed class ShowChangesGateTests
     public async Task AFilterThatStaysOnIsReportedWithTheNextAction()
     {
         var box = new FakeCheckBox(true, sticks: true);
+        var clock = new FakeClock();
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            ShowChangesGate.TurnOff(box.IsOn, box.Click, waitMs: 5, pollMs: 1)
+            ShowChangesGate.TurnOff(box.IsOn, box.Click, waitMs: 1000, pollMs: 200, clock.Delay)
         );
+
+        Assert.Equal(1000, clock.Now.TotalMilliseconds);
 
         Assert.Contains("show-changes filter active", error.Message);
         Assert.Contains("Next:", error.Message);

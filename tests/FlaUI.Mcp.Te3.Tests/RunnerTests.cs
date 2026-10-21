@@ -143,13 +143,16 @@ public sealed class RunnerTests : IDisposable
     [Fact]
     public async Task AbsenceMustSettleAndReappearanceRestartsClock()
     {
-        var clock = Stopwatch.StartNew();
-        await Te3Page.WaitForAbsence(
-            () => clock.ElapsedMilliseconds is >= 100 and < 250,
+        // Absent at 0, present at 100 and 200, absent again from 300: settled 300 ms later, at 600.
+        var clock = new FakeClock();
+        await Absence.WaitFor(
+            () => Task.FromResult(clock.Now.TotalMilliseconds is >= 100 and < 250),
             timeoutMs: 2000,
-            settleMs: 300
+            settleMs: 300,
+            clock.Elapsed,
+            clock.Delay
         );
-        Assert.True(clock.ElapsedMilliseconds >= 550);
+        Assert.Equal(600, clock.Now.TotalMilliseconds);
     }
 
     [Fact]
@@ -157,10 +160,13 @@ public sealed class RunnerTests : IDisposable
         await Assert.ThrowsAsync<IOException>(() => Te3Page.WaitForAbsence(() => throw new IOException("provider")));
 
     [Fact]
-    public async Task PersistentPresenceTimesOut() =>
+    public async Task PersistentPresenceTimesOut()
+    {
+        var clock = new FakeClock();
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            Te3Page.WaitForAbsence(() => true, timeoutMs: 100, settleMs: 50)
+            Absence.WaitFor(() => Task.FromResult(true), timeoutMs: 100, settleMs: 50, clock.Elapsed, clock.Delay)
         );
+    }
 
     [Fact]
     public void ModelHashIgnoresPropertyOrderButNotArrayOrder()

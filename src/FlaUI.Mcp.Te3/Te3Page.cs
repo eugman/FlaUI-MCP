@@ -1234,7 +1234,7 @@ public sealed partial class Te3Page(
     private async Task Absent(Target target)
     {
         reportStep?.Invoke($"Wait for absence: {target.Selector}");
-        await WaitForAbsenceAsync(() =>
+        await Absence.WaitFor(() =>
             Task.Run(() =>
                     query.IsPresent(
                         handle,
@@ -1248,47 +1248,8 @@ public sealed partial class Te3Page(
         );
     }
 
-    public static async Task WaitForAbsence(Func<bool> present, int timeoutMs = 15000, int settleMs = 500) =>
-        await WaitForAbsenceAsync(() => Task.FromResult(present()), timeoutMs, settleMs);
-
-    private static async Task WaitForAbsenceAsync(Func<Task<bool>> present, int timeoutMs = 15000, int settleMs = 500)
-    {
-        var total = Stopwatch.StartNew();
-        Stopwatch? absent = null;
-        Exception? lastUnavailable = null;
-        while (total.ElapsedMilliseconds < timeoutMs)
-        {
-            try
-            {
-                if (await present())
-                {
-                    absent = null;
-                }
-                else
-                {
-                    absent ??= Stopwatch.StartNew();
-                    if (absent.ElapsedMilliseconds >= settleMs)
-                    {
-                        return;
-                    }
-                }
-            }
-            catch (Exception error)
-                when (error is FlaUI.Core.Exceptions.ElementNotAvailableException
-                    || error is System.Runtime.InteropServices.COMException { HResult: unchecked((int)0x80040201) }
-                )
-            {
-                // A window can disappear between enumeration and a property read.
-                // Re-observe from fresh roots; a failed read never proves absence.
-                absent = null;
-                lastUnavailable = error;
-            }
-
-            await Task.Delay(100);
-        }
-
-        throw new TimeoutException("Target did not remain absent for the settle period", lastUnavailable);
-    }
+    public static Task WaitForAbsence(Func<bool> present, int timeoutMs = 15000, int settleMs = 500) =>
+        Absence.WaitFor(() => Task.FromResult(present()), timeoutMs, settleMs);
 
     private async Task Count(Target target, int expected)
     {
