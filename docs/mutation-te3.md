@@ -25,7 +25,7 @@ Stryker mutates committed code only. It runs on an export of `HEAD` in `local/bu
 - `dotnet-stryker` comes from the root `.config/dotnet-tools.json`, which the core owns and pins.
 - The core's own `scripts/coverage.ps1`, `scripts/mutation.ps1` and [mutation.md](mutation.md) cover the shared core and run `tests/FlaUI.Mcp.Tests`; this page and `scripts/coverage-te3.ps1` are the TE3 equivalents.
 
-Files added to the mutated set since the latest run: `RunGrant.cs`, `Te3Page.Walk.cs` (moved out of `Te3Page.cs`), `WalkPlace.cs`, `LayoutChecks.cs`, `SceneCheck.cs`, `Absence.cs`, `Te3Layout.Panes.cs`, `FailurePause.cs`, `PopupWindows.cs`, `ScreenPresence.cs` and `RunExecutor.Diagnostics.cs`. `PhysicalInputObserver.IsPhysical` was mutated but had no covering test, so its mutants counted as uncovered and were missing from the covered score; `RunGrantTests.OnlyInputWithoutAnInjectedFlagCountsAsTheUsers` now covers each flag.
+Files added to the mutated set since the latest run: `RunGrant.cs`, `Te3Page.Walk.cs` (moved out of `Te3Page.cs`), `WalkPlace.cs`, `LayoutChecks.cs`, `SceneCheck.cs`, `Absence.cs`, `Te3Layout.Panes.cs`, `FailurePause.cs`, `PopupWindows.cs`, `ScreenPresence.cs`, `RunExecutor.Diagnostics.cs`, `TomRows.cs`, `LayoutFiles.cs`, `Te3Dialogs.cs`, `Te3EnvCheck.cs` and `PlacementReadBack.cs`. `PhysicalInputObserver.IsPhysical` was mutated but had no covering test, so its mutants counted as uncovered and were missing from the covered score; `RunGrantTests.OnlyInputWithoutAnInjectedFlagCountsAsTheUsers` now covers each flag.
 
 A surviving mutant is either a missing test, which you fix with a red-green test, or an equivalent mutant, which you list below with the reason.
 
