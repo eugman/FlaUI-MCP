@@ -144,4 +144,20 @@ public sealed class LayoutChecksTests
             LayoutChecks.Baseline([main, window], main.Hwnd, _ => automationId)
         );
     }
+
+    [Theory]
+    [InlineData(480, 480, true)]
+    [InlineData(480, 484, true)]
+    [InlineData(480, 485, false)]
+    public void APaneAlreadyAtItsSizeNeedsNoDrag(int requested, int current, bool skip)
+    {
+        // Live, apply-preset dragged TOM Explorer and Properties though both were already at target: 15 inputs each.
+        Assert.Equal(skip, LayoutChecks.AlreadyThere(requested, current));
+        if (skip)
+        {
+            var step = JsonSerializer.SerializeToElement(LayoutChecks.Skipped("Properties", requested, current));
+            Assert.Equal(0, step.GetProperty("inputsSent").GetInt32());
+            Assert.True(step.GetProperty("skipped").GetBoolean());
+        }
+    }
 }

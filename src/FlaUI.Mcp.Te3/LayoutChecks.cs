@@ -24,6 +24,20 @@ internal static class LayoutChecks
         int InputsSent
     );
 
+    /// <summary>Whether a pane is already within the tolerance of its requested size, so no drag is needed.</summary>
+    public static bool AlreadyThere(int requested, int current) => Math.Abs(current - requested) <= SizeTolerance;
+
+    /// <summary>The step for a pane left alone because it was already at its size: no input.</summary>
+    public static object Skipped(string title, int requested, int reached) =>
+        new
+        {
+            title,
+            requested,
+            reached,
+            inputsSent = 0,
+            skipped = true,
+        };
+
     /// <summary>The step a resize reports; throws, with the step, when the pane missed its size.</summary>
     public static object Measured(ResizeMeasure measure)
     {

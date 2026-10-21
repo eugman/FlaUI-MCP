@@ -63,6 +63,16 @@ public sealed partial class Te3Layout
         var others = parts.Where(p => p.Title != pane.Title).Select(p => p.Container.BoundingRectangle).Distinct();
         var documents = parts.Where(p => p.Kind == "document").Select(p => p.Container.BoundingRectangle);
         var width = GetArgument<int?>(a, "width");
+        var target =
+            width
+            ?? GetArgument<int?>(a, "height")
+            ?? throw new ArgumentException("resize needs width or height; no input sent.");
+        var current = width is null ? before.Height : before.Width;
+        if (LayoutChecks.AlreadyThere(target, current))
+        {
+            return LayoutChecks.Skipped(title, target, current);
+        }
+
         var (from, to) = SplitterPlan.Resize(
             before,
             others,
