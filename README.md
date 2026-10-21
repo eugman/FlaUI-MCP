@@ -72,9 +72,9 @@ Every tool in `tools/list` carries MCP `annotations`, and `flaui/operations/stat
 
 | Hint | Core tools |
 |---|---|
-| `readOnlyHint: true` | `operation_status`, `find`, `wait`, `snapshot`, `get_text`, `list_windows`, `get_clipboard`, `screenshot` (its `parkPointer` option moves the mouse, but never sends input to the app) |
+| `readOnlyHint: true` | `operation_status` (also `statusHint`, so it is answered while other calls block), `find`, `wait`, `snapshot`, `get_text`, `list_windows`, `get_clipboard` |
 | `readOnlyHint: false`, `destructiveHint: true` | `close`, `fill`, `send_keys`, `click`, `mouse`, `paste`, `batch`: they can remove or overwrite content |
-| `readOnlyHint: false`, `destructiveHint: false` | `type`, `launch`; also `idempotentHint: true` for `focus`, `set_window_state`, `place_window` |
+| `readOnlyHint: false`, `destructiveHint: false` | `type`, `launch`; also `idempotentHint: true` for `focus`, `set_window_state`, `place_window`, `screenshot` (its `parkPointer` option moves the pointer before capturing and counts that as input) |
 
 `openWorldHint` is false throughout. A product tool sets its own hints by overriding `ToolBase.Annotations` with `McpToolAnnotations.ReadOnly` or `McpToolAnnotations.Input(destructive: ..., idempotent: ...)`; a tool that does not is listed without annotations, which a client must treat as a possible mutation.
 
