@@ -284,6 +284,25 @@ public sealed class DispatchAccountingTests
         Assert.Equal("activation-denied", result.Outcome!.Failure!.Code);
     }
 
+    // K7: the click fallback's refusal text agrees with the Select call it follows.
+
+    [Fact]
+    public void ARefusedFallbackClickAfterSelectSaysSelectWasSent()
+    {
+        var message = ClickTool.ClickFailure("activation-denied: blocked. No input sent.", "X", [], patternSent: true);
+
+        Assert.DoesNotContain("No input sent", message);
+        Assert.Contains("Select was sent", message);
+    }
+
+    [Fact]
+    public void ARefusedClickWithoutAPatternCallKeepsItsText()
+    {
+        var message = ClickTool.ClickFailure("activation-denied: blocked. No input sent.", "X", [], patternSent: false);
+
+        Assert.Equal("activation-denied: blocked. No input sent.", message);
+    }
+
     private sealed class DelegateTool(string name, Func<McpToolResult> run) : ToolBase
     {
         public override string Name => name;

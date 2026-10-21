@@ -91,18 +91,16 @@ public class ClickTool : ToolBase
             return Task.FromResult(BlockedResult(pending));
         }
 
+        ClickRequest? resolved = null;
         try
         {
             // Read inside the try, as before, so a malformed argument is reported as a failed click.
-            return Task.FromResult(
-                Click(
-                    request with
-                    {
-                        Handle = GetStringArgument(arguments, "handle"),
-                        Action = GetStringArgument(arguments, "action"),
-                    }
-                )
-            );
+            resolved = request with
+            {
+                Handle = GetStringArgument(arguments, "handle"),
+                Action = GetStringArgument(arguments, "action"),
+            };
+            return Task.FromResult(Click(resolved));
         }
         catch (Exception ex)
         {
@@ -118,7 +116,9 @@ public class ClickTool : ToolBase
             catch { }
 
             return Task.FromResult(
-                ErrorResult($"Failed to click {refId}: {ClickFailure(ex.Message, ex.GetType().Name, windows)}")
+                ErrorResult(
+                    $"Failed to click {refId}: {ClickFailure(ex.Message, ex.GetType().Name, windows, resolved?.PatternSent == true)}"
+                )
             );
         }
     }
@@ -132,7 +132,11 @@ public class ClickTool : ToolBase
         bool? RequestedPhysical,
         string? Action,
         int ProcessId
-    );
+    )
+    {
+        /// <summary>Set once a pattern call went out, so a later refusal does not claim nothing was sent.</summary>
+        public bool PatternSent { get; set; }
+    }
 
     /// <summary>Resolve the ref, then use a pattern when one fits and a guarded mouse click otherwise.</summary>
     private McpToolResult Click(ClickRequest request)
@@ -178,6 +182,7 @@ public class ClickTool : ToolBase
 
             // Some tree providers accept Select() and change nothing; a real click selects.
             selectionFallback = true;
+            request.PatternSent = true;
         }
 
         return MouseClick(request, element, elementName, physical, selectionFallback);
@@ -410,6 +415,12 @@ public class ClickTool : ToolBase
     )
     {
         var reason = string.IsNullOrWhiteSpace(message) ? exceptionType : message;
+        if (patternSent)
+        {
+            // The fallback click was refused, but the Select before it went out and is counted.
+            reason = GuardedInput.NoteFocusChange(reason, "Select was sent");
+        }
+
         var modal = windows.Any(w => !w.IsEnabled && !w.IsToolWindow)
             ? windows.FirstOrDefault(w => w.IsEnabled && !w.IsToolWindow && !w.IsCloaked && w.Title.Length > 0)
             : null;
