@@ -99,6 +99,25 @@ A product repo that merges this core must check the following.
   - FlaUI-MCP-TE3: `CliRunner.cs:24` (TE CLI) and `ArtifactFiles.cs:338` (git) → `GuardedDesktop.StartProcess` where the process changes the desktop or the model; a pure helper such as git may stay raw.
 - **Offline tests.** `InputDesktop` is internal and visible to `FlaUI.Mcp.Tests`, `FlaUI.Mcp.PowerBi.Tests`, `FlaUI.Mcp.Camtasia.Tests` and `FlaUI.Mcp.Te3.Tests`. A product test assembly that drives input tools must derive a fake from it and install it through `InputDesktop.Override` (see `FakeDesktop` in the core tests), and must set `FLAUI_OFFLINE_TESTS=1` before any test runs, as the core test assembly does in a module initializer. The real desktop then refuses the changes it covers (listed below) if a test misses the fake.
 
+### Stage B: what each product changes at the rebase
+
+These come with the shared guard, refusal, proof and tool-fact work. Each item names the product files to delete or change.
+
+- **Delete the guard copies and use Core's.**
+  - PBI: `PowerBi/Desktop/PhysicalInputObserver.cs`, `Heartbeat.cs` and `InteractionPermission.cs` (its `ChangeStamp` has no caller and is not carried over).
+  - Camtasia: `Camtasia/Desktop/PhysicalInputObserver.cs` (with its inline `IInputObserver`), `Heartbeat.cs` and `InteractionPermission.cs`.
+  - TE3: `IInputObserver.cs`, `PhysicalInputObserver.cs`; rebuild `Te3Interaction` on `InteractionGrant` (`Begin`, `End`, `Require`, `Guard`, `Pause`/`Observed`, `Mark`/`Rebaseline`), keeping only its activation check (`ActivationProblem`) on top of `Mark`.
+  - Map product failure types to `InteractionGrant` codes: `approval-required`, `focus-revoked`, `focus-unavailable`, `paused-after-failure` (hyphenated; the TE3 underscore spellings are mapped by `RefusalCodes.Canonical`).
+- **Fail closed.** Each interactive host calls `MutationGuard.RequireHook()` at startup, so a path that forgot to install the grant (TE3 `run`, Camtasia Recorder and FFmpeg starts, PBI recovery and close_all) is refused instead of allowed.
+- **Machine-wide lease.** Nothing to change in product code. Each product's offline test module initializer sets `DesktopLease.NameVariable` (`FLAUI_LEASE_NAME`) to a name of its own process, as Core's `OfflineDesktopTests` does.
+- **Refusal types.** Derive product refusal types (PBI `PbiFailure`, Camtasia `AutomationFailureException`, TE3 `CoreCallException`) from `AutomationRefusal`, with `Code`, `InputsSent` and `ActionDispatched`. Narrow poll catches from `InvalidOperationException` to `ElementNotFoundException`: refusals, not-found and blocked are no longer `InvalidOperationException`. Pause only when `Disposition` is not `NoInput`; wire `ToolRegistry.FailedAfterInput` to the grant's `Pause` (TE3 `FailurePause`).
+- **Proofs.** Build host proofs with `Proof.Compare` (PBI `pbi_navigate` `uiVerified`, open/close pane `acted`, Camtasia clip select, export duration, TE3 layout presets) and set them on the outcome with `ToolOutcome.WithProof`; never hard-code `verified`. Read `status` (now `ok`, `failed` or `unverified`) and `proof.verdict` instead of text.
+- **Tool facts.** Override `Observation`, `Recovery` and `MutatingWhenArgument` on product tools and drop the hand-kept tables (PBI `DemoToolAnnotations.ByTool`, `InputFreeTools`, `ScopedDesktop.IsMutation`; Camtasia `CamSessionInput.cs:53`'s non-mutating list; README tables). New argument records can use `ToolSchema.For<T>()` with `[ToolDoc]`.
+- **Hit test.** Camtasia: `ClickHitTest.PassThrough("selectionPlayhead", "informationPopup")` at startup before moving clip clicks to refs. TE3: pass the neighbouring captions to `ClickHitTest.RequireNotWithin` (or `windows_mouse drag fromMustNotHit`) for splitter drags.
+- **Snapshots.** Pass the handle's HWND (`windowHwnd`) to `SnapshotBuilder.BuildSnapshot` for a scoped snapshot (Camtasia `SessionSnapshot`, PBI `RegionSnapshot` and `ScopedDesktop`).
+- **Placement.** TE3 `PlacementReadBack` reads `failure.code: placement-mismatch` and `proof` instead of comparing the text.
+- **Contract tests.** Link Core's `tests/FlaUI.Mcp.Tests/Contract/*.cs` into each product test project, as `FakeDesktop.cs` is linked; the product's fake must override the `InputDesktop` virtuals they use.
+
 ### Changes from the 2026-10-21 quality review
 
 A product repo that merges this core meets these on top of the list below.
