@@ -1,5 +1,4 @@
 using FlaUI.Mcp.Core;
-using FlaUI.Mcp.Tools;
 
 /// <summary>The mcp command: the generic windows_* tools and the TE3 tools in one server.</summary>
 internal static class Te3McpServer
@@ -17,9 +16,9 @@ internal static class Te3McpServer
 
     /// <summary>
     /// Registers the TE3 tools beside the generic ones, and puts every tool that changes the desktop behind the user's
-    /// grant: Core checks the mutation hook before each input it sends and each window placement or state change, and
-    /// the focus, close and launch tools, which do not check it yet, are wrapped. Reads stay free. The hook is set in
-    /// the calling flow, so install before the server starts.
+    /// grant: Core checks the mutation hook before each input it sends, each focus, close and launch, and each window
+    /// placement or state change. Reads stay free. The hook is set in the calling flow, so install before the server
+    /// starts.
     /// </summary>
     internal static void Install(AutomationHost host, Te3Interaction interaction)
     {
@@ -37,10 +36,6 @@ internal static class Te3McpServer
         registry.RegisterTool(new Te3Layout(host, interaction));
         registry.RegisterTool(FlaUI.Mcp.Te3.Te3NativePreflightTool.Create());
 
-        // TODO(core): Core's focus, close and launch tools check the hook after the rebase; then drop these wrappers.
-        registry.RegisterTool(new GrantedTool(new FocusWindowTool(host.Sessions), interaction));
-        registry.RegisterTool(new GrantedTool(new CloseWindowTool(host.Sessions), interaction));
-        registry.RegisterTool(new GrantedTool(new LaunchTool(host.Sessions), interaction));
         MutationGuard.BeforeMutation.Value = interaction.Require;
     }
 }

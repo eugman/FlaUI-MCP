@@ -22,7 +22,6 @@
       "**/Backlog.cs",
       "**/InputTally.cs",
       "**/InputProof.cs",
-      "**/GrantedTool.cs",
       "!**/obj/**",
       "!**/*.g.cs",
       "!**/AssemblyInfo.cs"
