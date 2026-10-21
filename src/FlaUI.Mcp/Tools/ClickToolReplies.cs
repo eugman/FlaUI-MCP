@@ -150,6 +150,14 @@ public partial class ClickTool
                     + "by handle before continuing; do not repeat the click."
             ),
         };
-        return response with { Outcome = ToolOutcome.FromPattern(result) };
+        if (result.WaitNote.Length > 0)
+        {
+            response = TextResult(response.Content[0].Text + result.WaitNote);
+        }
+
+        return response with
+        {
+            Outcome = ToolOutcome.FromPattern(result),
+        };
     }
 }

@@ -148,13 +148,32 @@ public sealed class PendingCallOutcomeTests
     }
 
     [Fact]
-    public void AWaitThatTimesOutKeepsItsLastReadError()
+    public void APendingCallWhoseWindowReadsFailedSaysSoInItsReply()
     {
-        var error = new TimeoutException("provider busy");
-        WaitOutcome<int> outcome = new WaitOutcome<int>.TimedOut(3, error);
+        using var hold = new ManualResetEventSlim();
+        var reads = 0;
+        try
+        {
+            var result = ModalAwareInvoker.Execute(
+                Pid,
+                "Invoke on 'Save'",
+                hold.Wait,
+                new PendingInvokeTracker(_ => 1),
+                TimeSpan.FromMilliseconds(150),
+                _ => ++reads == 1 ? [] : throw new TimeoutException("window list timed out")
+            );
 
-        var timedOut = Assert.IsType<WaitOutcome<int>.TimedOut>(outcome);
-        Assert.Equal(3, timedOut.Last);
-        Assert.Same(error, timedOut.LastError);
+            Assert.Equal(PatternCallOutcome.StillPending, result.Outcome);
+            Assert.Equal("window list timed out", result.WaitError);
+            var reply = FlaUI.Mcp.Tools.ClickTool.PatternResult(result, "Invoked Save");
+            Assert.Contains(
+                "While waiting, reading the app's windows failed (window list timed out), so a modal dialog may have gone undetected.",
+                reply.Content[0].Text
+            );
+        }
+        finally
+        {
+            hold.Set();
+        }
     }
 }

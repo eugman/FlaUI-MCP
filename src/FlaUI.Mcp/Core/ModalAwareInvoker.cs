@@ -32,7 +32,17 @@ public sealed record PatternCallResult(
     string? ModalTitle = null,
     string? PendingPatternId = null,
     bool Dispatched = true
-);
+)
+{
+    /// <summary>The last failed read of the app's windows while waiting, when the call is still pending.</summary>
+    public string? WaitError { get; init; }
+
+    /// <summary>The sentence a pending reply adds for <see cref="WaitError"/>, or empty.</summary>
+    internal string WaitNote =>
+        WaitError == null
+            ? ""
+            : $" While waiting, reading the app's windows failed ({WaitError}), so a modal dialog may have gone undetected.";
+}
 
 /// <summary>
 /// Executes UI Automation pattern calls (Invoke, Toggle, Select, ...) so that a
@@ -65,7 +75,7 @@ public static class ModalAwareInvoker
     /// <param name="gracePeriod">Max time to wait for completion; defaults to <see cref="DefaultGracePeriod"/>.</param>
     /// <param name="windowEnumerator">Override for window enumeration (for testing).</param>
     /// <exception cref="Exception">Rethrows any exception from <paramref name="patternCall"/> when it completes within the grace period.</exception>
-    public static PatternCallResult Execute(
+    internal static PatternCallResult Execute(
         int processId,
         string description,
         Action patternCall,
@@ -118,7 +128,10 @@ public static class ModalAwareInvoker
         // that happens only after validation, which a hung provider can hold up. A call still pending that has
         // not counted itself is reported as not yet sent (timed_out_pending). A modal dialog proves the call
         // reached the app, and without an operation to count against the answer stays that it may have been sent.
-        var pending = new PatternCallResult(PatternCallOutcome.StillPending, PendingPatternId: info.OperationId);
+        var pending = new PatternCallResult(PatternCallOutcome.StillPending, PendingPatternId: info.OperationId)
+        {
+            WaitError = (waited as WaitOutcome<PatternCallResult>.TimedOut)?.LastError?.Message,
+        };
         return operation == null ? pending : pending with { Dispatched = operation.InputsSent > sentBefore };
     }
 

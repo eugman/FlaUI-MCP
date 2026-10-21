@@ -69,7 +69,9 @@ public abstract class ToolBase : ITool
         var text = result.Dispatched
             ? $"{request} was sent; the app's UI Automation provider has not returned."
             : $"{request} is still waiting on the app's UI Automation provider and may not have been sent.";
-        return TextResult($"{text} Check windows_operation_status before continuing; do not repeat it.") with
+        return TextResult(
+            $"{text} Check windows_operation_status before continuing; do not repeat it.{result.WaitNote}"
+        ) with
         {
             Outcome = ToolOutcome.FromPattern(result),
         };
