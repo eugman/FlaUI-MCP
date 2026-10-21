@@ -53,7 +53,7 @@ public sealed class Te3Interaction : IDisposable
 
             if (createObserver != null)
             {
-                observer ??= createObserver();
+                observer = Live(observer) ?? createObserver();
             }
 
             inputAtApproval = InputSequence();
@@ -115,6 +115,26 @@ public sealed class Te3Interaction : IDisposable
         {
             // An observer that stopped cannot vouch that the user is away.
             return true;
+        }
+    }
+
+    // An observer that can no longer vouch for the user's input is replaced, never reused.
+    private static IInputObserver? Live(IInputObserver? current)
+    {
+        if (current == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            _ = current.Sequence;
+            return current;
+        }
+        catch (InvalidOperationException)
+        {
+            current.Dispose();
+            return null;
         }
     }
 

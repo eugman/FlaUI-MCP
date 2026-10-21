@@ -14,6 +14,7 @@ internal sealed class PhysicalInputObserver : IInputObserver
     private System.Windows.Forms.ApplicationContext? context;
     private Exception? failure;
     private long sequence;
+    private long lastBeat = Environment.TickCount64;
     private int disposed;
     private uint threadId;
 
@@ -36,7 +37,11 @@ internal sealed class PhysicalInputObserver : IInputObserver
     {
         get
         {
-            if (!thread.IsAlive || Volatile.Read(ref disposed) != 0)
+            if (
+                !thread.IsAlive
+                || Volatile.Read(ref disposed) != 0
+                || !IsResponsive(Interlocked.Read(ref lastBeat), Environment.TickCount64)
+            )
             {
                 throw new InvalidOperationException("Physical input observer is unavailable");
             }
@@ -45,8 +50,13 @@ internal sealed class PhysicalInputObserver : IInputObserver
         }
     }
 
+    // The hook thread beats every HeartbeatMs. Windows silently removes a low-level hook whose thread stops pumping
+    // messages, so a thread that missed StaleAfterMs of beats can no longer vouch that the user is away.
+    private const int HeartbeatMs = 250;
+    private const int StaleAfterMs = 2_000;
+
     /// <summary>Whether the hook thread's last heartbeat is recent enough to trust that its hooks still run.</summary>
-    internal static bool IsResponsive(long lastBeat, long now) => true;
+    internal static bool IsResponsive(long lastBeat, long now) => now - lastBeat <= StaleAfterMs;
 
     // LLKHF_INJECTED / LLKHF_LOWER_IL_INJECTED and LLMHF equivalents.
     internal static bool IsPhysical(bool keyboard, uint flags) => (flags & (keyboard ? 0x12u : 0x03u)) == 0;
@@ -86,6 +96,10 @@ internal sealed class PhysicalInputObserver : IInputObserver
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             }
 
+            using var heartbeat = new System.Windows.Forms.Timer { Interval = HeartbeatMs };
+            heartbeat.Tick += (_, _) => Interlocked.Exchange(ref lastBeat, Environment.TickCount64);
+            heartbeat.Start();
+            Interlocked.Exchange(ref lastBeat, Environment.TickCount64);
             ready.Set();
             System.Windows.Forms.Application.Run(context);
         }
