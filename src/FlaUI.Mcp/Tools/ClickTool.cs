@@ -197,7 +197,7 @@ public partial class ClickTool : ToolBase
         {
             return MouseClick(request, element, elementName, physical, selectionFallback);
         }
-        catch (InvalidOperationException error) when (scrolled != null)
+        catch (Exception error) when (scrolled != null && GuardedInput.IsRefusal(error))
         {
             throw GuardedInput.ChangedFirst(error, scrolled);
         }

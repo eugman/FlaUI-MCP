@@ -35,7 +35,7 @@ public static class MutationGuard
     {
         if (BeforeMutation.Value is { } hook)
         {
-            hook();
+            RunHook(hook);
             return;
         }
 
@@ -55,6 +55,41 @@ public static class MutationGuard
 
     /// <summary>Count one input or mutation against the running operation, just before it is sent.</summary>
     public static void RecordDispatch() => OperationContext.Current.Value?.RecordInput();
+
+    /// <summary>
+    /// Run the host's hook. Its refusal keeps its type, and its code is noted on the running operation, so the
+    /// outcome carries it even when a tool turns the exception into text; any other exception is noted as
+    /// permission-denied.
+    /// </summary>
+    private static void RunHook(Action hook)
+    {
+        try
+        {
+            hook();
+        }
+        catch (InputRefusedException)
+        {
+            throw;
+        }
+        catch (AutomationRefusal refusal)
+        {
+            Note(new InputRefusal(refusal.Code, refusal.Message) { ActionDispatched = refusal.ActionDispatched });
+            throw;
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            Note(new InputRefusal(RefusalCodes.PermissionDenied, error.Message) { ActionDispatched = false });
+            throw;
+        }
+    }
+
+    private static void Note(InputRefusal refusal)
+    {
+        if (OperationContext.Current.Value is { } operation)
+        {
+            operation.Refusal = refusal;
+        }
+    }
 
     public static void Execute(Action validateIdentity, Action mutation)
     {

@@ -46,7 +46,7 @@ public sealed record ElementBounds(double X, double Y, double Width, double Heig
 
 // A completed lookup with zero matches is distinct from provider, budget,
 // ownership and ambiguous-match failures. Only read-only discovery downgrades it.
-public sealed class ElementNotFoundException(string message) : InvalidOperationException(message);
+public sealed class ElementNotFoundException(string message) : AutomationRefusal(RefusalCodes.ElementNotFound, message);
 
 public sealed record QueryResult(List<ElementInfo> Elements, int Visited, bool Truncated, int Unreadable)
 {

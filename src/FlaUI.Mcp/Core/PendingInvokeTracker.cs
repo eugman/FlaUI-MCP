@@ -33,7 +33,7 @@ public sealed class PendingInvokeInfo
 
 /// <summary>Thrown when a lookup targets an app whose UIA provider is held by a pending call.</summary>
 public sealed class ProviderBlockedException(PendingInvokeInfo pending)
-    : InvalidOperationException(PendingInvokeTracker.DescribeBlocked(pending))
+    : AutomationRefusal(RefusalCodes.ProviderBlocked, PendingInvokeTracker.DescribeBlocked(pending))
 {
     public PendingInvokeInfo Pending { get; } = pending;
 }

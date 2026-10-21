@@ -80,7 +80,8 @@ public sealed class OfflineDesktopTests
     {
         var called = false;
 
-        Assert.ThrowsAny<InvalidOperationException>(() =>
+        // Refused before the call: here by the integrity check, which cannot read process 0's token.
+        Assert.ThrowsAny<AutomationRefusal>(() =>
             ClickGeometry.Scroll(0, new PendingInvokeTracker(), () => { }, () => called = true, () => default)
         );
 

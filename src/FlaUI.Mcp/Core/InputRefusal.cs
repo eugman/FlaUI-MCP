@@ -41,9 +41,9 @@ public sealed record ProcessRef(
 }
 
 /// <summary>Thrown when guarded input sends nothing; carries the structured reason.</summary>
-public sealed class InputRefusedException(InputRefusal refusal) : InvalidOperationException(refusal.Message)
+public sealed class InputRefusedException(InputRefusal refusal) : AutomationRefusal(refusal.Code, refusal.Message)
 {
-    public InputRefusal Refusal { get; } = refusal;
+    public InputRefusal Refusal { get; } = refusal with { Code = RefusalCodes.Canonical(refusal.Code) };
 
     /// <summary>
     /// The exception to throw for <paramref name="refusal"/>, also noted on the running operation: tools
@@ -51,11 +51,12 @@ public sealed class InputRefusedException(InputRefusal refusal) : InvalidOperati
     /// </summary>
     public static InputRefusedException Record(InputRefusal refusal)
     {
+        var exception = new InputRefusedException(refusal) { ActionDispatched = refusal.ActionDispatched == true };
         if (OperationContext.Current.Value is { } operation)
         {
-            operation.Refusal = refusal;
+            operation.Refusal = exception.Refusal;
         }
 
-        return new InputRefusedException(refusal);
+        return exception;
     }
 }

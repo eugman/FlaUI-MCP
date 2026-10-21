@@ -147,7 +147,12 @@ public class ScreenshotTool : ToolBase
                 _elementRegistry.ResolveRef(refId, handle);
             }
             catch (Exception ex)
-                when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+                when (ex
+                        is ArgumentException
+                            or InvalidOperationException
+                            or AutomationRefusal
+                            or System.ComponentModel.Win32Exception
+                )
             {
                 return Task.FromResult(ErrorResult(ex.Message));
             }
@@ -670,7 +675,7 @@ public class ScreenshotTool : ToolBase
         {
             PointerParking.Park(bounds);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or AutomationRefusal)
         {
             warning = ParkRefused(ex);
         }

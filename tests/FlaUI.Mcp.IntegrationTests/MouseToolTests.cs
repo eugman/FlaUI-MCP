@@ -112,7 +112,7 @@ public class MouseToolTests(TestAppFixture fixture, ITestOutputHelper output)
         // click and the move path.
         var origin = Origin(fixture.WinFormsHandle);
         var parked = FlaUI.Core.Input.Mouse.Position;
-        var error = await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<InputRefusedException>(() =>
             Run(
                 Pointer(),
                 new

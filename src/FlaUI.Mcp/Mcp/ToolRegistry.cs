@@ -16,6 +16,12 @@ public class ToolRegistry
     public Func<JsonElement?, ProcessIdentity?>? ResolveTarget { get; set; }
     public PendingInvokeTracker? Pending { get; set; }
 
+    /// <summary>
+    /// Called when a top-level call failed after sending input (inputsSent above 0, or a refusal that says input went
+    /// out), with the tool's name and outcome, so a host can pause its grant until the app has been observed.
+    /// </summary>
+    public Action<string, ToolOutcome>? FailedAfterInput { get; set; }
+
     public ToolRegistry(TimeSpan? toolTimeout = null, Action? onToolActivity = null)
     {
         _toolTimeout = toolTimeout ?? TimeSpan.FromSeconds(30);
@@ -236,6 +242,14 @@ public class ToolRegistry
         }
 
         operation.Finished = true;
+        if (
+            result.Outcome is { Status: "failed" } failed
+            && (failed.InputsSent > 0 || failed.Failure?.ActionDispatched == true)
+        )
+        {
+            FailedAfterInput?.Invoke(tool.Name, failed);
+        }
+
         return result;
     }
 

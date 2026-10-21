@@ -73,7 +73,7 @@ public sealed class GuardedInput : IDisposable
 
             changedFirst = focusedFirst;
         }
-        catch (InvalidOperationException error) when (focusedFirst != null)
+        catch (Exception error) when (focusedFirst != null && IsRefusal(error))
         {
             lease.Dispose();
             throw ChangedFirst(error, focusedFirst);
@@ -134,13 +134,19 @@ public sealed class GuardedInput : IDisposable
         return true;
     }
 
+    /// <summary>A refusal or guard failure: what a change noted before it must be added to.</summary>
+    internal static bool IsRefusal(Exception error) => error is InvalidOperationException or AutomationRefusal;
+
     /// <summary>A refusal raised after focus changed: it may not claim that nothing was sent.</summary>
-    internal static InvalidOperationException ChangedFirst(InvalidOperationException error, string note)
+    internal static Exception ChangedFirst(Exception error, string note)
     {
         var message = NoteFocusChange(error.Message, note);
-        return error is InputRefusedException refused
-            ? InputRefusedException.Record(refused.Refusal with { Message = message })
-            : new InvalidOperationException(message, error);
+        return error switch
+        {
+            InputRefusedException refused => InputRefusedException.Record(refused.Refusal with { Message = message }),
+            AutomationRefusal other => InputRefusedException.Record(new InputRefusal(other.Code, message)),
+            _ => new InvalidOperationException(message, error),
+        };
     }
 
     /// <summary>
@@ -153,7 +159,7 @@ public sealed class GuardedInput : IDisposable
         {
             check();
         }
-        catch (InvalidOperationException error) when (changedFirst != null)
+        catch (Exception error) when (changedFirst != null && IsRefusal(error))
         {
             throw ChangedFirst(error, changedFirst);
         }

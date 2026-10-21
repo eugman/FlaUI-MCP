@@ -137,7 +137,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
             };
         }
-        catch (InvalidOperationException error) when (scrolled != null)
+        catch (Exception error) when (scrolled != null && GuardedInput.IsRefusal(error))
         {
             throw GuardedInput.ChangedFirst(error, scrolled);
         }

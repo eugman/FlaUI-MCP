@@ -32,7 +32,7 @@ public sealed class DispatchAccountingTests
         {
             action();
         }
-        catch (InvalidOperationException) { }
+        catch (Exception error) when (error is InvalidOperationException or AutomationRefusal) { }
         finally
         {
             OperationContext.Current.Value = null;
