@@ -86,7 +86,9 @@ public sealed class CheckpointRetryTests : IDisposable
     {
         File.WriteAllBytes(output, [1, 2, 3]);
 
-        Assert.Throws<IOException>(() => CaptureAnnotations.Create(manifestPath, specPath));
+        var error = Assert.Throws<IOException>(() => CaptureAnnotations.Create(manifestPath, specPath));
+
+        Assert.Contains("already exists with other content", error.Message);
 
         Assert.Equal([1, 2, 3], File.ReadAllBytes(output));
         Assert.False(ArtifactFiles.ReadManifest(manifestPath).Screenshots.ContainsKey(spec.Checkpoint));
@@ -97,7 +99,8 @@ public sealed class CheckpointRetryTests : IDisposable
     {
         using (new FileStream(manifestPath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
-            Assert.Throws<IOException>(() => CaptureAnnotations.Create(manifestPath, specPath));
+            var error = Assert.Throws<IOException>(() => CaptureAnnotations.Create(manifestPath, specPath));
+            Assert.Contains("retry when it finishes", error.Message);
         }
 
         Assert.False(File.Exists(output));
@@ -144,5 +147,15 @@ public sealed class CheckpointRetryTests : IDisposable
         Assert.False(File.Exists(output));
         Assert.Equal(before, File.ReadAllText(manifestPath));
         Assert.Empty(Directory.GetFiles(root, "*.partial"));
+    }
+
+    [Fact]
+    public void APartialFileLeftByACrashDoesNotBlockTheRetry()
+    {
+        File.WriteAllBytes(output + ".partial", [1, 2, 3]);
+
+        CaptureAnnotations.Create(manifestPath, specPath);
+
+        AssertRecorded();
     }
 }

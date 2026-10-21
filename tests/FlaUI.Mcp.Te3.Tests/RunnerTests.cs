@@ -400,9 +400,10 @@ public sealed class RunnerTests : IDisposable
         // A runner killed between Process.Start and the PID save must still read as "a TE3 may be running".
         var manifest = new RunManifest();
         RunManifest? atStart = null;
+        RunManifest? lastSaved = null;
         using var app = RunJournal.Launch(
             manifest,
-            () => { },
+            () => lastSaved = JsonSerializer.Deserialize<RunManifest>(JsonSerializer.Serialize(manifest)),
             new System.Diagnostics.ProcessStartInfo("TabularEditor3.exe"),
             _ =>
             {
@@ -414,5 +415,7 @@ public sealed class RunnerTests : IDisposable
         Assert.NotEqual(0, atStart!.LaunchRequestedTicks);
         Assert.Equal(0, atStart.ProcessId);
         Assert.Equal(Environment.ProcessId, manifest.ProcessId);
+        // The started process is saved too, so a killed runner can find the TE3 it left.
+        Assert.Equal(Environment.ProcessId, lastSaved!.ProcessId);
     }
 }
