@@ -41,6 +41,36 @@ public sealed class ReviewFollowUpTests
         Assert.True(result.Outcome.IsPending);
     }
 
+    [Fact]
+    public void AModalProvesThePatternCallWentOut()
+    {
+        using var hold = new ManualResetEventSlim();
+        var calls = 0;
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        try
+        {
+            // The call never reaches RecordDispatch, but a dialog opening proves the app received it.
+            var result = ModalAwareInvoker.Execute(
+                123,
+                "Invoke on 'Open...'",
+                hold.Wait,
+                new PendingInvokeTracker(_ => 1),
+                TimeSpan.FromSeconds(5),
+                _ => calls++ == 0 ? [] : [new Win32WindowInfo(7, "Open", 123, true, false, false)]
+            );
+
+            Assert.Equal(PatternCallOutcome.ModalDetected, result.Outcome);
+            Assert.True(result.Dispatched);
+            Assert.Equal("completed", ToolOutcome.FromPattern(result).Dispatch);
+        }
+        finally
+        {
+            hold.Set();
+            OperationContext.Current.Value = null;
+        }
+    }
+
     private sealed class Sends(string name) : ToolBase
     {
         public override string Name => name;
