@@ -178,27 +178,12 @@ public sealed class GuardedInput : IDisposable
         return message[..at] + replacement + message[(at + NothingSent.Length)..];
     }
 
-    private static readonly SemaphoreSlim InputGate = new(1, 1);
-
-    public static IDisposable AcquireLease()
-    {
-        if (
-            !InputGate.Wait(
-                TimeSpan.FromSeconds(2),
-                OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None
-            )
-        )
-        {
-            throw new TimeoutException("Desktop input is busy; no input sent.");
-        }
-
-        return new InputLease();
-    }
-
-    private sealed class InputLease : IDisposable
-    {
-        public void Dispose() => InputGate.Release();
-    }
+    /// <summary>The machine-wide input lease (<see cref="DesktopLease"/>): waits up to 2 s, then refuses as busy.</summary>
+    public static IDisposable AcquireLease() =>
+        DesktopLease.Acquire(
+            TimeSpan.FromSeconds(2),
+            OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None
+        );
 
     public static InputTarget ForegroundTarget(ProcessPolicy policy) =>
         ForegroundTarget(

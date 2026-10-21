@@ -213,14 +213,8 @@ public sealed class PointerMutationTests
             FakeDesktop.Target,
             () =>
             {
-                var gate = (SemaphoreSlim)
-                    typeof(GuardedInput)
-                        .GetField(
-                            "InputGate",
-                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
-                        )!
-                        .GetValue(null)!;
-                held = gate.CurrentCount == 0;
+                var gate = DesktopLease.Held;
+                held = gate;
                 return From;
             },
             0

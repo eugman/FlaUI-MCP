@@ -80,14 +80,8 @@ public sealed class MutationBranchTests
 
     private static bool LeaseHeld()
     {
-        var gate = (SemaphoreSlim)
-            typeof(GuardedInput)
-                .GetField(
-                    "InputGate",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
-                )!
-                .GetValue(null)!;
-        return gate.CurrentCount == 0;
+        var gate = DesktopLease.Held;
+        return gate;
     }
 }
 

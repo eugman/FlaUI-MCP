@@ -391,14 +391,8 @@ public sealed class ReviewFollowUpTests
 
     private static bool LeaseHeld()
     {
-        var gate = (SemaphoreSlim)
-            typeof(GuardedInput)
-                .GetField(
-                    "InputGate",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
-                )!
-                .GetValue(null)!;
-        return gate.CurrentCount == 0;
+        var gate = DesktopLease.Held;
+        return gate;
     }
 
     private sealed class Runs(string name, Func<McpToolResult> run) : ToolBase

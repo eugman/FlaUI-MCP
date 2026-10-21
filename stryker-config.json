@@ -16,6 +16,7 @@
       "**/Core/Interaction/InteractionGrantObserve.cs",
       "**/Core/Interaction/Heartbeat.cs",
       "**/Core/MutationGuard.cs",
+      "**/Core/DesktopLease.cs",
       "**/Core/InputRefusal.cs",
       "**/Core/ElementRegistry.cs",
       "**/Core/PendingInvokeTracker.cs",

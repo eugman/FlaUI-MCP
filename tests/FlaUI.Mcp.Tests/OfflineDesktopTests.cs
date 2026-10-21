@@ -8,7 +8,15 @@ namespace FlaUI.Mcp.Tests;
 internal static class OfflineTestSetup
 {
     [ModuleInitializer]
-    internal static void DisableRealDesktop() => Environment.SetEnvironmentVariable(InputDesktop.OfflineVariable, "1");
+    internal static void DisableRealDesktop()
+    {
+        Environment.SetEnvironmentVariable(InputDesktop.OfflineVariable, "1");
+        // A lease of this process's own, so the offline tests never wait on (or block) a host using the desktop.
+        Environment.SetEnvironmentVariable(
+            DesktopLease.NameVariable,
+            $@"Local\FlaUI-MCP-Tests-{Environment.ProcessId}"
+        );
+    }
 }
 
 /// <summary>

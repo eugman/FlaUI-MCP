@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FlaUI.Mcp.Core;
 
 namespace FlaUI.Mcp.IntegrationTests;
 
@@ -46,9 +47,39 @@ internal static class DesktopClaim
         && file.StartsWith("FlaUI.Mcp", StringComparison.OrdinalIgnoreCase)
         && file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Refuse to start the desktop suite while the desktop is busy (a read-only process check).</summary>
+    /// <summary>Whether another process holds the machine-wide input lease (the hosts' named mutex) right now.</summary>
+    internal static bool LeaseHeldElsewhere()
+    {
+        using var mutex = new Mutex(false, DesktopLease.Name);
+        try
+        {
+            if (!mutex.WaitOne(0))
+            {
+                return true;
+            }
+        }
+        catch (AbandonedMutexException)
+        {
+            // Its holder exited; this probe now owns it and releases it below.
+        }
+
+        mutex.ReleaseMutex();
+        return false;
+    }
+
+    /// <summary>
+    /// Refuse to start the desktop suite while the desktop is busy: another process holds the input lease, a
+    /// FlaUI.Mcp host runs (a read-only process check), or FLAUI_DESKTOP_BUSY is set.
+    /// </summary>
     internal static void RequireFree()
     {
+        if (LeaseHeldElsewhere())
+        {
+            throw new InvalidOperationException(
+                $"The desktop tests did not start: another process holds the desktop lease ({DesktopLease.Name})."
+            );
+        }
+
         var processes = Process
             .GetProcesses()
             .Select(p =>
