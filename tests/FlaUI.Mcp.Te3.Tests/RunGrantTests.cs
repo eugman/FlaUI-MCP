@@ -19,17 +19,66 @@ public sealed class RunGrantTests : IDisposable
         @"\.Guard\(\)|\bTe3McpServer\.Install\(|\bInstall\(host, interaction\)"
     );
 
+    private static readonly Regex Member = new(@"^    (?:public|private|internal|protected)\b", RegexOptions.Multiline);
+
+    /// <summary>
+    /// Each <c>new AutomationHost(</c> whose own member (from the declaration before it to the next one) installs no
+    /// grant, as "line: text". Per occurrence: a guarded host elsewhere in the file does not cover another one.
+    /// </summary>
+    internal static List<string> UnguardedHosts(string source)
+    {
+        var starts = Member.Matches(source).Select(m => m.Index).Append(source.Length).ToList();
+        var unguarded = new List<string>();
+        foreach (Match host in Regex.Matches(source, @"new AutomationHost\("))
+        {
+            var from = starts.LastOrDefault(i => i <= host.Index);
+            var to = starts.First(i => i > host.Index);
+            if (!InstallsGrant.IsMatch(source[from..to]))
+            {
+                var line = source[..host.Index].Count(c => c == '\n') + 1;
+                unguarded.Add($"{line}: {source.Split('\n')[line - 1].Trim()}");
+            }
+        }
+
+        return unguarded;
+    }
+
     [Fact]
     public void EveryAutomationHostTheExeBuildsHasTheGrantInstalled()
     {
         var unguarded = Directory
             .GetFiles(DirectInputJournalTests.Sources(), "*.cs")
-            .Where(file => File.ReadAllText(file).Contains("new AutomationHost("))
-            .Where(file => !InstallsGrant.IsMatch(File.ReadAllText(file)))
-            .Select(Path.GetFileName)
+            .SelectMany(file =>
+                UnguardedHosts(File.ReadAllText(file)).Select(hit => Path.GetFileName(file) + ":" + hit)
+            )
             .ToList();
 
         Assert.Empty(unguarded);
+    }
+
+    [Fact]
+    public void AGuardedHostDoesNotCoverAnotherHostInTheSameFile()
+    {
+        const string source = """
+            public static class Commands
+            {
+                public static void Serve()
+                {
+                    using var host = new AutomationHost(policy);
+                    using var guard = interaction.Guard();
+                }
+
+                public static void Replay()
+                {
+                    using var host = new AutomationHost(policy);
+                }
+            }
+            """;
+
+        var hits = UnguardedHosts(source);
+
+        Assert.Single(hits);
+        Assert.StartsWith("11:", hits[0]);
     }
 
     [Fact]
