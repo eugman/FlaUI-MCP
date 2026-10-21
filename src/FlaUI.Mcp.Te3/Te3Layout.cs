@@ -335,12 +335,14 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
         var pane = FindPane(window, title);
         var before = pane.Container.BoundingRectangle;
         var others = parts.Where(p => p.Title != pane.Title).Select(p => p.Container.BoundingRectangle).Distinct();
+        var documents = parts.Where(p => p.Kind == "document").Select(p => p.Container.BoundingRectangle);
         var (from, to) = SplitterPlan.Resize(
             before,
             others,
             GetArgument<int?>(a, "width"),
             GetArgument<int?>(a, "height"),
-            window.BoundingRectangle
+            window.BoundingRectangle,
+            documents
         );
         var origin = window.BoundingRectangle;
         var pid = host.Sessions.GetWindowProcessId(handle);

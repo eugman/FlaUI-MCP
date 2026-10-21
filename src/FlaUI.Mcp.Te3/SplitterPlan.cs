@@ -11,12 +11,14 @@ public static class SplitterPlan
     public const int MaxGap = 24;
 
     /// <summary>Drag start and end, in screen pixels, that make <paramref name="pane"/> the requested size.</summary>
+    /// <param name="documents">The neighbours that are document areas: a dock pane touching one keeps the splitter.</param>
     public static (Point From, Point To) Resize(
         Rectangle pane,
         IEnumerable<Rectangle> others,
         int? width,
         int? height,
-        Rectangle? window = null
+        Rectangle? window = null,
+        IEnumerable<Rectangle>? documents = null
     )
     {
         if (width is null == height is null)
@@ -25,8 +27,9 @@ public static class SplitterPlan
         }
 
         var neighbours = others.Where(o => o != pane).ToList();
+        var docs = (documents ?? []).ToHashSet();
         (Point, Point)? Plan(List<Rectangle> candidates) =>
-            width is { } w ? Horizontal(pane, candidates, w) : Vertical(pane, candidates, height!.Value);
+            width is { } w ? Horizontal(pane, candidates, w, docs) : Vertical(pane, candidates, height!.Value, docs);
 
         // A real neighbour on either side wins; the interior fallback is only for an edge with none.
         if (Plan(neighbours) is { } shared)
@@ -43,14 +46,19 @@ public static class SplitterPlan
             );
     }
 
-    private static (Point, Point)? Horizontal(Rectangle pane, List<Rectangle> others, int width)
+    private static (Point, Point)? Horizontal(
+        Rectangle pane,
+        List<Rectangle> others,
+        int width,
+        HashSet<Rectangle> documents
+    )
     {
         var y = (pane.Top + pane.Bottom) / 2;
         if (
             others.FirstOrDefault(o => Near(o.Right, pane.Left) && Spans(o.Top, o.Bottom, y)) is { IsEmpty: false } left
         )
         {
-            var x = Between(left.Right, pane.Left);
+            var x = Between(left.Right, pane.Left, intoSecond: documents.Contains(left));
             return (new Point(x, y), new Point(x + pane.Width - width, y));
         }
 
@@ -59,14 +67,19 @@ public static class SplitterPlan
             { IsEmpty: false } right
         )
         {
-            var x = Between(pane.Right, right.Left);
+            var x = Between(pane.Right, right.Left, intoSecond: false);
             return (new Point(x, y), new Point(x + width - pane.Width, y));
         }
 
         return null;
     }
 
-    private static (Point, Point)? Vertical(Rectangle pane, List<Rectangle> others, int height)
+    private static (Point, Point)? Vertical(
+        Rectangle pane,
+        List<Rectangle> others,
+        int height,
+        HashSet<Rectangle> documents
+    )
     {
         var x = (pane.Left + pane.Right) / 2;
         if (
@@ -74,7 +87,7 @@ public static class SplitterPlan
             { IsEmpty: false } above
         )
         {
-            var y = Between(above.Bottom, pane.Top);
+            var y = Between(above.Bottom, pane.Top, intoSecond: documents.Contains(above));
             return (new Point(x, y), new Point(x, y + pane.Height - height));
         }
 
@@ -83,7 +96,7 @@ public static class SplitterPlan
             { IsEmpty: false } below
         )
         {
-            var y = Between(pane.Bottom, below.Top);
+            var y = Between(pane.Bottom, below.Top, intoSecond: false);
             return (new Point(x, y), new Point(x, y + height - pane.Height));
         }
 
@@ -117,16 +130,26 @@ public static class SplitterPlan
         }
     }
 
-    /// <summary>Pixels inside the first pane where the splitter sits when two panes touch.</summary>
-    /// <remarks>Seen live on 3.27.1 at 125%: with no gap the splitter is in the first pane's last rows, and a
-    /// drag on the shared edge itself grabs the second pane's title bar and undocks it.</remarks>
+    /// <summary>Pixels inside the pane that holds the splitter when two panes touch.</summary>
+    /// <remarks>Seen live on 3.27.1 at 125%: between two dock panes the splitter is in the first pane's last rows,
+    /// and a drag on the shared edge itself grabs the second pane's title bar and undocks it. Beside a document the
+    /// splitter is the dock pane's border: a drag 3 px inside AI Assistant (left of the document) moved it, and one
+    /// 3 px inside the document (left of TOM Explorer) moved nothing.</remarks>
     public const int TouchingInset = 3;
 
     /// <summary>A gap this narrow is handled as touching: its midpoint is the shared edge itself.</summary>
     public const int TouchingGap = 2;
 
-    private static int Between(int firstEnd, int secondStart) =>
-        secondStart - firstEnd <= TouchingGap ? firstEnd - TouchingInset : (firstEnd + secondStart) / 2;
+    // The resized pane is never a document, so only a first neighbour (left or above) can send the inset into the second.
+    private static int Between(int firstEnd, int secondStart, bool intoSecond)
+    {
+        if (secondStart - firstEnd > TouchingGap)
+        {
+            return (firstEnd + secondStart) / 2;
+        }
+
+        return intoSecond ? secondStart + TouchingInset : firstEnd - TouchingInset;
+    }
 
     /// <summary>
     /// Fails when the drag opened a new titled top-level window in the process: the drag grabbed a pane's title bar

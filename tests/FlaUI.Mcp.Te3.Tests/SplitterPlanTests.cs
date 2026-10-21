@@ -60,6 +60,41 @@ public sealed class SplitterPlanTests
         Assert.Equal(from.X - 320, to.X);
     }
 
+    [Fact]
+    public void ARightPaneTouchingADocumentIsDraggedInsideItselfNotTheDocument()
+    {
+        // Seen live on 3.27.1 at 125%, window restored at 0,0,1920,1080 (UIA origin 1,39), in screen coordinates: the
+        // Expression Editor document ends at x 1159 and TOM Explorer starts there. A drag 3 px inside the document
+        // (x 1156) left TOM Explorer at 760; the AI Assistant drag 3 px inside that dock pane worked. The splitter is
+        // the dock pane's own border, on the side that faces the document.
+        var editor = new Rectangle(681, 100, 478, 947);
+        var tom = new Rectangle(1159, 100, 760, 549);
+        var properties = new Rectangle(1159, 649, 760, 398);
+        var (from, to) = SplitterPlan.Resize(tom, [editor, properties], width: 480, height: null, documents: [editor]);
+        Assert.Equal(1159 + SplitterPlan.TouchingInset, from.X);
+        Assert.Equal(from.X + 280, to.X);
+    }
+
+    [Fact]
+    public void ALeftPaneTouchingADocumentStillDragsInsideItself()
+    {
+        // The live AI Assistant step that reached its width: the dock pane is the first pane, so nothing changes.
+        var assistant = new Rectangle(1, 100, 638, 947);
+        var editor = new Rectangle(639, 100, 520, 947);
+        var (from, _) = SplitterPlan.Resize(assistant, [editor], width: 680, height: null, documents: [editor]);
+        Assert.Equal(639 - SplitterPlan.TouchingInset, from.X);
+    }
+
+    [Fact]
+    public void ALowerPaneBelowAnotherPaneStillDragsInsideTheUpperOne()
+    {
+        var tom = new Rectangle(1159, 100, 760, 549);
+        var properties = new Rectangle(1159, 649, 760, 398);
+        var editor = new Rectangle(681, 100, 478, 947);
+        var (from, _) = SplitterPlan.Resize(properties, [tom, editor], null, 320, documents: [editor]);
+        Assert.Equal(649 - SplitterPlan.TouchingInset, from.Y);
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
