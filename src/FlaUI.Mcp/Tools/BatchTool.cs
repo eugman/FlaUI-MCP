@@ -188,9 +188,6 @@ public sealed class BatchTool : ToolBase
             steps.Add(new(number, "wait", false, new("completed", "returned")));
         }
 
-        // Preserve the legacy numbered text and IsError contract. Structured
-        // outcomes expose failures/pending state without interpreting UI text.
-        // A step that fails after completed ones makes the batch partial: earlier input reached the app.
         /// <summary>
         /// A batch stopped at a pending step after earlier steps sent input is partial, with the pending marker
         /// kept. Reporting the pending step's own "not-dispatched" would invite a replay of input already sent.
@@ -209,6 +206,10 @@ public sealed class BatchTool : ToolBase
             };
         }
 
+        /// <summary>
+        /// The numbered trace as text, with IsError left as before, and the structured outcome beside it. A step
+        /// that fails after completed ones makes the batch partial: earlier input reached the app.
+        /// </summary>
         public McpToolResult Result()
         {
             var failed = steps.Any(s => s.IsError);
