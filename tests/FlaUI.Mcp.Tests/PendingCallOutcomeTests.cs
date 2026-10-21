@@ -102,7 +102,7 @@ public sealed class PendingCallOutcomeTests
         var result = ModalAwareInvoker.Execute(
             Pid,
             "Invoke on 'Save'",
-            () => Thread.Sleep(200),
+            () => Task.Delay(200).Wait(),
             new PendingInvokeTracker(_ => 1),
             TimeSpan.FromSeconds(5),
             _ => ++reads == 1 ? [] : throw new System.ComponentModel.Win32Exception(5)

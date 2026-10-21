@@ -18,7 +18,8 @@ public sealed class RawMutatorSurfaceTests
     [InlineData("SetClipboardText")]
     [InlineData("PreserveAndSetClipboardText")]
     public void TheRawMutatorIsNotPublic(string name) =>
-        Assert.Empty(
-            typeof(Win32Desktop).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.Name == name)
+        Assert.DoesNotContain(
+            typeof(Win32Desktop).GetMethods(BindingFlags.Public | BindingFlags.Static),
+            method => method.Name == name
         );
 }

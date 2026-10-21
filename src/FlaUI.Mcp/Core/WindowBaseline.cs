@@ -45,10 +45,13 @@ public sealed class WindowBaseline(IEnumerable<Win32WindowInfo> before)
             return null;
         }
 
-        if (Opened(after).FirstOrDefault() is not { } dialog)
+        var opened = Opened(after);
+        if (opened.Count == 0)
         {
             return "(unknown title)";
         }
+
+        var dialog = opened[0];
 
         return dialog.Title.Length > 0 ? dialog.Title : "(untitled window)";
     }
