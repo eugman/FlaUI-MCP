@@ -27,7 +27,7 @@
           false,
           "self-or-descendant"
         ],
-        "description": "Keyboard fallback only: require verified keyboard focus before Ctrl\u002BA, true for the exact control, \u0022self-or-descendant\u0022 for it or a descendant (an editable ComboBox focuses its Edit child). Default \u0022self-or-descendant\u0022; set false only for a control that never reports focus, and the keys then go wherever focus is."
+        "description": "Keyboard fallback only: require verified keyboard focus before Ctrl\u002BA, true for the exact control, \u0022self-or-descendant\u0022 for it or any descendant. By default the exact control, or its Edit child when the ref is a ComboBox or Spinner, or a focused Edit inside it with no other value control in between; set false only for a control that never reports focus, and the keys then go wherever focus is."
       }
     },
     "required": [

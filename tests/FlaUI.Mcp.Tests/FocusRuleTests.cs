@@ -63,4 +63,58 @@ public sealed class FocusRuleTests
         Assert.Contains("no input sent", error.Message);
         Assert.Equal(0, desktop.Dispatched);
     }
+
+    [Fact]
+    public void AFillOnAComboBoxAcceptsFocusOnItsEditChild()
+    {
+        var combo = Element();
+        var edit = Element();
+        var desktop = new FakeDesktop { FocusedOn = edit };
+        desktop.IgnoreFocus(combo);
+        desktop.Parents[edit] = combo;
+        desktop.ControlTypes[combo] = FlaUI.Core.Definitions.ControlType.ComboBox;
+        desktop.ControlTypes[edit] = FlaUI.Core.Definitions.ControlType.Button;
+        using var installed = desktop.Install();
+
+        new GuardedInput(FakeDesktop.Target, combo, FocusRule.EditInComposite).Dispose();
+    }
+
+    [Fact]
+    public void AFillOnACanvasRefusesFocusOnAButtonInsideIt()
+    {
+        // Ctrl+A on a canvas whose toolbar button holds focus would select every object.
+        var canvas = Element();
+        var button = Element();
+        var desktop = new FakeDesktop { FocusedOn = button };
+        desktop.IgnoreFocus(canvas);
+        desktop.Parents[button] = canvas;
+        desktop.ControlTypes[button] = FlaUI.Core.Definitions.ControlType.Button;
+        using var installed = desktop.Install();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new GuardedInput(FakeDesktop.Target, canvas, FocusRule.EditInComposite)
+        );
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void AFillAcceptsAFocusedEditOnlyWithNoOtherValueControlInBetween()
+    {
+        var field = Element();
+        var middle = Element();
+        var edit = Element();
+        var desktop = new FakeDesktop { FocusedOn = edit };
+        desktop.IgnoreFocus(field);
+        desktop.Parents[edit] = middle;
+        desktop.Parents[middle] = field;
+        desktop.ControlTypes[edit] = FlaUI.Core.Definitions.ControlType.Edit;
+        using var installed = desktop.Install();
+
+        new GuardedInput(FakeDesktop.Target, field, FocusRule.EditInComposite).Dispose();
+
+        desktop.ValueBearing.Add(middle);
+        Assert.Throws<InvalidOperationException>(() =>
+            new GuardedInput(FakeDesktop.Target, field, FocusRule.EditInComposite)
+        );
+    }
 }

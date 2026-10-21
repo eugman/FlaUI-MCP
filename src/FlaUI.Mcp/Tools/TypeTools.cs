@@ -216,7 +216,7 @@ public partial class FillTool : ToolBase
                 @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },
                 value = new { type = "string", description = "Value to fill" },
                 verifyFocus = FocusRules.Schema(
-                    "Keyboard fallback only: require verified keyboard focus before Ctrl+A, true for the exact control, \"self-or-descendant\" for it or a descendant (an editable ComboBox focuses its Edit child). Default \"self-or-descendant\"; set false only for a control that never reports focus, and the keys then go wherever focus is."
+                    "Keyboard fallback only: require verified keyboard focus before Ctrl+A, true for the exact control, \"self-or-descendant\" for it or any descendant. By default the exact control, or its Edit child when the ref is a ComboBox or Spinner, or a focused Edit inside it with no other value control in between; set false only for a control that never reports focus, and the keys then go wherever focus is."
                 ),
             },
             required = new[] { "ref", "value" },
@@ -359,7 +359,7 @@ public partial class FillTool : ToolBase
 
     /// <summary>Whether the keyboard fallback requires verified focus: true unless the caller turns it off.</summary>
     internal static FocusRule KeyboardVerifiesFocus(JsonElement? arguments) =>
-        FocusRules.Parse(arguments, "ref", FocusRule.SelfOrDescendant);
+        FocusRules.Parse(arguments, "ref", FocusRule.EditInComposite);
 
     /// <summary>
     /// Focus the control and replace its text by keyboard. With <paramref name="verifyFocus"/>, a control that did

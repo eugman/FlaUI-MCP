@@ -126,6 +126,8 @@ internal class InputDesktop
 
     public virtual AutomationElement? ParentOf(AutomationElement element) => element.Parent;
 
+    public virtual bool HasValuePattern(AutomationElement element) => element.Patterns.Value.IsSupported;
+
     /// <summary>The element UI Automation reports as having keyboard focus, or null.</summary>
     public virtual AutomationElement? FocusedElement(AutomationElement reference) =>
         reference.Automation.FocusedElement();

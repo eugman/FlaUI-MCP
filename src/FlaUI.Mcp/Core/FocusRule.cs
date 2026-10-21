@@ -17,6 +17,14 @@ public enum FocusRule
     /// focus to its Edit child, so the exact rule would refuse it while keys still reach the control.
     /// </summary>
     SelfOrDescendant,
+
+    /// <summary>
+    /// The default for a fill, whose Ctrl+A selects everything wherever focus is: the control itself, or a descendant
+    /// when the control is a ComboBox or Spinner (an editable composite whose Edit child takes focus), or when the
+    /// focused descendant is an Edit with no other Value-bearing control between it and the ref (a date picker's or
+    /// a custom field's text box). Focus on a button inside a canvas does not pass.
+    /// </summary>
+    EditInComposite,
 }
 
 public static class FocusRules
@@ -64,22 +72,54 @@ public static class FocusRules
             return true;
         }
 
-        if (rule == FocusRule.Exact)
+        if (rule == FocusRule.Exact || desktop.FocusedElement(element) is not { } focused)
         {
             return false;
         }
 
-        var focused = desktop.FocusedElement(element);
-        for (var depth = 0; focused != null && depth < 50; depth++)
+        if (PathUp(desktop, focused, element) is not { } between)
         {
-            if (desktop.SameElement(focused, element))
-            {
-                return true;
-            }
-
-            focused = desktop.ParentOf(focused);
+            return false;
         }
 
-        return false;
+        if (rule == FocusRule.SelfOrDescendant)
+        {
+            return true;
+        }
+
+        var type = desktop.ControlTypeOf(element);
+        if (type is FlaUI.Core.Definitions.ControlType.ComboBox or FlaUI.Core.Definitions.ControlType.Spinner)
+        {
+            return true;
+        }
+
+        return desktop.ControlTypeOf(focused) == FlaUI.Core.Definitions.ControlType.Edit
+            && !between.Any(desktop.HasValuePattern);
+    }
+
+    /// <summary>
+    /// The elements strictly between <paramref name="focused"/> and its ancestor <paramref name="element"/>, or null
+    /// when it is not under it.
+    /// </summary>
+    private static List<AutomationElement>? PathUp(
+        InputDesktop desktop,
+        AutomationElement focused,
+        AutomationElement element
+    )
+    {
+        var between = new List<AutomationElement>();
+        var current = desktop.ParentOf(focused);
+        for (var depth = 0; current != null && depth < 50; depth++)
+        {
+            if (desktop.SameElement(current, element))
+            {
+                return between;
+            }
+
+            between.Add(current);
+            current = desktop.ParentOf(current);
+        }
+
+        return null;
     }
 }

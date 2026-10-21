@@ -39,7 +39,7 @@ public sealed class FillKeyboardTests
         using var installed = desktop.Install();
 
         var error = Assert.Throws<InvalidOperationException>(() =>
-            Fallback(field, verifyFocus: FocusRule.SelfOrDescendant, reads: "")
+            Fallback(field, verifyFocus: FocusRule.EditInComposite, reads: "")
         );
 
         Assert.Contains("no input sent", error.Message);
@@ -53,7 +53,7 @@ public sealed class FillKeyboardTests
         var desktop = new FakeDesktop { KeyboardFocus = false };
         using var installed = desktop.Install();
 
-        var result = Fallback(Element(), verifyFocus: FocusRule.SelfOrDescendant, reads: "");
+        var result = Fallback(Element(), verifyFocus: FocusRule.EditInComposite, reads: "");
 
         Assert.NotEqual(true, result.IsError);
         Assert.Equal("Filled field with \"\"", result.Content[0].Text);
@@ -64,9 +64,9 @@ public sealed class FillKeyboardTests
     [Fact]
     public void KeyboardFillVerifiesFocusUnlessTheCallerTurnsItOff()
     {
-        Assert.Equal(FocusRule.SelfOrDescendant, FillTool.KeyboardVerifiesFocus(null));
+        Assert.Equal(FocusRule.EditInComposite, FillTool.KeyboardVerifiesFocus(null));
         Assert.Equal(
-            FocusRule.SelfOrDescendant,
+            FocusRule.EditInComposite,
             FillTool.KeyboardVerifiesFocus(JsonSerializer.SerializeToElement(new { @ref = "w1e1" }))
         );
         Assert.Equal(
@@ -82,7 +82,7 @@ public sealed class FillKeyboardTests
         var schema = JsonSerializer.SerializeToElement(new FillTool(new ElementRegistry()).GetDefinition().InputSchema);
 
         Assert.True(schema.GetProperty("properties").TryGetProperty("verifyFocus", out var verifyFocus));
-        Assert.Contains("Default \"self-or-descendant\"", verifyFocus.GetProperty("description").GetString());
+        Assert.Contains("By default the exact control", verifyFocus.GetProperty("description").GetString());
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public sealed class FillKeyboardTests
         using var installed = desktop.Install();
 
         var error = Assert.Throws<InvalidOperationException>(() =>
-            Fallback(Element(), verifyFocus: FocusRule.SelfOrDescendant, reads: "")
+            Fallback(Element(), verifyFocus: FocusRule.EditInComposite, reads: "")
         );
 
         Assert.Contains("left the control after Ctrl+A", error.Message);

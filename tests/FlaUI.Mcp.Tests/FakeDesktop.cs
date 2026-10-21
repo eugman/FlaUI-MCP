@@ -301,6 +301,11 @@ internal sealed class FakeDesktop : InputDesktop
     public override FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         ControlTypes.TryGetValue(element, out var type) ? type : FlaUI.Core.Definitions.ControlType.Custom;
 
+    /// <summary>Elements that support the Value pattern.</summary>
+    public HashSet<AutomationElement> ValueBearing { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override bool HasValuePattern(AutomationElement element) => ValueBearing.Contains(element);
+
     /// <summary>Elements UI Automation reports as offscreen.</summary>
     public HashSet<AutomationElement> Offscreen { get; } = new(ReferenceEqualityComparer.Instance);
 
