@@ -10,14 +10,14 @@ public static class SplitterPlan
     // Widest gap still treated as a shared edge; dock splitters are a few pixels, scaled by DPI.
     public const int MaxGap = 24;
 
-    /// <summary>Drag start and end, in screen pixels, that make <paramref name="pane"/> the requested size.</summary>
-    /// <param name="documents">The neighbours that are document areas: a dock pane touching one keeps the splitter.</param>
     /// <summary>The one size a resize asks for; refused before anything else when it names neither or both.</summary>
     public static int RequireOne(int? width, int? height) =>
         width is null == height is null
             ? throw new ArgumentException("Pass exactly one of width or height; no input sent.")
             : (width ?? height)!.Value;
 
+    /// <summary>Drag start and end, in screen pixels, that make <paramref name="pane"/> the requested size.</summary>
+    /// <param name="documents">The neighbours that are document areas: a dock pane touching one keeps the splitter.</param>
     public static (Point From, Point To) Resize(
         Rectangle pane,
         IEnumerable<Rectangle> others,
