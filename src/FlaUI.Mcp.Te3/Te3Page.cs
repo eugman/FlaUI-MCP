@@ -2491,23 +2491,7 @@ public sealed class Te3Page(
         }
 
         _ = folder;
-        Exception? first = null;
-        // Navigation edits nothing, so one clean retry is safe when a check fails on a slow redraw.
-        for (var attempt = 0; attempt < 2; attempt++)
-        {
-            try
-            {
-                await WalkToObject(table, objectName, objectType);
-                return;
-            }
-            catch (InvalidOperationException ex) when (attempt == 0)
-            {
-                first = ex;
-                reportStep?.Invoke($"Retrying from a clean tree after: {ex.Message}");
-            }
-        }
-
-        throw first!;
+        await NavigationRetry.Once(() => WalkToObject(table, objectName, objectType), reportStep);
     }
 
     // Where the last walk ended; the arrival check compares it with the request.
