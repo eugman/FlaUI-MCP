@@ -12,7 +12,7 @@ public sealed partial class Te3Page
     /// </summary>
     public async Task SelectObjectPath(string table, string objectName, string objectType, string folder = "")
     {
-        if (objectType is not ("Table" or "Column" or "Measure"))
+        if (objectType is not ("" or "Table" or "Column" or "Measure"))
         {
             throw new ArgumentException("Unsupported object type");
         }
@@ -89,6 +89,7 @@ public sealed partial class Te3Page
         WalkReport = new
         {
             strategy = "rows",
+            objectType = picked.ConfirmedType,
             rowsRead = picked.RowsRead,
             indentPx = picked.IndentPx,
             selects = picked.Tried,

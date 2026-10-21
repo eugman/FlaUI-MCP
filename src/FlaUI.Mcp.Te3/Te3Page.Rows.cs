@@ -40,6 +40,16 @@ public sealed partial class Te3Page
         await invoke("windows_click", new { @ref = reference, action = "select" });
     }
 
+    // TE3's account of the selection: the status bar's slot when it names the row, otherwise Properties.
+    private Confirmation Confirm(TreeRow row)
+    {
+        var bar = Te3StatusBar.SelectionSlot(ObserveModelState().Slots);
+        var folder = PropertiesValue("Folder");
+        return TomSelection.SelectionName(bar) == row.Value
+            ? new(row.Value, TomSelection.SelectionType(bar), folder)
+            : new(PropertiesValue("Name"), PropertiesValue("ObjectType"), folder);
+    }
+
     private sealed class RowTree(Te3Page page) : IRowTree
     {
         public async Task<RowRead> Read()
@@ -66,17 +76,18 @@ public sealed partial class Te3Page
 
         public Task Select(TreeRow row) => page.SelectRow(row);
 
-        // Properties follows the selection a moment later; a few short reads, never a key.
-        public async Task<(string? Name, string? Type)> Selected()
+        // The status bar names an object selection at once; Properties follows a moment later and has no ObjectType
+        // row for a column. A few short reads, never a key.
+        public async Task<Confirmation> Selected(TreeRow row)
         {
-            (string? Name, string? Type) read = (null, null);
-            for (var attempt = 0; attempt < PropertiesReads && read.Name == null; attempt++)
+            var seen = new Confirmation(null, null, null);
+            for (var attempt = 0; attempt < PropertiesReads && seen.Name == null; attempt++)
             {
                 await Task.Delay(PropertiesPollMs);
-                read = await Task.Run(() => (page.PropertiesValue("Name"), page.PropertiesValue("ObjectType")));
+                seen = await Task.Run(() => page.Confirm(row));
             }
 
-            return read;
+            return seen;
         }
     }
 }

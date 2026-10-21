@@ -272,5 +272,8 @@ public static class PathWalker
         string table,
         string objectName,
         string objectType
-    ) => row.Value == objectName && Te3Page.ObjectTypeMatches(objectType, row.Type) && currentTable == table;
+    ) =>
+        row.Value == objectName
+        && (objectType.Length == 0 || Te3Page.ObjectTypeMatches(objectType, row.Type))
+        && currentTable == table;
 }

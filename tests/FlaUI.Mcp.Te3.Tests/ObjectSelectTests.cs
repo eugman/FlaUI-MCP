@@ -37,9 +37,11 @@ public sealed class ObjectSelectTests
         public Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected() =>
             Task.FromResult<(IReadOnlyList<TreeRow>?, int?)>((All, selected?.Index));
 
-        public Task<(string? Name, string? Type)> Selected() =>
-            Task.FromResult<(string?, string?)>(
-                selected == null ? (null, null) : (selected.Value, rows[selected.Index].Type)
+        public Task<Confirmation> Selected(TreeRow row) =>
+            Task.FromResult(
+                selected == null
+                    ? new Confirmation(null, null, null)
+                    : new Confirmation(selected.Value, rows[selected.Index].Type, null)
             );
     }
 
@@ -269,4 +271,21 @@ public sealed class ObjectSelectTests
         {
             Truncated = true,
         };
+
+    [Fact]
+    public async Task WithoutAnObjectTypeTheFirstNamedCandidateTeConfirmsIsTakenAndItsTypeReported()
+    {
+        // A hierarchy level has no type the agent knows; the status bar names it once selected.
+        var tree = new FakeRows(
+            ("Tables", 1, "Group"),
+            ("Brands", 2, "Table"),
+            ("Brand Hierarchy", 3, "Hierarchy"),
+            ("Brand", 4, "Level")
+        );
+
+        var result = await ObjectSelect.Run(tree, new WalkRequest("Brands", "Brand", ""), () => false);
+
+        Assert.True(result.Found, result.Reason);
+        Assert.Equal("Level", result.ConfirmedType);
+    }
 }

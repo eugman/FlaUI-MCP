@@ -76,7 +76,12 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                 type = "string",
                 description = "Optional display folder path of a column or measure, backslash-separated (e.g. 1. Brand Hierarchy). The object must be inside it: the walk passes the table, then each folder of the path, and stops with the reason once it leaves the table. It does not make the walk faster.",
             };
-            properties["objectType"] = new { type = "string", @enum = Te3Destinations.ObjectTypes };
+            properties["objectType"] = new
+            {
+                type = "string",
+                @enum = Te3Destinations.ObjectTypes,
+                description = "Optional. Without it the first object of that name under the table (and folder) that TE3 confirms is selected, a hierarchy level included, and its type is reported.",
+            };
             return new
             {
                 type = "object",
@@ -244,7 +249,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                 await page.SelectObjectPath(
                     GetStringArgument(a, "table")!,
                     GetStringArgument(a, "objectName")!,
-                    GetStringArgument(a, "objectType")!,
+                    GetStringArgument(a, "objectType") ?? "",
                     GetStringArgument(a, "folder") ?? ""
                 );
                 break;
@@ -337,7 +342,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
 
     private static void ValidateObject(JsonElement a)
     {
-        foreach (var field in new[] { "table", "objectName", "objectType" })
+        foreach (var field in new[] { "table", "objectName" })
         {
             if (!a.TryGetProperty(field, out var value) || string.IsNullOrWhiteSpace(value.GetString()))
             {
@@ -345,16 +350,21 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             }
         }
 
-        if (!Te3Destinations.ObjectTypes.Contains(a.GetProperty("objectType").GetString()))
+        // Optional: without it the first same-named object under the table that TE3 confirms is taken (a level).
+        if (
+            a.TryGetProperty("objectType", out var type)
+            && type.ValueKind != JsonValueKind.Null
+            && !Te3Destinations.ObjectTypes.Contains(type.GetString())
+        )
         {
             throw new ArgumentException("Unsupported objectType.");
         }
 
-        if (
-            a.GetProperty("objectType").GetString() == "Table"
-            && a.TryGetProperty("folder", out var folder)
-            && !string.IsNullOrWhiteSpace(folder.GetString())
-        )
+        var isTable =
+            a.TryGetProperty("objectType", out var requested)
+            && requested.ValueKind == JsonValueKind.String
+            && requested.GetString() == "Table";
+        if (isTable && a.TryGetProperty("folder", out var folder) && !string.IsNullOrWhiteSpace(folder.GetString()))
         {
             throw new ArgumentException("folder applies to columns and measures; a table is in no display folder.");
         }
