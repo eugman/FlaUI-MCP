@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FlaUI.Mcp.Core;
 using Xunit;
 
@@ -7,6 +8,7 @@ namespace FlaUI.Mcp.Tests;
 public sealed class Win32ReadFailureTests
 {
     private const uint StaleProcessId = 4242;
+    private const uint OwnerProcessIdValue = 5151;
 
     // Windows returned no thread id, but the out parameter still holds a process id.
     private static uint FailedOwnerRead(nint hwnd, out uint processId)
@@ -17,7 +19,7 @@ public sealed class Win32ReadFailureTests
 
     private static uint OwnerRead(nint hwnd, out uint processId)
     {
-        processId = StaleProcessId;
+        processId = OwnerProcessIdValue;
         return 1;
     }
 
@@ -30,7 +32,7 @@ public sealed class Win32ReadFailureTests
     [Fact]
     public void AnOwnerReadReportsItsProcess()
     {
-        Assert.Equal((int)StaleProcessId, Win32Desktop.OwnerProcessId(100, OwnerRead));
+        Assert.Equal((int)OwnerProcessIdValue, Win32Desktop.OwnerProcessId(100, OwnerRead));
     }
 
     // Windows copied nothing, but the buffer already holds text.
@@ -70,20 +72,57 @@ public sealed class Win32ReadFailureTests
     [Fact]
     public void EnumerationKeepsAnUntitledWindowOfTheRequestedProcess()
     {
-        var window = Win32Desktop.ReadWindow(0, (int)StaleProcessId, OwnerRead, FailedTextRead);
+        var window = Win32Desktop.ReadWindow(0, (int)OwnerProcessIdValue, OwnerRead, FailedTextRead);
 
         Assert.NotNull(window);
         Assert.Equal(string.Empty, window.Title);
-        Assert.Equal((int)StaleProcessId, window.ProcessId);
+        Assert.Equal((int)OwnerProcessIdValue, window.ProcessId);
         Assert.Null(Win32Desktop.ReadWindow(0, 1, OwnerRead, ShortTextRead));
     }
 
-    // Not a window: user32 rejects the handle, so every read about it fails.
+    // Not a window: user32 rejects the handle, so every read about it fails. The value is arbitrary; it only
+    // has to fail handle validation, and its low word indexes far past the user handles a session holds in practice.
+    // Deriving one from a real window (create, then destroy) would open a window, which offline tests must not.
     private const nint NoWindow = unchecked((nint)0x7FFFFFFF);
 
     [Fact]
     public void DescribeSaysWhenAWindowCannotBeRead()
     {
         Assert.Equal($"hwnd={NoWindow}, pid=0, class=unreadable", Win32Desktop.Describe(NoWindow));
+    }
+
+    // The fakes above only prove the helpers; this proves the real reads go through them. A direct call such as
+    // GetWindowThreadProcessId(hwnd, out pid) would hand back the stale out value these helpers refuse, so the
+    // only call-shaped mention of each import must be its extern declaration; everywhere else it is a method group.
+    [Fact]
+    public void RealWin32ReadsOnlyGoThroughTheFailureAwareHelpers()
+    {
+        var source = SourceDirectory();
+        var calls = Directory
+            .EnumerateFiles(source, "*.cs", SearchOption.AllDirectories)
+            .Where(file =>
+                !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+            )
+            .SelectMany(file => File.ReadLines(file).Select(line => (file, line)))
+            .Where(entry => Regex.IsMatch(entry.line, @"\b(GetWindowThreadProcessId|GetWindowText|GetClassName)\s*\("))
+            .ToArray();
+
+        Assert.Equal(3, calls.Length);
+        Assert.All(calls, entry => Assert.Contains("static extern", entry.line));
+    }
+
+    private static string SourceDirectory()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "src", "FlaUI.Mcp");
+            if (File.Exists(Path.Combine(candidate, "Core", "Win32Desktop.cs")))
+            {
+                return candidate;
+            }
+        }
+
+        throw new DirectoryNotFoundException("src/FlaUI.Mcp");
     }
 }

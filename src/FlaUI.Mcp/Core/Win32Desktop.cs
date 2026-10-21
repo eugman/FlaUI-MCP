@@ -601,6 +601,8 @@ public static partial class Win32Desktop
     /// <see cref="FindObstructions"/>. A window that disappears between enumeration and measurement
     /// is dropped rather than recorded with unknown bounds: transient shell windows come and go
     /// constantly, and treating a window that no longer exists as opaque refuses good captures.
+    /// The same holds for a window whose owner cannot be read: <see cref="GetTopLevelWindows"/> leaves it
+    /// out because it was destroyed between enumeration and the read, so it is treated as gone.
     /// </summary>
     /// <returns>Visible top-level windows, front to back, each with its visible bounds.</returns>
     public static IReadOnlyList<WindowBounds> ObserveZOrder() =>

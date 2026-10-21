@@ -19,7 +19,31 @@ Separately, the offline test assembly sets `FLAUI_OFFLINE_TESTS=1` before any te
 
 The pointer code (ClickTool, MouseTool, PointerActions, ClickPoint, GuardedInput.Click) mostly runs against real UI Automation elements, so offline tests cannot reach most of its mutants. `pwsh scripts/mutation.ps1 -Part pointer-integration` mutates those files against `tests/FlaUI.Mcp.IntegrationTests` instead, using `stryker-config.pointer-integration.json`. It waives the offline-only rule for that part alone, and only when asked for by name: it is never part of `-Part all`. Run it only with the desktop free and the person at the machine agreeing. It runs one test session at a time, gives each mutant 180 s beyond the normal timeout, stops after 3 hours, and runs with the real desktop (`FLAUI_OFFLINE_TESTS` unset). The guard still checks Stryker's options, here for the integration project alone. Every test session must leave no test app or other stray window behind: the fixture closes apps a killed test host left running before it launches its own, and the script closes any that remain when the part ends.
 
-Latest pointer-integration run, 2026-10-21 at b4f538c: partial run, stopped at about 12 of 249 mutants when the night's work was wrapped up (each mutant runs in its own test session of about 15 s). Stryker reports mutant statuses only when a run finishes, so there is no score yet; the pointer part's score stays 49.36% offline until a full run of about an hour completes.
+Latest pointer-integration run, 2026-10-21 at 4b2a697: the first full run. Started at 11:23 with `pwsh scripts/mutation.ps1 -Part pointer-integration -Minutes 25`, concurrency 1, against `tests/FlaUI.Mcp.IntegrationTests` with the desktop granted for the run; it finished in 24:00, one minute inside the 25-minute cap, so the next run should keep the default 3-hour cap or give it at least 60 minutes. Stryker tested 249 mutants: 129 killed, 119 survived, 1 timed out, 0 errors. Stryker's own score is 21.35%, because it counts the 360 mutants with no covering test as survivors ((129 + 1) / 609). Of the mutants the integration tests do cover, 129 / 249 = 51.8% were killed; Stryker's covered-mutant score counts the timeout as detected, so it reports 130 / 249 = 52.2%. Stryker also logged `2 mutants got status CompileError. Reason: Could not be injected in code.`, next to 536 compile errors that Stryker discards as usual. The reports are in `local/build-background/StrykerOutput/pointer-integration/reports/` (`mutation-report.json` and `.html`, gitignored).
+
+| File | Killed | Timed out | Survived | No coverage |
+|---|---|---|---|---|
+| ClickTool | 52 | 1 | 66 | 82 |
+| ClickToolReplies | 8 | 0 | 11 | 20 |
+| GuardedInput | 54 | 0 | 42 | 79 |
+| ClickPoint | 15 | 0 | 0 | 28 |
+| MouseTool | 0 | 0 | 0 | 123 |
+| PointerActions | 0 | 0 | 0 | 28 |
+
+No integration test covers MouseTool or PointerActions yet. The survivors are mostly string mutations (36), logical mutations (19), equality mutations (16) and removed statements (14). The ten lines with the most survivors, for the next kill tests:
+
+1. `ClickTool` line 259, `PatternActions` (5): each action name emptied; nothing checks the list's names.
+2. `ClickToolReplies` line 43, the modal check `windows.Any(w => !w.IsEnabled && !w.IsToolWindow)` (5): `true`/`false`, `All`, `||`, a dropped `!`.
+3. `ClickTool` line 169, the `action == "select"` condition (4): `&&`/`||` swapped, `!=`, emptied string.
+4. `ClickTool` line 368, `toggleBefore` read only for `toggle` (4).
+5. `ClickToolReplies` line 70, the new window's title (`!known.Contains(...) && w.Title.Length > 0`) (4).
+6. `GuardedInput` line 104, `!activated && WindowState == stateBefore` (3).
+7. `GuardedInput` line 118, `hadFocus || !HasKeyboardFocus(element)` (3).
+8. `GuardedInput` line 397, the `chunk.Length < 64` boundary (3).
+9. `ClickTool` line 230, `opensDialog = physical && EndsWithEllipsis(...) && processId != 0` (3).
+10. `ClickTool` line 244, the 2000 ms dialog wait loop (3); line 299 (default action order), 327 (hold wait) and 379 (toggle reply) also have 3 each.
+
+Survivors in this part can be killed only by integration tests, so writing and checking those kill tests needs the desktop. Earlier run, 2026-10-21 at b4f538c: partial, stopped at about 12 of 249 mutants when the night's work was wrapped up (each mutant runs in its own test session of about 15 s), so it gave no score.
 
 ## Run log
 

@@ -40,7 +40,9 @@ public static partial class Win32Desktop
     /// <summary>
     /// A visible top-level window as <see cref="GetTopLevelWindows"/> lists it, or null when it is skipped:
     /// another process's window when <paramref name="processId"/> is set, or a window whose owner cannot be
-    /// read, which no process filter or allowlist could then vouch for. An untitled window keeps an empty title.
+    /// read. That window was destroyed between enumeration and the read, so it is treated as gone, as
+    /// <see cref="ObserveZOrder"/> treats any window that disappears; no process filter or allowlist could
+    /// vouch for it anyway. An untitled window keeps an empty title.
     /// </summary>
     internal static Win32WindowInfo? ReadWindow(
         nint hwnd,
