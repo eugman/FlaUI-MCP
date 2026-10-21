@@ -10,6 +10,13 @@ internal static class Te3McpServer
         // extensions) and the TE3 tools share one registry, so refs and handles carry across.
         using var host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]), includeDesktopTools: true);
         using var interaction = new Te3Interaction();
+        Install(host, interaction);
+        await new FlaUI.Mcp.McpServer(host.Tools).RunAsync();
+    }
+
+    /// <summary>Registers the TE3 tools beside the generic ones.</summary>
+    internal static void Install(AutomationHost host, Te3Interaction interaction)
+    {
         var registry = host.Tools;
         foreach (var name in Te3InteractionTool.Names)
         {
@@ -23,7 +30,5 @@ internal static class Te3McpServer
 
         registry.RegisterTool(new Te3Layout(host, interaction));
         registry.RegisterTool(FlaUI.Mcp.Te3.Te3NativePreflightTool.Create());
-
-        await new FlaUI.Mcp.McpServer(registry).RunAsync();
     }
 }
