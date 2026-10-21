@@ -136,7 +136,7 @@ public sealed class AgentHintTests
         Win32WindowInfo[] blocked =
         [
             new(1, "Main", 7, false, false, false),
-            new(2, "Error report", 7, true, false, false),
+            new(2, "Error report", 7, true, false, false) { Owner = 1 },
         ];
         Assert.Equal("COMException", ToolsClickFailure("", "COMException", []));
         var withModal = ToolsClickFailure("", "COMException", blocked);

@@ -151,7 +151,7 @@ public static class ModalAwareInvoker
 
             if (processId != 0)
             {
-                var modalTitle = DetectModal(windowsBefore, windowEnumerator(processId));
+                var modalTitle = new WindowBaseline(windowsBefore.Values).NewModal(windowEnumerator(processId));
                 if (modalTitle != null)
                 {
                     info.ModalTitle = modalTitle;
@@ -165,40 +165,4 @@ public static class ModalAwareInvoker
             }
         }
     }
-
-    /// <summary>
-    /// Detect the modal signature: a previously enabled window of the process became disabled, as a modal dialog
-    /// disables its owner. A new window alone is not one: tooltips, menus and tool windows appear without blocking
-    /// anything. Returns the title of the new dialog (an owned, titled, non-tooltip window preferred), or null
-    /// when no window was disabled.
-    /// </summary>
-    private static string? DetectModal(
-        IReadOnlyDictionary<nint, Win32WindowInfo> before,
-        IReadOnlyList<Win32WindowInfo> current
-    )
-    {
-        var ownerDisabled = current.Any(window =>
-            before.TryGetValue(window.Hwnd, out var previous) && previous.IsEnabled && !window.IsEnabled
-        );
-        if (!ownerDisabled)
-        {
-            return null;
-        }
-
-        var dialog = current
-            .Where(window => !before.ContainsKey(window.Hwnd) && CanBeDialog(window))
-            .OrderByDescending(window => window.Owner != 0)
-            .ThenByDescending(window => window.Title.Length > 0)
-            .FirstOrDefault();
-        if (dialog == null)
-        {
-            return "(unknown title)";
-        }
-
-        return dialog.Title.Length > 0 ? dialog.Title : "(untitled window)";
-    }
-
-    // A tooltip or a menu never blocks its owner, and a tool window is a palette, not a dialog.
-    private static bool CanBeDialog(Win32WindowInfo window) =>
-        !window.IsToolWindow && window.ClassName is not ("tooltips_class32" or "#32768");
 }

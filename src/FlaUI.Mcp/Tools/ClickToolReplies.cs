@@ -102,9 +102,8 @@ public partial class ClickTool
             reason = GuardedInput.NoteFocusChange(reason, "Select was sent");
         }
 
-        var modal = windows.Any(w => !w.IsEnabled && !w.IsToolWindow)
-            ? windows.FirstOrDefault(w => w.IsEnabled && !w.IsToolWindow && !w.IsCloaked && w.Title.Length > 0)
-            : null;
+        // A dialog owned by a disabled window, never just the first enabled window while any is disabled.
+        var modal = WindowBaseline.BlockingDialog(windows);
         return modal == null
             ? reason
             : $"{reason.TrimEnd('.')}. Window \"{modal.Title}\" appears to be a modal dialog blocking input; handle it first (see windows_list_windows).";
@@ -126,11 +125,9 @@ public partial class ClickTool
         }
     }
 
-    internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after)
-    {
-        var known = before.Select(w => w.Hwnd).ToHashSet();
-        return after.FirstOrDefault(w => !known.Contains(w.Hwnd) && w.Title.Length > 0)?.Title;
-    }
+    /// <summary>The title of a dialog the click opened: new, titled, and not a tooltip, menu or tool window.</summary>
+    internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after) =>
+        new WindowBaseline(before).Opened(after).FirstOrDefault(w => w.Title.Length > 0)?.Title;
 
     /// <summary>
     /// Map a modal-aware pattern call result to a tool result.

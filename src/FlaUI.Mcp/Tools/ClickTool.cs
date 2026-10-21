@@ -116,7 +116,7 @@ public partial class ClickTool : ToolBase
                 var owner = _elementRegistry.GetProcessIdForRef(refId);
                 if (owner != 0)
                 {
-                    windows = Win32Desktop.GetTopLevelWindows(owner);
+                    windows = InputDesktop.Current.TopLevelWindows(owner);
                 }
             }
             catch { }
@@ -229,7 +229,7 @@ public partial class ClickTool : ToolBase
 
         var processId = request.ProcessId;
         var opensDialog = physical && EndsWithEllipsis(elementName) && processId != 0;
-        var before = opensDialog ? Win32Desktop.GetTopLevelWindows(processId) : [];
+        var before = opensDialog ? InputDesktop.Current.TopLevelWindows(processId) : [];
         input.Click(element, mouseButton);
         if (!opensDialog)
         {
@@ -244,7 +244,7 @@ public partial class ClickTool : ToolBase
         // A physical click returns before its dialog exists; report the window so agents don't list too early.
         for (var waited = 0; waited < 2000; waited += 100)
         {
-            if (NewWindowTitle(before, Win32Desktop.GetTopLevelWindows(processId)) is { } title)
+            if (NewWindowTitle(before, InputDesktop.Current.TopLevelWindows(processId)) is { } title)
             {
                 return TextResult(
                     $"Clicked {elementName}; window \"{title}\" opened. Get its handle from windows_list_windows."
