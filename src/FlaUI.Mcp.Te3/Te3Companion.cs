@@ -94,7 +94,11 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         public string Last { get; set; } = "validate request";
     }
 
-    public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
+    // A navigation that fails after input pauses the grant; a status-bar read lifts it.
+    public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
+        FailurePause.After(grant, await Execute(arguments), observation: name == ModelState);
+
+    private async Task<McpToolResult> Execute(JsonElement? arguments)
     {
         var step = new Step();
         var inputs = new InputTally();

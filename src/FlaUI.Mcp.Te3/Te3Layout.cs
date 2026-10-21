@@ -36,8 +36,16 @@ public sealed partial class Te3Layout(
 
     private sealed record Part(string Title, string Kind, AutomationElement Close, AutomationElement Container);
 
-    public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
-        Respond(inputs => Run(arguments, inputs));
+    // A failure after input pauses the grant; a read of the layout (list, show-pane) lifts it.
+    public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
+        FailurePause.After(
+            grant,
+            await Respond(inputs => Run(arguments, inputs)),
+            observation: readOnly && Observes(arguments)
+        );
+
+    private bool Observes(JsonElement? arguments) =>
+        arguments is { } a && GetStringArgument(a, "action") is "list" or "show-pane";
 
     private async Task<McpToolResult> Run(JsonElement? arguments, InputTally inputs)
     {

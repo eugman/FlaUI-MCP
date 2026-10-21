@@ -25,6 +25,7 @@ internal static class CoreFailure
         "desktop-unavailable",
         Te3Interaction.ApprovalRequired,
         Te3Interaction.FocusRevoked,
+        Te3Interaction.PausedAfterFailure,
     ];
 
     /// <summary>

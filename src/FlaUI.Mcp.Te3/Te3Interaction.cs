@@ -21,6 +21,11 @@ public sealed class Te3Interaction : IDisposable
     /// <summary>The refusal code once the user's own input revoked the batch.</summary>
     public const string FocusRevoked = "focus_revoked";
 
+    /// <summary>The refusal code while an earlier call's failure after input has not been looked at.</summary>
+    public const string PausedAfterFailure = "paused_after_failure";
+
+    private string? paused;
+
     /// <summary>The refusal code when the run's TE3 came to the front by anything but the user's click on it.</summary>
     public const string ActivationDenied = "activation_denied";
 
@@ -102,6 +107,15 @@ public sealed class Te3Interaction : IDisposable
                     $"Desktop input needs the user's approval: {reason} Ask the user, then call {Te3InteractionTool.Begin}."
                 );
             }
+
+            if (paused != null)
+            {
+                throw Refusal(
+                    PausedAfterFailure,
+                    $"Desktop input is paused: {paused}. Observe TE3 with te3_layout_read list or te3_model_state, "
+                        + "then retry."
+                );
+            }
         }
     }
 
@@ -165,6 +179,24 @@ public sealed class Te3Interaction : IDisposable
         }
 
         return now.ButtonDowns == before.ButtonDowns ? "TE3 came to the front without a click from the user." : null;
+    }
+
+    /// <summary>Refuses input until <see cref="Observed"/>: a call failed after sending input.</summary>
+    internal void Pause(string why)
+    {
+        lock (sync)
+        {
+            paused = why;
+        }
+    }
+
+    /// <summary>A read of TE3 succeeded, so its state after the failure has been seen; input may resume.</summary>
+    internal void Observed()
+    {
+        lock (sync)
+        {
+            paused = null;
+        }
     }
 
     // A typed refusal, noted on the running operation so Core's outcome carries the code; it sent nothing itself.

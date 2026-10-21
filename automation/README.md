@@ -33,7 +33,7 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 
 | Tool | Does |
 |---|---|
-| `te3_interaction_begin` / `te3_interaction_end` | Start and end the user's grant. In this server it covers every tool that changes the desktop: the `windows_*` input and window tools (`windows_click`, `windows_type`, `windows_fill`, `windows_send_keys`, `windows_paste`, `windows_mouse`, `windows_place_window`, `windows_set_window_state`, `windows_focus`, `windows_close`, `windows_launch`), `te3_navigate` and `te3_layout`'s changes. Begin only after the user says the machine is clear; their own keyboard or mouse input ends it. |
+| `te3_interaction_begin` / `te3_interaction_end` | Start and end the user's grant. In this server it covers every tool that changes the desktop: the `windows_*` input and window tools (`windows_click`, `windows_type`, `windows_fill`, `windows_send_keys`, `windows_paste`, `windows_mouse`, `windows_place_window`, `windows_set_window_state`, `windows_focus`, `windows_close`, `windows_launch`), `te3_navigate` and `te3_layout`'s changes. Begin only after the user says the machine is clear; their own keyboard or mouse input ends it. A refusal carries `failure.code`: `approval_required`, `focus_revoked` (the user's input), `activation_denied` (the runner's TE3 came forward without the user's click) or `paused_after_failure`. After a `te3_navigate` or `te3_layout` call fails having sent input, all input is refused with `paused_after_failure` until `te3_layout_read list`/`show-pane` or `te3_model_state` succeeds. |
 | `te3_navigate` | Moves to a destination and checks it arrived. Takes focus; needs the grant. |
 | `te3_model_state` | Reads the status bar: whether a model is loaded, its connection, the BPA count, the selected object. Sends no input. |
 | `te3_layout_read` | Lists docked panes and document tabs (`list`), confirms a named pane is visible (`show-pane`) and plans the `assistant-model-review` geometry offline (`plan-preset`). Sends no input and needs no grant. |
@@ -56,7 +56,7 @@ Rules:
 
 ## Screenshot runner
 
-The runner launches its own TE3 instance, so close yours first. It stages a model, runs each recipe, and restores your TE3 preferences afterwards. Starting `run` approves the named recipes, like `te3_interaction_begin` in the MCP server: your own keyboard or mouse input revokes that, and the recipe fails at its next input (the run still closes its TE3 and restores your preferences). If Windows refuses to bring TE3 to the front, the runner asks you to click it; input after that click stops the run. Every run writes a manifest, the PNGs and an `index.html` under the configured output folder.
+The runner launches its own TE3 instance, so close yours first. It stages a model, runs each recipe, and restores your TE3 preferences afterwards. Starting `run` approves the named recipes, like `te3_interaction_begin` in the MCP server: your own keyboard or mouse input revokes that, and the recipe fails at its next input (the run still closes its TE3 and restores your preferences). If Windows refuses to bring TE3 to the front, the runner asks you to click it: it carries on only if a mouse click, and no typing, came before TE3 reached the front, and any input after that click stops the run. Every run writes a manifest, the PNGs and an `index.html` under the configured output folder.
 
 ### Configure
 

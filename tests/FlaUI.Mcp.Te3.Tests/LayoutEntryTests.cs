@@ -226,4 +226,51 @@ public sealed class LayoutEntryTests : IDisposable
         Assert.Contains("Save changes?", result.Content.Single().Text);
         Assert.Equal(["Close AI Assistant"], surface!.Presses);
     }
+
+    [Fact]
+    public async Task AFailureAfterInputPausesUntilTheLayoutIsReadAgain()
+    {
+        var tool = Tool(inputs => new FakeSurface(inputs, "AI Assistant", "Properties")
+        {
+            FailingPress = "AI Assistant",
+        });
+        var read = Tool(Standard, readOnly: true);
+
+        var failed = await tool.ExecuteAsync(Args(new { action = "close", titles = new[] { "AI Assistant" } }));
+        var refused = await tool.ExecuteAsync(Args(new { action = "close", titles = new[] { "Properties" } }));
+
+        Assert.Equal(true, failed.IsError);
+        Assert.Equal(true, refused.IsError);
+        Assert.Equal("paused_after_failure", refused.Outcome?.Failure?.Code);
+        Assert.Empty(surface!.Presses);
+
+        Assert.NotEqual(true, (await read.ExecuteAsync(Args(new { action = "list" }))).IsError);
+        var resumed = await tool.ExecuteAsync(Args(new { action = "close", titles = new[] { "Properties" } }));
+
+        Assert.NotEqual(true, resumed.IsError);
+        Assert.Equal(["Close Properties"], surface!.Presses);
+    }
+
+    [Fact]
+    public async Task AFailureBeforeAnyInputDoesNotPause()
+    {
+        var tool = Tool(Standard);
+
+        await tool.ExecuteAsync(Args(new { action = "keep", titles = new[] { "TOM Explorr" } }));
+        var next = await tool.ExecuteAsync(Args(new { action = "close", titles = new[] { "AI Assistant" } }));
+
+        Assert.NotEqual(true, next.IsError);
+    }
+
+    [Fact]
+    public void WhilePausedTheGrantRefusesWithItsOwnCodeAndAnObservationLiftsIt()
+    {
+        interaction.Pause("an earlier call failed after sending input");
+
+        var error = Assert.Throws<InputRefusedException>(interaction.Require);
+
+        Assert.Equal(Te3Interaction.PausedAfterFailure, error.Refusal.Code);
+        interaction.Observed();
+        interaction.Require();
+    }
 }
