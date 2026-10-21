@@ -79,7 +79,9 @@ public sealed class Win32ReadFailureTests
         Assert.Null(Win32Desktop.ReadWindow(0, 1, OwnerRead, ShortTextRead));
     }
 
-    // Not a window: user32 rejects the handle, so every read about it fails.
+    // Not a window: user32 rejects the handle, so every read about it fails. The value is arbitrary; it only
+    // has to fail handle validation, and its low word indexes far past the user handles a session holds in practice.
+    // Deriving one from a real window (create, then destroy) would open a window, which offline tests must not.
     private const nint NoWindow = unchecked((nint)0x7FFFFFFF);
 
     [Fact]
