@@ -77,4 +77,13 @@ public sealed class Win32ReadFailureTests
         Assert.Equal((int)StaleProcessId, window.ProcessId);
         Assert.Null(Win32Desktop.ReadWindow(0, 1, OwnerRead, ShortTextRead));
     }
+
+    // Not a window: user32 rejects the handle, so every read about it fails.
+    private const nint NoWindow = unchecked((nint)0x7FFFFFFF);
+
+    [Fact]
+    public void DescribeSaysWhenAWindowCannotBeRead()
+    {
+        Assert.Equal($"hwnd={NoWindow}, pid=0, class=unreadable", Win32Desktop.Describe(NoWindow));
+    }
 }

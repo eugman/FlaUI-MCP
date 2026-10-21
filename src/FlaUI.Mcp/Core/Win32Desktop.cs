@@ -403,7 +403,10 @@ public static partial class Win32Desktop
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(nint hWnd, [Out] char[] lpClassName, int nMaxCount);
 
-    /// <summary>Compact diagnostic identity for a window: handle, process id and class name.</summary>
+    /// <summary>
+    /// Compact diagnostic identity for a window: handle, process id and class name. A failed read shows as
+    /// pid=0 and class=unreadable, not as an empty class that reads like a real one.
+    /// </summary>
     public static string Describe(nint hwnd)
     {
         if (hwnd == 0)
@@ -412,7 +415,7 @@ public static partial class Win32Desktop
         }
 
         var name = ReadText(hwnd, ClassNameCapacity, GetClassName);
-        return $"hwnd={hwnd}, pid={GetProcessId(hwnd)}, class={name}";
+        return $"hwnd={hwnd}, pid={GetProcessId(hwnd)}, class={name ?? "unreadable"}";
     }
 
     [DllImport("dwmapi.dll")]
