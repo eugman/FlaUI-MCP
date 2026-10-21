@@ -77,4 +77,25 @@ public sealed class DirectInputJournalTests
 
         Assert.Empty(unjournaled);
     }
+
+    [Fact]
+    public void ThePagesOwnClicksUseCoresClickPoint()
+    {
+        // A raw clickable point skips ClickPoint's visibility checks and Core's hit test under the input lease;
+        // GuardedInput.Click reads and checks the point itself.
+        var source = File.ReadAllText(Path.Combine(Sources(), "Te3Page.cs"));
+
+        Assert.DoesNotContain("GetClickablePoint", source);
+        Assert.DoesNotContain("Mouse.Click(", source);
+    }
+
+    [Fact]
+    public void AnObscuredPointerTargetIsAStructuredRefusal()
+    {
+        var error = Te3Page.Obscured(new(100, 4242, 0), "Model menu is obscured");
+
+        Assert.Equal("point-not-on-target", error.Refusal.Code);
+        Assert.Equal(4242, error.Refusal.Target?.Pid);
+        Assert.Equal("Model menu is obscured; no input sent.", error.Message);
+    }
 }
