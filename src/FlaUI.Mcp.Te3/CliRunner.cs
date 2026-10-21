@@ -21,7 +21,11 @@ public sealed class CliRunner
         start.ArgumentList.Add("--output-format");
         start.ArgumentList.Add("json");
         start.Environment["TE_SESSION"] = "fla_automation_" + Environment.ProcessId;
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("TE CLI did not start");
+        // The TE CLI changes the model, so it starts like any other change: under Core's input lease and mutation
+        // check, counted, and refused while FLAUI_OFFLINE_TESTS is set.
+        using var process =
+            FlaUI.Mcp.Core.GuardedDesktop.StartProcess(start)
+            ?? throw new InvalidOperationException("TE CLI did not start");
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
         var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
