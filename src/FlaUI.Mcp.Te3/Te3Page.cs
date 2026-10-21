@@ -16,19 +16,11 @@ public sealed class Te3Page(
 {
     /// <summary>
     /// Sends input this page dispatches itself rather than through a Core tool, journaled like tool calls. The
-    /// GuardedInput (whose constructor activates the target), the hit test and the send all run inside the journaled
-    /// call, and the tally counts what Core recorded: the activation, when there was one, and the send.
+    /// GuardedInput (whose constructor activates the target) and <paramref name="send"/>, which sends through it, run
+    /// inside the journaled call, and the tally counts what Core recorded: the activation, when there was one, and
+    /// each send.
     /// </summary>
-    /// <param name="clear">The hit test; false refuses before anything is sent.</param>
-    /// <param name="obscured">The refusal when <paramref name="clear"/> fails.</param>
-    private Task SendInput(
-        string action,
-        object arguments,
-        InputTarget target,
-        Func<bool> clear,
-        string obscured,
-        Action send
-    ) =>
+    private Task SendInput(string action, object arguments, InputTarget target, Action<GuardedInput> send) =>
         RunJournal.Input(
             journal,
             action,
@@ -37,13 +29,59 @@ public sealed class Te3Page(
                 Inputs.Dispatch(() =>
                 {
                     using var input = new GuardedInput(target);
-                    if (!clear())
-                    {
-                        throw new InvalidOperationException(obscured);
-                    }
-
-                    input.Send(send);
+                    send(input);
                 })
+        );
+
+    /// <summary>
+    /// Moves the pointer to <paramref name="point"/> once the target is in front and the point lies on
+    /// <paramref name="over"/>; refuses, sending nothing more, when another window covers it.
+    /// </summary>
+    private Task MovePointer(string what, InputTarget target, System.Drawing.Point point, nint over) =>
+        SendInput(
+            "te3_pointer_move",
+            new
+            {
+                target = what,
+                point.X,
+                point.Y,
+            },
+            target,
+            input =>
+            {
+                input.Check(() =>
+                {
+                    if (Win32Desktop.WindowAt(point) != over)
+                    {
+                        throw Obscured(target, what + " is obscured");
+                    }
+                });
+                input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(point));
+            }
+        );
+
+    /// <summary>The refusal for a pointer target another window covers, as Core's structured point-not-on-target.</summary>
+    internal static InputRefusedException Obscured(InputTarget target, string what) =>
+        InputRefusedException.Record(
+            new InputRefusal("point-not-on-target", what + "; no input sent.")
+            {
+                Target = new ProcessRef(null, target.ProcessId),
+            }
+        );
+
+    /// <summary>
+    /// Clicks a command in TE3's own non-activating menu popup through GuardedInput.Click: Core reads the element's
+    /// point under the input lease, checks it with ClickPoint, and hit-tests it against the popup.
+    /// </summary>
+    private Task ClickInPopup(string label, AutomationElement element, nint popup) =>
+        SendInput(
+            "te3_click",
+            new { target = label },
+            host.Sessions.GetInputTarget(handle) with
+            {
+                HitHwnd = popup,
+            },
+            input => input.Click(element)
         );
 
     /// <summary>Inputs sent for this page: the caller's tool calls (when it shares the tally) and the page's own.</summary>
@@ -1450,21 +1488,11 @@ public sealed class Te3Page(
     {
         var menuBarItem = await Resolve(modelMenu);
         var ownerIdentity = host.Sessions.GetInputTarget(handle);
-        var menuBarPoint = await Task.Run(menuBarItem.GetClickablePoint).WaitAsync(TimeSpan.FromSeconds(5));
+        // Only where the item is visible, as Core's pointer tools choose it.
+        var menuBarPoint = await Task.Run(() => ClickPoint.Choose(ClickGeometry.Read(menuBarItem)))
+            .WaitAsync(TimeSpan.FromSeconds(5));
         reportStep?.Invoke("Open Model menu");
-        await SendInput(
-            "te3_pointer_move",
-            new
-            {
-                target = "Model menu",
-                menuBarPoint.X,
-                menuBarPoint.Y,
-            },
-            ownerIdentity,
-            () => Win32Desktop.WindowAt(menuBarPoint) == ownerIdentity.Hwnd,
-            "Model menu is obscured",
-            () => FlaUI.Core.Input.Mouse.MoveTo(menuBarPoint)
-        );
+        await MovePointer("Model menu", ownerIdentity, menuBarPoint, ownerIdentity.Hwnd);
         return ownerIdentity;
     }
 
@@ -1914,53 +1942,19 @@ public sealed class Te3Page(
             throw new TimeoutException("Window menu did not expose Default layout");
         }
 
-        var owner = host.Sessions.GetInputTarget(handle);
         var popup = await MenuPopup(element);
         // TE3's non-activating menu is a same-process window without a native owner.
         // Keep the main window foreground and require hit testing against this exact popup.
-        var point = await Task.Run(element.GetClickablePoint).WaitAsync(TimeSpan.FromSeconds(5));
         reportStep?.Invoke("Apply default layout");
-        await SendInput(
-            "te3_click",
-            new
-            {
-                target = "Default layout",
-                point.X,
-                point.Y,
-            },
-            owner with
-            {
-                HitHwnd = popup,
-            },
-            () => Win32Desktop.GetProcessId(popup) == owner.ProcessId && Win32Desktop.WindowAt(point) == popup,
-            "Default layout click point is obscured",
-            () => FlaUI.Core.Input.Mouse.Click(point)
-        );
+        await ClickInPopup("Default layout", element, popup);
     }
 
     // TE3 menu commands are clicked physically inside their own popup window; UIA Invoke can stay pending.
     private async Task ClickPopupCommand(AutomationElement command, string label)
     {
         var popup = await MenuPopup(command);
-        var owner = host.Sessions.GetInputTarget(handle);
-        var point = await Task.Run(command.GetClickablePoint).WaitAsync(TimeSpan.FromSeconds(5));
         reportStep?.Invoke("Click " + label);
-        await SendInput(
-            "te3_click",
-            new
-            {
-                target = label,
-                point.X,
-                point.Y,
-            },
-            owner with
-            {
-                HitHwnd = popup,
-            },
-            () => Win32Desktop.WindowAt(point) == popup,
-            label + " is obscured",
-            () => FlaUI.Core.Input.Mouse.Click(point)
-        );
+        await ClickInPopup(label, command, popup);
     }
 
     // Discovery helpers: capture-only probes that record locators before recipes are written.
@@ -2187,20 +2181,7 @@ public sealed class Te3Page(
         var owner = host.Sessions.GetInputTarget(handle);
         var bounds =
             Win32Desktop.GetWindowBounds(owner.Hwnd) ?? throw new InvalidOperationException("TE3 window disappeared");
-        var point = ParkPoint(bounds);
-        await SendInput(
-            "te3_pointer_move",
-            new
-            {
-                target = "title bar",
-                point.X,
-                point.Y,
-            },
-            owner,
-            () => Win32Desktop.WindowAt(point) == owner.Hwnd,
-            "TE3 title bar is obscured; pointer not moved",
-            () => FlaUI.Core.Input.Mouse.MoveTo(point)
-        );
+        await MovePointer("TE3 title bar", owner, ParkPoint(bounds), owner.Hwnd);
         await Task.Delay(200);
     }
 
