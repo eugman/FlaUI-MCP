@@ -10,7 +10,7 @@ namespace FlaUI.Mcp.Core;
 /// </summary>
 public static class GuardedDesktop
 {
-    /// <summary>Start a process; counted once Windows accepted the start. A start that throws counts nothing.</summary>
+    /// <summary>Start a process; counted only when a process is returned. A start that throws or returns null counts nothing.</summary>
     public static Process? StartProcess(ProcessStartInfo info) => WindowMutation.Start(info);
 
     /// <summary>
