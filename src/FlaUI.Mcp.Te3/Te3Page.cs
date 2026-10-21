@@ -2545,9 +2545,15 @@ public sealed partial class Te3Page(
 
                 break;
             case { Id: "object" }:
-                // Proof from the tree and status bar, not the property grid: grid rows below the fold of a short
-                // Properties pane are not exposed to UI Automation.
-                VerifyArrival(table!, objectName!, objectType!, (await ObserveSelection()).Row, lastWalk?.Table);
+                // Proof from the tree and the status bar; Properties' ObjectType only when the bar names another row
+                // (it does not follow every selection on 3.27.1).
+                VerifyArrival(
+                    table!,
+                    objectName!,
+                    objectType!,
+                    await Typed((await ObserveSelection()).Row),
+                    lastWalk?.Table
+                );
                 break;
             case { Id: "tom-explorer" }:
                 if (!await IsOnScreen(TomTreeTarget()))
