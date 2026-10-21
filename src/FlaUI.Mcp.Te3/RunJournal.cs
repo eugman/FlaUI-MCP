@@ -26,7 +26,10 @@ internal static class RunJournal
         return app;
     }
 
-    /// <summary>Runs one tool call, journaling its intent before it runs and its result or error after.</summary>
+    /// <summary>
+    /// Runs one tool call, journaling its intent before it runs and its result or error after. The call has run by
+    /// then, so a journal write that fails afterwards is reported beside the result or error, never instead of it.
+    /// </summary>
     internal static async Task<McpToolResult> Tool(
         string journal,
         string tool,
@@ -50,7 +53,7 @@ internal static class RunJournal
         }
         catch (Exception error)
         {
-            Append(
+            var unrecorded = TryAppend(
                 journal,
                 new
                 {
@@ -59,10 +62,15 @@ internal static class RunJournal
                     error = error.Message,
                 }
             );
+            if (unrecorded != null)
+            {
+                error.Data[JournalErrorKey] = unrecorded;
+            }
+
             throw;
         }
 
-        Append(
+        var failure = TryAppend(
             journal,
             new
             {
@@ -71,9 +79,24 @@ internal static class RunJournal
                 result,
             }
         );
-        return result;
+        return failure == null ? result : result with { Content = [.. result.Content, new() { Text = failure }] };
     }
 
     private static void Append(string journal, object entry) =>
         File.AppendAllText(journal, JsonSerializer.Serialize(entry) + Environment.NewLine);
+
+    /// <returns>Null once written; otherwise why the entry could not be recorded.</returns>
+    private static string? TryAppend(string journal, object entry)
+    {
+        try
+        {
+            Append(journal, entry);
+            return null;
+        }
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or NotSupportedException or JsonException)
+        {
+            return $"Journal: this call's outcome could not be recorded in {journal} ({ex.Message}). The call ran.";
+        }
+    }
 }
