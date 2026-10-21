@@ -2,7 +2,7 @@ using FlaUI.Mcp;
 
 /// <summary>
 /// The inputs one TE3 tool call or run has sent, each counted once it went out: a Core tool call that completed or is
-/// pending, a failed one whose text does not prove a refusal before input, and a direct send that returned. A refusal
+/// pending, a failed one whose text does not prove a refusal before input, and a direct send whose checks passed. A refusal
 /// before input (activation denied, no desktop, no grant, a stale ref, a covered point, a failed intent write)
 /// counts nothing. TODO(core): switch to Core's inputsSent after the rebase.
 /// </summary>
@@ -33,11 +33,14 @@ public sealed class InputTally
         }
     }
 
-    /// <summary>Dispatches one direct input; call it once every check before the input has passed.</summary>
+    /// <summary>
+    /// Dispatches one direct input, counted first: call it once every check before the input has passed (inside
+    /// GuardedInput.Send), so a click that throws after the button went down still counts.
+    /// </summary>
     public void Dispatch(Action send)
     {
-        send();
         Sent++;
+        send();
     }
 
     // failure: null when the call returned normally; otherwise its text, which may prove nothing was sent.
