@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed for product repos
+- A `windows_batch` with a failed step returns `isError: true` (it mirrors `status: failed`). A stranded (timed-out or cancelled) call reports `status: failed` and keeps a refusal it recorded.
 - The raw Win32 mutators (`Win32Desktop.FocusWindow`, `CloseWindow`, `PlaceWindow`, `SetWindowState`, `SetClipboardText`, `PreserveAndSetClipboardText`) are internal; product code goes through the guarded calls.
 - Native focus and close by handle deliberately bypass the pending tracker, so they still reach a modal dialog that blocks the provider; a host that wants them refused while a call is pending can check `PendingInvokeTracker.TryGetPending` first.
 - New public guarded calls for what product code did raw: `GuardedDesktop.StartProcess`, `GuardedDesktop.CallPattern` and `GuardedDesktop.SetClipboardText`, and `GuardedInput.SetClipboardText` / `PreserveAndSetClipboardText` under a guard. Each takes the lease and permission check, counts, and is refused under `FLAUI_OFFLINE_TESTS`. [docs/operation-recovery.md](docs/operation-recovery.md#adapting-a-product-repo) lists the call sites in each product repo.

@@ -73,7 +73,7 @@ public sealed class ToolOutcomeTests
 
         var result = await registry.ExecuteToolAsync("structured-batch-failure", null);
 
-        Assert.NotEqual(true, result.IsError);
+        Assert.True(result.IsError); // isError mirrors status: failed.
         Assert.Equal("not-dispatched", result.Outcome!.Dispatch);
         Assert.Contains("1. click: failed", result.Content[0].Text);
         var status = JsonSerializer.SerializeToElement(registry.Operations.Status())[0];

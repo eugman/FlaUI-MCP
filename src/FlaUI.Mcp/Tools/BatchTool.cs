@@ -207,8 +207,9 @@ public sealed class BatchTool : ToolBase
         }
 
         /// <summary>
-        /// The numbered trace as text, with IsError left as before, and the structured outcome beside it. A step
-        /// that fails after completed ones makes the batch partial: earlier input reached the app.
+        /// The numbered trace as text, and the structured outcome beside it. A step that fails after completed ones
+        /// makes the batch partial: earlier input reached the app. IsError mirrors status: failed, so a client
+        /// that reads only isError does not take a failed batch for a successful one.
         /// </summary>
         public McpToolResult Result()
         {
@@ -219,6 +220,7 @@ public sealed class BatchTool : ToolBase
                 : PendingOutcome(pending, sent, pendingNumber < rowCount);
             return TextResult(string.Join("\n", trace)) with
             {
+                IsError = failed ? true : null,
                 Outcome = outcome with { Steps = steps, InputsSent = sent, Status = failed ? "failed" : null },
             };
         }

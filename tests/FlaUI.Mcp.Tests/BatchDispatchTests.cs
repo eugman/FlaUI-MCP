@@ -47,7 +47,7 @@ public sealed class BatchDispatchTests
             },
             stopOnError
         );
-        Assert.NotEqual(true, result.IsError); // Upstream batch returns numbered text, including failures.
+        Assert.True(result.IsError); // The numbered text keeps every step; isError mirrors status: failed.
         Assert.Equal(expectedCalls, calls);
         Assert.Contains("1. click: failed", result.Content[0].Text);
         Assert.Equal(stopOnError, result.Content[0].Text!.Contains("Stopped at action"));

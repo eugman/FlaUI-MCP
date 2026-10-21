@@ -23,11 +23,11 @@ Every `tools/call` result carries `structuredContent` with these fields. Product
 | `status` | `ok` or `failed`: whether the tool did what was asked, separate from how much input went out. |
 | `inputsSent` | The number of changes the call made: keys, clicks, pointer moves, pattern calls, focus and restore, close, window state, clipboard writes, scroll-into-view and process starts. Only changes that happened are counted. |
 | `failure` | Set when guarded input refused: `code`, `message`, `foregroundProcess` (`name`, `pid`), `target` (`pid`, `integrityLevel`, `uiAccess`) and `actionDispatched`. |
-| `steps` | For `windows_batch`: one outcome per step, numbered from 1. |
+| `steps` | For `windows_batch`: one outcome per step, numbered from 1. A batch with a failed step has `status: failed` and `isError: true`, even when earlier steps sent input (`dispatch: partial`). |
 | `message` | New: the tool's text, for clients that show only `structuredContent`. |
 | `operationId`, `pendingPatternId`, `modalTitle`, `verification` | Unchanged. |
 
-An outcome is pending when `provider` is `pending` or `dispatch` is `timed_out_pending`. A batch that stops at a pending step after earlier steps sent input reports `partial` with `provider: pending`, and must not be replayed. A host that tests for `completed` or `timed_out_pending` must also handle `partial`.
+An outcome is pending when `provider` is `pending` or `dispatch` is `timed_out_pending`. A call stranded by its timeout or a cancel reports `timed_out_pending` with `status: failed`, and keeps any refusal it recorded before it stranded in `failure`. A batch that stops at a pending step after earlier steps sent input reports `partial` with `provider: pending`, and must not be replayed. A host that tests for `completed` or `timed_out_pending` must also handle `partial`.
 
 Operation status (`flaui/operations/status` and `windows_operation_status`) reports `status` as `ok`, `failed`, `running` or `timed_out_pending`. While an operation has no result yet, its `dispatch` is `partial` once input went out and `unknown` before that.
 

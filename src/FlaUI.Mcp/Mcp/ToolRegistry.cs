@@ -266,9 +266,17 @@ public class ToolRegistry
             {
                 new() { Type = "text", Text = PendingMessage(name, settled != null) },
             },
+            // Failed like any error result, and carrying a refusal the call recorded before it stranded.
             Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id)
             {
                 InputsSent = operation.InputsSent,
+                Status = "failed",
+                Failure = operation.Refusal is { } refusal
+                    ? refusal with
+                    {
+                        ActionDispatched = operation.InputsSent > 0,
+                    }
+                    : null,
             },
             IsError = true,
         };
