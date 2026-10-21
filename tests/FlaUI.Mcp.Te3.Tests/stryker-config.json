@@ -17,6 +17,8 @@
       "**/SettingsLease.cs",
       "**/PathWalker.cs",
       "**/Te3Page.cs",
+      "**/Te3Page.Walk.cs",
+      "**/RunGrant.cs",
       "**/NavigationRetry.cs",
       "**/DialogCancel.cs",
       "**/PhysicalInputObserver.cs",
