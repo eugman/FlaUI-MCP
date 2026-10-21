@@ -9,12 +9,18 @@ public sealed class PathWalkerTests
         private int at;
         public int Downs { get; private set; }
 
+        /// <summary>A slow tree: the selection does not move off this row in time, though rows are shown below it.</summary>
+        public int? SlowAt { get; init; }
+
+        public bool Stalled { get; private set; }
+
         public Task<RowObservation> Current() => Task.FromResult(rows[at]);
 
         public Task<RowObservation?> Down()
         {
             Downs++;
-            if (at + 1 >= rows.Length)
+            Stalled = at == SlowAt;
+            if (Stalled || at + 1 >= rows.Length)
             {
                 return Task.FromResult<RowObservation?>(null);
             }
@@ -76,6 +82,50 @@ public sealed class PathWalkerTests
         Assert.False(walk.Found);
         Assert.Contains("end of the filtered tree", walk.Reason);
     }
+
+    [Fact]
+    public async Task ASlowMoveIsNotReportedAsTheEndOfTheTree()
+    {
+        // A slow UIA read left the selection on Date Hierarchy past the move timeout; the walk said "end of the
+        // filtered tree", and the caller concluded the model had no such column.
+        var tree = new FakeTree(
+            new("Date", "Calculated Table"),
+            new("Date Hierarchy", "Hierarchy"),
+            new("Date Key", "Data Column")
+        )
+        {
+            SlowAt = 1,
+        };
+
+        var walk = await PathWalker.Find(tree, "Date", "Date Key", "Column");
+
+        Assert.False(walk.Found);
+        Assert.DoesNotContain("end of the", walk.Reason);
+        Assert.Contains("did not move", walk.Reason);
+        Assert.Contains("'Date Hierarchy'", walk.Reason);
+        Assert.Contains("not proof", walk.Reason);
+        Assert.Equal("Date", walk.Table);
+    }
+
+    [Fact]
+    public async Task ASlowMoveInAChildWalkIsNotReportedAsTheEndOfTheTree()
+    {
+        var tree = new FakeTree(new("Tables", "Tables"), new("Brands", "Table"), new("Sales", "Table")) { SlowAt = 1 };
+
+        var walk = await PathWalker.FindRow(tree, "Sales");
+
+        Assert.False(walk.Found);
+        Assert.DoesNotContain("end of the", walk.Reason);
+        Assert.Contains("did not move", walk.Reason);
+    }
+
+    [Theory]
+    [InlineData(new double[] { 100, 120, 140 }, 120.0, true)]
+    [InlineData(new double[] { 100, 120, 140 }, 140.0, false)]
+    [InlineData(new double[] { 140 }, 140.0, false)]
+    [InlineData(new double[] { 100, 120 }, null, false)]
+    public void ARowShownBelowTheSelectionMeansItHadSomewhereToMove(double[] tops, double? selected, bool below) =>
+        Assert.Equal(below, TomSelection.RowShownBelow(tops.Select(t => (double?)t), selected));
 
     [Fact]
     public async Task TheWalkStopsAtTheRowLimit()

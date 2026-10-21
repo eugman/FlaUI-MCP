@@ -98,14 +98,22 @@ public sealed partial class Te3Page
     {
         public async Task<RowObservation> Current() => (await page.ObserveSelection()).Row;
 
-        public Task<RowObservation?> Down() => Move("Down");
+        public bool Stalled { get; private set; }
+
+        public async Task<RowObservation?> Down()
+        {
+            var (row, rowBelow) = await Move("Down");
+            Stalled = row == null && rowBelow;
+            return row;
+        }
 
         /// <summary>Press Up and return the row above once it has settled; null at the top.</summary>
-        public Task<RowObservation?> Up() => Move("Up");
+        public async Task<RowObservation?> Up() => (await Move("Up")).Row;
 
-        private async Task<RowObservation?> Move(string key)
+        // The row the key moved to, and whether a row was shown below the selection before the key.
+        private async Task<(RowObservation? Row, bool RowBelow)> Move(string key)
         {
-            var before = await page.ObserveSelection();
+            var (before, rowBelow) = await page.ReadSelection();
             await page.Keys(key, TomExplorerTarget());
             var moved = await WalkClock.AwaitMove(
                 before,
@@ -113,14 +121,17 @@ public sealed partial class Te3Page
                 WalkClock.Start(),
                 ms => Task.Delay(ms)
             );
-            return moved?.Row;
+            return (moved?.Row, rowBelow);
         }
     }
 
     /// <summary>One observation of the selection: the row, plus the raw bar text and row position to detect movement.</summary>
     private sealed record SelectionSnapshot(RowObservation Row, string? BarText, double? RowTop);
 
-    private async Task<SelectionSnapshot> ObserveSelection()
+    private async Task<SelectionSnapshot> ObserveSelection() => (await ReadSelection()).Snapshot;
+
+    // The selection, and whether any realized row lies below it (kept out of the snapshot, which detects movement).
+    private async Task<(SelectionSnapshot Snapshot, bool RowBelow)> ReadSelection()
     {
         var tree = TomExplorerTarget();
         var rows = await Task.Run(() =>
@@ -137,7 +148,8 @@ public sealed partial class Te3Page
             .WaitAsync(TimeSpan.FromSeconds(5));
         var selected = rows.Elements.FirstOrDefault(r => r.Selected == true);
         var bar = await Task.Run(() => ObserveModelState().Selection);
-        return new(TomSelection.ObservedRow(selected?.Value, bar), bar, selected?.Bounds?.Y);
+        var below = TomSelection.RowShownBelow(rows.Elements.Select(r => r.Bounds?.Y), selected?.Bounds?.Y);
+        return (new(TomSelection.ObservedRow(selected?.Value, bar), bar, selected?.Bounds?.Y), below);
     }
 
     public static string ObjectNotFoundMessage(string table, string objectName) =>

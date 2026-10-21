@@ -9,8 +9,17 @@ public interface ITreeCursor
     /// <summary>The selected row now.</summary>
     Task<RowObservation> Current();
 
-    /// <summary>Press Down and return the next row once the selection and status bar have moved and settled; null at the end.</summary>
+    /// <summary>
+    /// Press Down and return the next row once the selection and status bar have moved and settled; null when it did not
+    /// move, at the end of the tree or because the tree was slow (see <see cref="Stalled"/>).
+    /// </summary>
     Task<RowObservation?> Down();
+
+    /// <summary>
+    /// After a Down that returned null: true when a row was shown below the selection, so the selection should have
+    /// moved and the end of the tree is not proven.
+    /// </summary>
+    bool Stalled => false;
 }
 
 /// <summary>Where a walk ended: the table the object was found under, or why it was not found.</summary>
@@ -75,7 +84,9 @@ public static class PathWalker
 
             if (await cursor.Down() is not { } next)
             {
-                return new(false, null, visited, $"Reached the end of the filtered tree after {visited} rows.");
+                return cursor.Stalled
+                    ? new(false, currentTable, visited, DidNotMove(row, visited))
+                    : new(false, null, visited, $"Reached the end of the filtered tree after {visited} rows.");
             }
 
             row = next;
@@ -99,11 +110,19 @@ public static class PathWalker
     )
     {
         var row = skipCurrent ? await cursor.Down() : await cursor.Current();
+        RowObservation? previous = null;
         for (var visited = 1; visited <= maxRows; visited++)
         {
             if (row == null)
             {
-                return new(false, null, visited - 1, $"Reached the end of the tree after {visited - 1} rows.");
+                return new(
+                    false,
+                    null,
+                    visited - 1,
+                    cursor.Stalled
+                        ? DidNotMove(previous, visited - 1)
+                        : $"Reached the end of the tree after {visited - 1} rows."
+                );
             }
 
             // The whole row, text and status-bar type: a child may share the next table's name.
@@ -122,11 +141,18 @@ public static class PathWalker
                 return new(true, null, visited, null);
             }
 
+            previous = row;
             row = visited < maxRows ? await cursor.Down() : null;
         }
 
         return new(false, null, maxRows, $"Stopped after {maxRows} rows.");
     }
+
+    // A Down that timed out while a row was shown below: a slow read, not the end of the tree.
+    private static string DidNotMove(RowObservation? row, int visited) =>
+        $"The selection did not move from '{row?.Value ?? "the starting row"}' within "
+        + $"{WalkClock.MoveTimeout.TotalSeconds} s after {visited} rows, although a row is shown below it. TOM Explorer "
+        + "was slow; this is not proof the object is missing. Observe with te3_model_state, then retry.";
 
     internal static bool IsTable(string? type) => Te3Page.ObjectTypeMatches("Table", type);
 

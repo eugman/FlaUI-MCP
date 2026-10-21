@@ -28,4 +28,11 @@ internal static class TomSelection
     /// </summary>
     internal static RowObservation ObservedRow(string? treeValue, string? bar) =>
         new(treeValue ?? SelectionName(bar), SelectionType(bar));
+
+    /// <summary>
+    /// True when a realized row's top lies below the selected row's: the selection had somewhere to move. A selection
+    /// with no known position has none.
+    /// </summary>
+    internal static bool RowShownBelow(IEnumerable<double?> rowTops, double? selectedTop) =>
+        selectedTop is { } top && rowTops.Any(other => other > top);
 }
