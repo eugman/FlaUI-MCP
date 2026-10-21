@@ -72,7 +72,10 @@ internal static class LayoutSteps
         {
             return await run(inputs);
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or TimeoutException)
+        // A stopped call still says what it sent before it stopped.
+        catch (Exception ex)
+            when (ex is ArgumentException or InvalidOperationException or TimeoutException or OperationCanceledException
+            )
         {
             return Failure(tool, ex, inputs.Sent);
         }

@@ -20,9 +20,6 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
     // Never approved when none is passed, so a tool built without one refuses input.
     private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
 
-    // The inputs the current call has sent; the registry runs one call of a tool at a time.
-    private InputTally inputs = new();
-
     public override string Name => ToolName;
     public override string Description =>
         "Arrange TE3 for a screenshot. list: docked panes and document tabs with window-relative bounds. "
@@ -92,47 +89,41 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
 
     private sealed record Part(string Title, string Kind, AutomationElement Close, AutomationElement Container);
 
-    public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
-    {
-        inputs = new InputTally();
-        try
-        {
-            var a = arguments ?? JsonSerializer.SerializeToElement(new { });
-            if (GetStringArgument(a, "action") == "plan-preset")
-            {
-                var plan = Te3PanePlan.Resolve(
-                    Required(a, "preset"),
-                    GetArgument<int?>(a, "windowWidth") ?? 1920,
-                    GetArgument<int?>(a, "windowHeight") ?? 1080
-                );
-                return TextResult(JsonSerializer.Serialize(plan, McpProtocol.JsonOptions));
-            }
+    public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
+        Respond(inputs => Run(arguments, inputs));
 
-            using var guard = GetStringArgument(a, "action") is "list" or "show-pane" ? null : grant.Guard();
-            var processId = Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3);
-            var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(processId));
-            var handle = Bind(host, hwnd, processId);
-            var window =
-                host.Sessions.GetWindow(handle) ?? throw new InvalidOperationException("TE3 window not readable.");
-            object result = GetStringArgument(a, "action") switch
-            {
-                "list" => List(window),
-                "close" => await Close(handle, window, Titles(a), keep: false),
-                "keep" => await Close(handle, window, Titles(a), keep: true),
-                "show-pane" => ShowPane(window, Required(a, "title")),
-                "hide-pane" => await HidePane(handle, window, Required(a, "title")),
-                "apply-preset" => await ApplyPreset(handle, window, Required(a, "preset")),
-                "maximize-pane" => await PaneButton(handle, window, Required(a, "title"), "Maximize"),
-                "restore-pane" => await PaneButton(handle, window, Required(a, "title"), "Restore"),
-                "resize" => await Resize(handle, window, Required(a, "title"), a),
-                _ => throw new ArgumentException("Unsupported TE3 layout action"),
-            };
-            return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or TimeoutException)
+    private async Task<McpToolResult> Run(JsonElement? arguments, InputTally inputs)
+    {
+        var a = arguments ?? JsonSerializer.SerializeToElement(new { });
+        if (GetStringArgument(a, "action") == "plan-preset")
         {
-            return Failure(ex, inputs.Sent);
+            var plan = Te3PanePlan.Resolve(
+                Required(a, "preset"),
+                GetArgument<int?>(a, "windowWidth") ?? 1920,
+                GetArgument<int?>(a, "windowHeight") ?? 1080
+            );
+            return TextResult(JsonSerializer.Serialize(plan, McpProtocol.JsonOptions));
         }
+
+        using var guard = GetStringArgument(a, "action") is "list" or "show-pane" ? null : grant.Guard();
+        var processId = Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3);
+        var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(processId));
+        var handle = Bind(host, hwnd, processId);
+        var window = host.Sessions.GetWindow(handle) ?? throw new InvalidOperationException("TE3 window not readable.");
+        object result = GetStringArgument(a, "action") switch
+        {
+            "list" => List(window),
+            "close" => await Close(inputs, handle, window, Titles(a), keep: false),
+            "keep" => await Close(inputs, handle, window, Titles(a), keep: true),
+            "show-pane" => ShowPane(window, Required(a, "title")),
+            "hide-pane" => await HidePane(inputs, handle, window, Required(a, "title")),
+            "apply-preset" => await ApplyPreset(inputs, handle, window, Required(a, "preset")),
+            "maximize-pane" => await PaneButton(inputs, handle, window, Required(a, "title"), "Maximize"),
+            "restore-pane" => await PaneButton(inputs, handle, window, Required(a, "title"), "Restore"),
+            "resize" => await Resize(inputs, handle, window, Required(a, "title"), a),
+            _ => throw new ArgumentException("Unsupported TE3 layout action"),
+        };
+        return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
     }
 
     internal static Task<McpToolResult> Respond(Func<InputTally, Task<McpToolResult>> run) =>
@@ -174,7 +165,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         );
     }
 
-    private async Task<object> HidePane(string handle, Window window, string title)
+    private async Task<object> HidePane(InputTally inputs, string handle, Window window, string title)
     {
         if (!Te3PanePlan.IsNamedPane(title))
         {
@@ -192,7 +183,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
             };
         }
 
-        await Click(handle, pane.Close);
+        await Click(inputs, handle, pane.Close);
         await RequireNoDialog(window, pane.Title);
         if (Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title)))
         {
@@ -207,7 +198,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         };
     }
 
-    private async Task<object> ApplyPreset(string handle, Window window, string preset)
+    private async Task<object> ApplyPreset(InputTally inputs, string handle, Window window, string preset)
     {
         var sizes = Te3PanePlan.Resolve(preset, window.BoundingRectangle.Width, window.BoundingRectangle.Height);
         var parts = Parts(window);
@@ -236,7 +227,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
                     inputs,
                     sent,
                     size.Pane,
-                    async () => changed = await Resize(handle, window, size.Pane, args, strict: true)
+                    async () => changed = await Resize(inputs, handle, window, size.Pane, args, strict: true)
                 );
                 return changed;
             }
@@ -311,7 +302,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
             height = r.Height,
         };
 
-    private async Task<object> Close(string handle, Window window, string[] titles, bool keep)
+    private async Task<object> Close(InputTally inputs, string handle, Window window, string[] titles, bool keep)
     {
         var attempted = new HashSet<string>();
         var closes = 0;
@@ -330,7 +321,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
                 }
 
                 attempted.Add(next.Title);
-                await LayoutSteps.Sending(inputs, sent, next.Title, () => Click(handle, next.Close));
+                await LayoutSteps.Sending(inputs, sent, next.Title, () => Click(inputs, handle, next.Close));
                 await RequireNoDialog(window, next.Title);
                 return next.Title;
             }
@@ -389,7 +380,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         ?? throw new ArgumentException($"No docked pane titled '{title}'; use action list.");
 
     // A docked pane shows Maximize; once maximized the same button is named Restore (observed on 3.27.1).
-    private async Task<object> PaneButton(string handle, Window window, string title, string button)
+    private async Task<object> PaneButton(InputTally inputs, string handle, Window window, string title, string button)
     {
         var pane = FindPane(window, title);
         var target =
@@ -399,11 +390,18 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
                     ? $"Pane '{pane.Title}' has no Maximize button (a tab-group pane may not, or it is already maximized)."
                     : $"Pane '{pane.Title}' has no Restore button; it is not maximized."
             );
-        await Click(handle, target);
+        await Click(inputs, handle, target);
         return button == "Maximize" ? new { maximized = pane.Title } : (object)new { restored = pane.Title };
     }
 
-    private async Task<object> Resize(string handle, Window window, string title, JsonElement a, bool strict = false)
+    private async Task<object> Resize(
+        InputTally inputs,
+        string handle,
+        Window window,
+        string title,
+        JsonElement a,
+        bool strict = false
+    )
     {
         var parts = Parts(window);
         var pane = FindPane(window, title);
@@ -418,6 +416,7 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         );
         var origin = window.BoundingRectangle;
         await Tool(
+            inputs,
             "windows_mouse",
             new
             {
@@ -451,9 +450,9 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
         };
     }
 
-    private Task Click(string handle, AutomationElement element) =>
-        Tool("windows_click", new { @ref = host.Elements.Register(handle, element), handle });
+    private Task Click(InputTally inputs, string handle, AutomationElement element) =>
+        Tool(inputs, "windows_click", new { @ref = host.Elements.Register(handle, element), handle });
 
-    private Task Tool(string tool, object args) =>
+    private Task Tool(InputTally inputs, string tool, object args) =>
         inputs.Invoke(() => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)), tool: tool);
 }
