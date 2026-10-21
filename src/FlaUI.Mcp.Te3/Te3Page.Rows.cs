@@ -6,9 +6,6 @@ using FlaUI.Mcp.Core;
 /// </summary>
 public sealed partial class Te3Page
 {
-    private const int PropertiesPollMs = 300;
-    private const int PropertiesReads = 3;
-
     /// <summary>
     /// The last object navigation's account for the reply: the strategy used, the rows read, the measured indent
     /// step in pixels, the selects sent and, after a keyboard fallback, the rows walked.
@@ -59,15 +56,14 @@ public sealed partial class Te3Page
         await invoke("windows_click", new { @ref = reference, action = "select" });
     }
 
-    // TE3's account of the selection: the status bar's slot when it names the row, otherwise Properties.
-    private Confirmation Confirm(TreeRow row)
-    {
-        var bar = Te3StatusBar.SelectionSlot(ObserveModelState().Slots);
-        var folder = PropertiesValue("Folder");
-        return TomSelection.SelectionName(bar) == row.Value
-            ? new(row.Value, TomSelection.SelectionType(bar), folder)
-            : new(PropertiesValue("Name"), PropertiesValue("ObjectType"), folder);
-    }
+    // The raw readings of the selection: the status bar's slot and the Properties rows (Name, ObjectType, Folder).
+    private SelectionView ViewSelection() =>
+        new(
+            Te3StatusBar.SelectionSlot(ObserveModelState().Slots),
+            PropertiesValue("Name"),
+            PropertiesValue("ObjectType"),
+            PropertiesValue("Folder")
+        );
 
     // PageDown presses at most, to realize a filtered tree longer than the viewport (about 23 rows at 1080 px).
     private const int MaxPages = 6;
@@ -117,18 +113,8 @@ public sealed partial class Te3Page
 
         public Task Select(TreeRow row) => page.SelectRow(row);
 
-        // The status bar names an object selection at once; Properties follows a moment later and has no ObjectType
-        // row for a column. A few short reads, never a key.
-        public async Task<Confirmation> Selected(TreeRow row)
-        {
-            var seen = new Confirmation(null, null, null);
-            for (var attempt = 0; attempt < PropertiesReads && seen.Name == null; attempt++)
-            {
-                await Task.Delay(PropertiesPollMs);
-                seen = await Task.Run(() => page.Confirm(row));
-            }
+        public Task<SelectionView> View() => Task.Run(page.ViewSelection);
 
-            return seen;
-        }
+        public Task Wait(int ms) => Task.Delay(ms);
     }
 }

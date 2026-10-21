@@ -24,15 +24,36 @@ public interface IRowTree
     /// <summary>A fresh read after a select: the rows, and the index of the TreeItem that is selected now.</summary>
     Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected();
 
-    /// <summary>
-    /// What the selection is: its name and type from the status bar's selection slot when that names
-    /// <paramref name="row"/>, otherwise Properties' Name and ObjectType; and Properties' display Folder.
-    /// </summary>
-    Task<Confirmation> Selected(TreeRow row);
+    /// <summary>The status bar's selection slot and Properties' Name, ObjectType and Folder, as they read now.</summary>
+    Task<SelectionView> View();
+
+    /// <summary>A pause between reads of the selection.</summary>
+    Task Wait(int ms);
 }
 
 /// <summary>What TE3 says the selection is; any part may be null when it cannot be read.</summary>
 public sealed record Confirmation(string? Name, string? Type, string? Folder);
+
+/// <summary>The raw readings of the selection: the status bar's slot and the Properties rows.</summary>
+public sealed record SelectionView(string? Bar, string? Name, string? Type, string? Folder)
+{
+    /// <summary>
+    /// What the selection of <paramref name="row"/> is, once TE3 shows it, or null while it still shows what was
+    /// selected <paramref name="before"/> the select. The slot counts only when it changed and names the row's label
+    /// (an earlier same-named candidate can leave it naming the label with that candidate's type); otherwise
+    /// Properties counts once it changed.
+    /// </summary>
+    public static Confirmation? Settle(TreeRow row, SelectionView before, SelectionView now)
+    {
+        if (now.Bar != before.Bar && TomSelection.SelectionName(now.Bar) == row.Value)
+        {
+            return new(row.Value, TomSelection.SelectionType(now.Bar), now.Folder);
+        }
+
+        var moved = now.Name != null && (now.Name, now.Type, now.Folder) != (before.Name, before.Type, before.Folder);
+        return moved ? new(now.Name, now.Type, now.Folder) : null;
+    }
+}
 
 /// <summary>A candidate the row strategy selected and turned down, and why.</summary>
 public sealed record RejectedRow(int Index, string? Value, string Reason);
@@ -89,9 +110,10 @@ internal static class ObjectSelect
         TreeRow? last = null;
         foreach (var row in candidates.Take(MaxTries).TakeWhile(_ => !outOfTime()))
         {
+            var before = await tree.View();
             await tree.Select(row);
             last = row;
-            var (why, type) = await Confirmed(tree, rows, row, request);
+            var (why, type) = await Confirmed(tree, rows, row, request, before);
             if (why != null)
             {
                 rejected.Add(new(row.Index, row.Value, why));
@@ -165,9 +187,11 @@ internal static class ObjectSelect
         IRowTree tree,
         IReadOnlyList<TreeRow> paged,
         TreeRow row,
-        WalkRequest request
+        WalkRequest request,
+        SelectionView before
     )
     {
+        await tree.Wait(SettleMs);
         var (fresh, selected) = await tree.ReadSelected();
         if (selected != row.Index)
         {
@@ -183,8 +207,34 @@ internal static class ObjectSelect
             return ("a fresh read does not place it in the requested table and folder", null);
         }
 
-        var seen = await tree.Selected(row);
-        return (Mismatch(seen, request), seen.Type);
+        var seen = await Settled(tree, row, before);
+        return seen == null
+            ? (
+                "TE3 did not show the new selection: the status bar and Properties still read as before the select",
+                null
+            )
+            : (Mismatch(seen, request), seen.Type);
+    }
+
+    private const int SettleMs = 150;
+    private const int ViewPollMs = 300;
+    private const int ViewReads = 4;
+
+    // The status bar names an object selection quickly; Properties follows a moment later and has no ObjectType row
+    // for a column. A few short reads, never a key.
+    private static async Task<Confirmation?> Settled(IRowTree tree, TreeRow row, SelectionView before)
+    {
+        for (var attempt = 0; attempt < ViewReads; attempt++)
+        {
+            if (SelectionView.Settle(row, before, await tree.View()) is { } seen)
+            {
+                return seen;
+            }
+
+            await tree.Wait(ViewPollMs);
+        }
+
+        return null;
     }
 
     // The paged rows with the fresh read laid over them by index: placement is computed over the whole list.

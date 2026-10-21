@@ -31,6 +31,7 @@ public sealed class ObjectSelectTests
         {
             Selects.Add(row.Index);
             selected = IgnoresSelect ? selected : row;
+            sinceSelect = 0;
             return Task.CompletedTask;
         }
 
@@ -48,12 +49,27 @@ public sealed class ObjectSelectTests
                 )
             );
 
-        public Task<Confirmation> Selected(TreeRow row) =>
-            Task.FromResult(
-                selected == null
-                    ? new Confirmation(null, null, null)
-                    : new Confirmation(selected.Value, rows[selected.Index].Type, null)
-            );
+        /// <summary>Reads after a select during which the status bar still names the previous selection.</summary>
+        public int StaleBarReads { get; init; }
+
+        /// <summary>When true, Properties shows no ObjectType (as for a column on 3.27.1).</summary>
+        public bool PropertiesWithoutType { get; init; }
+
+        private string? bar;
+        private int sinceSelect;
+
+        public Task<SelectionView> View()
+        {
+            if (selected != null && sinceSelect++ >= StaleBarReads)
+            {
+                bar = $"{rows[selected.Index].Type} \"{selected.Value}\"";
+            }
+
+            var type = selected == null || PropertiesWithoutType ? null : rows[selected.Index].Type;
+            return Task.FromResult(new SelectionView(bar, selected?.Value, type, null));
+        }
+
+        public Task Wait(int ms) => Task.CompletedTask;
     }
 
     private static FakeRows LiveBrandSearch(bool complete = true) =>
@@ -313,5 +329,50 @@ public sealed class ObjectSelectTests
         var result = await ObjectSelect.Run(tree, NoFolder, () => false);
 
         Assert.True(result.Found, string.Join("; ", result.Rejected.Select(r => r.Reason)));
+    }
+
+    private static FakeRows LevelThenColumn(int staleBarReads) =>
+        new(
+            ("Tables", 1, "Group"),
+            ("Brands", 2, "Table"),
+            ("Brand Hierarchy", 3, "Hierarchy"),
+            ("Brand", 4, "Level"),
+            ("Brand", 3, "Column")
+        )
+        {
+            StaleBarReads = staleBarReads,
+            PropertiesWithoutType = true,
+        };
+
+    [Fact]
+    public async Task AStatusBarSlotLeftByTheEarlierSameNamedCandidateIsWaitedOutNotReported()
+    {
+        // After the Level "Brand" was turned down, the slot still read Level "Brand" when the column was selected.
+        var result = await ObjectSelect.Run(LevelThenColumn(staleBarReads: 2), NoFolder, () => false);
+
+        Assert.True(result.Found, string.Join("; ", result.Rejected.Select(r => r.Reason)));
+        Assert.Equal("Column", result.ConfirmedType);
+    }
+
+    [Fact]
+    public async Task ASelectionTeNeverShowsIsTurnedDownNotTakenFromTheStaleSlot()
+    {
+        var result = await ObjectSelect.Run(LevelThenColumn(staleBarReads: 100), NoFolder, () => false);
+
+        Assert.False(result.Found);
+        Assert.Contains(result.Rejected, r => r.Reason.Contains("did not show the new selection"));
+    }
+
+    [Theory]
+    [InlineData("Level \"Brand\"", "Level \"Brand\"", false)] // unchanged: stale
+    [InlineData("Level \"Brand\"", "Column \"Brand\"", true)] // changed and names the label
+    [InlineData("Column \"Type\"", "Column \"Type\"", false)] // a folder leaves the slot on the previous object
+    public void TheSlotCountsOnlyWhenItChangedAndNamesTheRow(string beforeBar, string nowBar, bool counts)
+    {
+        var row = new TreeRow(4, "Brand", 3);
+        var before = new SelectionView(beforeBar, "Brand", null, null);
+        var now = new SelectionView(nowBar, "Brand", null, null);
+
+        Assert.Equal(counts, SelectionView.Settle(row, before, now) != null);
     }
 }
