@@ -75,21 +75,32 @@ internal sealed class FakeDesktop : InputDesktop
         }
     }
 
-    public override bool IsEnabled(nint hwnd) => true;
+    /// <summary>When false, the target is disabled, as while it shows a modal dialog.</summary>
+    public bool TargetEnabled { get; set; } = true;
 
-    public override nint LastActivePopup(nint owner) => owner;
+    /// <summary>A modal dialog owned by the target, or 0 for none.</summary>
+    public nint ModalHwnd { get; set; }
+
+    /// <summary>Whether the intended control reports keyboard focus after it is focused.</summary>
+    public bool KeyboardFocus { get; set; } = true;
+
+    public int ElementFocusRequests { get; private set; }
+
+    public override bool IsEnabled(nint hwnd) => hwnd != TargetHwnd || TargetEnabled;
+
+    public override nint LastActivePopup(nint owner) => ModalHwnd == 0 ? owner : ModalHwnd;
 
     public override int ProcessOf(nint hwnd) => hwnd == OtherHwnd ? OtherPid : TargetPid;
 
     public override bool BelongsTo(nint hwnd, nint target) => hwnd != 0 && hwnd == target;
 
-    public override bool HasOwner(nint hwnd, nint owner) => false;
+    public override bool HasOwner(nint hwnd, nint owner) => hwnd != 0 && hwnd == ModalHwnd && owner == TargetHwnd;
 
     public override nint WindowAt(Point point) => TargetHwnd;
 
-    public override void FocusElement(AutomationElement element) { }
+    public override void FocusElement(AutomationElement element) => ElementFocusRequests++;
 
-    public override bool HasKeyboardFocus(AutomationElement element) => true;
+    public override bool HasKeyboardFocus(AutomationElement element) => KeyboardFocus;
 
     public override void Dispatch(Action input) => Interlocked.Increment(ref dispatched);
 
