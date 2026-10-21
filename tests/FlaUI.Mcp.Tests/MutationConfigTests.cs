@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace FlaUI.Mcp.Tests;
@@ -76,5 +77,42 @@ public sealed class MutationConfigTests
         Assert.Contains("$offlineProject = 'FlaUI.Mcp.Tests.csproj'", script);
         Assert.Contains("IsSolutionContext: True", script);
         Assert.Contains("throw \"Mutation testing ($name) aborted before running tests", script);
+    }
+
+    [Fact]
+    public void TheOfflineAssemblyTurnsOffTheRealDesktop()
+    {
+        Assert.Equal("1", Environment.GetEnvironmentVariable("FLAUI_OFFLINE_TESTS"));
+        Assert.Contains(
+            "$env:FLAUI_OFFLINE_TESTS = '1'",
+            File.ReadAllText(RepoFile(Path.Combine("scripts", "mutation.ps1")))
+        );
+    }
+
+    [Fact]
+    public void EveryTestThatRunsAnInputToolInstallsTheFakeDesktop()
+    {
+        var tool = new Regex(@"new (SendKeysTool|TypeTool|FillTool|ClickTool|MouseTool|PasteTool|WindowStateTool)\(");
+        var test = new Regex(@"\[(Fact|Theory)\]");
+        var project = Path.GetDirectoryName(
+            RepoFile(Path.Combine("tests", "FlaUI.Mcp.Tests", "FlaUI.Mcp.Tests.csproj"))
+        )!;
+        var unguarded = new List<string>();
+        foreach (var file in Directory.GetFiles(project, "*.cs"))
+        {
+            var text = File.ReadAllText(file);
+            var starts = test.Matches(text).Select(m => m.Index).Append(text.Length).ToArray();
+            for (var i = 0; i + 1 < starts.Length; i++)
+            {
+                var body = text[starts[i]..starts[i + 1]];
+                if (tool.IsMatch(body) && !body.Contains(".Install()"))
+                {
+                    var name = Regex.Match(body, @"(?:void|Task)\s+(\w+)\(").Groups[1].Value;
+                    unguarded.Add($"{Path.GetFileNameWithoutExtension(file)}.{name}");
+                }
+            }
+        }
+
+        Assert.Empty(unguarded);
     }
 }

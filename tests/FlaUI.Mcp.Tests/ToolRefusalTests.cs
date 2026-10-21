@@ -122,6 +122,7 @@ public sealed class ToolRefusalTests
     [Fact]
     public async Task TypeNeedsText()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var result = await Run(new TypeTool(new ElementRegistry()), new { });
 
         Assert.True(result.IsError);
@@ -216,6 +217,7 @@ public sealed class ToolRefusalTests
     [Fact]
     public async Task TypeByHandleNeedsASessionManager()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var result = await Run(new TypeTool(new ElementRegistry()), new { handle = "w1", text = "a" });
 
         Assert.True(result.IsError);
@@ -227,6 +229,7 @@ public sealed class ToolRefusalTests
     [InlineData(Ref, null, "Missing required argument: value")]
     public async Task FillNeedsARefAndAValue(string? reference, string? value, string message)
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var result = await Run(new FillTool(new ElementRegistry()), new { @ref = reference, value });
 
         Assert.True(result.IsError);
@@ -236,6 +239,7 @@ public sealed class ToolRefusalTests
     [Fact]
     public async Task FillOfARefWhoseProviderIsBlockedIsRefused()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var refs = BlockedRef(out var tracker);
 
         AssertBlocked(await Run(new FillTool(refs, tracker), new { @ref = Ref, value = "x" }));
@@ -244,6 +248,7 @@ public sealed class ToolRefusalTests
     [Fact]
     public async Task ClickNeedsARef()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var result = await Run(new ClickTool(new ElementRegistry()), new { });
 
         Assert.True(result.IsError);
@@ -253,6 +258,7 @@ public sealed class ToolRefusalTests
     [Fact]
     public async Task ClickOfARefWhoseProviderIsBlockedIsRefused()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var refs = BlockedRef(out var tracker);
 
         AssertBlocked(await Run(new ClickTool(refs, tracker), new { @ref = Ref }));
@@ -261,6 +267,7 @@ public sealed class ToolRefusalTests
     [Fact]
     public async Task MouseNeedsAHandleOrRef()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         using var sessions = Window().Sessions;
 
         var result = await Run(

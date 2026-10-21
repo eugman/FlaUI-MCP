@@ -10,6 +10,7 @@ public sealed class KeySequenceValidationTests
     [Fact]
     public async Task HandleWithoutSessionsReturnsActionableError()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new SendKeysTool(new ElementRegistry());
         var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { handle = "w1", chord = "Enter" }));
         Assert.True(result.IsError);
@@ -23,6 +24,7 @@ public sealed class KeySequenceValidationTests
     [InlineData("Win+R", "Windows key is disabled")]
     public async Task InvalidLaterChordFailsBeforeTargetResolution(string later, string error)
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         // No sessions or desktop provider: resolving the supplied handle would fail.
         // The validation error proves that execution did not reach target resolution.
         var tool = new SendKeysTool(new ElementRegistry(), processPolicy: new ProcessPolicy(["te"]));
@@ -38,6 +40,7 @@ public sealed class KeySequenceValidationTests
     [Fact]
     public void ValidSequencePreservesOrderAndNormalizesSpacing()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new SendKeysTool(new ElementRegistry());
         var sequence = tool.PrepareSequence([" Ctrl + S ", "Enter"]);
         Assert.Equal(new[] { "Ctrl+S", "Enter" }, sequence.Select(step => step.Text));
@@ -53,6 +56,7 @@ public sealed class KeySequenceValidationTests
     [InlineData("Shift+Slash")]
     public void NumpadAndPunctuationKeysResolve(string chord)
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new SendKeysTool(new ElementRegistry());
         var sequence = tool.PrepareSequence([chord]);
         Assert.Equal(chord.Split('+').Length, sequence[0].Keys.Count);

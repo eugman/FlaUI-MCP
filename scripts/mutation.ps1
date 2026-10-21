@@ -47,6 +47,17 @@ function UnsafeRun($logs, $expected) {
     $text = $text -join "`n"
     if ($text -match 'IsSolutionContext: True') { return 'Stryker is in solution mode and would run every test project.' }
     if ($text -match 'IntegrationTests') { return 'The integration test project appears in the run.' }
+    # Stryker logs its options before it builds anything. Until they are seen and name only the offline
+    # project, nothing else may happen: a build or a test run first means the check came too late.
+    if ($text -match 'TestProjects: \[([^\]]*)\]') {
+        $projects = @($Matches[1] -split ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })
+        $others = @($projects | Where-Object { (Split-Path $_ -Leaf) -ne $offlineProject })
+        if ($projects.Count -eq 0 -or $others.Count -gt 0) { return "Stryker would run these test projects: $($projects -join ', ')." }
+    }
+    elseif ($text -match 'Building|Number of tests found') {
+        return "Stryker started building before its options could be checked."
+    }
+
     if ($text -match 'Number of tests found: (\d+)' -and [int]$Matches[1] -gt $expected) {
         return "Stryker found $($Matches[1]) tests; the offline project has $expected."
     }
@@ -79,8 +90,8 @@ function RunPart($name, $files, $expected) {
         $null = $stryker.Handle
         $deadline = (Get-Date).AddMinutes($Minutes)
         $checked = $false
-        while (-not $stryker.WaitForExit(1000)) {
-            # Until the discovered test count is known and safe, watch the log every second.
+        while (-not $stryker.WaitForExit(200)) {
+            # Until the discovered test count is known and safe, watch the log five times a second.
             if (-not $checked) {
                 $reason = UnsafeRun (Join-Path $output 'logs') $expected
                 if ($reason) {
@@ -115,6 +126,8 @@ function RunPart($name, $files, $expected) {
 
 # Stryker's builds must not leave a compiler server or build nodes running with a worktree as their
 # working directory: that keeps the folder busy after the run.
+# The offline tests also set this themselves; the real desktop then refuses every change.
+$env:FLAUI_OFFLINE_TESTS = '1'
 $env:UseSharedCompilation = 'false'
 $env:MSBUILDDISABLENODEREUSE = '1'
 $expected = OfflineTestCount

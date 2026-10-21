@@ -9,9 +9,11 @@ A surviving mutant needs either a test that kills it or a line here saying why n
 Stryker runs every test once per mutant. The integration tests launch test apps and take keyboard focus, so a mutation run that included them would fight whoever is using the machine for hundreds of runs. `scripts/mutation.ps1` therefore:
 
 - runs Stryker inside `tests/FlaUI.Mcp.Tests` and names that project with `--test-project`, so Stryker never opens `FlaUI.Mcp.slnx`;
-- stops the run before its first test if Stryker's log shows a solution context, the integration test project, or more tests than `dotnet test --list-tests` finds in the offline project.
+- stops Stryker when its options, which it logs before it builds anything, show a solution context or any test project but the offline one, or when it starts building before those options were checked; and stops it again if test discovery finds more tests than `dotnet test --list-tests` finds in the offline project. The discovery check comes as the initial test run starts, so the options check is the one that keeps desktop tests from ever running.
 
-`MutationConfigTests` fails if the config names another test project or the script loses these checks.
+Separately, the offline test assembly sets `FLAUI_OFFLINE_TESTS=1` before any test runs (and the script sets it too). With it set, the real desktop refuses every change: input, focus, close, window state and the clipboard. A test that forgot to install the fake desktop, or a mutant that skips a guard, then fails instead of typing into the window in front.
+
+`MutationConfigTests` fails if the config names another test project, the script loses these checks, the variable is not set, or a test constructs an input tool without installing the fake desktop.
 
 ## Run log
 

@@ -28,6 +28,7 @@ public sealed class ShotSetupTests
     [Fact]
     public async Task WindowStateNeedsATarget()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new WindowStateTool(new ElementRegistry(), new PendingInvokeTracker());
         var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { state = "maximize" }));
         Assert.True(result.IsError);
@@ -37,6 +38,7 @@ public sealed class ShotSetupTests
     [Fact]
     public void CoordinateClickIsInMouseSchema()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new MouseTool(new ElementRegistry(), new PendingInvokeTracker(), new SessionManager());
         var schema = JsonSerializer.SerializeToElement(tool.InputSchema);
         var actions = schema.GetProperty("properties").GetProperty("action").GetProperty("enum");
@@ -47,6 +49,7 @@ public sealed class ShotSetupTests
     [Fact]
     public async Task CoordinateClickWithoutTargetReturnsBeforeInput()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new MouseTool(new ElementRegistry(), new PendingInvokeTracker(), new SessionManager());
         var result = await tool.ExecuteAsync(
             JsonSerializer.SerializeToElement(new { action = "click", to = new { x = 10, y = 20 } })

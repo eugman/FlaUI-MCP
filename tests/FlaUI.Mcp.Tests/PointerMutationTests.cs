@@ -55,6 +55,7 @@ public sealed class PointerMutationTests
     [Fact]
     public async Task AMouseRefFindsItsWindowWhenNoHandleIsGiven()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var (refs, sessions, tracker) = BlockedWindow();
         using var _ = sessions;
         var reference = refs.Register("w1", Element());
@@ -69,6 +70,7 @@ public sealed class PointerMutationTests
     [Fact]
     public async Task AnExplicitHandleWinsOverTheRefsWindow()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var (refs, sessions, tracker) = BlockedWindow();
         using var _ = sessions;
         var elsewhere = refs.Register("w9", Element());

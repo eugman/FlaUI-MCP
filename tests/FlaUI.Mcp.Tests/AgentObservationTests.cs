@@ -111,6 +111,7 @@ public sealed class AgentObservationTests
     [Fact]
     public async Task StrictFocusRequiresARefBeforeAnyInput()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var type = await new TypeTool(new()).ExecuteAsync(
             JsonSerializer.SerializeToElement(new { text = "x", verifyFocus = true })
         );

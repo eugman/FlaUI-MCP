@@ -126,6 +126,7 @@ public sealed class KeyboardMutationTests
     [Fact]
     public async Task StrictFocusWithoutARefIsRefusedByBothKeyboardTools()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var keys = await new SendKeysTool(new ElementRegistry()).ExecuteAsync(
             Args(new { chord = "Enter", verifyFocus = true })
         );
@@ -138,6 +139,7 @@ public sealed class KeyboardMutationTests
     [Fact]
     public async Task StrictFocusWithARefIsNotRefusedForTheMissingRef()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var refs = new ElementRegistry();
         var reference = refs.Register("w1", Element());
 
@@ -170,6 +172,7 @@ public sealed class KeyboardMutationTests
     [Fact]
     public async Task AnEmptyKeyListIsNoKeysAtAll()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var result = await new SendKeysTool(new ElementRegistry()).ExecuteAsync(
             Args(new { keys = Array.Empty<string>() })
         );
@@ -180,6 +183,7 @@ public sealed class KeyboardMutationTests
     [Fact]
     public async Task AnUnknownRefIsReportedBeforeAnyInputCheck()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var keys = await new SendKeysTool(new ElementRegistry()).ExecuteAsync(
             Args(new { @ref = "w1e9", chord = "Enter" })
         );
@@ -252,6 +256,7 @@ public sealed class KeyboardMutationTests
     [Fact]
     public void TheWindowsKeyIsRefusedUnderAnAllowlist()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new SendKeysTool(new ElementRegistry(), processPolicy: new ProcessPolicy(["contoso"]));
 
         var result = tool.ExecuteAsync(Args(new { chord = "Win+R" })).GetAwaiter().GetResult();

@@ -14,11 +14,31 @@ internal class InputDesktop
 
     public static InputDesktop Current => Override.Value ?? Windows;
 
+    /// <summary>
+    /// Set to 1 by the offline test assembly. The real desktop then refuses every change, so a test that forgot
+    /// to install a fake, or a mutant that skips a guard, fails instead of typing into the window in front.
+    /// </summary>
+    internal const string OfflineVariable = "FLAUI_OFFLINE_TESTS";
+
+    private static void RefuseOffline()
+    {
+        if (Environment.GetEnvironmentVariable(OfflineVariable) == "1")
+        {
+            throw new InvalidOperationException(
+                $"The real desktop takes no input while {OfflineVariable}=1; install a fake desktop. No input sent."
+            );
+        }
+    }
+
     public virtual void EnsureAlive(InputTarget target) => target.EnsureAliveOnWindows();
 
     public virtual nint Foreground() => Win32Desktop.GetForegroundWindow();
 
-    public virtual void Focus(nint hwnd) => Win32Desktop.FocusWindow(hwnd);
+    public virtual void Focus(nint hwnd)
+    {
+        RefuseOffline();
+        Win32Desktop.FocusWindow(hwnd);
+    }
 
     public virtual bool IsEnabled(nint hwnd) => Win32Desktop.IsWindowEnabled(hwnd);
 
@@ -32,23 +52,43 @@ internal class InputDesktop
 
     public virtual nint WindowAt(Point point) => Win32Desktop.WindowAt(point);
 
-    public virtual void FocusElement(AutomationElement element) => element.Focus();
+    public virtual void FocusElement(AutomationElement element)
+    {
+        RefuseOffline();
+        element.Focus();
+    }
 
     public virtual bool HasKeyboardFocus(AutomationElement element) =>
         element.Properties.HasKeyboardFocus.TryGetValue(out var focused) && focused;
 
     /// <summary>Posts WM_CLOSE; false when Windows did not accept the message.</summary>
-    public virtual bool PostClose(nint hwnd) => Win32Desktop.CloseWindow(hwnd);
+    public virtual bool PostClose(nint hwnd)
+    {
+        RefuseOffline();
+        return Win32Desktop.CloseWindow(hwnd);
+    }
 
     /// <summary>Replaces the clipboard with text; false when another process holds it open.</summary>
-    public virtual bool SetClipboardText(string text) => Win32Desktop.SetClipboardText(text);
+    public virtual bool SetClipboardText(string text)
+    {
+        RefuseOffline();
+        return Win32Desktop.SetClipboardText(text);
+    }
 
     /// <summary>Sends one input. The fake records it instead.</summary>
-    public virtual void Dispatch(Action input) => input();
+    public virtual void Dispatch(Action input)
+    {
+        RefuseOffline();
+        input();
+    }
 
     public virtual string WindowState(nint hwnd) => Win32Desktop.GetWindowState(hwnd);
 
-    public virtual void SetWindowState(nint hwnd, string state) => Win32Desktop.SetWindowState(hwnd, state);
+    public virtual void SetWindowState(nint hwnd, string state)
+    {
+        RefuseOffline();
+        Win32Desktop.SetWindowState(hwnd, state);
+    }
 
     private static readonly Lazy<ProcessIntegrity> Self = new(() =>
         ProcessIntegrity.Read(Environment.ProcessId) ?? new(ProcessIntegrity.Medium, false)

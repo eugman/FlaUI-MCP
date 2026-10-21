@@ -65,6 +65,7 @@ public sealed class PasteEvidenceTests
     [Fact]
     public async Task VerifyFocusStillRequiresARef()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new PasteTool(new ElementRegistry(), new PendingInvokeTracker(), ProcessPolicy.AllowAll, null);
         var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { text = "x", verifyFocus = true }));
         Assert.True(result.IsError);
@@ -74,6 +75,7 @@ public sealed class PasteEvidenceTests
     [Fact]
     public async Task MissingTextIsRejected()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new PasteTool(new ElementRegistry(), new PendingInvokeTracker(), ProcessPolicy.AllowAll, null);
         var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { }));
         Assert.True(result.IsError);
@@ -83,6 +85,7 @@ public sealed class PasteEvidenceTests
     [Fact]
     public async Task AHandleWithoutASessionManagerIsRejected()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new PasteTool(new ElementRegistry(), new PendingInvokeTracker(), ProcessPolicy.AllowAll, null);
         var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { text = "x", handle = "w1" }));
         Assert.True(result.IsError);
@@ -92,6 +95,7 @@ public sealed class PasteEvidenceTests
     [Fact]
     public void TheToolAdvertisesFocusVerification()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         // It is the tool recommended for code, so the option that stops a paste landing in the wrong
         // control has to be discoverable from the schema.
         var schema = JsonSerializer.Serialize(
