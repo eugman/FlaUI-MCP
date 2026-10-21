@@ -8,13 +8,21 @@ public sealed class Te3Interaction : IDisposable
 {
     private readonly object sync = new();
     private readonly Func<long>? physicalInput;
-    private PhysicalInputObserver? observer;
+    private readonly Func<IInputObserver>? createObserver;
+    private IInputObserver? observer;
     private long inputAtApproval;
     private string? batch;
     private string reason = "the user has not approved a batch.";
 
     /// <param name="physicalInput">Counts non-injected input; null hooks the real keyboard and mouse once a batch begins.</param>
-    public Te3Interaction(Func<long>? physicalInput = null) => this.physicalInput = physicalInput;
+    public Te3Interaction(Func<long>? physicalInput = null)
+    {
+        this.physicalInput = physicalInput;
+        createObserver = physicalInput == null ? () => new PhysicalInputObserver() : null;
+    }
+
+    /// <param name="createObserver">Starts an observer once a batch begins.</param>
+    internal Te3Interaction(Func<IInputObserver> createObserver) => this.createObserver = createObserver;
 
     public bool Active
     {
@@ -43,9 +51,9 @@ public sealed class Te3Interaction : IDisposable
                 throw new InvalidOperationException("End the current batch before beginning another.");
             }
 
-            if (physicalInput == null)
+            if (createObserver != null)
             {
-                observer ??= new PhysicalInputObserver();
+                observer ??= createObserver();
             }
 
             inputAtApproval = InputSequence();

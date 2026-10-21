@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 /// Counts non-injected input; never records keys, coordinates, or text. The same observer as the Camtasia and
 /// Power BI hosts; Core does not expose one. TODO(core): share it from Core.
 /// </summary>
-internal sealed class PhysicalInputObserver : IDisposable
+internal sealed class PhysicalInputObserver : IInputObserver
 {
     private readonly Thread thread;
     private readonly ManualResetEventSlim ready = new();
@@ -44,6 +44,9 @@ internal sealed class PhysicalInputObserver : IDisposable
             return Interlocked.Read(ref sequence);
         }
     }
+
+    /// <summary>Whether the hook thread's last heartbeat is recent enough to trust that its hooks still run.</summary>
+    internal static bool IsResponsive(long lastBeat, long now) => true;
 
     // LLKHF_INJECTED / LLKHF_LOWER_IL_INJECTED and LLMHF equivalents.
     internal static bool IsPhysical(bool keyboard, uint flags) => (flags & (keyboard ? 0x12u : 0x03u)) == 0;
