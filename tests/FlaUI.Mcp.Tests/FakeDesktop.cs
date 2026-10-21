@@ -289,8 +289,17 @@ internal sealed class FakeDesktop : InputDesktop
     /// <summary>What rendering a window by handle returns; null for a render that fails.</summary>
     public byte[]? WindowImage { get; set; } = [];
 
+    /// <summary>When set, a render waits for it, as PrintWindow does on a hung window.</summary>
+    public ManualResetEventSlim? RenderBlock { get; set; }
+
+    /// <summary>The UI Automation tree the fake reports for a window.</summary>
+    public string Tree { get; set; } = "";
+
+    public override string ElementTree(nint hwnd) => Tree;
+
     public override bool CaptureWindow(nint hwnd, out byte[] image, out string? reason)
     {
+        RenderBlock?.Wait();
         image = WindowImage ?? [];
         reason = WindowImage == null ? "no image (fake)" : null;
         return WindowImage != null;

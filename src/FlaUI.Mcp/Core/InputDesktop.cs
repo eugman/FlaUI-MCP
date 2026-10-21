@@ -136,6 +136,40 @@ internal class InputDesktop
     /// <summary>The clipboard's text, read without changing it.</summary>
     public virtual Win32Desktop.ClipboardText ClipboardText() => Win32Desktop.GetClipboardText();
 
+    private static readonly Lazy<FlaUI.UIA3.UIA3Automation> Automation = new(() => new FlaUI.UIA3.UIA3Automation());
+
+    /// <summary>
+    /// The window's UI Automation tree as indented "ControlType 'Name' [AutomationId]" lines, at most 4 levels and
+    /// 200 elements. A read; it may block on a hung provider, so callers bound it.
+    /// </summary>
+    public virtual string ElementTree(nint hwnd)
+    {
+        var lines = new List<string>();
+        void Walk(AutomationElement element, int depth)
+        {
+            if (lines.Count >= 200)
+            {
+                return;
+            }
+
+            var id = element.Properties.AutomationId.ValueOrDefault;
+            lines.Add(
+                $"{new string(' ', depth * 2)}{element.Properties.ControlType.ValueOrDefault} '{element.Properties.Name.ValueOrDefault}'"
+                    + (string.IsNullOrEmpty(id) ? "" : $" [{id}]")
+            );
+            if (depth < 4)
+            {
+                foreach (var child in element.FindAllChildren())
+                {
+                    Walk(child, depth + 1);
+                }
+            }
+        }
+
+        Walk(Automation.Value.FromHandle(hwnd), 0);
+        return string.Join('\n', lines);
+    }
+
     /// <summary>Renders a window by handle (PrintWindow); a read, so it needs no lease or grant.</summary>
     public virtual bool CaptureWindow(nint hwnd, out byte[] image, out string? reason) =>
         NativeWindowCapture.TryCaptureHwnd(hwnd, out image, out reason);

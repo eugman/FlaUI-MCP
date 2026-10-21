@@ -76,4 +76,59 @@ public sealed class DiagnosticsCaptureTests
             warning
         );
     }
+
+    [Fact]
+    public void AHungRenderIsBoundedAndReportedAsTimedOut()
+    {
+        using var release = new ManualResetEventSlim();
+        using var installed = new FakeDesktop { WindowImage = [1], RenderBlock = release }.Install();
+        var path = TempPng();
+        try
+        {
+            var capture = Diagnostics.Capture(FakeDesktop.TargetHwnd, path, TimeSpan.FromMilliseconds(100));
+
+            Assert.False(capture.Saved);
+            Assert.Equal("The window did not render within 100 ms; it may be hung.", capture.SkipReason);
+        }
+        finally
+        {
+            release.Set();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void TheCaptureRecordsTheWindowsAndTheTargetsTree()
+    {
+        var desktop = new FakeDesktop
+        {
+            WindowImage = [1],
+            WindowsOf = _ =>
+                [
+                    new Win32WindowInfo(FakeDesktop.TargetHwnd, "Main", FakeDesktop.TargetPid, false, false, false),
+                    new Win32WindowInfo(7, "Save changes?", FakeDesktop.TargetPid, true, false, false)
+                    {
+                        Owner = FakeDesktop.TargetHwnd,
+                    },
+                ],
+            Tree = "Window 'Main'\n  Button 'OK'",
+        };
+        using var installed = desktop.Install();
+        var path = TempPng();
+        try
+        {
+            var capture = Diagnostics.Capture(FakeDesktop.TargetHwnd, path);
+
+            Assert.Equal(["Main", "Save changes?"], capture.Windows.Select(w => w.Title));
+            Assert.Equal("Window 'Main'\n  Button 'OK'", capture.Tree);
+            var notes = File.ReadAllText(path + ".txt");
+            Assert.Contains("Save changes?", notes);
+            Assert.Contains("Button 'OK'", notes);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".txt");
+        }
+    }
 }
