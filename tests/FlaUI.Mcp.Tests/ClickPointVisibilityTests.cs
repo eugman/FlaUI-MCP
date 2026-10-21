@@ -38,6 +38,26 @@ public sealed class ClickPointVisibilityTests
     }
 
     [Fact]
+    public void AColumnHeaderEdgeIsInsideItsGridsViewport()
+    {
+        // The live failure: a resize drag from a grid column header's right edge, (-1227,233). The header row is
+        // subtracted from the grid's viewport for content, but the header item itself lives in it.
+        var grid = new Rectangle(-1500, 200, 800, 400);
+        var headerRow = new Rectangle(-1500, 221, 780, 25);
+        var bar = new Rectangle(-720, 200, 20, 400);
+        var header = new Rectangle(-1400, 221, 174, 25);
+        var viewport = ClickGeometry.Viewport(grid, [headerRow, bar], header);
+        var geometry = new ClickGeometry(false, null, header, [viewport]);
+        var edge = FlaUI.Mcp.Core.PointerPlan.EdgePoint(header, "right");
+
+        Assert.Equal(new Point(-1227, 233), edge);
+        Assert.Equal(edge, ClickPoint.Choose(geometry, edge));
+        // The scrollbar is still cut off for it, and the header row still is for content.
+        Assert.Equal(-720, viewport.Right);
+        Assert.Equal(246, ClickGeometry.Viewport(grid, [headerRow, bar], new Rectangle(-1400, 300, 174, 20)).Top);
+    }
+
+    [Fact]
     public void ACentreUnderTheScrollbarFallsBackToTheCentreOfTheVisiblePart()
     {
         var geometry = new ClickGeometry(false, null, Clip, [ClickGeometry.Viewport(Timeline, [HorizontalBar])]);

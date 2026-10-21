@@ -77,23 +77,26 @@ public sealed record ClickGeometry(
     private static bool IsSentinel(Point point) => point.X == int.MinValue || point.Y == int.MinValue;
 
     // A scroller's bounds include its own scrollbars and column headers, which take a press meant for content.
-    private static Rectangle Viewport(AutomationElement scroller) =>
+    private static Rectangle Viewport(AutomationElement scroller, Rectangle element) =>
         Viewport(
             scroller.BoundingRectangle,
             scroller
                 .FindAllChildren(cf => cf.ByControlType(ControlType.ScrollBar).Or(cf.ByControlType(ControlType.Header)))
-                .Select(chrome => chrome.BoundingRectangle)
+                .Select(chrome => chrome.BoundingRectangle),
+            element
         );
 
     /// <summary>
     /// <paramref name="bounds"/> without the scrollbars and headers in <paramref name="chrome"/>: each is cut off the
     /// edge it lies along (a wide one off the top or bottom, a tall one off the left or right). Empty when nothing
-    /// is left.
+    /// is left. The cut is for content: a scrollbar or header that holds <paramref name="element"/> itself (a column
+    /// header, the resize handle of a header drag) is kept, since the element lives in it.
     /// </summary>
-    internal static Rectangle Viewport(Rectangle bounds, IEnumerable<Rectangle> chrome)
+    internal static Rectangle Viewport(Rectangle bounds, IEnumerable<Rectangle> chrome, Rectangle? element = null)
     {
         var (left, top, right, bottom) = (bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
-        foreach (var bar in chrome.Where(bar => bar.IntersectsWith(bounds)))
+        var centre = element is { } e ? new Point(e.X + e.Width / 2, e.Y + e.Height / 2) : (Point?)null;
+        foreach (var bar in chrome.Where(bar => bar.IntersectsWith(bounds) && !(centre is { } c && bar.Contains(c))))
         {
             if (bar.Width >= bar.Height)
             {
@@ -116,13 +119,14 @@ public sealed record ClickGeometry(
     public static ClickGeometry Read(AutomationElement element)
     {
         OperationContext.Check();
+        var bounds = element.BoundingRectangle;
         var scrollers = new List<Rectangle>();
         var ancestor = element.Parent;
         for (var depth = 0; ancestor != null && depth < MaxAncestors; depth++)
         {
             if (ancestor.Patterns.Scroll.IsSupported)
             {
-                scrollers.Add(Viewport(ancestor));
+                scrollers.Add(Viewport(ancestor, bounds));
             }
 
             if (ancestor.Properties.ControlType.ValueOrDefault == ControlType.Window)
@@ -133,7 +137,6 @@ public sealed record ClickGeometry(
             ancestor = ancestor.Parent;
         }
 
-        var bounds = element.BoundingRectangle;
         var clickable = UsableClickable(element.TryGetClickablePoint(out var point), point, bounds);
         return new(element.Properties.IsOffscreen.ValueOrDefault, clickable, bounds, scrollers);
     }
