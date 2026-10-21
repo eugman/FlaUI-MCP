@@ -115,7 +115,10 @@ public static class Diagnostics
 
         public int TotalMs => (int)total.TotalMilliseconds;
 
-        public TimeSpan Remaining => total - clock.Elapsed;
+        public TimeSpan Remaining => Spent ? TimeSpan.Zero : total - clock.Elapsed;
+
+        /// <summary>Set when a stage ran out the budget, so the later stages skip even if the clock lags the wait.</summary>
+        public bool Spent { get; set; }
     }
 
     /// <summary>
@@ -136,6 +139,7 @@ public static class Diagnostics
             if (!task.Wait(remaining, CancellationToken.None))
             {
                 // Abandoned: the worker keeps running (a hung provider may never return); its result is dropped.
+                budget.Spent = true;
                 _ = task.ContinueWith(t => _ = t.Exception, TaskScheduler.Default);
                 return (
                     default,
