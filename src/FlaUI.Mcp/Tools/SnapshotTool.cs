@@ -37,6 +37,7 @@ public class SnapshotTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new

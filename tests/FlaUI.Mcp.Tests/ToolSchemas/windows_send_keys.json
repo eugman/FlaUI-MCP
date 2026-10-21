@@ -3,6 +3,7 @@
   "description": "Send key presses or key chords to an element by ref or the focused element. Supports either \u0060chord\u0060 (single chord, e.g., Ctrl\u002BRight) or \u0060keys\u0060 array (sequence, e.g., [\u0022Ctrl\u002BC\u0022,\u0022Ctrl\u002BV\u0022]).",
   "inputSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "handle": {
         "type": "string",

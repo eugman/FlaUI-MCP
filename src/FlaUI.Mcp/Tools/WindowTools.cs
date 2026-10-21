@@ -29,7 +29,13 @@ public class ListWindowsTool : ToolBase
         "List all open windows with their handles, titles, and process names. "
         + "Use this to find windows to interact with.";
 
-    public override object InputSchema => new { type = "object", properties = new { } };
+    public override object InputSchema =>
+        new
+        {
+            type = "object",
+            additionalProperties = false,
+            properties = new { },
+        };
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
@@ -83,6 +89,7 @@ public class FocusWindowTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
@@ -195,6 +202,7 @@ public class CloseWindowTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new { handle = new { type = "string", description = "Window handle to close" } },
             required = new[] { "handle" },
         };

@@ -19,6 +19,7 @@ public sealed class BatchTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 actions = new

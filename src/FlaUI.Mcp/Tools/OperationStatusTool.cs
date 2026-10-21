@@ -16,7 +16,12 @@ public sealed class OperationStatusTool(OperationCoordinator operations, Pending
         + "dispatch says how much input went out: completed, partial, not-dispatched, timed_out_pending (still running; never replay) or unknown, with inputsSent. "
         + "provider is pending while a click it started still blocks UI Automation on that app (usually an open menu or dialog). No UI Automation calls.";
     public override object InputSchema =>
-        new { type = "object", properties = new { operationId = new { type = "string" } } };
+        new
+        {
+            type = "object",
+            additionalProperties = false,
+            properties = new { operationId = new { type = "string" } },
+        };
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
         Task.FromResult(

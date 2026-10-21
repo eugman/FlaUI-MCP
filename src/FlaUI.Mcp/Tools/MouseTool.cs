@@ -27,6 +27,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 action = new { type = "string", @enum = new[] { "park", "move", "hover", "scroll", "drag", "click" } },

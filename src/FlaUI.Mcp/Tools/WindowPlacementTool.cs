@@ -20,6 +20,7 @@ public sealed class WindowPlacementTool(
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 @ref = new { type = "string" },

@@ -40,6 +40,7 @@ public class ScreenshotTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 frame = new

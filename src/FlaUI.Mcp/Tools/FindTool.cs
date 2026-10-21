@@ -51,6 +51,7 @@ public sealed class FindTool(ElementQuery query) : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new { type = "string" },

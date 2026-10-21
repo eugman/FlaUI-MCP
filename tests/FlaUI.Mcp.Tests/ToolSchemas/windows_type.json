@@ -3,6 +3,7 @@
   "description": "Type text into an element. The element will be focused first. Line breaks are sent as Enter. Code editors can autocomplete typed text; use windows_paste for code. Use this for typing without clearing existing content. Use windows_fill to replace content.",
   "inputSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "handle": {
         "type": "string",

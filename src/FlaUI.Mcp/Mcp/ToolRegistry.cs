@@ -41,6 +41,9 @@ public class ToolRegistry
         || _tools.TryGetValue(name, out var tool)
             && tool.GetDefinition().Annotations is { ReadOnlyHint: true, StatusHint: true };
 
+    /// <summary>The registered tools, for contract tests.</summary>
+    internal IReadOnlyCollection<ITool> All => _tools.Values;
+
     public List<McpTool> GetToolDefinitions()
     {
         return _tools.Values.Select(t => t.GetDefinition()).ToList();

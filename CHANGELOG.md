@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed for product repos
+- Every core tool schema sets `additionalProperties: false`; `SchemaParityTests` checks each handler reads only declared arguments and every declared one. A product host can copy the test for its own tools.
 - Pointer actions on an element press only where it is visible: a scrolling ancestor's viewport excludes its scrollbars and headers, a hidden clickable point or centre falls back to the centre of the element's visible part, and the press point is hit-tested (`ClickPoint.Verify`) before input, refusing with `click-point-covered` when something else is there. `InputDesktop` gains `ElementAt`, `ParentOf`, `SameElement` and `DescribeElement`.
 - Modal detection during a pattern call needs a window of the process to become disabled; a tooltip, menu or tool window that appears no longer marks the provider pending.
 - `windows_click` expand, collapse and toggle read the state back: "Expanded X"/"Collapsed X" only when it got there (`verification: verified`); a state that did not move fails with `verification: mismatch`, dispatch completed.

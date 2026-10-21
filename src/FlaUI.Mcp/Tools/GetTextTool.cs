@@ -29,6 +29,7 @@ public class GetTextTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },

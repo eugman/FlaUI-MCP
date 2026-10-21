@@ -27,6 +27,7 @@ public sealed class PasteTool(
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new

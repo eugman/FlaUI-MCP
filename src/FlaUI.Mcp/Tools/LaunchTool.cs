@@ -26,6 +26,7 @@ public class LaunchTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 app = new

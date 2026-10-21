@@ -42,6 +42,7 @@ public class TypeTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
@@ -202,6 +203,7 @@ public class FillTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new

@@ -20,6 +20,7 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new

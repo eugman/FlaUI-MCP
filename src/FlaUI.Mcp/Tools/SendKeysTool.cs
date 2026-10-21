@@ -70,6 +70,7 @@ public class SendKeysTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
