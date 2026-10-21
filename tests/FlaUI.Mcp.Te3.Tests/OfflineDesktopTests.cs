@@ -36,4 +36,24 @@ public sealed class OfflineDesktopTests
         Assert.Equal(1, desktop.Dispatched);
         Assert.Null(InputDesktop.Override.Value);
     }
+
+    [Fact]
+    public void TheFakeDesktopOverridesEveryDesktopCallCoreCanMake()
+    {
+        // A desktop call the fake does not override falls through to the real desktop. Core's next release adds
+        // ElementAt, ParentOf, SameElement, TopLevelWindows, Monitors, MovePointer, FocusedControl, ClipboardText and
+        // CaptureWindow: this fails at that rebase until FakeDesktop overrides each one.
+        var missing = typeof(InputDesktop)
+            .GetMethods(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
+            .Where(m => m.IsVirtual && !m.IsFinal && m.DeclaringType == typeof(InputDesktop))
+            .Where(m =>
+                typeof(FakeDesktop)
+                    .GetMethod(m.Name, m.GetParameters().Select(p => p.ParameterType).ToArray())
+                    ?.DeclaringType != typeof(FakeDesktop)
+            )
+            .Select(m => m.Name)
+            .ToList();
+
+        Assert.Empty(missing);
+    }
 }

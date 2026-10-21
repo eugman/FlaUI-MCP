@@ -82,6 +82,9 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override bool SetClipboardText(string text) => true;
 
+    // Nothing is written or preserved: the fake has no clipboard, and Core reads null as "could not set it".
+    public override Win32Desktop.TextClipboardLease? PreserveAndSetClipboardText(string text) => null;
+
     public override System.Diagnostics.Process? StartProcess(System.Diagnostics.ProcessStartInfo info)
     {
         StartRequests++;
