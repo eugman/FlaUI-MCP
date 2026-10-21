@@ -57,7 +57,7 @@ internal static class WindowMutation
         using var lease = GuardedInput.AcquireLease();
         OperationContext.Check();
         MutationGuard.CheckPermission();
-        var started = Process.Start(info);
+        var started = InputDesktop.Current.StartProcess(info);
         MutationGuard.RecordDispatch();
         return started;
     }
@@ -97,10 +97,15 @@ internal static class WindowMutation
         void Validate() => GuardedInput.RequireDrivable(processId, InputDesktop.Current);
         if (pending == null)
         {
-            MutationGuard.Execute(Validate, call);
+            MutationGuard.Execute(Validate, () => InputDesktop.Current.CallPattern(call));
             return new PatternCallResult(PatternCallOutcome.Completed);
         }
 
-        return ModalAwareInvoker.Execute(processId, description, () => MutationGuard.Execute(Validate, call), pending);
+        return ModalAwareInvoker.Execute(
+            processId,
+            description,
+            () => MutationGuard.Execute(Validate, () => InputDesktop.Current.CallPattern(call)),
+            pending
+        );
     }
 }

@@ -158,6 +158,7 @@ public sealed class ReviewFollowUpTests
     [Fact]
     public void ScrollingIntoViewIsValidatedCountedAndHoldsTheLease()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var operation = new OperationContext();
         var order = new List<string>();
         var leaseHeld = false;
@@ -189,6 +190,7 @@ public sealed class ReviewFollowUpTests
     [Fact]
     public void AScrollWhoseTargetFailsValidationIsNotSent()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var scrolled = false;
 
         Assert.Throws<InvalidOperationException>(() =>

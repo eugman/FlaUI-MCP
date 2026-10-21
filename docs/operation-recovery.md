@@ -82,3 +82,15 @@ A product repo that merges this core must check the following.
   - `ClickTool` is a partial class; its replies are in `ClickToolReplies.cs`.
   - The transport calls the new `McpServer.RecordRefusedRequest`.
 - **Offline tests.** `InputDesktop` is internal and visible to `FlaUI.Mcp.Tests`, `FlaUI.Mcp.PowerBi.Tests`, `FlaUI.Mcp.Camtasia.Tests` and `FlaUI.Mcp.Te3.Tests`. A product test assembly that drives input tools must derive a fake from it and install it through `InputDesktop.Override` (see `FakeDesktop` in the core tests), and must set `FLAUI_OFFLINE_TESTS=1` before any test runs, as the core test assembly does in a module initializer. The real desktop then refuses the changes it covers (listed below) if a test misses the fake.
+
+### What the offline switch covers
+
+With `FLAUI_OFFLINE_TESTS=1` and no fake installed, the real `InputDesktop` refuses, before doing anything, every change made through it:
+
+- `Dispatch`: all keyboard and mouse input sent through guarded input, including pointer parking.
+- `Focus`, `FocusElement`, `PostClose`, `SetWindowState`, `PlaceWindow` and `SetClipboardText`.
+- `StartProcess`: `WindowMutation.Start`, used by `windows_launch`.
+- `CallPattern`: the UI Automation calls that change an app (Invoke, Toggle, Select, Expand, Collapse, SetValue, ScrollIntoView, and UI Automation focus and close).
+
+It does not cover anything that bypasses the seam: direct `Win32Desktop.*` calls (such as `Win32Desktop.FocusWindow`, `CloseWindow`, `SetWindowState` or `PlaceWindow`), `TextClipboard.PreserveAndSetClipboardText`, raw FlaUI input (`element.Click()`, `Mouse`/`Keyboard`, or `GetClickablePoint` followed by a mouse call), and UI Automation reads. Product code that calls these directly is not protected by the switch, and should go through `InputDesktop` or guarded input instead.
+

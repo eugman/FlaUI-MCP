@@ -39,7 +39,7 @@ public sealed record ClickGeometry(
         var result = ModalAwareInvoker.Execute(
             processId,
             "ScrollIntoView",
-            () => MutationGuard.Execute(validate, scroll),
+            () => MutationGuard.Execute(validate, () => InputDesktop.Current.CallPattern(scroll)),
             pending
         );
         if (result.Outcome != PatternCallOutcome.Completed)

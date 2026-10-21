@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using FlaUI.Core.AutomationElements;
 
@@ -73,6 +74,23 @@ internal class InputDesktop
     {
         RefuseOffline();
         return Win32Desktop.SetClipboardText(text);
+    }
+
+    /// <summary>Starts a process. Offline, nothing starts.</summary>
+    public virtual Process? StartProcess(ProcessStartInfo info)
+    {
+        RefuseOffline();
+        return Process.Start(info);
+    }
+
+    /// <summary>
+    /// Makes one UI Automation call that changes the app: Invoke, Toggle, Select, Expand, Collapse, SetValue,
+    /// ScrollIntoView, or a UI Automation focus or close.
+    /// </summary>
+    public virtual void CallPattern(Action call)
+    {
+        RefuseOffline();
+        call();
     }
 
     /// <summary>Sends one input. The fake records it instead.</summary>

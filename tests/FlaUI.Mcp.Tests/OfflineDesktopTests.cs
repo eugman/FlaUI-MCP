@@ -53,4 +53,28 @@ public sealed class OfflineDesktopTests
 
         Assert.Contains(assembly, friends);
     }
+
+    [Fact]
+    public void TheRealDesktopStartsNoProcessInOfflineTests()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}", "missing.exe");
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            WindowMutation.Start(new System.Diagnostics.ProcessStartInfo(missing) { UseShellExecute = false })
+        );
+
+        Assert.Contains(InputDesktop.OfflineVariable, error.Message);
+    }
+
+    [Fact]
+    public void TheRealDesktopMakesNoPatternCallInOfflineTests()
+    {
+        var called = false;
+
+        Assert.ThrowsAny<InvalidOperationException>(() =>
+            ClickGeometry.Scroll(0, new PendingInvokeTracker(), () => { }, () => called = true)
+        );
+
+        Assert.False(called);
+    }
 }

@@ -261,6 +261,7 @@ public sealed class DispatchAccountingTests
     [Fact]
     public void AProcessThatFailsToStartCountsNothing()
     {
+        using var offlineDesktop = new FakeDesktop { StartFails = true }.Install();
         // A missing executable: Windows starts nothing and Process.Start throws.
         var missing = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}", "missing.exe");
         var info = new ProcessStartInfo(missing) { UseShellExecute = false };

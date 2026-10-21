@@ -312,7 +312,7 @@ public class FillTool : ToolBase
             () =>
                 MutationGuard.Execute(
                     () => _elementRegistry.ValidateReference(refId, handle),
-                    () => valuePattern.SetValue(value)
+                    () => InputDesktop.Current.CallPattern(() => valuePattern.SetValue(value))
                 ),
             _invokeTracker
         );

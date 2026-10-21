@@ -371,7 +371,7 @@ public partial class ClickTool : ToolBase
         var result = ModalAwareInvoker.Execute(
             processId,
             $"{verb} on '{elementName}'",
-            () => MutationGuard.Execute(validate, call),
+            () => MutationGuard.Execute(validate, () => InputDesktop.Current.CallPattern(call)),
             _invokeTracker
         );
         // Providers may update toggle state asynchronously, so wait briefly for it to move.

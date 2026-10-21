@@ -166,6 +166,25 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override void SetWindowState(nint hwnd, string state) => StateRequests.Add(state);
 
+    /// <summary>When true, starting a process fails as for a missing executable; nothing starts either way.</summary>
+    public bool StartFails { get; set; }
+
+    public int StartRequests { get; private set; }
+
+    public int PatternCalls { get; private set; }
+
+    public override System.Diagnostics.Process? StartProcess(System.Diagnostics.ProcessStartInfo info)
+    {
+        StartRequests++;
+        return StartFails ? throw new System.ComponentModel.Win32Exception(2) : null;
+    }
+
+    public override void CallPattern(Action call)
+    {
+        PatternCalls++;
+        call();
+    }
+
     public bool NormalWindow { get; set; } = true;
 
     public Rectangle Bounds { get; set; } = new(100, 100, 800, 600);

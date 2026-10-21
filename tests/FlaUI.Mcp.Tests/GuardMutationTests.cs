@@ -215,6 +215,7 @@ public sealed class GuardMutationTests
     [Fact]
     public void AProcessStartChecksMutationPermission()
     {
+        using var offlineDesktop = new FakeDesktop { StartFails = true }.Install();
         var missing = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}", "missing.exe");
         MutationGuard.BeforeMutation.Value = () => throw new InvalidOperationException("mutation denied");
         try
