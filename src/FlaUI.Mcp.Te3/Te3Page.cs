@@ -2543,17 +2543,19 @@ public sealed class Te3Page(
         }
 
         _ = folder;
-        await NavigationRetry.Once(() => WalkToObject(table, objectName, objectType), () => Inputs.Sent, reportStep);
+        // The walk's time limit counts from here: opening TOM Explorer, the gate and the search use the same 30 s.
+        var elapsed = WalkClock.Start();
+        await NavigationRetry.Once(
+            () => WalkToObject(table, objectName, objectType, elapsed),
+            () => Inputs.Sent,
+            reportStep
+        );
     }
-
-    // Core stops every tool call at 30 s (ToolRegistry, not configurable from this host); the walk stops itself first,
-    // leaving time to clear the search and report where it got to.
-    private static readonly TimeSpan WalkBudget = TimeSpan.FromSeconds(20);
 
     // Where the last walk ended; the arrival check compares it with the request.
     private WalkResult? lastWalk;
 
-    private async Task WalkToObject(string table, string objectName, string objectType)
+    private async Task WalkToObject(string table, string objectName, string objectType, Func<TimeSpan> elapsed)
     {
         await OpenTom();
         if (await ShowChangesGate.TurnOff(TomChangesState, () => Click(TomChangesTarget())))
@@ -2564,13 +2566,12 @@ public sealed class Te3Page(
         await SearchTomTyped(objectName);
         await Keys("Home", TomExplorerTarget());
         var cursor = new TomCursor(this);
-        var clock = System.Diagnostics.Stopwatch.StartNew();
         var walk = await PathWalker.Find(
             cursor,
             table,
             objectName,
             objectType,
-            outOfTime: () => clock.Elapsed > WalkBudget
+            outOfTime: WalkClock.OutOfTime(elapsed)
         );
         if (!walk.Found)
         {
@@ -2620,9 +2621,6 @@ public sealed class Te3Page(
     /// </summary>
     private sealed class TomCursor(Te3Page page) : ITreeCursor
     {
-        private const int PollMs = 60;
-        private const int MoveTimeoutMs = 1500;
-
         public async Task<RowObservation> Current() => (await page.ObserveSelection()).Row;
 
         public Task<RowObservation?> Down() => Move("Down");
@@ -2634,25 +2632,13 @@ public sealed class Te3Page(
         {
             var before = await page.ObserveSelection();
             await page.Keys(key, TomExplorerTarget());
-            for (var waited = 0; waited < MoveTimeoutMs; waited += PollMs)
-            {
-                await Task.Delay(PollMs);
-                var now = await page.ObserveSelection();
-                if (now.Equals(before))
-                {
-                    continue;
-                }
-
-                // Moved; take it once a second read agrees, so a half-updated status bar is not trusted.
-                await Task.Delay(PollMs * 2);
-                var settled = await page.ObserveSelection();
-                if (settled.Equals(now))
-                {
-                    return settled.Row;
-                }
-            }
-
-            return null;
+            var moved = await WalkClock.AwaitMove(
+                before,
+                page.ObserveSelection,
+                WalkClock.Start(),
+                ms => Task.Delay(ms)
+            );
+            return moved?.Row;
         }
     }
 
