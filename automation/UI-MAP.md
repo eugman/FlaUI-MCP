@@ -115,7 +115,7 @@ A dialog can disappear between window enumeration and a UIA read. Treat `Element
 | Preferences > AI Features > Permissions | Live UIA tree and pane controls | `preferences/permissions` |
 | Preferences > AI Features > AI Assistant > AI Provider | Live UIA tree and pane controls | `preferences/ai-provider` |
 | Preferences > AI Features > AI Assistant > Preferences | Live UIA tree and pane controls | `preferences/ai-assistant` |
-| View > AI Assistant | Live View popup Button `AI Assistant` and Pane `AI Assistant` (2026-10-21) | Reopen verified by hand; `te3_layout` has no show action yet |
+| View > AI Assistant | Live View popup Button `AI Assistant` and Pane `AI Assistant` (2026-10-21) | `te3_layout reopen-pane` (reopen verified by hand; the action needs live verification) |
 | TOM Explorer > Show changes | Live UIA CheckBox with Toggle pattern; [official behavior](https://docs.tabulareditor.com/en/features/unsaved-changes.html) | `tom-explorer/changes` |
 | Properties > Show changes | Live CheckBox `Show changes` in `PropertyGridView` > ToolBar `Tools` (2026-10-21) | Observed only |
 

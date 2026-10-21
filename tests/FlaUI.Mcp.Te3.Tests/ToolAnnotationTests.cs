@@ -76,6 +76,7 @@ public sealed class ToolAnnotationTests : IDisposable
         Assert.Equal(["list", "plan-preset", "show-pane"], Actions(Tool("te3_layout_read")));
         Assert.Empty(Actions(Tool("te3_layout")).Intersect(["list", "plan-preset", "show-pane"]));
         Assert.Contains("resize", Actions(Tool("te3_layout")));
+        Assert.Contains("reopen-pane", Actions(Tool("te3_layout")));
     }
 
     [Fact]

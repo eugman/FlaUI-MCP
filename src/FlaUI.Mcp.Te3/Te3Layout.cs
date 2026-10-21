@@ -59,6 +59,7 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
             "close" => await Close(inputs, handle, window, Titles(a), keep: false),
             "keep" => await Close(inputs, handle, window, Titles(a), keep: true),
             "show-pane" => ShowPane(window, Required(a, "title")),
+            "reopen-pane" => await ReopenPane(inputs, handle, window, Required(a, "title")),
             "hide-pane" => await HidePane(inputs, handle, window, Required(a, "title")),
             "apply-preset" => await ApplyPreset(inputs, handle, window, Required(a, "preset")),
             "maximize-pane" => await PaneButton(inputs, handle, window, Required(a, "title"), "Maximize"),
@@ -106,10 +107,14 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
             };
         }
 
-        throw new InvalidOperationException(
-            "Pane is hidden. Its reopen menu locator is not verified for this TE3 build; no input sent."
-        );
+        throw new InvalidOperationException(LayoutSteps.HiddenMessage(title));
     }
+
+    private Task<object> ReopenPane(InputTally inputs, string handle, Window window, string title) =>
+        LayoutSteps.Reopen(host, handle, window, inputs, title);
+
+    internal static bool PaneVisible(Window window, string title) =>
+        Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title));
 
     private async Task<object> HidePane(InputTally inputs, string handle, Window window, string title)
     {

@@ -9,6 +9,7 @@ public sealed partial class Te3Layout
     [
         "close",
         "keep",
+        "reopen-pane",
         "hide-pane",
         "apply-preset",
         "maximize-pane",
@@ -44,13 +45,15 @@ public sealed partial class Te3Layout
         readOnly
             ? "Read TE3's layout for a screenshot; sends no input and needs no grant. list: docked panes and document "
                 + "tabs with window-relative bounds. show-pane: confirm the AI Assistant, TOM Explorer or Properties "
-                + "pane is visible; refuses an absent pane until its reopen locator is verified. plan-preset: offline "
+                + "pane is visible; sends no input, so a hidden pane is reopened with te3_layout reopen-pane. plan-preset: offline "
                 + "assistant-model-review geometry (windowWidth/windowHeight default to 1920x1080). Pane titles match "
                 + "with or without TE3's \"(Changed)\" suffix. Changes are te3_layout."
             : "Arrange TE3 for a screenshot. close: hide named docked panes by title; document tabs are never closed. "
                 + "keep: hide every docked pane except these titles (closing a tab-group pane surfaces the next tab, "
                 + "so this repeats until only the kept ones remain). hide-pane: named AI Assistant, TOM Explorer, or "
-                + "Properties dock surfaces. apply-preset: live guarded resizing. maximize-pane / restore-pane: the "
+                + "Properties dock surfaces. reopen-pane: reopen a hidden pane from the View menu (View, then the popup "
+                + "entry named after the pane); a visible pane is left alone and a pane without a mapped View entry is "
+                + "refused before input. apply-preset: live guarded resizing. maximize-pane / restore-pane: the "
                 + "pane's own Maximize or Restore button (TE3 remembers a maximized pane across restarts, so restore "
                 + "it when done). Pane titles match with or without TE3's \"(Changed)\" suffix. resize: drag the "
                 + "splitter a pane shares with its neighbour until the pane is `width` or `height` physical pixels. "
@@ -74,7 +77,7 @@ public sealed partial class Te3Layout
                 title = new
                 {
                     type = "string",
-                    description = "show-pane/hide-pane/maximize-pane/restore-pane/resize: the pane title.",
+                    description = "show-pane/reopen-pane/hide-pane/maximize-pane/restore-pane/resize: the pane title.",
                 },
                 preset = new { type = "string", @enum = new[] { FlaUI.Mcp.Te3.Te3PanePlan.AssistantModelReview } },
                 windowWidth = new

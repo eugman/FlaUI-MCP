@@ -132,6 +132,21 @@ internal static class LayoutSteps
         }
     }
 
+    /// <summary>te3_layout reopen-pane: the View menu entry named after the pane (see <see cref="PaneReopen"/>).</summary>
+    public static Task<object> Reopen(
+        AutomationHost host,
+        string handle,
+        Window window,
+        InputTally inputs,
+        string title
+    ) => PaneReopen.Show(new LayoutViewMenu(host, handle, window, inputs), title);
+
+    /// <summary>What te3_layout_read show-pane says about a hidden pane.</summary>
+    public static string HiddenMessage(string title) =>
+        PaneReopen.IsMapped(title)
+            ? "Pane is hidden; reopen it with te3_layout reopen-pane. No input sent."
+            : PaneReopen.UnverifiedLocator;
+
     public static string DialogOpened(string closing, string dialog) =>
         $"Closing '{closing}' opened \"{dialog}\". Answer it, then run keep/close again.";
 }
