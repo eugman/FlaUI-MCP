@@ -36,6 +36,9 @@ public sealed class GuardedInput : IDisposable
     private readonly InputTarget target;
     private readonly InputDesktop desktop = InputDesktop.Current;
 
+    // What this guard changed before any input, so a later refusal does not claim nothing was sent.
+    private readonly string? changedFirst;
+
     public GuardedInput(InputTarget target, AutomationElement? element = null, bool verifyFocus = false)
     {
         this.target = target;
@@ -61,6 +64,8 @@ public sealed class GuardedInput : IDisposable
                     "Intended control did not receive verified keyboard focus; no input sent."
                 );
             }
+
+            changedFirst = focusedFirst;
         }
         catch (InvalidOperationException error) when (focusedFirst != null)
         {
@@ -123,6 +128,22 @@ public sealed class GuardedInput : IDisposable
         return error is InputRefusedException refused
             ? InputRefusedException.Record(refused.Refusal with { Message = message })
             : new InvalidOperationException(message, error);
+    }
+
+    /// <summary>
+    /// Run a check made after this guard activated the target. Its refusal says what the guard already
+    /// changed, as a refusal from the guard itself would.
+    /// </summary>
+    public void Check(Action check)
+    {
+        try
+        {
+            check();
+        }
+        catch (InvalidOperationException error) when (changedFirst != null)
+        {
+            throw FocusedFirst(error, changedFirst);
+        }
     }
 
     /// <summary>Replace "no input sent" with what actually changed, or append it.</summary>
@@ -362,12 +383,16 @@ public sealed class GuardedInput : IDisposable
 
     public void Click(AutomationElement element, MouseButton button = MouseButton.Left, bool doubleClick = false)
     {
-        var point = ClickPoint.Choose(ClickGeometry.Read(element));
+        var point = default(System.Drawing.Point);
+        Check(() => point = ClickPoint.Choose(ClickGeometry.Read(element)));
         Verify();
         var clickRoot = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
         if (desktop.ProcessOf(clickRoot) != target.ProcessId || desktop.WindowAt(point) != clickRoot)
         {
-            throw new InvalidOperationException("Click point is obscured by another window.");
+            var covering = desktop.WindowAt(point);
+            Check(() =>
+                throw NotOnTarget(target, covering, "Click point is obscured by another window; no input sent.")
+            );
         }
 
         Send(() =>
@@ -381,6 +406,19 @@ public sealed class GuardedInput : IDisposable
                 Mouse.Click(point, button);
             }
         });
+    }
+
+    /// <summary>The refusal for a pointer action whose point lies on another window, or on none.</summary>
+    internal static InputRefusedException NotOnTarget(InputTarget target, nint covering, string message)
+    {
+        var pid = covering == 0 ? 0 : InputDesktop.Current.ProcessOf(covering);
+        return InputRefusedException.Record(
+            new InputRefusal("point-not-on-target", message)
+            {
+                ForegroundProcess = pid == 0 ? null : new ProcessRef(ProcessPolicy.TryGetProcessName(pid), pid),
+                Target = new ProcessRef(null, target.ProcessId),
+            }
+        );
     }
 
     public void Dispose() => lease.Dispose();

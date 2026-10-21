@@ -246,7 +246,7 @@ public sealed class GuardMutationTests
             []
         );
 
-        var error = Assert.Throws<InvalidOperationException>(() => ClickPoint.Choose(geometry));
+        var error = Assert.Throws<InputRefusedException>(() => ClickPoint.Choose(geometry));
 
         Assert.StartsWith(start, error.Message);
     }

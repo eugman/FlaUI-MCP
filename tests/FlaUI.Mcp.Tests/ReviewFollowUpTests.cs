@@ -7,6 +7,7 @@ using Xunit;
 namespace FlaUI.Mcp.Tests;
 
 /// <summary>Dispatch reporting fixed after the core stack review.</summary>
+[Collection(InputLeaseCollection.Name)]
 public sealed class ReviewFollowUpTests
 {
     private static JsonElement Args(object value) => JsonSerializer.SerializeToElement(value);
@@ -119,6 +120,39 @@ public sealed class ReviewFollowUpTests
         {
             OperationContext.Current.Value = null;
         }
+    }
+
+    [Fact]
+    public void ADropPointOffTheTargetIsAStructuredRefusalThatNamesTheActivation()
+    {
+        var to = new System.Drawing.Point(50, 10);
+        var desktop = new FakeDesktop
+        {
+            ForegroundWindow = FakeDesktop.OtherHwnd,
+            WindowUnder = point => point == to ? FakeDesktop.OtherHwnd : FakeDesktop.TargetHwnd,
+        };
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            MouseTool.Drag(FakeDesktop.Target, new System.Drawing.Point(10, 10), to, 4)
+        );
+
+        Assert.Equal("point-not-on-target", error.Refusal.Code);
+        Assert.Equal(FakeDesktop.OtherPid, error.Refusal.ForegroundProcess!.Pid);
+        Assert.Equal(FakeDesktop.TargetPid, error.Refusal.Target!.Pid);
+        Assert.EndsWith("no keys or clicks were sent, but the target window was activated first.", error.Message);
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void AClickPointRefusalIsStructured()
+    {
+        var geometry = new ClickGeometry(true, null, new System.Drawing.Rectangle(0, 0, 10, 10), []);
+
+        var error = Assert.Throws<InputRefusedException>(() => ClickPoint.Choose(geometry));
+
+        Assert.Equal("click-point-unavailable", error.Refusal.Code);
+        Assert.StartsWith("The element is offscreen", error.Refusal.Message);
     }
 
     private sealed class Sends(string name) : ToolBase

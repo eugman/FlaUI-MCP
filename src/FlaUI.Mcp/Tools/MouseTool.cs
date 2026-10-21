@@ -200,7 +200,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     private static Point Move(InputTarget target, Point point, int hoverMs)
     {
         using var input = new GuardedInput(target);
-        RequireHit(target, point);
+        input.Check(() => RequireHit(target, point));
         input.Send(() => Mouse.MoveTo(point));
         if (hoverMs > 0)
         {
@@ -213,7 +213,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     private static Point Scroll(InputTarget target, Point point, int ticks)
     {
         using var input = new GuardedInput(target);
-        RequireHit(target, point);
+        input.Check(() => RequireHit(target, point));
         input.Send(() => Mouse.MoveTo(point));
         input.Send(() => Mouse.Scroll(ticks));
         return Mouse.Position;
@@ -222,7 +222,9 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     private static Point Click(InputTarget target, Point point)
     {
         using var input = new GuardedInput(target);
-        ClickGuarded(target, point, clicked => input.Send(() => Mouse.Click(clicked, MouseButton.Left)));
+        input.Check(() =>
+            ClickGuarded(target, point, clicked => input.Send(() => Mouse.Click(clicked, MouseButton.Left)))
+        );
         return Mouse.Position;
     }
 
@@ -241,9 +243,9 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     {
         var path = PointerPlan.DragPath(from, to, steps);
         using var input = new GuardedInput(target);
-        RequireHit(target, from);
+        input.Check(() => RequireHit(target, from));
         // The release lands at `to`; refuse a drag that would drop onto another window or the desktop.
-        RequireHit(target, to);
+        input.Check(() => RequireHit(target, to));
         input.Send(() => Mouse.MoveTo(from));
         input.Send(() => Mouse.Down(MouseButton.Left));
         try
@@ -266,9 +268,12 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     internal static void RequireHit(InputTarget target, Point point, Func<Point, nint>? windowAt = null)
     {
         var root = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
-        if ((windowAt ?? InputDesktop.Current.WindowAt)(point) != root)
+        var under = (windowAt ?? InputDesktop.Current.WindowAt)(point);
+        if (under != root)
         {
-            throw new InvalidOperationException(
+            throw GuardedInput.NotOnTarget(
+                target,
+                under,
                 "Point is not on the target window (off-window or covered); no input sent."
             );
         }

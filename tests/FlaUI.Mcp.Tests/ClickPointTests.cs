@@ -22,7 +22,7 @@ public sealed class ClickPointTests
     ) => new(offscreen, clickable, bounds ?? Row, scrollers);
 
     private static string Refusal(ClickGeometry geometry, Point? requested = null) =>
-        Assert.Throws<InvalidOperationException>(() => ClickPoint.Choose(geometry, requested)).Message;
+        Assert.Throws<InputRefusedException>(() => ClickPoint.Choose(geometry, requested)).Message;
 
     [Fact]
     public void VisibleElementUsesItsClickablePoint()

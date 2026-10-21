@@ -46,7 +46,7 @@ public sealed class PointerMutationTests
         };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() => MouseTool.Drag(FakeDesktop.Target, From, To, 4));
+        var error = Assert.Throws<InputRefusedException>(() => MouseTool.Drag(FakeDesktop.Target, From, To, 4));
 
         Assert.Equal("Point is not on the target window (off-window or covered); no input sent.", error.Message);
         Assert.Equal(0, desktop.Dispatched);
