@@ -1732,26 +1732,23 @@ public sealed partial class Te3Page(
         }
     }
 
-    /// <summary>One lookup, no retries: whether the target exists and is not offscreen.</summary>
+    /// <summary>One lookup, no retries: whether the target exists and is not offscreen; a failed read throws.</summary>
     private async Task<bool> IsOnScreen(Target target) =>
         await Task.Run(() =>
-        {
-            try
-            {
-                var element = query.Resolve(
-                    handle,
-                    target.Selector,
-                    target.Within,
-                    target.IncludeOwned,
-                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
-                );
-                return !element.Properties.IsOffscreen.ValueOrDefault;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                return false;
-            }
-        });
+            ScreenPresence.Read(
+                () =>
+                    !query
+                        .Resolve(
+                            handle,
+                            target.Selector,
+                            target.Within,
+                            target.IncludeOwned,
+                            budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
+                        )
+                        .Properties.IsOffscreen.ValueOrDefault,
+                target.Selector.ToString()
+            )
+        );
 
     public async Task SetProperty(string property, string value)
     {
