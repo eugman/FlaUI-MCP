@@ -1344,59 +1344,29 @@ public sealed partial class Te3Page(
             Win32Desktop.GetWindowBounds(owner.Hwnd) ?? throw new InvalidOperationException("Owner disappeared");
         var observed =
             Win32Desktop.GetWindowBounds(dialog.Hwnd) ?? throw new InvalidOperationException("Popup disappeared");
+        var spec = new SceneCheck.Spec(
+            owner.Hwnd,
+            dialog,
+            scene,
+            ownerBounds,
+            observed,
+            modal,
+            includeOutsideOwner,
+            popupShadowPadding
+        );
         void VerifyScene()
         {
             owner.EnsureAlive();
             dialog.EnsureAlive();
-            if (
-                Win32Desktop.GetForegroundWindow() != (modal ? dialog.Hwnd : owner.Hwnd)
-                || Win32Desktop.GetWindowBounds(owner.Hwnd) != ownerBounds
-                || Win32Desktop.GetWindowBounds(dialog.Hwnd) != observed
-            )
-            {
-                throw new InvalidOperationException("Scene focus or geometry changed");
-            }
-
-            if (
-                (!includeOutsideOwner && !ownerBounds.Contains(scene))
-                || (includeOutsideOwner && scene != System.Drawing.Rectangle.Union(ownerBounds, observed))
-                || !Screen.AllScreens.Any(s => s.WorkingArea.Contains(scene))
-            )
-            {
-                throw new InvalidOperationException(
-                    $"Scene {scene} is clipped; owner {ownerBounds}, dialog {observed}, work areas {string.Join("; ", Screen.AllScreens.Select(s => s.WorkingArea))}"
-                );
-            }
-
-            var windows = Win32Desktop.GetTopLevelWindows();
-            var aboveOwner = windows.TakeWhile(w => w.Hwnd != owner.Hwnd).ToArray();
-            var obstructions = aboveOwner
-                .Where(w =>
-                    !w.IsCloaked
-                    && w.Hwnd != dialog.Hwnd
-                    && !IsPopupShadow(
-                        w,
-                        Win32Desktop.GetWindowBounds(w.Hwnd),
-                        dialog.ProcessId,
-                        observed,
-                        modal,
-                        popupShadowPadding
-                    )
-                    && (Win32Desktop.GetWindowBounds(w.Hwnd)?.IntersectsWith(scene) ?? true)
+            SceneCheck.Verify(
+                spec,
+                new(
+                    Win32Desktop.GetForegroundWindow(),
+                    Win32Desktop.GetTopLevelWindows(),
+                    Win32Desktop.GetWindowBounds,
+                    Screen.AllScreens.Select(s => s.WorkingArea).ToList()
                 )
-                .ToArray();
-            if (!windows.Any(w => w.Hwnd == owner.Hwnd) || obstructions.Length > 0)
-            {
-                throw new InvalidOperationException(
-                    $"Scene popup {observed} obscured: "
-                        + string.Join(
-                            "; ",
-                            obstructions.Select(w =>
-                                $"HWND={w.Hwnd}, PID={w.ProcessId}, title={w.Title}, bounds={Win32Desktop.GetWindowBounds(w.Hwnd)}"
-                            )
-                        )
-                );
-            }
+            );
         }
 
         reportStep?.Invoke("Capture unobscured owner/popup scene (actual screen pixels)");
