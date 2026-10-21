@@ -226,9 +226,10 @@ public class ScreenshotTool : ToolBase
         // Park only once the call is known to be valid, so a refused call never moves the real mouse. A park the
         // guards refuse (a revoked grant, a busy lease) still captures, with a warning: the image is the evidence.
         string? parkWarning = null;
+        Proof? parkProof = null;
         if (
             GetBoolArgument(arguments, "parkPointer", false)
-            && ParkPointer(handle, refId, out parkWarning) is { } parkError
+            && ParkPointer(handle, refId, out parkWarning, out parkProof) is { } parkError
         )
         {
             return Task.FromResult(ErrorResult(parkError));
@@ -352,6 +353,14 @@ public class ScreenshotTool : ToolBase
                 if (result.IsError == true)
                 {
                     return result;
+                }
+
+                if (parkProof != null)
+                {
+                    result = result with
+                    {
+                        Outcome = (result.Outcome ?? new ToolOutcome("completed", "not-tracked")).WithProof(parkProof),
+                    };
                 }
                 // Warnings do not depend on includeMetadata: a warning the caller has to opt into is
                 // not a warning, and the default call is the one that produced a mis-scaled capture.
@@ -651,9 +660,23 @@ public class ScreenshotTool : ToolBase
         $"parkPointer was refused, so the pointer was not moved: {error.Message} "
         + "The capture was taken anyway; a hover state or tooltip may show in it.";
 
-    private string? ParkPointer(string? handle, string? refId, out string? warning)
+    /// <summary>Whether the pointer ended outside the window, read back after the park; unavailable when refused.</summary>
+    internal static Proof ParkProof(System.Drawing.Rectangle window, System.Drawing.Point? landed)
+    {
+        var expected = $"outside {window.X},{window.Y} {window.Width}x{window.Height}";
+        if (landed is not { } point)
+        {
+            return new(Proof.Unavailable, null, expected, "pointer", Independent: true);
+        }
+
+        var verdict = window.Contains(point) ? Proof.Mismatch : Proof.Verified;
+        return new(verdict, $"{point.X},{point.Y}", expected, "pointer", Independent: true);
+    }
+
+    private string? ParkPointer(string? handle, string? refId, out string? warning, out Proof? proof)
     {
         warning = null;
+        proof = null;
         var window = handle ?? (refId == null ? null : _elementRegistry.WindowForRef(refId));
         var hwnd = window == null ? InputDesktop.Current.Foreground() : _sessionManager.GetWindowHwnd(window);
         if (window != null && WindowIsGone(hwnd))
@@ -673,11 +696,12 @@ public class ScreenshotTool : ToolBase
 
         try
         {
-            PointerParking.Park(bounds);
+            proof = ParkProof(bounds, PointerParking.Park(bounds));
         }
         catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or AutomationRefusal)
         {
             warning = ParkRefused(ex);
+            proof = ParkProof(bounds, null);
         }
 
         return null;

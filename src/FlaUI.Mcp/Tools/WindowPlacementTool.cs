@@ -157,6 +157,13 @@ public sealed class WindowPlacementTool(
     /// Verified when the window landed exactly where requested. Otherwise (DPI, a minimum size or the shell
     /// constrained it) a failure with the deltas; the move went out in full and is never replayed.
     /// </summary>
+    /// <summary>The window rectangle after the move, read back through Win32, against the request.</summary>
+    private static Proof PlacementProof(System.Drawing.Rectangle requested, System.Drawing.Rectangle after)
+    {
+        static string Box(System.Drawing.Rectangle r) => $"{r.X},{r.Y} {r.Width}x{r.Height}";
+        return Proof.Compare(Box(requested), Box(after), "window-rect", independent: true);
+    }
+
     internal static McpToolResult PlacementResult(
         System.Drawing.Rectangle requested,
         System.Drawing.Rectangle before,
@@ -181,7 +188,7 @@ public sealed class WindowPlacementTool(
         {
             return TextResult(JsonSerializer.Serialize(report)) with
             {
-                Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "verified" },
+                Outcome = new ToolOutcome("completed", "not-tracked").WithProof(PlacementProof(requested, after)),
             };
         }
 
@@ -201,9 +208,14 @@ public sealed class WindowPlacementTool(
                 delta,
             }
         );
-        return ErrorResult($"Window did not land where requested: {mismatch}") with
+        var text = $"Window did not land where requested: {mismatch}";
+        return ErrorResult(text) with
         {
-            Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "mismatch" },
+            // Its own code, so a host can tell a constrained placement from a refusal or a failed call.
+            Outcome = new ToolOutcome("completed", "not-tracked")
+            {
+                Failure = new InputRefusal(RefusalCodes.PlacementMismatch, text) { ActionDispatched = true },
+            }.WithProof(PlacementProof(requested, after)),
         };
     }
 }

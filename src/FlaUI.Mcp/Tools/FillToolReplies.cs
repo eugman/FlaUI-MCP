@@ -29,7 +29,8 @@ public partial class FillTool
         string value,
         TextObservation observed,
         ToolOutcome outcome,
-        FlaUI.Core.Definitions.ControlType type = FlaUI.Core.Definitions.ControlType.Edit
+        FlaUI.Core.Definitions.ControlType type = FlaUI.Core.Definitions.ControlType.Edit,
+        bool independent = true
     )
     {
         var verification = observed.Verify(value);
@@ -41,7 +42,11 @@ public partial class FillTool
                 $"Sent \"{value}\" to {elementName}; it could not be read back, so the fill is not verified."
             ),
         };
-        return reply with { Outcome = outcome with { Verification = verification } };
+        // Independent unless read back through the same pattern that set it (SetValue then Value).
+        return reply with
+        {
+            Outcome = outcome.WithProof(new Proof(verification, observed.Text, value, observed.Pattern, independent)),
+        };
     }
 
     internal static string FillMismatch(string expected, string? observed, FlaUI.Core.Definitions.ControlType type)

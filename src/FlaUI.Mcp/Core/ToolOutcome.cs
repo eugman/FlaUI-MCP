@@ -36,6 +36,13 @@ public sealed record ToolOutcome(
     [JsonPropertyName("message"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; init; }
 
+    /// <summary>How the tool checked its effect, when it did; status follows its verdict.</summary>
+    [JsonPropertyName("proof"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Proof? Proof { get; init; }
+
+    /// <summary>This outcome with <paramref name="proof"/>, its verdict also given as the verification.</summary>
+    public ToolOutcome WithProof(Proof proof) => this with { Proof = proof, Verification = proof.Verdict };
+
     [JsonIgnore]
     public bool IsPending => Provider == "pending" || Dispatch == "timed_out_pending";
 

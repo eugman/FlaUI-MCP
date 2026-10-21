@@ -3,6 +3,9 @@ using FlaUI.Mcp.Core;
 
 namespace FlaUI.Mcp.Tools;
 
+/// <summary>A pattern call's reply, its verification, and the state read back.</summary>
+internal sealed record PatternVerdict(string Message, string? Verification, string? Observed);
+
 /// <summary>The replies windows_click gives, kept apart from the code that clicks.</summary>
 public partial class ClickTool
 {
@@ -26,34 +29,27 @@ public partial class ClickTool
         };
 
     /// <summary>A toggle's reply and its verification: verified when the state moved, mismatch when it did not.</summary>
-    internal static (string Message, string? Verification) ToggleVerdict(
-        string name,
-        ToggleState? before,
-        ToggleState? after
-    ) =>
-        (
+    internal static PatternVerdict ToggleVerdict(string name, ToggleState? before, ToggleState? after) =>
+        new(
             ToggleOutcome(name, before, after),
             (before, after) switch
             {
                 (null, _) or (_, null) => "unavailable",
                 var (b, a) when b == a => "mismatch",
                 _ => "verified",
-            }
+            },
+            after?.ToString()
         );
 
     /// <summary>
     /// An expand or collapse reply from the state read back: verified when it reached the requested state (an
     /// expand also when partially expanded), mismatch when it did not, unavailable when it could not be read.
     /// </summary>
-    internal static (string Message, string? Verification) ExpandVerdict(
-        string name,
-        string action,
-        ExpandCollapseState? state
-    )
+    internal static PatternVerdict ExpandVerdict(string name, string action, ExpandCollapseState? state)
     {
         if (state is not { } reached)
         {
-            return ($"Sent {action} request to {name}; its state could not be read", "unavailable");
+            return new($"Sent {action} request to {name}; its state could not be read", "unavailable", null);
         }
 
         var done =
@@ -62,10 +58,32 @@ public partial class ClickTool
                 : reached == ExpandCollapseState.Collapsed;
         if (!done)
         {
-            return ($"Sent {action} to {name}, but it is still {reached}", "mismatch");
+            return new($"Sent {action} to {name}, but it is still {reached}", "mismatch", reached.ToString());
         }
 
-        return (action == "expand" ? $"Expanded {name}" : $"Collapsed {name}", "verified");
+        return new(action == "expand" ? $"Expanded {name}" : $"Collapsed {name}", "verified", reached.ToString());
+    }
+
+    /// <summary>
+    /// The reply with its proof: the pattern state read back (from the same provider that acted, so not
+    /// independent) against the state expected.
+    /// </summary>
+    internal static McpToolResult CheckedPatternResult(
+        PatternCallResult result,
+        PatternVerdict verdict,
+        string source,
+        string? expected
+    )
+    {
+        var reply = CheckedPatternResult(result, verdict.Message, verdict.Verification);
+        return verdict.Verification == null
+            ? reply
+            : reply with
+            {
+                Outcome = reply.Outcome!.WithProof(
+                    new Proof(verdict.Verification, verdict.Observed, expected, source, Independent: false)
+                ),
+            };
     }
 
     /// <summary>

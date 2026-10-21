@@ -33,12 +33,19 @@ public sealed class PatternStateProofTests
         ExpandCollapseState state,
         string message,
         string verification
-    ) => Assert.Equal((message, verification), ClickTool.ExpandVerdict("Tables", action, state));
+    )
+    {
+        var verdict = ClickTool.ExpandVerdict("Tables", action, state);
+        Assert.Equal(
+            (message, verification, state.ToString()),
+            (verdict.Message, verdict.Verification, verdict.Observed)
+        );
+    }
 
     [Fact]
     public void AnUnreadableExpandStateIsUnverified() =>
         Assert.Equal(
-            ("Sent expand request to Tables; its state could not be read", "unavailable"),
+            new PatternVerdict("Sent expand request to Tables; its state could not be read", "unavailable", null),
             ClickTool.ExpandVerdict("Tables", "expand", null)
         );
 
@@ -48,7 +55,7 @@ public sealed class PatternStateProofTests
     [InlineData(null, ToggleState.On, "unavailable")]
     public void AToggleIsJudgedByTheStateBeforeAndAfter(ToggleState? before, ToggleState? after, string verification) =>
         Assert.Equal(
-            (ClickTool.ToggleOutcome("Bold", before, after), verification),
+            new PatternVerdict(ClickTool.ToggleOutcome("Bold", before, after), verification, after?.ToString()),
             ClickTool.ToggleVerdict("Bold", before, after)
         );
 

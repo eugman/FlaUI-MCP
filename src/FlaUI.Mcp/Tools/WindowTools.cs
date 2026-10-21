@@ -162,7 +162,12 @@ public class FocusWindowTool : ToolBase
             "foreground activation was not observed. Do not send input until the target is active.";
         if (hwnd == 0)
         {
-            return TextResult($"Focus requested for {handle}, but {Unobserved}");
+            return TextResult($"Focus requested for {handle}, but {Unobserved}") with
+            {
+                Outcome = new ToolOutcome("completed", "not-tracked").WithProof(
+                    new Proof(Proof.Unavailable, null, handle, "foreground", Independent: true)
+                ),
+            };
         }
 
         var desktop = InputDesktop.Current;
@@ -170,7 +175,9 @@ public class FocusWindowTool : ToolBase
         {
             return TextResult($"Focused window {handle}") with
             {
-                Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "verified" },
+                Outcome = new ToolOutcome("completed", "not-tracked").WithProof(
+                    new Proof(Proof.Verified, $"{desktop.Foreground()}", $"{hwnd}", "foreground", Independent: true)
+                ),
             };
         }
 

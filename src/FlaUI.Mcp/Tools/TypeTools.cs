@@ -353,7 +353,8 @@ public partial class FillTool : ToolBase
             value,
             new TextObservation(observed, "Value"),
             ToolOutcome.FromPattern(result),
-            element.Properties.ControlType.ValueOrDefault
+            element.Properties.ControlType.ValueOrDefault,
+            independent: false
         );
     }
 

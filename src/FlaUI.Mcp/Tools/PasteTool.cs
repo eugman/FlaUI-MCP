@@ -180,7 +180,12 @@ public sealed class PasteTool(
             note = ". The clipboard now holds that text." + verdict.Sentence;
         }
 
-        return PasteReply($"Sent Ctrl+V for {clipboardText.Length} characters to {target}{note}", verdict);
+        return PasteReply(
+            $"Sent Ctrl+V for {clipboardText.Length} characters to {target}{note}",
+            verdict,
+            verdict.Observed,
+            clipboardText
+        );
     }
 
     /// <summary>
@@ -188,17 +193,38 @@ public sealed class PasteTool(
     /// or changed without it) is a failure; Ctrl+V went out, so the dispatch stays completed. An unchanged value
     /// that already holds the text (identical text re-pasted) is not.
     /// </summary>
-    internal static McpToolResult PasteReply(string text, PasteVerdict verdict) =>
+    internal static McpToolResult PasteReply(
+        string text,
+        PasteVerdict verdict,
+        string? observed = null,
+        string? expected = null
+    ) =>
         (verdict.Verification is "not-applied" or "mismatch" ? ErrorResult(text) : TextResult(text)) with
         {
-            Outcome = new ToolOutcome("completed", "not-tracked") { Verification = verdict.Verification },
+            // The Value read back after Ctrl+V is independent of the keystroke that pasted. An identical re-paste
+            // (unchanged) is a no-op for the proof, so its status is ok.
+            Outcome = new ToolOutcome("completed", "not-tracked")
+            {
+                Verification = verdict.Verification,
+                Proof = new Proof(
+                    verdict.Verification == "unchanged" ? Proof.NoOp : verdict.Verification,
+                    observed,
+                    expected,
+                    "Value",
+                    Independent: true
+                ),
+            },
         };
 
     /// <summary>
     /// What a paste's read-back establishes, as the outcome's verification (verified, unchanged, mismatch,
     /// unavailable or not-established) and the sentence the reply gives.
     /// </summary>
-    internal sealed record PasteVerdict(string Verification, string Sentence);
+    internal sealed record PasteVerdict(string Verification, string Sentence)
+    {
+        /// <summary>The value read back, when one was.</summary>
+        public string? Observed { get; init; }
+    }
 
     /// <summary>
     /// Read the target back where it exposes a value, so the reply reports what arrived rather than
@@ -306,7 +332,13 @@ public sealed class PasteTool(
     private static string Lines(string text) => text.ReplaceLineEndings("\n");
 
     /// <summary>The verdict behind <see cref="DescribeEvidence"/>.</summary>
-    internal static PasteVerdict Judge(string? before, string? observed, string expected)
+    internal static PasteVerdict Judge(string? before, string? observed, string expected) =>
+        JudgeValues(before, observed, expected) with
+        {
+            Observed = observed,
+        };
+
+    private static PasteVerdict JudgeValues(string? before, string? observed, string expected)
     {
         if (observed == null)
         {

@@ -385,14 +385,28 @@ public partial class ClickTool : ToolBase
         }
 
         // Read the state back: providers may update it asynchronously, so wait briefly for it to move.
-        var (message, verification) = action switch
+        return action switch
         {
-            "toggle" => ToggleVerdict(elementName, toggleBefore, SettledToggle(element, toggleBefore)),
-            "expand" => ExpandVerdict(elementName, action, SettledExpand(element, ExpandCollapseState.Expanded)),
-            "collapse" => ExpandVerdict(elementName, action, SettledExpand(element, ExpandCollapseState.Collapsed)),
-            _ => (Done(action, elementName), (string?)null),
+            "toggle" => CheckedPatternResult(
+                result,
+                ToggleVerdict(elementName, toggleBefore, SettledToggle(element, toggleBefore)),
+                "Toggle",
+                $"not {toggleBefore}"
+            ),
+            "expand" => CheckedPatternResult(
+                result,
+                ExpandVerdict(elementName, action, SettledExpand(element, ExpandCollapseState.Expanded)),
+                "ExpandCollapse",
+                nameof(ExpandCollapseState.Expanded)
+            ),
+            "collapse" => CheckedPatternResult(
+                result,
+                ExpandVerdict(elementName, action, SettledExpand(element, ExpandCollapseState.Collapsed)),
+                "ExpandCollapse",
+                nameof(ExpandCollapseState.Collapsed)
+            ),
+            _ => CheckedPatternResult(result, Done(action, elementName), null),
         };
-        return CheckedPatternResult(result, message, verification);
     }
 
     private static string Done(string action, string elementName) =>

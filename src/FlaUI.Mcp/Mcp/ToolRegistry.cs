@@ -286,7 +286,7 @@ public class ToolRegistry
         {
             Outcome = outcome with
             {
-                Status = failed ? "failed" : "ok",
+                Status = StatusOf(failed, outcome.Proof),
                 InputsSent = inputsSent,
                 Failure =
                     // A refusal recorded as coming after input (a counted Select, say) keeps that, whatever this call counted.
@@ -298,6 +298,17 @@ public class ToolRegistry
                         : outcome.Failure,
             },
         };
+    }
+
+    // An error is always failed; otherwise a proof decides between ok, failed and unverified.
+    private static string StatusOf(bool failed, Proof? proof)
+    {
+        if (failed)
+        {
+            return "failed";
+        }
+
+        return proof is null ? "ok" : Proof.StatusFor(proof.Verdict);
     }
 
     private static McpToolResult ErrorText(string message) =>
