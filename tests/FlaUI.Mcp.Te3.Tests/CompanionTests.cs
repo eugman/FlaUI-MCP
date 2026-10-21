@@ -229,9 +229,13 @@ public sealed class CompanionTests
             new(11, "", 123, true, false, false),
             new(12, "Preferences", 123, true, false, false),
             new(13, "fla_model.bim - Tabular Editor 3.26.3 - Enterprise Edition", 123, false, false, false),
+            // A cloaked or tool window with the title is never the document window.
+            new(15, "Tabular Editor 3", 123, true, false, true),
+            new(16, "Tabular Editor 3", 123, true, true, false),
         ];
         Assert.Equal((nint)13, Te3Companion.MainWindow(windows));
-        Assert.Throws<InvalidOperationException>(() => Te3Companion.MainWindow(windows[..2]));
+        var none = Assert.Throws<InvalidOperationException>(() => Te3Companion.MainWindow(windows[..2]));
+        Assert.Contains("found 0", none.Message);
         Assert.Throws<InvalidOperationException>(() =>
             Te3Companion.MainWindow([windows[2], windows[2] with { Hwnd = 14 }])
         );
@@ -265,6 +269,10 @@ public sealed class CompanionTests
     [InlineData("Column", "Calculated Table Column", true)]
     [InlineData("Column", "Level", false)]
     [InlineData("Measure", null, false)]
+    [InlineData("Measure", "Measure", true)]
+    [InlineData("Column", "Column", true)]
+    [InlineData("Column", "Data Column", true)]
+    [InlineData("Column", "Calculated Column", true)]
     public void SameNamedRowsArePickedByObjectType(string requested, string? observed, bool expected) =>
         Assert.Equal(expected, Te3Page.ObjectTypeMatches(requested, observed));
 
@@ -273,6 +281,7 @@ public sealed class CompanionTests
     [InlineData("Calculated Table Column \"Calenc", "Calculated Table Column")]
     [InlineData("Hierarchy \"Date Hierarchy\"", "Hierarchy")]
     [InlineData("(Nothing selected)", null)]
+    [InlineData("\"Date\"", null)]
     [InlineData(null, null)]
     public void StatusBarSelectionGivesTheObjectType(string? selection, string? expected) =>
         Assert.Equal(expected, Te3Page.SelectionType(selection));
@@ -283,7 +292,7 @@ public sealed class CompanionTests
 
     [Fact]
     public void TableArrivalUsesTheTableName() =>
-        Te3Page.VerifyArrival("Date", "Date", "Table", new("Date", "Calculated Table"), "Date");
+        Te3Page.VerifyArrival("Date", "RefDate", "Table", new("Date", "Calculated Table"), "Date");
 
     [Fact]
     public void ProcessIdIsOptionalWhenOneTe3IsRunning()

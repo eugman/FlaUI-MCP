@@ -84,6 +84,7 @@ public sealed class PathWalkerTests
         var walk = await PathWalker.Find(tree, "Exchange Rate", "Date", "Column", maxRows: 3);
         Assert.False(walk.Found);
         Assert.Equal(2, tree.Downs);
+        Assert.Equal("Stopped after 3 rows.", walk.Reason);
     }
 
     [Fact]
@@ -133,7 +134,8 @@ public sealed class PathWalkerTests
     {
         var walk = await PathWalker.FindRow(new FakeTree(new RowObservation("Tables", "Tables")), "Roles");
         Assert.False(walk.Found);
-        Assert.Contains("end of the tree", walk.Reason);
+        Assert.Equal(1, walk.RowsVisited);
+        Assert.Equal("Reached the end of the tree after 1 rows.", walk.Reason);
     }
 
     [Fact]
@@ -147,5 +149,16 @@ public sealed class PathWalkerTests
         Assert.Equal(2, walk.RowsVisited);
         Assert.Contains("Stopped after 2 rows", walk.Reason);
         Assert.Equal(1, tree.Downs);
+    }
+
+    [Fact]
+    public async Task TheRowAtTheLimitIsStillChecked()
+    {
+        var find = await PathWalker.Find(SpaceParts(), "Date", "Date", "Table", maxRows: 6);
+        var findRow = await PathWalker.FindRow(SpaceParts(), "Tables", maxRows: 4);
+
+        Assert.True(find.Found);
+        Assert.True(findRow.Found);
+        Assert.Equal(4, findRow.RowsVisited);
     }
 }
