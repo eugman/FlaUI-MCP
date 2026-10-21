@@ -186,35 +186,19 @@ public static partial class RunExecutor
         {
             RecordFailure(manifest, ex);
             manifest.Tests.Add(new(recipe.Id, "failed", timer.ElapsedMilliseconds, recipe.DocsPage));
-            if (handle != null)
-            {
-                try
-                {
-                    await Invoke(
-                        "windows_screenshot",
-                        new
-                        {
-                            handle,
-                            savePath = Path.Combine(output, "failure.png"),
-                            includeImage = false,
-                            background = true,
-                        }
-                    );
-                }
-                catch { }
-
-                try
-                {
-                    await Invoke("windows_find", new { handle, maxResults = 200 });
-                }
-                catch { }
-            }
-
-            try
-            {
-                WriteWindowList(Path.Combine(output, "failure-windows.json"), manifest.ProcessId);
-            }
-            catch { }
+            await CaptureFailure(
+                (tool, args) =>
+                    RunJournal.Tool(
+                        journal,
+                        tool,
+                        args,
+                        () => host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args))
+                    ),
+                host == null ? null : handle,
+                output,
+                manifest
+            );
+            WriteWindowListNoted(Path.Combine(output, "failure-windows.json"), manifest);
         }
         finally
         {

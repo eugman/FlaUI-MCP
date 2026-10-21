@@ -32,6 +32,9 @@ public class RunManifest
     public string? Error { get; set; }
     public string? CurrentStep { get; set; }
     public string? ErrorDetails { get; set; }
+
+    /// <summary>Why a failure capture (failure.png, windows_find, failure-windows.json) is missing, one line each.</summary>
+    public List<string> DiagnosticNotes { get; set; } = [];
     public List<TestResult> Tests { get; set; } = [];
     public Dictionary<string, string> Screenshots { get; set; } = [];
     public Dictionary<string, string> ScreenshotHashes { get; set; } = [];
