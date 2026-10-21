@@ -1,39 +1,49 @@
 /// <summary>
-/// Where an object walk is in the filtered tree: the table the rows belong to, and which folders of the requested
-/// display folder path it is inside under the requested table. The search filter shows every ancestor of a match, so
-/// the walk passes the table row, then each folder row of the path, then the rows inside the folder.
+/// Where an object walk is in the filtered tree, placed by each row's depth (<see cref="TomRows"/>): the top-level
+/// group (depth 1: Tables, Roles, ...), the table the rows belong to, and which folders of the requested display folder
+/// path the walk is inside. A row at or above a folder's depth has left that folder.
 /// </summary>
 /// <remarks>
-/// Depth comes from each row's left edge, which TOM Explorer indents under its parent: a row at or left of a matched
-/// folder's edge has left that folder. Whether rows are indented at all is decided by the first row under the table;
-/// when it is not to the right of the table row (or an edge is unknown), placement is checked by row order only, and
-/// a miss says so.
+/// Only a table row under Tables is a table: the search also matches role table permissions under Roles, which sit at
+/// depth 3 like a folder. With a folder requested, a row whose depth could not be read is never placed inside it.
 /// </remarks>
 internal sealed class WalkPlace(string table, string? folder)
 {
+    public const string TablesGroup = "Tables";
+
     // Rows of these types are objects, not display folders, even when one shares a folder's name.
-    private static readonly string[] NotFolders = ["Hierarchy", "Level", "Partition", "Relationship"];
+    private static readonly string[] NotFolders =
+    [
+        "Hierarchy",
+        "Level",
+        "Partition",
+        "Relationship",
+        "TablePermission",
+    ];
 
     private readonly string[] segments = (folder ?? "").Split(
         '\\',
         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
     );
 
-    // The folders the walk is inside under the table, innermost on top: each one's left edge, and whether it is the
-    // next folder of the path (an unmatched folder between path folders means the path does not continue there).
-    private readonly Stack<(double Left, bool OnPath)> inside = new();
+    // The folders the walk is inside under the table, innermost on top: each one's depth, and whether it is the next
+    // folder of the path (an unmatched folder between path folders means the path does not continue there).
+    private readonly Stack<(int Depth, bool OnPath)> inside = new();
     private int matched;
-    private double? tableLeft;
-    private bool? indented;
+    private string? group;
     private bool seenFolder;
+    private bool placed = true;
 
-    /// <summary>The table the current row belongs to, or null before the first table row.</summary>
+    /// <summary>The table the current row belongs to, or null before the first table row or outside Tables.</summary>
     public string? Table { get; private set; }
 
-    /// <summary>True when no folder was asked for, or the walk is inside every folder of the path.</summary>
-    public bool InFolder => matched == segments.Length;
+    /// <summary>True when no folder was asked for, or the current row is inside every folder of the path.</summary>
+    public bool InFolder => !HasFolder || (matched == segments.Length && placed);
 
     public bool HasFolder => segments.Length > 0;
+
+    /// <summary>A top-level group other than Tables, whose subtree a table, column or measure walk skips.</summary>
+    public static bool SkipsGroup(RowObservation row) => row.Depth == 1 && row.Value != TablesGroup;
 
     /// <summary>
     /// Moves the walk onto <paramref name="row"/>. Returns why the object cannot be further on when a folder was asked
@@ -41,12 +51,11 @@ internal sealed class WalkPlace(string table, string? folder)
     /// </summary>
     public string? Enter(RowObservation row)
     {
-        if (PathWalker.IsTable(row.Type))
+        if (row.Depth == 1 || (PathWalker.IsTable(row.Type) && InTables))
         {
             var left = HasFolder && Table == table ? LeftTable() : null;
-            Table = row.Value;
-            tableLeft = row.Left;
-            indented = null;
+            group = row.Depth == 1 ? row.Value : group;
+            Table = row.Depth == 1 ? null : row.Value;
             inside.Clear();
             matched = 0;
             return left;
@@ -60,51 +69,48 @@ internal sealed class WalkPlace(string table, string? folder)
         return null;
     }
 
+    private bool InTables => group is null or TablesGroup;
+
     private void Track(RowObservation row)
     {
-        indented ??= tableLeft is { } t && row.Left is { } l ? l > t : false;
-        while (indented == true && inside.Count > 0 && row.Left <= inside.Peek().Left)
+        placed = row.Depth != null;
+        while (inside.Count > 0 && row.Depth <= inside.Peek().Depth)
         {
             matched -= inside.Pop().OnPath ? 1 : 0;
         }
 
-        if (!IsFolder(row))
+        if (row.Depth is not { } depth || !IsFolder(row))
         {
             return;
         }
 
-        var continues = !InFolder && (inside.Count == 0 || inside.Peek().OnPath);
-        if (continues && row.Value == segments[matched])
-        {
-            inside.Push((row.Left ?? 0, true));
-            matched++;
-            seenFolder = true;
-        }
-        else if (indented == true)
-        {
-            inside.Push((row.Left ?? 0, false));
-        }
+        var continues = matched < segments.Length && (inside.Count == 0 || inside.Peek().OnPath);
+        var onPath = continues && row.Value == segments[matched];
+        inside.Push((depth, onPath));
+        matched += onPath ? 1 : 0;
+        seenFolder |= onPath;
     }
 
     /// <summary>The object was found under the table, but not inside the folder path.</summary>
     public string OutsideFolder(string objectName) =>
-        $"Found '{objectName}' under table '{table}', but not inside display folder '{folder}': it is in another "
-        + "folder or none. Object names are unique in a table, so the walk stopped there."
-        + OrderOnly();
+        placed
+            ? $"Found '{objectName}' under table '{table}', but not inside display folder '{folder}': it is in another "
+                + "folder or none. Object names are unique in a table, so the walk stopped there."
+            : $"Found '{objectName}' under table '{table}', but its row's depth could not be read, so whether it is "
+                + $"inside display folder '{folder}' is not known.";
 
     private string LeftTable() =>
-        (
-            seenFolder
-                ? $"Walked through display folder '{folder}' under table '{table}' without finding the object."
-                : $"Walked through table '{table}' and found no display folder '{folder}' under it for this search."
-        ) + OrderOnly();
-
-    private string OrderOnly() =>
-        indented == true ? "" : " Placement was checked by row order only: the tree did not show its indentation.";
+        seenFolder
+            ? $"Walked through display folder '{folder}' under table '{table}' without finding the object."
+            : $"Walked through table '{table}' and found no display folder '{folder}' under it for this search.";
 
     private static bool IsFolder(RowObservation row) =>
         row.Type is { } type
-        && !Te3Page.ObjectTypeMatches("Column", type)
-        && !Te3Page.ObjectTypeMatches("Measure", type)
+        && !IsObject(type)
         && !NotFolders.Contains(type.Replace(" ", "", StringComparison.Ordinal));
+
+    private static bool IsObject(string type) =>
+        Te3Page.ObjectTypeMatches("Column", type)
+        || Te3Page.ObjectTypeMatches("Measure", type)
+        || Te3Page.ObjectTypeMatches("Table", type);
 }

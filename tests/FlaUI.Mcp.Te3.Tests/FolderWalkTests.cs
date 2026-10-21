@@ -1,88 +1,194 @@
 using Xunit;
 
-/// <summary>te3_navigate object with a display folder: the walk over a scripted tree; no desktop access.</summary>
+/// <summary>
+/// te3_navigate object over the filtered tree, placed by row depth (TomRows); no desktop access. The live tree is
+/// SpaceParts searched for "Brand" on TE3 3.27.1 (2026-10-21): the search also matches role table permissions, which
+/// sit under Roles before Tables.
+/// </summary>
 public sealed class FolderWalkTests
 {
-    // SpaceParts filtered by "Brand": Brands[Brand] sits in display folder "1. Brand Hierarchy" (UI-MAP), and another
-    // table has a same-named column outside any folder.
-    private static FakeTree BrandFolders() =>
+    private static RowObservation At(int depth, string value, string? type) => new(value, type, depth);
+
+    // The order TE3 showed: Roles first (with each role's Brands table permission at depth 3, like a folder), then
+    // Tables > Brands > 1. Brand Hierarchy > Brand (Node50, depth 4), then another table's Brand column.
+    private static FakeTree LiveBrandSearch() =>
         new(
-            new("Tables", "Tables"),
-            new("Brands", "Table"),
-            new("Brand Hierarchy", "Hierarchy"),
-            new("Brand", "Level"),
-            new("1. Brand Hierarchy", "Display Folder"),
-            new("Brand", "Data Column"),
-            new("Sub Brand", "Data Column"),
-            new("Products", "Table"),
-            new("Brand", "Data Column")
+            At(0, "SpaceParts", "Model"),
+            At(1, "Roles", null),
+            At(2, "Brand VPs", "Role"),
+            At(3, "Brands", "Table Permission"),
+            At(2, "Business Line Leaders", "Role"),
+            At(3, "Brands", "Table Permission"),
+            At(1, "Tables", null),
+            At(2, "Brands", "Table"),
+            At(3, "1. Brand Hierarchy", "Folder"),
+            At(4, "Brand", "Column"),
+            At(3, "Brand Hierarchy", "Hierarchy"),
+            At(4, "Brand", "Level"),
+            At(2, "Products", "Table"),
+            At(3, "Brand", "Column")
         );
 
     [Fact]
-    public async Task WithAFolderTheWalkPassesTheTableThenTheFolderThenFindsTheObjectInIt()
+    public async Task TheLiveWalkWithTheFolderSkipsRolesAndFindsTheColumnInTheFolder()
     {
-        var walk = await PathWalker.Find(BrandFolders(), "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
+        // Live, the walk spent its 18 s inside Roles and stopped on Table Permission "Brands".
+        var tree = LiveBrandSearch();
 
-        Assert.True(walk.Found);
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
+
+        Assert.True(walk.Found, walk.Reason);
         Assert.Equal("Brands", walk.Table);
-        Assert.Equal(6, walk.RowsVisited);
+        Assert.Equal(["Roles"], tree.Collapsed);
+        Assert.Equal(5, tree.Downs);
     }
 
     [Fact]
-    public async Task AnObjectOutsideTheRequestedFolderIsNotTakenForIt()
+    public async Task TheLiveWalkWithoutTheFolderFindsTheSameColumn()
+    {
+        // Live, the walk reached Node50 but reported "unknown type / table none".
+        var walk = await PathWalker.Find(LiveBrandSearch(), "Brands", "Brand", "Column");
+
+        Assert.True(walk.Found, walk.Reason);
+        Assert.Equal("Brands", walk.Table);
+    }
+
+    [Fact]
+    public async Task ATablePermissionIsNeverTakenForTheTable()
+    {
+        var tree = new FakeTree(At(1, "Roles", null), At(2, "Brand VPs", "Role"), At(3, "Brands", "Table"));
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brands", "Table");
+
+        Assert.False(walk.Found);
+    }
+
+    [Fact]
+    public async Task OnlyGroupsOtherThanTablesAreCollapsed()
+    {
+        var tree = LiveBrandSearch();
+
+        await PathWalker.Find(tree, "Products", "Brand", "Column");
+
+        Assert.Equal(["Roles"], tree.Collapsed);
+    }
+
+    [Fact]
+    public async Task AnObjectInASiblingFolderIsNotTakenAsInsideTheRequestedOne()
     {
         var tree = new FakeTree(
-            new("Brands", "Table"),
-            new("Brand", "Data Column"),
-            new("1. Brand Hierarchy", "Display Folder"),
-            new("Sub Brand", "Data Column")
+            At(1, "Tables", null),
+            At(2, "Brands", "Table"),
+            At(3, "1. Brand Hierarchy", "Folder"),
+            At(4, "Sub Brand", "Column"),
+            At(3, "2. Other", "Folder"),
+            At(4, "Brand", "Column")
         );
 
         var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
 
         Assert.False(walk.Found);
         Assert.Contains("not inside display folder '1. Brand Hierarchy'", walk.Reason);
-        Assert.Equal(1, tree.Downs);
+    }
+
+    [Fact]
+    public async Task AnObjectBackUnderTheTableAfterTheFolderIsNotInIt()
+    {
+        var tree = new FakeTree(
+            At(2, "Brands", "Table"),
+            At(3, "1. Brand Hierarchy", "Folder"),
+            At(4, "Sub Brand", "Column"),
+            At(3, "Brand", "Column")
+        );
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
+
+        Assert.False(walk.Found);
+    }
+
+    [Fact]
+    public async Task ANestedFolderIsMatchedOneLevelAtATime()
+    {
+        var tree = new FakeTree(
+            At(2, "Sales", "Table"),
+            At(3, "Automation", "Folder"),
+            At(4, "Other", "Folder"),
+            At(5, "Gross", "Measure"),
+            At(4, "Verified", "Folder"),
+            At(5, "Net", "Measure")
+        );
+
+        var walk = await PathWalker.Find(tree, "Sales", "Net", "Measure", folder: @"Automation\Verified");
+
+        Assert.True(walk.Found, walk.Reason);
+    }
+
+    [Fact]
+    public async Task ASubfolderOfAnotherFolderWithTheRightNameIsNotThePath()
+    {
+        // Automation\Other\Verified is not Automation\Verified.
+        var tree = new FakeTree(
+            At(2, "Sales", "Table"),
+            At(3, "Automation", "Folder"),
+            At(4, "Other", "Folder"),
+            At(5, "Verified", "Folder"),
+            At(6, "Net", "Measure")
+        );
+
+        var walk = await PathWalker.Find(tree, "Sales", "Net", "Measure", folder: @"Automation\Verified");
+
+        Assert.False(walk.Found);
     }
 
     [Fact]
     public async Task AWalkThatLeavesTheTableWithoutTheFolderStopsThereAndSaysSo()
     {
-        // Without a folder the walk would go on through Products to the end of the tree or the clock.
-        var tree = BrandFolders();
+        var tree = LiveBrandSearch();
 
         var walk = await PathWalker.Find(tree, "Brands", "Brand Key", "Column", folder: "2. Other");
 
         Assert.False(walk.Found);
         Assert.Contains("no display folder '2. Other'", walk.Reason);
-        Assert.Equal(8, walk.RowsVisited);
-        Assert.Equal(7, tree.Downs);
     }
 
     [Fact]
     public async Task TheObjectFoundInAnotherFolderEndsTheWalk()
     {
-        // Object names are unique in a table, and a row's folders come before it in tree order.
-        var tree = BrandFolders();
-
-        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "2. Other");
+        var walk = await PathWalker.Find(LiveBrandSearch(), "Brands", "Brand", "Column", folder: "2. Other");
 
         Assert.False(walk.Found);
         Assert.Contains("not inside display folder '2. Other'", walk.Reason);
-        Assert.Equal(5, tree.Downs);
     }
 
     [Fact]
     public async Task AFolderRowNamedLikeAHierarchyIsNotTakenForTheFolder()
     {
+        var walk = await PathWalker.Find(LiveBrandSearch(), "Brands", "Brand", "Column", folder: "Brand Hierarchy");
+
+        Assert.False(walk.Found);
+    }
+
+    [Fact]
+    public async Task ARowWhoseDepthCouldNotBeReadIsNotPlacedInTheFolder()
+    {
         var tree = new FakeTree(
-            new("Brands", "Table"),
-            new("Brand Hierarchy", "Hierarchy"),
-            new("Brand", "Level"),
-            new("Brand", "Data Column")
+            At(2, "Brands", "Table"),
+            At(3, "1. Brand Hierarchy", "Folder"),
+            new("Brand", "Column")
         );
 
-        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "Brand Hierarchy");
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
+
+        Assert.False(walk.Found);
+        Assert.Contains("depth", walk.Reason);
+    }
+
+    [Fact]
+    public async Task ARowWithNoTypeIsNeverTakenForTheFolder()
+    {
+        var tree = new FakeTree(At(2, "Brands", "Table"), At(3, "1. Brand Hierarchy", null), At(4, "Brand", "Column"));
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
 
         Assert.False(walk.Found);
     }
@@ -90,42 +196,8 @@ public sealed class FolderWalkTests
     [Fact]
     public async Task AFolderForATableIsRefused() =>
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            PathWalker.Find(BrandFolders(), "Brands", "Brands", "Table", folder: "1. Brand Hierarchy")
+            PathWalker.Find(LiveBrandSearch(), "Brands", "Brands", "Table", folder: "1. Brand Hierarchy")
         );
-
-    [Fact]
-    public async Task ANestedFolderIsMatchedOneLevelAtATime()
-    {
-        var tree = new FakeTree(
-            new("Sales", "Table"),
-            new("Totals", "Display Folder"),
-            new("Gross", "Measure"),
-            new("Automation", "Display Folder"),
-            new("Verified", "Display Folder"),
-            new("Net", "Measure")
-        );
-
-        var walk = await PathWalker.Find(tree, "Sales", "Net", "Measure", folder: @"Automation\Verified");
-
-        Assert.True(walk.Found);
-        Assert.Equal(6, walk.RowsVisited);
-    }
-
-    [Fact]
-    public async Task AFolderRowIsMatchedOnlyUnderTheRequestedTable()
-    {
-        var tree = new FakeTree(
-            new("Products", "Table"),
-            new("1. Brand Hierarchy", "Display Folder"),
-            new("Brands", "Table"),
-            new("Brand", "Data Column")
-        );
-
-        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
-
-        Assert.False(walk.Found);
-        Assert.Contains("not inside display folder", walk.Reason);
-    }
 
     [Fact]
     public async Task TheRowAfterAParentIsReadOrTheSlowMoveIsSaid()
@@ -146,101 +218,5 @@ public sealed class FolderWalkTests
             new RowObservation("Date", "Calculated Table"),
             await PathWalker.RowAfter(next, new("Sales", "Table"))
         );
-    }
-
-    // Rows with their left edge: TOM Explorer indents a child under its parent.
-    private static RowObservation At(double left, string value, string type) => new(value, type, left);
-
-    [Fact]
-    public async Task AnObjectInASiblingFolderIsNotTakenAsInsideTheRequestedOne()
-    {
-        // Leaving "1. Brand Hierarchy" for its sibling "2. Other" did not end the folder, so Brand in "2. Other" was
-        // reported inside "1. Brand Hierarchy".
-        var tree = new FakeTree(
-            At(20, "Brands", "Table"),
-            At(40, "1. Brand Hierarchy", "Display Folder"),
-            At(60, "Sub Brand", "Data Column"),
-            At(40, "2. Other", "Display Folder"),
-            At(60, "Brand", "Data Column")
-        );
-
-        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
-
-        Assert.False(walk.Found);
-        Assert.Contains("not inside display folder '1. Brand Hierarchy'", walk.Reason);
-    }
-
-    [Fact]
-    public async Task AnObjectBackUnderTheTableAfterTheFolderIsNotInIt()
-    {
-        var tree = new FakeTree(
-            At(20, "Brands", "Table"),
-            At(40, "1. Brand Hierarchy", "Display Folder"),
-            At(60, "Sub Brand", "Data Column"),
-            At(40, "Brand", "Data Column")
-        );
-
-        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
-
-        Assert.False(walk.Found);
-    }
-
-    [Fact]
-    public async Task WithIndentationAnObjectDeepInTheFolderIsFound()
-    {
-        var tree = new FakeTree(
-            At(20, "Sales", "Table"),
-            At(40, "Automation", "Display Folder"),
-            At(60, "Other", "Display Folder"),
-            At(80, "Gross", "Measure"),
-            At(60, "Verified", "Display Folder"),
-            At(80, "Net", "Measure")
-        );
-
-        var walk = await PathWalker.Find(tree, "Sales", "Net", "Measure", folder: @"Automation\Verified");
-
-        Assert.True(walk.Found);
-    }
-
-    [Fact]
-    public async Task ASubfolderOfAnotherFolderWithTheRightNameIsNotThePath()
-    {
-        // Automation\Other\Verified is not Automation\Verified.
-        var tree = new FakeTree(
-            At(20, "Sales", "Table"),
-            At(40, "Automation", "Display Folder"),
-            At(60, "Other", "Display Folder"),
-            At(80, "Verified", "Display Folder"),
-            At(100, "Net", "Measure")
-        );
-
-        var walk = await PathWalker.Find(tree, "Sales", "Net", "Measure", folder: @"Automation\Verified");
-
-        Assert.False(walk.Found);
-    }
-
-    [Fact]
-    public async Task WithoutIndentationPlacementIsCheckedByRowOrderAndTheReasonSaysSo()
-    {
-        var tree = new FakeTree(
-            At(20, "Brands", "Table"),
-            At(20, "Brand", "Data Column"),
-            At(20, "1. Brand Hierarchy", "Display Folder")
-        );
-
-        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
-
-        Assert.False(walk.Found);
-        Assert.Contains("row order only", walk.Reason);
-    }
-
-    [Fact]
-    public async Task ARowWithNoTypeIsNeverTakenForTheFolder()
-    {
-        var tree = new FakeTree(new("Brands", "Table"), new("1. Brand Hierarchy", null), new("Brand", "Data Column"));
-
-        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", folder: "1. Brand Hierarchy");
-
-        Assert.False(walk.Found);
     }
 }

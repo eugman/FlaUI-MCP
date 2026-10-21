@@ -106,6 +106,13 @@ public static class Te3StatusBar
     }
 
     /// <summary>
+    /// The selection slot, whatever the rest of the bar shows: the last slot shaped like a selection,
+    /// <c>Type "Name"</c>. The object walk reads it even when a blank load panel leaves the bar unrecognized.
+    /// </summary>
+    public static string? SelectionSlot(IEnumerable<string> slots) =>
+        slots.LastOrDefault(slot => TomSelection.SelectionType(slot) != null);
+
+    /// <summary>
     /// The analyzer summary Button. On 3.26.3 it is the only Button and its label is the count itself ("7257 BP
     /// issues", or "Item" with nothing to count). 3.27.1 adds an "MCP Stopped" Button, so with more than one Button the
     /// summary is the one shaped like a count of BP issues; none or several such is no summary, not a guess.

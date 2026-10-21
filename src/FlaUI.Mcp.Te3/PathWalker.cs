@@ -1,8 +1,8 @@
 /// <summary>What the TOM Explorer shows for the selected row: its text and the status bar's object type.</summary>
 /// <param name="Value">The selected tree row's text, e.g. "Date".</param>
 /// <param name="Type">The status bar's type for the selection, e.g. "Calculated Table", or null.</param>
-/// <param name="Left">The row's left edge in screen pixels, which TOM Explorer indents by depth, or null.</param>
-public sealed record RowObservation(string? Value, string? Type, double? Left = null);
+/// <param name="Depth">The row's depth in the tree (model root 0, Tables 1, a table 2), or null when unread.</param>
+public sealed record RowObservation(string? Value, string? Type, int? Depth = null);
 
 /// <summary>The keyboard view of TOM Explorer that <see cref="PathWalker"/> drives.</summary>
 public interface ITreeCursor
@@ -21,6 +21,9 @@ public interface ITreeCursor
     /// moved and the end of the tree is not proven.
     /// </summary>
     bool Stalled => false;
+
+    /// <summary>Press Left on the selected row to collapse it; false when it could not be shown to have collapsed.</summary>
+    Task<bool> Collapse() => Task.FromResult(false);
 }
 
 /// <summary>Where a walk ended: the table the object was found under, or why it was not found.</summary>
@@ -76,6 +79,8 @@ public static class PathWalker
                 break;
             }
 
+            await SkipGroup(cursor, row);
+
             // Stop on our own before Core's fixed tool deadline cancels a key press part-way.
             if (outOfTime?.Invoke() == true)
             {
@@ -99,6 +104,15 @@ public static class PathWalker
         }
 
         return new(false, null, maxRows, $"Stopped after {maxRows} rows.");
+    }
+
+    // Roles, Perspectives and the other groups hold no table, column or measure the walk could want.
+    private static async Task SkipGroup(ITreeCursor cursor, RowObservation row)
+    {
+        if (WalkPlace.SkipsGroup(row))
+        {
+            await cursor.Collapse();
+        }
     }
 
     // The walk ends on this row: it is the object, it is the object outside the folder, or it leaves the table.
@@ -204,14 +218,32 @@ public static class PathWalker
 
     internal static bool IsTable(string? type) => Te3Page.ObjectTypeMatches("Table", type);
 
+    /// <summary>
+    /// The selection is the requested object: its row (or Properties, when the row's type was not read) has the name
+    /// and type, the walk reached it through the requested table, and Properties, when shown, names the same object.
+    /// </summary>
+    /// <param name="propertiesName">Properties' Name for the selection, or null when it was not read.</param>
+    /// <param name="propertiesType">Properties' ObjectType for the selection, or null when it was not read.</param>
+    internal static bool Arrived(
+        RowObservation row,
+        string? propertiesName,
+        string? propertiesType,
+        string? walkedTable,
+        string table,
+        string objectName,
+        string objectType
+    )
+    {
+        var typed = row with { Type = row.Type ?? propertiesType };
+        return Matches(typed, walkedTable, table, objectName, objectType)
+            && (propertiesName == null || propertiesName == objectName);
+    }
+
     internal static bool Matches(
         RowObservation row,
         string? currentTable,
         string table,
         string objectName,
         string objectType
-    ) =>
-        row.Value == objectName
-        && Te3Page.ObjectTypeMatches(objectType, row.Type)
-        && (objectType == "Table" ? row.Value == table : currentTable == table);
+    ) => row.Value == objectName && Te3Page.ObjectTypeMatches(objectType, row.Type) && currentTable == table;
 }

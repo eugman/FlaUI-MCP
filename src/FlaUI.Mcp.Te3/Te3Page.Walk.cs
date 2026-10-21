@@ -59,6 +59,12 @@ public sealed partial class Te3Page
             outOfTime: WalkClock.OutOfTime(elapsed),
             folder: folder
         );
+        // A walk that stopped on the object itself (its type unread, or the clock) is not a miss.
+        if (!walk.Found && await SelectionIsTarget(cursor, walk.Table, table, objectName, objectType))
+        {
+            walk = walk with { Found = true, Table = table };
+        }
+
         if (!walk.Found)
         {
             await ClearTomSearchTyped();
@@ -73,7 +79,7 @@ public sealed partial class Te3Page
         await ClearTomSearchTyped();
         // Clearing the filter keeps the selection; check it really did before reporting arrival.
         var after = await cursor.Current();
-        if (!PathWalker.Matches(after, walk.Table, table, objectName, objectType))
+        if (!await SelectionIsTarget(cursor, walk.Table, table, objectName, objectType))
         {
             throw new InvalidOperationException(
                 $"Selection moved when the search was cleared: now '{after.Value}' ({after.Type ?? "unknown type"})."
@@ -81,6 +87,20 @@ public sealed partial class Te3Page
         }
 
         lastWalk = walk;
+    }
+
+    // The selected row against the request, with Properties' Name and ObjectType read for it.
+    private async Task<bool> SelectionIsTarget(
+        TomCursor cursor,
+        string? walkedTable,
+        string table,
+        string objectName,
+        string objectType
+    )
+    {
+        var row = await cursor.Current();
+        var (name, type) = await Task.Run(() => (PropertiesValue("Name"), PropertiesValue("ObjectType")));
+        return PathWalker.Arrived(row, name, type, walkedTable, table, objectName, objectType);
     }
 
     /// <summary>Types into the TOM Explorer search box; setting its value does not apply TE3's filter.</summary>
@@ -109,7 +129,7 @@ public sealed partial class Te3Page
     /// </summary>
     private sealed class TomCursor(Te3Page page) : ITreeCursor
     {
-        public async Task<RowObservation> Current() => (await page.ObserveSelection()).Row;
+        public async Task<RowObservation> Current() => await page.Typed((await page.ObserveSelection()).Row);
 
         public bool Stalled { get; private set; }
 
@@ -118,6 +138,18 @@ public sealed partial class Te3Page
             var (row, rowBelow) = await Move("Down");
             Stalled = row == null && rowBelow;
             return row;
+        }
+
+        /// <summary>
+        /// Press Left on the selected row, which collapses it when it is expanded. True once the selection read back
+        /// unchanged: Left on a collapsed row would move to its parent instead, and then nothing is assumed.
+        /// </summary>
+        public async Task<bool> Collapse()
+        {
+            var before = await page.ObserveSelection();
+            await page.Keys("Left", TomExplorerTarget());
+            await Task.Delay(WalkClock.CollapseSettleMs);
+            return (await page.ObserveSelection()).Row == before.Row;
         }
 
         /// <summary>Press Up and return the row above once it has settled; null at the top.</summary>
@@ -134,7 +166,7 @@ public sealed partial class Te3Page
                 WalkClock.Start(),
                 ms => Task.Delay(ms)
             );
-            return (moved?.Row, rowBelow);
+            return (moved == null ? null : await page.Typed(moved.Row), rowBelow);
         }
     }
 
@@ -144,27 +176,58 @@ public sealed partial class Te3Page
     private async Task<SelectionSnapshot> ObserveSelection() => (await ReadSelection()).Snapshot;
 
     // The selection, and whether any realized row lies below it (kept out of the snapshot, which detects movement).
+    // One read of the tree gives the selected TreeItem and its DataItem, whose indent is the row's depth; the status
+    // bar's selection slot gives the type when it names this row (a selected display folder leaves the bar on the
+    // previous object; Typed then reads Properties).
     private async Task<(SelectionSnapshot Snapshot, bool RowBelow)> ReadSelection()
     {
         var tree = TomExplorerTarget();
         var rows = await Task.Run(() =>
                 query.Find(
                     handle,
-                    new(ControlType: "TreeItem"),
+                    new(),
                     tree.Selector,
-                    maxResults: 200,
+                    maxResults: 450,
                     register: false,
                     includeBounds: true,
                     budget: new SearchBudget(3000, TimeSpan.FromSeconds(3))
                 )
             )
             .WaitAsync(TimeSpan.FromSeconds(5));
-        var selected = rows.Elements.FirstOrDefault(r => r.Selected == true);
-        var bar = await Task.Run(() => ObserveModelState().Selection);
-        var below = TomSelection.RowShownBelow(rows.Elements.Select(r => r.Bounds?.Y), selected?.Bounds?.Y);
-        return (
-            new(TomSelection.ObservedRow(selected?.Value, bar, selected?.Bounds?.X), bar, selected?.Bounds?.Y),
-            below
+        var (selected, depth) = TomRows.Selected(rows.Elements);
+        var bar = await Task.Run(() => Te3StatusBar.SelectionSlot(ObserveModelState().Slots));
+        var value = selected?.Value ?? TomSelection.SelectionName(bar);
+        var type = TomRows.Type(value, bar, () => null);
+        var below = TomSelection.RowShownBelow(
+            rows.Elements.Where(r => r.ControlType == "TreeItem").Select(r => r.Bounds?.Y),
+            selected?.Bounds?.Y
         );
+        return (new(new RowObservation(value, type, depth), bar, selected?.Bounds?.Y), below);
+    }
+
+    // The row with its type from Properties' ObjectType when the status bar did not name it: read once per settled row,
+    // not on every poll while a move settles.
+    private async Task<RowObservation> Typed(RowObservation row) =>
+        row.Type != null ? row : row with { Type = await Task.Run(() => PropertiesValue("ObjectType")) };
+
+    /// <summary>A value the Properties pane shows for the selection (a DataItem named after the property), or null.</summary>
+    private string? PropertiesValue(string property)
+    {
+        try
+        {
+            var found = query.Find(
+                handle,
+                new(Name: property, ControlType: "DataItem"),
+                new(AutomationId: "propertyGrid"),
+                maxResults: 2,
+                register: false,
+                budget: new SearchBudget(1500, TimeSpan.FromSeconds(2))
+            );
+            return found.Elements.Count == 1 ? found.Elements[0].Value : null;
+        }
+        catch (ElementNotFoundException)
+        {
+            return null;
+        }
     }
 }

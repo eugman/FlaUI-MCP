@@ -15,6 +15,9 @@ internal static class WalkClock
 
     private const int PollMs = 60;
 
+    /// <summary>How long a Left that collapses a group is given before the selection is read back.</summary>
+    public const int CollapseSettleMs = 200;
+
     /// <summary>A clock started now.</summary>
     public static Func<TimeSpan> Start()
     {
