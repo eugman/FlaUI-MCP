@@ -64,6 +64,23 @@ internal static class LayoutSteps
         }
     }
 
+    /// <summary>Runs one call with its own tally and turns its failure into the reply.</summary>
+    public static async Task<McpToolResult> Respond(string tool, Func<InputTally, Task<McpToolResult>> run)
+    {
+        var inputs = new InputTally();
+        try
+        {
+            return await run(inputs);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or TimeoutException)
+        {
+            return Failure(tool, ex, inputs.Sent);
+        }
+    }
+
+    public static McpToolResult Failure(string tool, Exception ex, int inputsSent) =>
+        new() { Content = [new() { Type = "text", Text = Describe(tool, ex, inputsSent) }], IsError = true };
+
     /// <summary>The failure as JSON: the error, whether any input went out, and the steps completed before it.</summary>
     public static string Describe(string tool, Exception ex, int inputsSent)
     {

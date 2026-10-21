@@ -197,4 +197,46 @@ public sealed class Te3LayoutTests
         Assert.Equal(dispatched, reply.GetProperty("actionDispatched").GetBoolean());
         Assert.Equal(inputsSent, reply.GetProperty("inputsSent").GetInt32());
     }
+
+    [Fact]
+    public async Task ACancelledLayoutCallStillSaysWhatItSent()
+    {
+        var result = await Te3Layout.Respond(async inputs =>
+        {
+            await inputs.Invoke(Click("Clicked Close"), tool: "windows_click");
+            throw new OperationCanceledException("stopped");
+        });
+
+        var reply = System.Text.Json.JsonDocument.Parse(result.Content[0].Text!).RootElement;
+        Assert.True(result.IsError);
+        Assert.True(reply.GetProperty("actionDispatched").GetBoolean());
+        Assert.Equal(1, reply.GetProperty("inputsSent").GetInt32());
+    }
+
+    [Fact]
+    public async Task EachLayoutCallCountsOnlyItsOwnInputs()
+    {
+        var first = new TaskCompletionSource();
+        var slow = Te3Layout.Respond(async inputs =>
+        {
+            await inputs.Invoke(Click("Clicked"), tool: "windows_click");
+            await first.Task;
+            throw new InvalidOperationException("Pane is gone");
+        });
+
+        var quick = await Te3Layout.Respond(_ => throw new InvalidOperationException("No TE3 window"));
+        first.SetResult();
+
+        Assert.Equal(
+            0,
+            System.Text.Json.JsonDocument.Parse(quick.Content[0].Text!).RootElement.GetProperty("inputsSent").GetInt32()
+        );
+        Assert.Equal(
+            1,
+            System
+                .Text.Json.JsonDocument.Parse((await slow).Content[0].Text!)
+                .RootElement.GetProperty("inputsSent")
+                .GetInt32()
+        );
+    }
 }
