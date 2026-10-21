@@ -237,7 +237,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         click(point);
     }
 
-    private static Point Drag(InputTarget target, Point from, Point to, int steps)
+    internal static Point Drag(InputTarget target, Point from, Point to, int steps)
     {
         var path = PointerPlan.DragPath(from, to, steps);
         using var input = new GuardedInput(target);

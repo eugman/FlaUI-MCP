@@ -98,7 +98,14 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override nint WindowAt(Point point) => TargetHwnd;
 
-    public override void FocusElement(AutomationElement element) => ElementFocusRequests++;
+    /// <summary>Whether focusing the control gives it keyboard focus.</summary>
+    public bool ElementTakesFocus { get; set; } = true;
+
+    public override void FocusElement(AutomationElement element)
+    {
+        ElementFocusRequests++;
+        KeyboardFocus |= ElementTakesFocus;
+    }
 
     public override bool HasKeyboardFocus(AutomationElement element) => KeyboardFocus;
 
@@ -106,6 +113,23 @@ internal sealed class FakeDesktop : InputDesktop
 
     /// <summary>What PostMessage(WM_CLOSE) returns.</summary>
     public bool PostCloseResult { get; set; } = true;
+
+    /// <summary>The text placed on the clipboard, or null when nothing was.</summary>
+    public string? ClipboardText { get; private set; }
+
+    /// <summary>When true, another window takes the foreground as soon as the clipboard is written.</summary>
+    public bool FocusLostOnClipboardWrite { get; set; }
+
+    public override bool SetClipboardText(string text)
+    {
+        ClipboardText = text;
+        if (FocusLostOnClipboardWrite)
+        {
+            ForegroundWindow = OtherHwnd;
+        }
+
+        return true;
+    }
 
     public int CloseRequests { get; private set; }
 

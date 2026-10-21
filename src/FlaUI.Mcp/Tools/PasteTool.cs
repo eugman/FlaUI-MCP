@@ -97,44 +97,8 @@ public sealed class PasteTool(
                 element,
                 verifyFocus
             );
-            // Clipboard text uses CRLF; edit controls don't break lines on a bare LF.
-            var clipboardText = text.ReplaceLineEndings("\r\n");
-            if (!Win32Desktop.SetClipboardText(clipboardText))
-            {
-                return Task.FromResult(
-                    ErrorResult(
-                        "The clipboard is in use by another process, so nothing was pasted. The target window was "
-                            + "activated before this failed, so the desktop foreground may have changed."
-                    )
-                );
-            }
-            // Read before pasting: "the control contains the text" is not evidence on its own,
-            // because a field that already contained it reads the same either way.
-            var before = ReadValue(element);
-            // Focus as it was when Ctrl+V was dispatched. Reading it afterwards names whatever the
-            // paste moved focus to — an autocomplete popup, say — not where the text went.
-            var dispatchFocus = Win32Desktop.GetFocusedControl();
-            input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
-
             var target = string.IsNullOrEmpty(refId) ? "focused element" : refId;
-            // Ctrl+V is already dispatched. Nothing below may report a failure to paste: a
-            // read-back problem is missing evidence, not an unsent keystroke.
-            string note;
-            try
-            {
-                note =
-                    SendKeysTool.DescribeFocus(dispatchFocus, policy, "focus at dispatch")
-                    + ". The clipboard now holds that text."
-                    + PasteEvidence(element, clipboardText, before);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                note =
-                    $". The clipboard now holds that text. Not verified: reading back after the "
-                    + $"paste failed ({ex.Message}).";
-            }
-
-            return Task.FromResult(TextResult($"Sent Ctrl+V for {clipboardText.Length} characters to {target}{note}"));
+            return Task.FromResult(Paste(input, element, text, target));
         }
         catch (ProviderBlockedException blocked)
         {
@@ -145,6 +109,51 @@ public sealed class PasteTool(
         {
             return Task.FromResult(ErrorResult($"Failed to paste: {ex.Message}"));
         }
+    }
+
+    /// <summary>Put the text on the clipboard, send Ctrl+V through guarded input, and report what arrived.</summary>
+    private McpToolResult Paste(
+        GuardedInput input,
+        FlaUI.Core.AutomationElements.AutomationElement? element,
+        string text,
+        string target
+    )
+    {
+        // Clipboard text uses CRLF; edit controls don't break lines on a bare LF.
+        var clipboardText = text.ReplaceLineEndings("\r\n");
+        if (!InputDesktop.Current.SetClipboardText(clipboardText))
+        {
+            return ErrorResult(
+                "The clipboard is in use by another process, so nothing was pasted. The target window was "
+                    + "activated before this failed, so the desktop foreground may have changed."
+            );
+        }
+        // Read before pasting: "the control contains the text" is not evidence on its own,
+        // because a field that already contained it reads the same either way.
+        var before = ReadValue(element);
+        // Focus as it was when Ctrl+V was dispatched. Reading it afterwards names whatever the
+        // paste moved focus to — an autocomplete popup, say — not where the text went.
+        var dispatchFocus = Win32Desktop.GetFocusedControl();
+        input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
+
+        // Ctrl+V is already dispatched. Nothing below may report a failure to paste: a
+        // read-back problem is missing evidence, not an unsent keystroke.
+        string note;
+        try
+        {
+            note =
+                SendKeysTool.DescribeFocus(dispatchFocus, policy, "focus at dispatch")
+                + ". The clipboard now holds that text."
+                + PasteEvidence(element, clipboardText, before);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            note =
+                $". The clipboard now holds that text. Not verified: reading back after the "
+                + $"paste failed ({ex.Message}).";
+        }
+
+        return TextResult($"Sent Ctrl+V for {clipboardText.Length} characters to {target}{note}");
     }
 
     /// <summary>

@@ -22,7 +22,7 @@ public sealed class GuardedInputBranchTests
     [Fact]
     public void VerifiedFocusIsRefusedWhenTheControlDoesNotHoldKeyboardFocus()
     {
-        var desktop = new FakeDesktop { KeyboardFocus = false };
+        var desktop = new FakeDesktop { KeyboardFocus = false, ElementTakesFocus = false };
         using var installed = desktop.Install();
 
         var error = Assert.Throws<InvalidOperationException>(() =>

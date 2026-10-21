@@ -25,7 +25,8 @@ public enum PatternCallOutcome
 public sealed record PatternCallResult(
     PatternCallOutcome Outcome,
     string? ModalTitle = null,
-    string? PendingPatternId = null
+    string? PendingPatternId = null,
+    bool Dispatched = true
 );
 
 /// <summary>
@@ -96,7 +97,19 @@ public static class ModalAwareInvoker
             TaskScheduler.Default
         );
 
-        var deadline = DateTime.UtcNow + grace;
+        return AwaitResult(task, info, processId, windowsBefore, windowEnumerator, DateTime.UtcNow + grace);
+    }
+
+    /// <summary>Wait for the call until it returns, a modal appears, or the deadline passes.</summary>
+    private static PatternCallResult AwaitResult(
+        Task task,
+        PendingInvokeInfo info,
+        int processId,
+        IReadOnlyDictionary<nint, Win32WindowInfo> windowsBefore,
+        Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
+        DateTime deadline
+    )
+    {
         while (true)
         {
             // WaitAny (unlike Task.Wait) does not throw for faulted tasks,

@@ -40,6 +40,9 @@ internal class InputDesktop
     /// <summary>Posts WM_CLOSE; false when Windows did not accept the message.</summary>
     public virtual bool PostClose(nint hwnd) => Win32Desktop.CloseWindow(hwnd);
 
+    /// <summary>Replaces the clipboard with text; false when another process holds it open.</summary>
+    public virtual bool SetClipboardText(string text) => Win32Desktop.SetClipboardText(text);
+
     /// <summary>Sends one input. The fake records it instead.</summary>
     public virtual void Dispatch(Action input) => input();
 
