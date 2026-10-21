@@ -28,7 +28,7 @@ Run on 2026-10-21 at commit 7fa11b4, concurrency 1, 608 offline tests and no des
 | guards | GuardedInput, ProcessIntegrity, WindowMutation, ClickPoint, InputRefusal | 81.51% | 213 | 3 | 9 | 40 |
 | state | ElementRegistry, PendingInvokeTracker, OperationContext | 86.99% | 126 | 1 | 7 | 12 |
 | protocol | McpServer, McpLineTransport, ToolRegistry | 91.63% | 210 | 9 | 8 | 12 |
-| pointer | ClickTool, MouseTool | 50.27% | 186 | 2 | 11 | 175 |
+| pointer | ClickTool (now with ClickToolReplies), MouseTool | 50.27% | 186 | 2 | 11 | 175 |
 | keyboard | SendKeysTool, TypeTools, BatchTool | 88.03% | 396 | 1 | 17 | 37 |
 
 The first run with only the offline tests scored 77.74%, 73.29%, 72.38%, 24.87% and 62.97% for the same parts. The tests that killed the difference are in `GuardMutationTests`, `StateMutationTests`, `ProtocolMutationTests`, `StrandedCallMutationTests`, `PointerMutationTests`, `KeyboardMutationTests` and `ToolSchemaTests`.
@@ -59,7 +59,7 @@ No test can tell these from the original.
 
 These need a real window, element, process or input device. The integration tests cover them, and mutation testing never runs those.
 
-- `GuardedInput.Click`, `InputTarget.EnsureAliveOnWindows`, `GuardedInput.ForegroundTarget()` and `ClickPoint.Read`: read UI Automation geometry, real window ownership and the real foreground window.
+- `GuardedInput.Click`, `InputTarget.EnsureAliveOnWindows`, `GuardedInput.ForegroundTarget()`, `ClickGeometry.Read` and `ClickGeometry.ScrollIntoView`'s pattern lookup: read UI Automation geometry, real window ownership and the real foreground window. The guarded scroll itself (`ClickGeometry.Scroll`) is tested offline.
 - `ProcessIntegrity.Read` failure paths: need a process whose token cannot be opened.
 - `WindowMutation.Start` after a successful start: would start a process.
 - `ElementRegistry.SetWindowIdentity`, `InputForRef` and the identity check in `ResolveRef`: the identity comes from a real window handle.

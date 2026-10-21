@@ -19,7 +19,7 @@ $parts = [ordered]@{
     guards = 'GuardedInput', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'InputRefusal'
     state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext'
     protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry'
-    pointer = 'ClickTool', 'MouseTool'
+    pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool'
     keyboard = 'SendKeysTool', 'TypeTools', 'BatchTool'
 }
 
