@@ -81,4 +81,4 @@ A product repo that merges this core must check the following.
   - `MouseTool.Drag` is internal.
   - `ClickTool` is a partial class; its replies are in `ClickToolReplies.cs`.
   - The transport calls the new `McpServer.RecordRefusedRequest`.
-- **Offline tests.** A test assembly that drives input tools must install a fake `InputDesktop`, and should set `FLAUI_OFFLINE_TESTS=1` (the core test assembly does this in a module initializer). The real desktop then refuses every change if a test misses the fake.
+- **Offline tests.** `InputDesktop` is internal and visible to `FlaUI.Mcp.Tests`, `FlaUI.Mcp.PowerBi.Tests`, `FlaUI.Mcp.Camtasia.Tests` and `FlaUI.Mcp.Te3.Tests`. A product test assembly that drives input tools must derive a fake from it and install it through `InputDesktop.Override` (see `FakeDesktop` in the core tests), and must set `FLAUI_OFFLINE_TESTS=1` before any test runs, as the core test assembly does in a module initializer. The real desktop then refuses the changes it covers (listed below) if a test misses the fake.

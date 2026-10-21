@@ -38,4 +38,19 @@ public sealed class OfflineDesktopTests
 
         Assert.False(sent);
     }
+
+    [Theory]
+    [InlineData("FlaUI.Mcp.Tests")]
+    [InlineData("FlaUI.Mcp.PowerBi.Tests")]
+    [InlineData("FlaUI.Mcp.Camtasia.Tests")]
+    [InlineData("FlaUI.Mcp.Te3.Tests")]
+    public void ProductTestAssembliesCanInstallAFakeDesktop(string assembly)
+    {
+        var friends = typeof(InputDesktop)
+            .Assembly.GetCustomAttributes(typeof(System.Runtime.CompilerServices.InternalsVisibleToAttribute), false)
+            .Cast<System.Runtime.CompilerServices.InternalsVisibleToAttribute>()
+            .Select(a => a.AssemblyName);
+
+        Assert.Contains(assembly, friends);
+    }
 }
