@@ -42,16 +42,57 @@ public sealed class ServerGrantTests : IDisposable
     [Theory]
     [InlineData("windows_focus")]
     [InlineData("windows_close")]
-    [InlineData("windows_launch")]
-    public async Task WindowToolsThatSkipCoresCheckAreRefusedWithoutTheGrant(string tool)
+    public async Task CoresFocusAndCloseAreRefusedWithoutTheGrant(string tool)
     {
+        // A real window that is never shown, and a fake desktop: Core's own permission check refuses before any
+        // focus or WM_CLOSE, so nothing reaches the desktop, real or fake.
+        using var allowAll = new AutomationHost(ProcessPolicy.AllowAll, includeDesktopTools: true);
+        using var owner = new Te3Interaction(() => 0);
+        Te3McpServer.Install(allowAll, owner);
+        using var form = new HiddenForm();
+        var handle = Te3Layout.Bind(allowAll, form.Handle, Environment.ProcessId);
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+
+        var result = await allowAll.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(new { handle }));
+
+        Assert.True(result.IsError);
+        Assert.Contains(Te3InteractionTool.Begin, result.Content[0].Text);
+        Assert.Equal(0, result.Outcome?.InputsSent);
+        Assert.Equal(0, desktop.FocusRequests + desktop.CloseRequests);
+    }
+
+    [Fact]
+    public async Task CoresLaunchIsRefusedWithoutTheGrant()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+
         var result = await host.Tools.ExecuteToolAsync(
-            tool,
-            JsonSerializer.SerializeToElement(new { handle = "w-none", app = "fla-test-no-such-app.exe" })
+            "windows_launch",
+            JsonSerializer.SerializeToElement(new { app = "TabularEditor3.exe" })
         );
 
         Assert.True(result.IsError);
         Assert.Contains(Te3InteractionTool.Begin, result.Content[0].Text);
+        Assert.Equal(0, desktop.StartRequests);
+    }
+
+    [Theory]
+    [InlineData("windows_focus")]
+    [InlineData("windows_close")]
+    [InlineData("windows_launch")]
+    public void TheServerKeepsCoresOwnWindowTools(string tool)
+    {
+        // Core checks the grant in focus, close and launch itself, and its focus and close watch for a pending
+        // provider; a TE3 wrapper built from the bare tools would lose that.
+        using var plain = new AutomationHost(new ProcessPolicy(["TabularEditor3"]), includeDesktopTools: true);
+        var core = plain.Tools.GetToolDefinitions().Single(t => t.Name == tool);
+
+        var served = host.Tools.GetToolDefinitions().Single(t => t.Name == tool);
+
+        Assert.Equal(core.Description, served.Description);
+        Assert.Equal(core.Annotations, served.Annotations);
     }
 
     [Fact]
