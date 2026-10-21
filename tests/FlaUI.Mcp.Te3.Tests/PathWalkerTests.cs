@@ -190,4 +190,25 @@ public sealed class PathWalkerTests
         Assert.True(walk.Found);
         Assert.Equal(12, walk.RowsVisited);
     }
+
+    [Fact]
+    public async Task HierarchyAndLevelRowsKeepTheirTableInTheProgressText()
+    {
+        // Brands filtered by "Brand": the walk ran out of time on a Level and said "under table 'none'".
+        var tree = new FakeTree(
+            new("Tables", "Tables"),
+            new("Brands", "Table"),
+            new("Brand Hierarchy", "Hierarchy"),
+            new("Brand", "Level"),
+            new("Sub Brand", "Level"),
+            new("Brand", "Data Column")
+        );
+        var checks = 0;
+
+        var walk = await PathWalker.Find(tree, "Brands", "Brand", "Column", outOfTime: () => ++checks > 4);
+
+        Assert.False(walk.Found);
+        Assert.Equal("Brands", walk.Table);
+        Assert.Contains("on 'Sub Brand' (Level) under table 'Brands'", walk.Reason);
+    }
 }

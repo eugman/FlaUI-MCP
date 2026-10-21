@@ -313,6 +313,22 @@ public sealed class CompanionTests
     public void StatusBarSelectionGivesTheObjectType(string? selection, string? expected) =>
         Assert.Equal(expected, Te3Page.SelectionType(selection));
 
+    [Theory]
+    [InlineData("Table \"Brands\"", "Brands")]
+    [InlineData("Level \"Sub Brand\"", "Sub Brand")]
+    [InlineData("Calculated Table Column \"Calenc", null)]
+    [InlineData("(Nothing selected)", null)]
+    [InlineData(null, null)]
+    public void StatusBarSelectionGivesTheObjectNameOnlyWhenWhole(string? selection, string? expected) =>
+        Assert.Equal(expected, Te3Page.SelectionName(selection));
+
+    [Fact]
+    public void ASelectedRowWithoutATreeItemValueTakesItsNameFromTheStatusBar()
+    {
+        Assert.Equal(new RowObservation("Brands", "Table"), Te3Page.ObservedRow(null, "Table \"Brands\""));
+        Assert.Equal(new RowObservation("Brand", "Data Column"), Te3Page.ObservedRow("Brand", "Data Column \"Brand\""));
+    }
+
     [Fact]
     public void ColumnArrivalAccepted() =>
         Te3Page.VerifyArrival("Sales", "Amount", "Column", new("Amount", "Data Column"), "Sales");
