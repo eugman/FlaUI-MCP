@@ -229,10 +229,13 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override Rectangle? WindowBounds(nint hwnd) => Bounds;
 
+    /// <summary>Where a requested placement lands; exact unless a test clamps it, as DPI or a minimum size can.</summary>
+    public Func<Rectangle, Rectangle> PlaceAs { get; set; } = bounds => bounds;
+
     public override void PlaceWindow(nint hwnd, Rectangle bounds)
     {
         Placements.Add(bounds);
-        Bounds = bounds;
+        Bounds = PlaceAs(bounds);
     }
 
     /// <summary>The screens the desktop reports, in physical pixels.</summary>

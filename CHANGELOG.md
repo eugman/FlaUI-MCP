@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed for product repos
+- `windows_place_window` fails with `verification: mismatch` and the deltas when the window did not land exactly where requested (`verified` when it did). `windows_set_window_state` sends and counts nothing when the window is already in the requested state (`verification: no-op`).
 - `windows_focus` fails unless the target window is in front afterwards, and guarded input calls a foreground change an activation only when the target is in front (otherwise the note is "the foreground window changed").
 - Pointer parking never lands on the window: it parks beside it, on a neighbouring screen or in a free corner, and refuses with no input when the window covers every such point. It checks the integrity of the window under the park point. `InputDesktop` gains `MovePointer`, `PointerPosition` and `Monitors`.
 - A `windows_batch` with a failed step returns `isError: true` (it mirrors `status: failed`). A stranded (timed-out or cancelled) call reports `status: failed` and keeps a refusal it recorded.

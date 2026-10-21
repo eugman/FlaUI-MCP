@@ -57,6 +57,17 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
         var target = reference == null ? sessions!.GetInputTarget(handle!) : refs.InputForRef(reference);
         var desktop = InputDesktop.Current;
         var before = desktop.WindowState(target.Hwnd);
+        if (before == requested)
+        {
+            // Already there: nothing is sent, so nothing is counted.
+            return Task.FromResult(
+                TextResult(Report(requested, before, before, desktop.WindowBounds(target.Hwnd))) with
+                {
+                    Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "no-op" },
+                }
+            );
+        }
+
         using (GuardedInput.AcquireLease())
         {
             // Windows drops window messages to a higher-integrity window, as it drops input.
@@ -71,8 +82,20 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
         }
 
         var after = WaitForState(target.Hwnd, requested);
-        var bounds = desktop.WindowBounds(target.Hwnd);
-        var result = JsonSerializer.Serialize(
+        var result = Report(requested, before, after, desktop.WindowBounds(target.Hwnd));
+        return Task.FromResult(
+            after == requested
+                ? TextResult(result)
+                : ErrorResult($"State did not settle: {result}") with
+                {
+                    // The request went out in full; only its effect was not observed.
+                    Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "not-settled" },
+                }
+        );
+    }
+
+    private static string Report(string requested, string before, string after, System.Drawing.Rectangle? bounds) =>
+        JsonSerializer.Serialize(
             new
             {
                 requested,
@@ -89,16 +112,6 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
                     : null,
             }
         );
-        return Task.FromResult(
-            after == requested
-                ? TextResult(result)
-                : ErrorResult($"State did not settle: {result}") with
-                {
-                    // The request went out in full; only its effect was not observed.
-                    Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "not-settled" },
-                }
-        );
-    }
 
     private static string WaitForState(nint hwnd, string requested)
     {
