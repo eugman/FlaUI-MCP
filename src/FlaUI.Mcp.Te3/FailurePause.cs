@@ -24,6 +24,7 @@ internal static class FailurePause
         return result;
     }
 
+    // A failure with no outcome, or no input count, cannot show that nothing went out.
     private static bool SentOrMay(McpToolResult result) =>
-        result.Outcome is { } outcome && (outcome.InputsSent > 0 || CoreFailure.MayStillGoOut(outcome));
+        result.Outcome is not { InputsSent: { } sent } outcome || sent > 0 || CoreFailure.MayStillGoOut(outcome);
 }
