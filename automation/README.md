@@ -33,7 +33,7 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 
 | Tool | Does |
 |---|---|
-| `te3_interaction_begin` / `te3_interaction_end` | Start and end the user's grant for the tools that take focus. Begin only after the user says the machine is clear; their own keyboard or mouse input ends it. |
+| `te3_interaction_begin` / `te3_interaction_end` | Start and end the user's grant. In this server it covers every tool that changes the desktop: the `windows_*` input and window tools (`windows_click`, `windows_type`, `windows_fill`, `windows_send_keys`, `windows_paste`, `windows_mouse`, `windows_place_window`, `windows_set_window_state`, `windows_focus`, `windows_close`, `windows_launch`), `te3_navigate` and `te3_layout`'s changes. Begin only after the user says the machine is clear; their own keyboard or mouse input ends it. |
 | `te3_navigate` | Moves to a destination and checks it arrived. Takes focus; needs the grant. |
 | `te3_model_state` | Reads the status bar: whether a model is loaded, its connection, the BPA count, the selected object. Sends no input. |
 | `te3_layout` | Lists docked panes and document tabs; hides, maximizes, restores and resizes docked panes for a screenshot. Those changes take focus and need the grant; no model edits. |
