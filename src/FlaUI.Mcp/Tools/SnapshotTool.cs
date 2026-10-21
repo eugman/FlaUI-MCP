@@ -114,7 +114,8 @@ public class SnapshotTool : ToolBase
                 handle,
                 window,
                 GetArgument<int?>(arguments, "maxNodes") ?? 3000,
-                GetArgument<int?>(arguments, "maxCharacters") ?? 20000
+                GetArgument<int?>(arguments, "maxCharacters") ?? 20000,
+                _sessionManager.GetWindowHwnd(handle)
             );
             return Task.FromResult(TextResult(snapshot));
         }
