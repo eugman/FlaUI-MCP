@@ -134,14 +134,25 @@ public sealed class PendingCallOutcomeTests
     [Fact]
     public void AFailedWindowReadWhileWaitingDoesNotAbandonTheCall()
     {
+        // The call returns only once the wait has seen a failed window read, so the wait must go on past it.
+        using var readFailed = new ManualResetEventSlim();
         var reads = 0;
         var result = ModalAwareInvoker.Execute(
             Pid,
             "Invoke on 'Save'",
-            () => Task.Delay(200).Wait(),
+            () => readFailed.Wait(TimeSpan.FromSeconds(5)),
             new PendingInvokeTracker(_ => 1),
-            TimeSpan.FromSeconds(5),
-            _ => ++reads == 1 ? [] : throw new System.ComponentModel.Win32Exception(5)
+            TimeSpan.FromSeconds(10),
+            _ =>
+            {
+                if (++reads == 1)
+                {
+                    return [];
+                }
+
+                readFailed.Set();
+                throw new System.ComponentModel.Win32Exception(5);
+            }
         );
 
         Assert.Equal(PatternCallOutcome.Completed, result.Outcome);
