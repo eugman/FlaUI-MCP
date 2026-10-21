@@ -92,6 +92,8 @@ public sealed partial class Te3Page
             rowsRead = picked.RowsRead,
             indentPx = picked.IndentPx,
             selects = picked.Tried,
+            truncated = picked.Truncated,
+            rejected = picked.Rejected,
         };
         if (!picked.FallBack)
         {
@@ -113,6 +115,8 @@ public sealed partial class Te3Page
             rowsRead = picked.RowsRead,
             indentPx = picked.IndentPx,
             selects = picked.Tried,
+            truncated = picked.Truncated,
+            rejected = picked.Rejected,
             rowsWalked = walk.RowsVisited,
         };
         return walk;

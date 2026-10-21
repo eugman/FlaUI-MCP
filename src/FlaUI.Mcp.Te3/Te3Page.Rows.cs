@@ -42,13 +42,26 @@ public sealed partial class Te3Page
 
     private sealed class RowTree(Te3Page page) : IRowTree
     {
-        public async Task<(IReadOnlyList<TreeRow>? Rows, bool Complete, double? IndentPx)> Read()
+        public async Task<RowRead> Read()
         {
             var found = await page.ReadTree();
             page.depthScale ??= TomRows.Calibrate(found.Elements);
             var scale = page.depthScale;
-            var complete = !found.Truncated && !TomRows.Scrolls(found.Elements);
-            return (scale == null ? null : TomRows.Rows(found.Elements, scale), complete, scale?.Step);
+            var rows = scale == null ? null : TomRows.Rows(found.Elements, scale);
+            return new(rows, !TomRows.Scrolls(found.Elements), scale?.Step, found.Truncated);
+        }
+
+        public async Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected()
+        {
+            var found = await page.ReadTree();
+            var selected = found.Elements.FirstOrDefault(e => e.ControlType == "TreeItem" && e.Selected == true);
+            var index =
+                selected?.Name is { } name
+                && name.StartsWith("Node", StringComparison.Ordinal)
+                && int.TryParse(name[4..], out var n)
+                    ? n
+                    : (int?)null;
+            return (page.depthScale == null ? null : TomRows.Rows(found.Elements, page.depthScale), index);
         }
 
         public Task Select(TreeRow row) => page.SelectRow(row);

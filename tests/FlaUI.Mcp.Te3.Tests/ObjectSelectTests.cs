@@ -15,21 +15,27 @@ public sealed class ObjectSelectTests
 
         public bool Measured { get; init; } = true;
 
+        public bool Truncated { get; init; }
+
+        /// <summary>The provider accepts Select and the selection stays where it was.</summary>
+        public bool IgnoresSelect { get; init; }
+
         public List<int> Selects { get; } = [];
 
-        public Task<(IReadOnlyList<TreeRow>? Rows, bool Complete, double? IndentPx)> Read() =>
-            Task.FromResult<(IReadOnlyList<TreeRow>?, bool, double?)>(
-                Measured
-                    ? ([.. rows.Select((r, i) => new TreeRow(i, r.Value, r.Depth))], Complete, 24)
-                    : (null, Complete, null)
-            );
+        private IReadOnlyList<TreeRow> All => [.. rows.Select((r, i) => new TreeRow(i, r.Value, r.Depth))];
+
+        public Task<RowRead> Read() =>
+            Task.FromResult(new RowRead(Measured ? All : null, Complete, Measured ? 24 : null, Truncated));
 
         public Task Select(TreeRow row)
         {
             Selects.Add(row.Index);
-            selected = row;
+            selected = IgnoresSelect ? selected : row;
             return Task.CompletedTask;
         }
+
+        public Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected() =>
+            Task.FromResult<(IReadOnlyList<TreeRow>?, int?)>((All, selected?.Index));
 
         public Task<(string? Name, string? Type)> Selected() =>
             Task.FromResult<(string?, string?)>(
@@ -207,4 +213,60 @@ public sealed class ObjectSelectTests
         Assert.Empty(tree.Selects);
         Assert.True(result.FallBack);
     }
+
+    [Fact]
+    public async Task ASelectThatDidNotMoveTheSelectionIsRejectedBeforePropertiesAreTrusted()
+    {
+        // Properties still showed the previous object; a fresh read of the rows says where the selection really is.
+        var tree = new FakeRows(("Tables", 1, "Group"), ("Brands", 2, "Table"), ("Brand", 3, "Column"))
+        {
+            IgnoresSelect = true,
+        };
+
+        var result = await ObjectSelect.Run(tree, NoFolder, () => false);
+
+        Assert.False(result.Found);
+        Assert.Contains("is not row 2", Assert.Single(result.Rejected).Reason);
+    }
+
+    [Fact]
+    public async Task EachRejectedCandidateIsListedWithWhatPropertiesShowed()
+    {
+        var tree = new FakeRows(
+            ("Tables", 1, "Group"),
+            ("Brands", 2, "Table"),
+            ("Brand Hierarchy", 3, "Hierarchy"),
+            ("Brand", 4, "Level"),
+            ("Brand", 3, "Column")
+        );
+
+        var result = await ObjectSelect.Run(tree, NoFolder, () => false);
+
+        Assert.True(result.Found);
+        var rejected = Assert.Single(result.Rejected);
+        Assert.Equal(3, rejected.Index);
+        Assert.Contains("Level", rejected.Reason);
+    }
+
+    [Fact]
+    public async Task ATruncatedReadIsReportedAndFallsBackWhenItHoldsNoCandidate()
+    {
+        var found = await ObjectSelect.Run(LiveBrandSearchTruncated(), NoFolder, () => false);
+        var missing = await ObjectSelect.Run(
+            new FakeRows(("Tables", 1, "Group"), ("Brands", 2, "Table")) { Truncated = true },
+            NoFolder,
+            () => false
+        );
+
+        Assert.True(found.Found);
+        Assert.True(found.Truncated);
+        Assert.True(missing.FallBack);
+        Assert.True(missing.Truncated);
+    }
+
+    private static FakeRows LiveBrandSearchTruncated() =>
+        new(("Tables", 1, "Group"), ("Brands", 2, "Table"), ("1. Brand Hierarchy", 3, "Folder"), ("Brand", 4, "Column"))
+        {
+            Truncated = true,
+        };
 }
