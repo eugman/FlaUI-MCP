@@ -12,7 +12,14 @@ internal static class ShowChangesGate
     /// <summary>Turns the filter off when it is on. True when it clicked; a missing checkbox (null) is left alone.</summary>
     /// <param name="isOn">The checkbox state, or null when it is not on screen.</param>
     /// <param name="click">Clicks the checkbox once.</param>
-    public static async Task<bool> TurnOff(Func<Task<bool?>> isOn, Func<Task> click)
+    /// <param name="waitMs">How long the checkbox may still read on after the click.</param>
+    /// <param name="pollMs">Pause between reads.</param>
+    public static async Task<bool> TurnOff(
+        Func<Task<bool?>> isOn,
+        Func<Task> click,
+        int waitMs = SettleMs,
+        int pollMs = PollMs
+    )
     {
         if (await isOn() != true)
         {
@@ -20,11 +27,22 @@ internal static class ShowChangesGate
         }
 
         await click();
-        if (await isOn() == true)
+        for (var waited = 0; ; waited += pollMs)
         {
-            throw new InvalidOperationException(StillActive);
-        }
+            if (await isOn() != true)
+            {
+                return true;
+            }
 
-        return true;
+            if (waited >= waitMs)
+            {
+                throw new InvalidOperationException(StillActive);
+            }
+
+            await Task.Delay(pollMs);
+        }
     }
+
+    private const int SettleMs = 1000;
+    private const int PollMs = 200;
 }
