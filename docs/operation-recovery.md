@@ -98,6 +98,35 @@ A product repo that merges this core must check the following.
   - FlaUI-MCP-TE3: `CliRunner.cs:24` (TE CLI) and `ArtifactFiles.cs:338` (git) → `GuardedDesktop.StartProcess` where the process changes the desktop or the model; a pure helper such as git may stay raw.
 - **Offline tests.** `InputDesktop` is internal and visible to `FlaUI.Mcp.Tests`, `FlaUI.Mcp.PowerBi.Tests`, `FlaUI.Mcp.Camtasia.Tests` and `FlaUI.Mcp.Te3.Tests`. A product test assembly that drives input tools must derive a fake from it and install it through `InputDesktop.Override` (see `FakeDesktop` in the core tests), and must set `FLAUI_OFFLINE_TESTS=1` before any test runs, as the core test assembly does in a module initializer. The real desktop then refuses the changes it covers (listed below) if a test misses the fake.
 
+### Changes from the 2026-10-21 quality review
+
+A product repo that merges this core meets these on top of the list below.
+
+- **New failure cases (`isError: true`, `status: failed`).**
+  - `windows_batch` with a failed step (it mirrors `status: failed`; earlier input makes it `partial`).
+  - A stranded (timed-out or cancelled) call; it also keeps a refusal it recorded in `failure`.
+  - `windows_fill` whose read-back differs from the value (`verification: mismatch`, dispatch completed).
+  - `windows_focus` when the target is not in front afterwards.
+  - `windows_place_window` when the window did not land exactly where requested (`mismatch`, with deltas).
+  - `windows_click` expand, collapse or toggle whose state did not move (`mismatch`).
+  - `windows_paste` whose read-back is `unchanged` or `mismatch`.
+  - A call with an argument its closed schema does not declare: `Unknown argument 'x' for tool; no input sent. Declared arguments: ...`, not-dispatched.
+- **New outcome fields and values.** `verification` is set by fill (`verified`, `mismatch`, `unavailable`), focus (`verified`), placement (`verified`, `mismatch`), window state (`no-op`), expand/collapse/toggle (`verified`, `mismatch`, `unavailable`) and paste (`verified`, `unchanged`, `mismatch`, `unavailable`, `not-established`). Operation status adds `lateError` (a pattern call that failed after it was reported pending; `status` is then `failed`). `failure.actionDispatched` keeps a recorded `true`. New refusal code `click-point-covered`.
+- **Behaviour.**
+  - Fill's keyboard fallback verifies focus by default (`verifyFocus`, now in its schema) and checks focus again before Backspace or typing. `windows_send_keys` with a ref verifies focus by default.
+  - Fill says "Filled" only when the read-back matches.
+  - Click, fill and scroll pattern calls run the integrity check; paste re-checks permission and foreground just before the clipboard write.
+  - Focus is an activation only when the target is in front; another foreground change is noted as "the foreground window changed".
+  - A window-state request that matches the current state sends nothing (`inputsSent: 0`).
+  - Parking never lands on the window; a park the guards refuse still lets `windows_screenshot` capture, with a warning.
+  - Modal detection needs an owner to become disabled; tooltips, menus and tool windows are not modals.
+  - Pointer points press the visible part of an element and are hit-tested before input.
+  - A batch step no longer receives the batch's `action` key, so batch clicks use Invoke or Select again instead of a forced mouse click.
+  - Every core tool schema sets `additionalProperties: false`, and the registry enforces it.
+  - A stranded batch blocks the app of its first targeted step.
+- **New types.** `WindowBaseline`, `WaitOutcome<T>`, `Diagnostics.Capture` and `DiagnosticCapture`, `PatternCallResult.WaitError`. `ModalAwareInvoker.Execute` is internal; use `GuardedDesktop.CallPattern`.
+- **New `InputDesktop` virtuals.** `MovePointer`, `PointerPosition`, `Monitors`, `TopLevelWindows`, `ElementAt`, `ParentOf`, `SameElement`, `DescribeElement`, `FocusedControl`, `ClipboardText`, `CaptureWindow` and `ElementTree`. Tools now read the foreground, focus, window bounds and owners through the seam, so a product fake that does not override these reads the real desktop for them (TE3's `FakeDesktop` overrides none of them yet). Override at least `Foreground`, `ProcessOf`, `WindowBounds`, `TopLevelWindows`, `FocusedControl` and, for pointer tests, `ElementAt`/`ParentOf`/`SameElement`.
+
 ### Changes since the previous core release
 
 These are the differences a product repo meets when it merges this core over the previous `core/main`.
