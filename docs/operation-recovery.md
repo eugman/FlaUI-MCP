@@ -24,7 +24,8 @@ Every `tools/call` result carries `structuredContent` with these fields. Product
 | `inputsSent` | The number of changes the call made: keys, clicks, pointer moves, pattern calls, focus and restore, close, window state, clipboard writes, scroll-into-view and process starts. Only changes that happened are counted. |
 | `failure` | Set when guarded input refused: `code`, `message`, `foregroundProcess` (`name`, `pid`), `target` (`pid`, `integrityLevel`, `uiAccess`) and `actionDispatched`. |
 | `steps` | For `windows_batch`: one outcome per step, numbered from 1. |
-| `operationId`, `pendingPatternId`, `modalTitle`, `verification`, `message` | Unchanged. |
+| `message` | New: the tool's text, for clients that show only `structuredContent`. |
+| `operationId`, `pendingPatternId`, `modalTitle`, `verification` | Unchanged. |
 
 An outcome is pending when `provider` is `pending` or `dispatch` is `timed_out_pending`. A batch that stops at a pending step after earlier steps sent input reports `partial` with `provider: pending`, and must not be replayed. A host that tests for `completed` or `timed_out_pending` must also handle `partial`.
 
@@ -82,6 +83,59 @@ A product repo that merges this core must check the following.
   - `ClickTool` is a partial class; its replies are in `ClickToolReplies.cs`.
   - The transport calls the new `McpServer.RecordRefusedRequest`.
 - **Offline tests.** `InputDesktop` is internal and visible to `FlaUI.Mcp.Tests`, `FlaUI.Mcp.PowerBi.Tests`, `FlaUI.Mcp.Camtasia.Tests` and `FlaUI.Mcp.Te3.Tests`. A product test assembly that drives input tools must derive a fake from it and install it through `InputDesktop.Override` (see `FakeDesktop` in the core tests), and must set `FLAUI_OFFLINE_TESTS=1` before any test runs, as the core test assembly does in a module initializer. The real desktop then refuses the changes it covers (listed below) if a test misses the fake.
+
+### Changes since the previous core release
+
+These are the differences a product repo meets when it merges this core over the previous `core/main`.
+
+**Outcome values that are gone.**
+
+- `dispatch: failed` is gone. Registry error results, a failed batch and a batch step that throws now report `not-dispatched` when nothing went out, or `partial` when some input did. `BlockedResult` reports `not-dispatched` with `provider: pending`.
+- In operation status, `status: provider_pending` and `status: completed` are gone (`status` is now `ok`, `failed`, `running` or `timed_out_pending`, and a pending provider shows in `provider: pending`). `dispatch: running` and `dispatch: failed` are gone too.
+
+**Status fields that are new.** Operation status entries add `requestKey`, `finished`, `annotations`, `inputsSent` and `resultOutcome`.
+
+**Every result carries an outcome.** A tool that sets none gets one from the registry: `dispatch` from whether it failed and how much input went out, `provider: not-tracked` (or `pending` while a pattern call it started is still held) and `verification: not-established`. `McpToolResult.Outcome` is now `[JsonIgnore]`; `structuredContent` is computed from it and adds `message`, so deserializing a result no longer fills `Outcome`. `status`, `inputsSent`, `failure` and `message` are new fields; `verification`, `operationId`, `pendingPatternId`, `modalTitle` and `steps` were already there.
+
+**What inputsSent counts.** One per `GuardedInput.Send` call, so a 64-character chunk of typed text is one input, plus each counted change listed in the outcome contract above.
+
+**Texts that are new or changed.**
+
+- `Ref <ref> has no process identity; no action dispatched. Refresh it with windows_snapshot or windows_find on a window handle.`
+- Click, pending and not yet sent: `Not sent yet: the request is still waiting on the app, whose UI Automation provider has not answered. ...`
+- Fill, pending: `SetValue has not been sent yet: ...` or `SetValue dispatched; the provider call is still pending. ...`
+- Focus and close by UI Automation, pending: `<Focus|Close> on <handle> was sent; the app's UI Automation provider has not returned. ...` or `... is still waiting on the app's UI Automation provider and may not have been sent. ...`
+- Close: `WM_CLOSE was not posted to window <handle> (Win32 error <n>); it was not asked to close.` (`Win32Desktop.CloseWindow` now returns whether the message was posted.)
+- Paste: `The clipboard is in use by another process, so nothing was pasted.`, plus `Before this, the target window was activated, so the desktop foreground changed.` only when it was. A failure after the clipboard write ends with `The clipboard now holds that text.`
+- `windows_wait` failures name the exception type when the message is empty: `windows_wait: <type> No input sent.`
+- `ScrollIntoView did not return; the app's UI Automation provider may be blocked. Nothing was pressed. Check windows_operation_status before retrying.`
+- Startup: `Windows refused to make this process per-monitor-v2 DPI aware, ... so FlaUI-MCP will not start. ...`
+- Offline tests: `The real desktop takes no input while FLAUI_OFFLINE_TESTS=1; install a fake desktop. No input sent.`
+- Launch, focus, close and other lease holders while another call holds the lease: `Desktop input is busy; no input sent.`
+
+**Mixed phrasing.** Not every refusal says "no input sent". Product code that matches `\bno input sent\b` to decide that nothing went out must also handle "no action dispatched" (ref without identity, JSON-RPC refusals, duplicate request ids), "nothing was pasted" (paste), "No keyboard input was dispatched" (send-keys), "no further input sent" (focus moved during a call) and the rewritten "no keys or clicks were sent, but ... first". Prefer `dispatch` and `inputsSent` over text.
+
+**Signatures.**
+
+- `OperationCoordinator.Begin(tool, requestKey, annotations)` and `Status(id, pending, requestKey)`, plus `Ran(requestKey)`.
+- `ToolRegistry.ExecuteToolAsync(name, arguments, cancellationToken, requestKey, whenStranded)`.
+- `ToolBase.Annotations` and `McpTool.Annotations`, with `McpToolAnnotations.ReadOnly` and `McpToolAnnotations.Input(destructive, idempotent)`.
+- `SessionManager.FocusWindow(handle, pending)` and `CloseWindow(handle, pending)`, plus `UiaWindowFor(handle, pending)`; the window tools take a `PendingInvokeTracker`.
+- `Win32Desktop.CloseWindow` returns `bool`.
+- `MutationGuard.RecordDispatch` counts one input against the running operation, and `MutationGuard.Execute` counts before its mutation runs.
+- New public types: `InputRefusal`, `ProcessRef`, `ProcessIntegrity`, `InputRefusedException`.
+- `ToolOutcome.DispatchFor(failed, inputsSent)`.
+- `ElementSelector.NameContains`.
+
+**Variant code that bypasses the guards.** These calls skip the input lease, the integrity check, the counting and the offline switch, and should go through `SessionManager`, `WindowMutation` or `GuardedInput` instead:
+
+- FlaUI-MCP-PBI: `DemoSession.cs:720` (`Win32Desktop.FocusWindow`), `SessionLifecycle.cs:559` (`Win32Desktop.CloseWindow`), `ForegroundOps.cs:16` (`Win32Desktop.FocusWindow`).
+- All three variants: raw `GetClickablePoint` followed by a `GuardedInput` click, which skips `ClickPoint`'s visibility checks and the guarded scroll.
+
+**Call sites to fix for `partial`.** Both treat only `completed` or `timed_out_pending` as "input went out", so a `partial` call would be read as safe to retry:
+
+- FlaUI-MCP-PBI `ProviderEvidence.cs:73` and `:81`.
+- FlaUI-MCP-Camtasia `CamSessionInput.cs:110`.
 
 ### What the offline switch covers
 
