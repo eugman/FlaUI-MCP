@@ -274,7 +274,13 @@ public class ToolRegistry
                 Status = failed ? "failed" : "ok",
                 InputsSent = inputsSent,
                 Failure =
-                    failed && refusal != null ? refusal with { ActionDispatched = inputsSent > 0 } : outcome.Failure,
+                    // A refusal recorded as coming after input (a counted Select, say) keeps that, whatever this call counted.
+                    failed && refusal != null
+                        ? refusal with
+                        {
+                            ActionDispatched = refusal.ActionDispatched == true || inputsSent > 0,
+                        }
+                        : outcome.Failure,
             },
         };
     }
@@ -339,7 +345,7 @@ public class ToolRegistry
                 Failure = operation.Refusal is { } refusal
                     ? refusal with
                     {
-                        ActionDispatched = operation.InputsSent > 0,
+                        ActionDispatched = refusal.ActionDispatched == true || operation.InputsSent > 0,
                     }
                     : null,
             },

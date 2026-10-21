@@ -180,11 +180,18 @@ public sealed class PasteTool(
             note = ". The clipboard now holds that text." + verdict.Sentence;
         }
 
-        return TextResult($"Sent Ctrl+V for {clipboardText.Length} characters to {target}{note}") with
+        return PasteReply($"Sent Ctrl+V for {clipboardText.Length} characters to {target}{note}", verdict);
+    }
+
+    /// <summary>
+    /// The reply with its verdict. A read-back that shows the paste did not apply (unchanged, or changed
+    /// without the text) is a failure; Ctrl+V went out, so the dispatch stays completed.
+    /// </summary>
+    internal static McpToolResult PasteReply(string text, PasteVerdict verdict) =>
+        (verdict.Verification is "unchanged" or "mismatch" ? ErrorResult(text) : TextResult(text)) with
         {
             Outcome = new ToolOutcome("completed", "not-tracked") { Verification = verdict.Verification },
         };
-    }
 
     /// <summary>
     /// What a paste's read-back establishes, as the outcome's verification (verified, unchanged, mismatch,
