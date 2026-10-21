@@ -128,6 +128,26 @@ public sealed class PasteTool(
                     + "activated before this failed, so the desktop foreground may have changed."
             );
         }
+        // Replacing the user's clipboard is a change of its own, made before Ctrl+V can be refused.
+        MutationGuard.RecordDispatch();
+        try
+        {
+            return SendPaste(input, element, clipboardText, target);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not ProviderBlockedException)
+        {
+            return ErrorResult($"Failed to paste: {ex.Message} The clipboard now holds that text.");
+        }
+    }
+
+    /// <summary>Send Ctrl+V through guarded input and report what arrived.</summary>
+    private McpToolResult SendPaste(
+        GuardedInput input,
+        FlaUI.Core.AutomationElements.AutomationElement? element,
+        string clipboardText,
+        string target
+    )
+    {
         // Read before pasting: "the control contains the text" is not evidence on its own,
         // because a field that already contained it reads the same either way.
         var before = ReadValue(element);

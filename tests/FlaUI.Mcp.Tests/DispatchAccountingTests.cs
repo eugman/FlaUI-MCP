@@ -194,6 +194,30 @@ public sealed class DispatchAccountingTests
         Assert.Equal(3, counted);
     }
 
+    // K4: the clipboard write is a change of its own.
+
+    [Fact]
+    public async Task APasteRefusedAfterTheClipboardWriteCountsItAndSaysSo()
+    {
+        var desktop = new FakeDesktop { FocusLostOnClipboardWrite = true };
+        using var installed = desktop.Install();
+        var (sessions, handle) = Window();
+        using var _ = sessions;
+        var registry = new ToolRegistry();
+        registry.RegisterTool(
+            new PasteTool(new ElementRegistry(), new PendingInvokeTracker(), ProcessPolicy.AllowAll, sessions)
+        );
+
+        var result = await registry.ExecuteToolAsync("windows_paste", Args(new { handle, text = "abc" }));
+
+        Assert.True(result.IsError);
+        Assert.Equal("abc", desktop.ClipboardText);
+        Assert.Contains("The clipboard now holds that text", result.Content[0].Text);
+        Assert.Equal(0, desktop.Dispatched);
+        Assert.Equal(1, result.Outcome!.InputsSent);
+        Assert.Equal("partial", result.Outcome.Dispatch);
+    }
+
     private sealed class DelegateTool(string name, Func<McpToolResult> run) : ToolBase
     {
         public override string Name => name;
