@@ -113,13 +113,17 @@ internal static class RunJournal
             throw;
         }
 
+        // McpToolResult.Outcome is [JsonIgnore]: write the outcome explicitly, as Core serves it (structuredContent:
+        // dispatch, inputsSent, failure and the tool's message), beside the text.
         var failure = TryAppend(
             journal,
             new
             {
                 phase = "result",
                 tool,
-                result,
+                isError = result.IsError == true,
+                content = result.Content,
+                structuredContent = result.StructuredContent,
             }
         );
         return failure == null ? result : result with { Content = [.. result.Content, new() { Text = failure }] };
