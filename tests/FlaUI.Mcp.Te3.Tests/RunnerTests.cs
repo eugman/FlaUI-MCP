@@ -241,11 +241,13 @@ public sealed class RunnerTests : IDisposable
     {
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
+        using var grant = new Te3Interaction(() => 0);
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             RunExecutor.Execute(
                 new RunConfig(),
                 new Recipe("test", "page", false, _ => Task.CompletedTask),
+                grant,
                 cancellation.Token,
                 heldRunnerLock: null,
                 lockPath: LockPath
@@ -259,12 +261,14 @@ public sealed class RunnerTests : IDisposable
         using var held = RunExecutor.AcquireRunnerLock(LockPath);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
+        using var grant = new Te3Interaction(() => 0);
 
         // Reacquiring the same path would throw IOException; cancellation proves the held lock was accepted.
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             RunExecutor.Execute(
                 new RunConfig(),
                 new Recipe("test", "page", false, _ => Task.CompletedTask),
+                grant,
                 cancellation.Token,
                 held,
                 LockPath
@@ -320,6 +324,7 @@ public sealed class RunnerTests : IDisposable
         var manifest = new RunManifest();
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
+        using var grant = new Te3Interaction(() => 0);
 
         Assert.Throws<OperationCanceledException>(() =>
             RunExecutor.ReportStep(manifest, cancellation.Token)("Click Preferences command")

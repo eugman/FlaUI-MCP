@@ -38,8 +38,19 @@ public static partial class RunExecutor
     internal const string ActivationTimeout =
         "Manual activation not received within 120 seconds. The run asked Windows to focus TE3; nothing was typed or clicked.";
 
-    // Asks Windows to focus the run's TE3, then waits for the user to click it if Windows refused.
-    private static async Task ActivateOwnedWindow(
+    /// <summary>
+    /// Launches the run's TE3 through Core's guarded start: the input lease, the mutation check (the run's grant) and
+    /// the offline switch, which a raw Process.Start skipped.
+    /// </summary>
+    internal static Process LaunchTe3(RunManifest manifest, Action save, ProcessStartInfo start)
+    {
+        RunGrant.RequireInstalled();
+        return RunJournal.Launch(manifest, save, start, GuardedDesktop.StartProcess);
+    }
+
+    // Asks Windows to focus the run's TE3, then waits for the user to click it if Windows refused. True when the run
+    // waited for that click.
+    private static async Task<bool> ActivateOwnedWindow(
         AutomationHost host,
         string handle,
         int processId,
@@ -52,9 +63,13 @@ public static partial class RunExecutor
         await FocusOwnedWindow(host, handle, journal, inputs);
         var target = host.Sessions.GetInputTarget(handle);
         var activation = Stopwatch.StartNew();
-        if (Win32Desktop.GetForegroundWindow() != target.Hwnd)
+        var waited = Win32Desktop.GetForegroundWindow() != target.Hwnd;
+        if (waited)
         {
-            Console.WriteLine($"Click the TE3 window containing {label}; waiting 120 seconds.");
+            Console.WriteLine(
+                $"Click the TE3 window containing {label}; waiting 120 seconds. Then leave the keyboard and mouse "
+                    + "alone: input after that click stops the run."
+            );
         }
 
         while (Win32Desktop.GetForegroundWindow() != target.Hwnd)
@@ -68,15 +83,19 @@ public static partial class RunExecutor
 
             await Task.Delay(250, cancellationToken);
         }
+
+        return waited;
     }
 
     /// <summary>
     /// Asks Windows to focus the run's TE3 window: journaled, through Core's guarded focus, and counted as input only
     /// when it changed the foreground or restored the window. Refused first, with nothing journaled or sent, while an
-    /// earlier call still holds TE3's provider: Core's native-handle focus does not consult the pending tracker.
+    /// earlier call still holds TE3's provider (Core's native-handle focus does not consult the pending tracker), and
+    /// without the run's grant.
     /// </summary>
     internal static Task FocusOwnedWindow(AutomationHost host, string handle, string journal, InputTally inputs)
     {
+        RunGrant.RequireInstalled();
         if (host.Pending.TryGetPending(host.Sessions.GetInputTarget(handle).ProcessId, out var held))
         {
             throw new ProviderBlockedException(held);

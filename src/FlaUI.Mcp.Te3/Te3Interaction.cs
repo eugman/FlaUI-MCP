@@ -91,6 +91,23 @@ public sealed class Te3Interaction : IDisposable
         }
     }
 
+    /// <summary>
+    /// Counts the user's input from now on, keeping the batch: for the run, after the user clicked TE3 because Windows
+    /// refused to focus it, as the run asked. A grant already revoked stays revoked.
+    /// </summary>
+    internal void Rebaseline()
+    {
+        lock (sync)
+        {
+            if (batch == null)
+            {
+                throw new InvalidOperationException($"No batch to continue: {reason}");
+            }
+
+            inputAtApproval = InputSequence();
+        }
+    }
+
     /// <summary>Requires the grant now and before every input the core tools send, until disposed.</summary>
     public IDisposable Guard()
     {

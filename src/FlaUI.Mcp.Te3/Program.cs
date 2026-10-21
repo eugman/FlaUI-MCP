@@ -159,12 +159,20 @@ public static class RunnerCommands
             {
                 using var runnerGate = RunExecutor.AcquireRunnerLock();
                 DpiUtility.EnablePerMonitorV2();
+                // The operator's command approves these recipes; their own keyboard or mouse input revokes it.
+                using var interaction = RunGrant.Begin(new Te3Interaction(), recipes.Select(r => r.Id));
                 var failed = false;
                 foreach (var recipe in recipes)
                 {
                     for (var n = 0; n < (options.Repeat ?? config.Repeat); n++)
                     {
-                        var result = await RunExecutor.Execute(config, recipe, interrupts.Token, runnerGate);
+                        var result = await RunExecutor.Execute(
+                            config,
+                            recipe,
+                            interaction,
+                            interrupts.Token,
+                            runnerGate
+                        );
                         Console.WriteLine(
                             JsonSerializer.Serialize(
                                 new

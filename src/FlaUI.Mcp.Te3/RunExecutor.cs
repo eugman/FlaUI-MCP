@@ -72,16 +72,19 @@ public static partial class RunExecutor
         return path;
     }
 
+    /// <summary>Runs one recipe under <paramref name="interaction"/>, the run's grant (see <see cref="RunGrant"/>).</summary>
     public static Task<RunExecutionResult> Execute(
         RunConfig config,
         Recipe recipe,
+        Te3Interaction interaction,
         CancellationToken cancellationToken = default
-    ) => Execute(config, recipe, cancellationToken, heldRunnerLock: null);
+    ) => Execute(config, recipe, interaction, cancellationToken, heldRunnerLock: null);
 
     // A batch passes its held lock so no other runner can start between recipes; tests pass a lock path of their own.
     internal static async Task<RunExecutionResult> Execute(
         RunConfig config,
         Recipe recipe,
+        Te3Interaction interaction,
         CancellationToken cancellationToken,
         FileStream? heldRunnerLock,
         string? lockPath = null
@@ -89,6 +92,8 @@ public static partial class RunExecutor
     {
         using var runnerGate = heldRunnerLock == null ? AcquireRunnerLock(lockPath) : null;
         cancellationToken.ThrowIfCancellationRequested();
+        // Every input, focus and launch below checks the grant first; the user's own input revokes it.
+        using var grant = interaction.Guard();
         if (recipe.RequiresServer && !config.UseServer(recipe))
         {
             throw new ArgumentException("Recipe requires fixed/auto fixture mode: " + recipe.Id);
@@ -154,19 +159,26 @@ public static partial class RunExecutor
                 start.ArgumentList.Add(model);
             }
 
-            app = RunJournal.Launch(manifest, Save, start, Process.Start);
+            app = LaunchTe3(manifest, Save, start);
             manifest.Te3Version = app.MainModule?.FileVersionInfo.ProductVersion;
             var marker = manifest.Database.Length > 0 ? manifest.Database : id;
             handle = await WaitForOwnedWindow(host, app, marker, cancellationToken);
-            await ActivateOwnedWindow(
-                host,
-                handle,
-                app.Id,
-                $"{manifest.Database} {id}",
-                journal,
-                inputs,
-                cancellationToken
-            );
+            if (
+                await ActivateOwnedWindow(
+                    host,
+                    handle,
+                    app.Id,
+                    $"{manifest.Database} {id}",
+                    journal,
+                    inputs,
+                    cancellationToken
+                )
+            )
+            {
+                // The user clicked TE3 as asked; their input counts from that click on.
+                interaction.Rebaseline();
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken), journal, inputs);
             await page.DefaultLayout();
@@ -290,6 +302,7 @@ public static partial class RunExecutor
         {
             cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3(manifest.ProcessId);
+            RunGrant.RequireInstalled();
             await inputs.Invoke(
                 () =>
                     RunJournal.Tool(
