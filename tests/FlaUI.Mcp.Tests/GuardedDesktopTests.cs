@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 using Xunit;
 
@@ -45,6 +46,19 @@ public sealed class GuardedDesktopTests
 
         Assert.Equal(1, Counted(() => GuardedDesktop.StartProcess(new ProcessStartInfo("app.exe"))));
         Assert.Equal(1, desktop.StartRequests);
+    }
+
+    [Fact]
+    public async Task AStartThatStartsNothingCountsNothing()
+    {
+        using var offlineDesktop = new FakeDesktop { StartsNothing = true }.Install();
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new StartsTool());
+
+        var result = await registry.ExecuteToolAsync("starts", null);
+
+        Assert.Equal(0, result.Outcome!.InputsSent);
+        Assert.Equal("not-dispatched", result.Outcome.Dispatch);
     }
 
     [Fact]
@@ -141,5 +155,19 @@ public sealed class GuardedDesktopTests
 
         Assert.Equal(2, counted);
         Assert.Equal("def", desktop.ClipboardText);
+    }
+
+    private sealed class StartsTool : ToolBase
+    {
+        public override string Name => "starts";
+        public override string Description => "no desktop";
+        public override object InputSchema => new { };
+
+        public override Task<McpToolResult> ExecuteAsync(System.Text.Json.JsonElement? arguments) =>
+            Task.FromResult(
+                GuardedDesktop.StartProcess(new ProcessStartInfo("app.exe")) is null
+                    ? ErrorResult("Nothing was started.")
+                    : TextResult("started")
+            );
     }
 }

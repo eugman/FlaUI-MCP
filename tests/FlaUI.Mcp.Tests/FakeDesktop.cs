@@ -177,12 +177,21 @@ internal sealed class FakeDesktop : InputDesktop
 
     public int StartRequests { get; private set; }
 
+    /// <summary>When true, the start returns null, as Process.Start does when no new process was started.</summary>
+    public bool StartsNothing { get; set; }
+
     public int PatternCalls { get; private set; }
 
     public override System.Diagnostics.Process? StartProcess(System.Diagnostics.ProcessStartInfo info)
     {
         StartRequests++;
-        return StartFails ? throw new System.ComponentModel.Win32Exception(2) : null;
+        if (StartFails)
+        {
+            throw new System.ComponentModel.Win32Exception(2);
+        }
+
+        // An unstarted Process object stands in for a started one; null is Windows starting nothing.
+        return StartsNothing ? null : new System.Diagnostics.Process();
     }
 
     public override void CallPattern(Action call)

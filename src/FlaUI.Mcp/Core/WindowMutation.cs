@@ -50,7 +50,7 @@ internal static class WindowMutation
 
     /// <summary>
     /// Starting a process changes the desktop like input does: same lease and permission check. Counted
-    /// once Windows accepted the start; a start that throws started nothing.
+    /// only when a process was returned; a start that throws or returns null started nothing.
     /// </summary>
     public static Process? Start(ProcessStartInfo info)
     {
@@ -58,7 +58,12 @@ internal static class WindowMutation
         OperationContext.Check();
         MutationGuard.CheckPermission();
         var started = InputDesktop.Current.StartProcess(info);
-        MutationGuard.RecordDispatch();
+        // Null means Windows started no new process (for example a shell start handed to a running one).
+        if (started != null)
+        {
+            MutationGuard.RecordDispatch();
+        }
+
         return started;
     }
 
