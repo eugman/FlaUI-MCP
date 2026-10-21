@@ -12,6 +12,37 @@ internal static class LayoutSteps
     {
         public string Name => name;
         public List<object> Completed => completed;
+
+        /// <summary>The layout as read after the failure, or why it could not be read; null when not read.</summary>
+        public object? Readback { get; init; }
+    }
+
+    /// <summary>A step that failed after its input went out and measured what it did: the record replaces its name.</summary>
+    public sealed class StepFailedException(string message, object step) : InvalidOperationException(message)
+    {
+        public object Step => step;
+    }
+
+    /// <summary>The failure with the layout read back after it, so the reply shows the state the failure left.</summary>
+    public static ProgressException ReadBack(ProgressException failure, Func<object> read)
+    {
+        object readback;
+        string said;
+        try
+        {
+            readback = new { readBack = true, panes = read() };
+            said = " Layout read back after the failure (layoutAfterFailure).";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            readback = new { readBack = false, error = ex.Message };
+            said = " Reading the layout back after the failure failed; observe with te3_layout_read list.";
+        }
+
+        return new ProgressException(failure.Message + said, failure.Name, failure.Completed, failure)
+        {
+            Readback = readback,
+        };
     }
 
     /// <summary>A step whose input went out before it failed: its effect on the layout is unconfirmed.</summary>
@@ -56,9 +87,16 @@ internal static class LayoutSteps
     public static async Task Sending(InputTally inputs, Action<object> sent, object item, Func<Task> input)
     {
         var before = inputs.Sent;
+        var measured = false;
         try
         {
             await input();
+        }
+        catch (StepFailedException failed)
+        {
+            measured = true;
+            sent(failed.Step);
+            throw;
         }
         catch (Exception ex) when (CoreFailure.MayStillGoOut(CoreFailure.Outcome(ex)))
         {
@@ -67,7 +105,7 @@ internal static class LayoutSteps
         }
         finally
         {
-            if (inputs.Sent > before)
+            if (!measured && inputs.Sent > before)
             {
                 sent(item);
             }
@@ -107,6 +145,11 @@ internal static class LayoutSteps
         if (ex is ProgressException progress)
         {
             reply[progress.Name] = progress.Completed;
+        }
+
+        if (ex is ProgressException { Readback: { } readback })
+        {
+            reply["layoutAfterFailure"] = readback;
         }
 
         return JsonSerializer.Serialize(reply, McpProtocol.JsonOptions);

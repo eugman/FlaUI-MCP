@@ -149,43 +149,6 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
         };
     }
 
-    private async Task<object> ApplyPreset(InputTally inputs, string handle, Window window, string preset)
-    {
-        var sizes = Te3PanePlan.Resolve(preset, window.BoundingRectangle.Width, window.BoundingRectangle.Height);
-        var parts = Parts(window);
-        foreach (var size in sizes)
-        {
-            if (!parts.Any(part => part.Kind == "pane" && TitleMatches(part.Title, size.Pane)))
-            {
-                throw new InvalidOperationException("Preset needs visible pane '" + size.Pane + "'; no resize sent.");
-            }
-        }
-
-        var next = 0;
-        var changes = await LayoutSteps.Progress(
-            "changes",
-            async sent =>
-            {
-                if (next == sizes.Length)
-                {
-                    return null;
-                }
-
-                var size = sizes[next++];
-                var args = JsonSerializer.SerializeToElement(new { width = size.Width, height = size.Height });
-                object? changed = null;
-                await LayoutSteps.Sending(
-                    inputs,
-                    sent,
-                    size.Pane,
-                    async () => changed = await Resize(inputs, handle, window, size.Pane, args, strict: true)
-                );
-                return changed;
-            }
-        );
-        return new { preset, changes };
-    }
-
     private string Required(JsonElement a, string name) =>
         GetStringArgument(a, name) ?? throw new ArgumentException($"{name} is required for this action.");
 
@@ -320,67 +283,6 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
             );
         await Click(inputs, handle, target);
         return button == "Maximize" ? new { maximized = pane.Title } : (object)new { restored = pane.Title };
-    }
-
-    private async Task<object> Resize(
-        InputTally inputs,
-        string handle,
-        Window window,
-        string title,
-        JsonElement a,
-        bool strict = false
-    )
-    {
-        var parts = Parts(window);
-        var pane = FindPane(window, title);
-        var before = pane.Container.BoundingRectangle;
-        var others = parts.Where(p => p.Title != pane.Title).Select(p => p.Container.BoundingRectangle).Distinct();
-        var documents = parts.Where(p => p.Kind == "document").Select(p => p.Container.BoundingRectangle);
-        var (from, to) = SplitterPlan.Resize(
-            before,
-            others,
-            GetArgument<int?>(a, "width"),
-            GetArgument<int?>(a, "height"),
-            window.BoundingRectangle,
-            documents
-        );
-        var origin = window.BoundingRectangle;
-        var pid = host.Sessions.GetWindowProcessId(handle);
-        var windowsBefore = Win32Desktop.GetTopLevelWindows(pid).Select(w => w.Hwnd).ToList();
-        await Tool(
-            inputs,
-            "windows_mouse",
-            new
-            {
-                action = "drag",
-                handle,
-                from = new { x = from.X - origin.X, y = from.Y - origin.Y },
-                to = new { x = to.X - origin.X, y = to.Y - origin.Y },
-            }
-        );
-        await Task.Delay(300);
-        SplitterPlan.ThrowIfUndocked(windowsBefore, Win32Desktop.GetTopLevelWindows(pid), title);
-        var after = FindPane(window, title).Container.BoundingRectangle;
-        var requested = GetArgument<int?>(a, "width") ?? GetArgument<int?>(a, "height");
-        var reached = GetArgument<int?>(a, "width") is null ? after.Height : after.Width;
-        if (strict && Math.Abs(reached - requested!.Value) > 4)
-        {
-            throw new InvalidOperationException(
-                "Preset resize did not reach the requested size; inspect before retrying."
-            );
-        }
-
-        return new
-        {
-            title,
-            before = Relative(before, origin),
-            after = Relative(after, origin),
-            requested,
-            reached,
-            note = Math.Abs(reached - requested!.Value) > 4
-                ? "The pane did not reach the requested size; the drag may have missed the splitter."
-                : null,
-        };
     }
 
     private Task Click(InputTally inputs, string handle, AutomationElement element) =>

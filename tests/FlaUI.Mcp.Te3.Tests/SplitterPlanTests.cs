@@ -73,6 +73,7 @@ public sealed class SplitterPlanTests
         var (from, to) = SplitterPlan.Resize(tom, [editor, properties], width: 480, height: null, documents: [editor]);
         Assert.Equal(1159 + SplitterPlan.TouchingInset, from.X);
         Assert.Equal(from.X + 280, to.X);
+        Assert.Equal("left", SplitterPlan.Edge(tom, from, width: true));
     }
 
     [Fact]
@@ -83,6 +84,7 @@ public sealed class SplitterPlanTests
         var editor = new Rectangle(639, 100, 520, 947);
         var (from, _) = SplitterPlan.Resize(assistant, [editor], width: 680, height: null, documents: [editor]);
         Assert.Equal(639 - SplitterPlan.TouchingInset, from.X);
+        Assert.Equal("right", SplitterPlan.Edge(assistant, from, width: true));
     }
 
     [Fact]
@@ -93,6 +95,29 @@ public sealed class SplitterPlanTests
         var editor = new Rectangle(681, 100, 478, 947);
         var (from, _) = SplitterPlan.Resize(properties, [tom, editor], null, 320, documents: [editor]);
         Assert.Equal(649 - SplitterPlan.TouchingInset, from.Y);
+        Assert.Equal("top", SplitterPlan.Edge(properties, from, width: false));
+    }
+
+    [Fact]
+    public void AMissedDragSaysWhichEdgeFromWhereToWhereTheReachedSizeAndAttempts()
+    {
+        var message = SplitterPlan.Missed(
+            "TOM Explorer",
+            "left",
+            new Point(1158, 335),
+            new Point(1438, 335),
+            480,
+            760,
+            1
+        );
+
+        Assert.Contains("'TOM Explorer'", message);
+        Assert.Contains("left edge", message);
+        Assert.Contains("(1158,335) to (1438,335)", message);
+        Assert.Contains("requested 480", message);
+        Assert.Contains("reached 760", message);
+        Assert.Contains("1 attempt", message);
+        Assert.Contains("Inspect before retrying", message);
     }
 
     [Theory]

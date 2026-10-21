@@ -151,6 +151,36 @@ public static class SplitterPlan
         return intoSecond ? secondStart + TouchingInset : firstEnd - TouchingInset;
     }
 
+    /// <summary>Which edge of <paramref name="pane"/> a drag starting at <paramref name="from"/> moves.</summary>
+    public static string Edge(Rectangle pane, Point from, bool width)
+    {
+        if (width)
+        {
+            return from.X < (pane.Left + pane.Right) / 2 ? "left" : "right";
+        }
+
+        return from.Y < (pane.Top + pane.Bottom) / 2 ? "top" : "bottom";
+    }
+
+    /// <summary>Drags per resize: one, then a measured check, so a missed splitter costs one drag's input.</summary>
+    public const int MaxAttempts = 1;
+
+    /// <summary>The failure for a drag that left the pane short of its size: what was dragged and what it reached.</summary>
+    /// <param name="from">Drag start in window pixels, as sent.</param>
+    /// <param name="to">Drag end in window pixels, as sent.</param>
+    public static string Missed(
+        string title,
+        string edge,
+        Point from,
+        Point to,
+        int requested,
+        int reached,
+        int attempts
+    ) =>
+        $"Resize of '{title}' did not reach the requested size: dragged its {edge} edge from ({from.X},{from.Y}) to "
+        + $"({to.X},{to.Y}) in window pixels, requested {requested}, reached {reached} after {attempts} attempt"
+        + $"{(attempts == 1 ? "" : "s")}; the drag may have missed the splitter. Inspect before retrying.";
+
     /// <summary>
     /// Fails when the drag opened a new titled top-level window in the process: the drag grabbed a pane's title bar
     /// and floated it instead of moving the splitter.
