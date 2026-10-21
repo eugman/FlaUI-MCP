@@ -138,6 +138,8 @@ These are the differences a product repo meets when it merges this core over the
 - `ToolOutcome.DispatchFor(failed, inputsSent)`.
 - `ElementSelector.NameContains`.
 
+**Raw Win32 mutators are internal.** `Win32Desktop.FocusWindow`, `CloseWindow`, `PlaceWindow`, `SetWindowState`, `SetClipboardText` and `PreserveAndSetClipboardText` are `internal` (visible to the test assemblies), so product code that calls them no longer compiles. Use `SessionManager.FocusWindow`/`CloseWindow`, `windows_place_window`, `windows_set_window_state`, `GuardedDesktop.SetClipboardText`, or `GuardedInput.SetClipboardText`/`PreserveAndSetClipboardText` under a guard. Known call site: FlaUI-MCP-PBI `NativeRecoveryDesktop.cs:233` (`Win32Desktop.CloseWindow` inside `GuardedInput.Send`).
+
 **Variant code that bypasses the guards.** These calls skip the input lease, the integrity check, the counting and the offline switch, and should go through `SessionManager`, `WindowMutation` or `GuardedInput` instead:
 
 - FlaUI-MCP-PBI: `DemoSession.cs:720` (`Win32Desktop.FocusWindow`), `SessionLifecycle.cs:559` (`Win32Desktop.CloseWindow`), `ForegroundOps.cs:16` (`Win32Desktop.FocusWindow`).
@@ -157,5 +159,5 @@ With `FLAUI_OFFLINE_TESTS=1` and no fake installed, the real `InputDesktop` refu
 - `StartProcess`: `WindowMutation.Start`, used by `windows_launch`.
 - `CallPattern`: the UI Automation calls that change an app (Invoke, Toggle, Select, Expand, Collapse, SetValue, ScrollIntoView, and UI Automation focus and close).
 
-It does not cover anything that bypasses the seam: direct `Win32Desktop.*` calls (such as `Win32Desktop.FocusWindow`, `CloseWindow`, `SetWindowState` or `PlaceWindow`), `TextClipboard.PreserveAndSetClipboardText`, raw FlaUI input (`element.Click()`, `Mouse`/`Keyboard`, or `GetClickablePoint` followed by a mouse call), and UI Automation reads. Product code that calls these directly is not protected by the switch, and should go through `InputDesktop` or guarded input instead.
+It does not cover anything that bypasses the seam: raw FlaUI input (`element.Click()`, `Mouse`/`Keyboard`, or `GetClickablePoint` followed by a mouse call), and UI Automation reads. Product code that calls these directly is not protected by the switch, and should go through `InputDesktop` or guarded input instead.
 

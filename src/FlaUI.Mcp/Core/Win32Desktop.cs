@@ -201,7 +201,7 @@ public static partial class Win32Desktop
     /// A message-only window owns it, since an ownerless EmptyClipboard makes SetClipboardData fail.
     /// Returns false when another process keeps the clipboard open.
     /// </summary>
-    public static bool SetClipboardText(string text)
+    internal static bool SetClipboardText(string text)
     {
         var owner = CreateWindowEx(0, "STATIC", null, 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0);
         try
@@ -315,7 +315,7 @@ public static partial class Win32Desktop
 
     public static bool IsNormalWindow(nint hwnd) => IsWindowVisible(hwnd) && !IsIconic(hwnd) && !IsZoomed(hwnd);
 
-    public static void PlaceWindow(nint hwnd, System.Drawing.Rectangle bounds)
+    internal static void PlaceWindow(nint hwnd, System.Drawing.Rectangle bounds)
     {
         // SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER. Synchronous, one attempt.
         if (!SetWindowPos(hwnd, 0, bounds.X, bounds.Y, bounds.Width, bounds.Height, 0x0004 | 0x0010 | 0x0200))
@@ -460,7 +460,7 @@ public static partial class Win32Desktop
     /// <summary>
     /// Bring a window to the foreground, restoring it first if minimized.
     /// </summary>
-    public static void FocusWindow(nint hwnd)
+    internal static void FocusWindow(nint hwnd)
     {
         if (GetForegroundWindow() == hwnd)
         {
@@ -482,7 +482,7 @@ public static partial class Win32Desktop
     /// <summary>
     /// Request a window to close by posting WM_CLOSE (non-blocking). False when the message was not posted.
     /// </summary>
-    public static bool CloseWindow(nint hwnd) => PostMessage(hwnd, WM_CLOSE, 0, 0);
+    internal static bool CloseWindow(nint hwnd) => PostMessage(hwnd, WM_CLOSE, 0, 0);
 
     /// <summary>
     /// Get the process id owning the current foreground window, or 0 if there
