@@ -148,6 +148,18 @@ public class McpServer
         }
     }
 
+    /// <summary>
+    /// Remember a line the transport refused. A refused line that reuses the id of a request still in flight
+    /// says nothing about that request, which may already have sent input, so it is not marked.
+    /// </summary>
+    internal void RecordRefusedRequest(string key)
+    {
+        if (!cancellations.ContainsKey(key))
+        {
+            RecordNotDispatched(key);
+        }
+    }
+
     /// <summary>Remember a request that never dispatched, so status can tell a broker it is safe to retry.</summary>
     internal void RecordNotDispatched(string key)
     {

@@ -195,6 +195,31 @@ public sealed class ProtocolBranchTests
         Assert.DoesNotContain("2. wait", result.Content[0].Text);
     }
 
+    [Fact]
+    public async Task ARefusedLineDoesNotMarkAnInFlightRequestAsNotDispatched()
+    {
+        var tool = new BlockingTool();
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        registry.RegisterTool(tool);
+        var server = new McpServer(registry, concurrentRequests: true);
+        var first = server.HandleRequestAsync(
+            Request("{\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"blocking\"}}")
+        );
+        await tool.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // A damaged line that reuses the in-flight id is refused, but that id was dispatched.
+        await new McpLineTransport(server).RunAsync(
+            new StringReader("{\"id\":7,\n"),
+            new StringWriter(),
+            CancellationToken.None
+        );
+        var notDispatched = await NotDispatched(server, "7");
+        tool.Release.SetResult();
+        await first.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(notDispatched);
+    }
+
     private static JsonElement[] Rows(params object[] rows) => rows.Select(row => Args(row)).ToArray();
 
     private static Task<McpToolResult> Count(ref int calls)

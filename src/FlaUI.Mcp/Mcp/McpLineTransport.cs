@@ -112,7 +112,7 @@ internal sealed class McpLineTransport(McpServer server)
     {
         if (id is { ValueKind: JsonValueKind.Number or JsonValueKind.String } key)
         {
-            server.RecordNotDispatched(key.GetRawText());
+            server.RecordRefusedRequest(key.GetRawText());
         }
 
         return new()
