@@ -102,7 +102,10 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override bool HasOwner(nint hwnd, nint owner) => hwnd != 0 && hwnd == ModalHwnd && owner == TargetHwnd;
 
-    public override nint WindowAt(Point point) => TargetHwnd;
+    /// <summary>Which window is under a point; the target everywhere unless a test says otherwise.</summary>
+    public Func<Point, nint> WindowUnder { get; set; } = _ => TargetHwnd;
+
+    public override nint WindowAt(Point point) => WindowUnder(point);
 
     /// <summary>Whether focusing the control gives it keyboard focus.</summary>
     public bool ElementTakesFocus { get; set; } = true;
