@@ -1,5 +1,6 @@
 using System.Drawing;
 using FlaUI.Mcp.Core;
+using FlaUI.Mcp.Te3;
 
 /// <summary>
 /// The checks that decide whether a te3_layout change happened, kept apart from the UIA reads so they can be tested:
@@ -110,4 +111,28 @@ internal static class LayoutChecks
         windows.FirstOrDefault(w =>
             w.Hwnd != main && !before.Contains(w.Hwnd) && w.Title.Length > 0 && !w.IsToolWindow
         );
+
+    /// <summary>
+    /// The TE3 windows when a layout call starts, which later checks compare with. Refuses, before any input, a titled
+    /// window already open that is not the main window or a floating pane: a dialog nobody has answered.
+    /// </summary>
+    public static IReadOnlyCollection<nint> Baseline(IReadOnlyList<Win32WindowInfo> windows, nint main)
+    {
+        if (
+            windows.FirstOrDefault(w =>
+                w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow && !IsFloatingPane(w.Title)
+            ) is
+            { } open
+        )
+        {
+            throw new InvalidOperationException(
+                $"TE3 already shows \"{open.Title}\". Answer or close it, then retry; no input sent."
+            );
+        }
+
+        return windows.Select(w => w.Hwnd).ToList();
+    }
+
+    // A dock pane TE3 floated (see KNOWN-ISSUES), titled like the pane.
+    private static bool IsFloatingPane(string title) => Te3PanePlan.IsNamedPane(title) || PaneReopen.IsMapped(title);
 }

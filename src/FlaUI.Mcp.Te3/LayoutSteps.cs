@@ -161,25 +161,23 @@ internal static class LayoutSteps
         return JsonSerializer.Serialize(reply, McpProtocol.JsonOptions);
     }
 
-    /// <summary>The TE3 process's top-level windows now: read before a click, for <see cref="RequireNoDialog"/>.</summary>
-    public static IReadOnlyCollection<nint> WindowsOf(Window window) =>
-        Win32Desktop.GetTopLevelWindows(window.Properties.ProcessId.ValueOrDefault).Select(w => w.Hwnd).ToList();
-
     // Closing a pane can open a dialog on an unfamiliar build. Watch for ~1s and stop there: answering it is the
-    // caller's decision. A window already open before the click (such as a floating pane) is not one it opened.
-    public static async Task RequireNoDialog(Window window, string closing, IReadOnlyCollection<nint> before)
+    // caller's decision. Windows in the call's baseline (such as a floating pane) are not ones it opened.
+    public static async Task RequireNoDialog(ILayoutSurface surface, string closing, IReadOnlyCollection<nint> baseline)
     {
-        var pid = window.Properties.ProcessId.ValueOrDefault;
-        var main = window.Properties.NativeWindowHandle.ValueOrDefault;
         for (var waited = 0; waited <= 1000; waited += 200)
         {
-            var dialog = LayoutChecks.NewDialog(Win32Desktop.GetTopLevelWindows(pid), main, before);
-            if (dialog != null)
-            {
-                throw new InvalidOperationException(DialogOpened(closing, dialog.Title));
-            }
+            RequireNoNewWindow(surface, closing, baseline);
+            await surface.Delay(200);
+        }
+    }
 
-            await Task.Delay(200);
+    /// <summary>Throws, before the next input, when a window outside the call's baseline is open now.</summary>
+    public static void RequireNoNewWindow(ILayoutSurface surface, string closing, IReadOnlyCollection<nint> baseline)
+    {
+        if (LayoutChecks.NewDialog(surface.Windows(), surface.MainWindow, baseline) is { } dialog)
+        {
+            throw new InvalidOperationException(DialogOpened(closing, dialog.Title));
         }
     }
 

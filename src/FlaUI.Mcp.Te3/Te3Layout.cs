@@ -13,8 +13,13 @@ using FlaUI.Mcp.Te3;
 /// te3_layout_read only reads (list, show-pane, plan-preset), and te3_layout changes the layout.
 /// </summary>
 /// <param name="readOnly">True for te3_layout_read.</param>
-public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? interaction = null, bool readOnly = false)
-    : ToolBase
+/// <param name="attach">The layout for a call; null attaches to the running TE3. Tests pass a scripted one.</param>
+public sealed partial class Te3Layout(
+    AutomationHost host,
+    Te3Interaction? interaction = null,
+    bool readOnly = false,
+    Func<JsonElement, InputTally, ILayoutSurface>? attach = null
+) : ToolBase
 {
     public const string ToolName = "te3_layout";
     public const string ReadToolName = "te3_layout_read";
@@ -49,26 +54,41 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
         }
 
         using var guard = readOnly ? null : grant.Guard();
-        var processId = Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3);
-        var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(processId));
-        var handle = Bind(host, hwnd, processId);
-        var window = host.Sessions.GetWindow(handle) ?? throw new InvalidOperationException("TE3 window not readable.");
+        var (surface, handle, window) = Attach(a, inputs);
         object result = GetStringArgument(a, "action") switch
         {
-            "list" => List(window),
-            "close" => await Close(inputs, handle, window, Titles(a), keep: false),
-            "keep" => await Close(inputs, handle, window, Titles(a), keep: true),
-            "show-pane" => ShowPane(window, Required(a, "title")),
-            "reopen-pane" => await ReopenPane(inputs, handle, window, Required(a, "title")),
-            "hide-pane" => await HidePane(inputs, handle, window, Required(a, "title")),
-            "apply-preset" => await ApplyPreset(inputs, handle, window, Required(a, "preset")),
-            "maximize-pane" => await PaneButton(inputs, handle, window, Required(a, "title"), "Maximize"),
-            "restore-pane" => await PaneButton(inputs, handle, window, Required(a, "title"), "Restore"),
-            "resize" => await Resize(inputs, handle, window, Required(a, "title"), a),
+            "list" => List(surface),
+            "close" => await Close(surface, inputs, Titles(a), keep: false),
+            "keep" => await Close(surface, inputs, Titles(a), keep: true),
+            "show-pane" => ShowPane(surface, Required(a, "title")),
+            "reopen-pane" => await ReopenPane(inputs, handle, Live(window), Required(a, "title")),
+            "hide-pane" => await HidePane(surface, Required(a, "title")),
+            "apply-preset" => await ApplyPreset(inputs, handle, Live(window), Required(a, "preset")),
+            "maximize-pane" => await PaneButton(surface, Required(a, "title"), "Maximize"),
+            "restore-pane" => await PaneButton(surface, Required(a, "title"), "Restore"),
+            "resize" => await Resize(inputs, handle, Live(window), Required(a, "title"), a),
             _ => throw new ArgumentException("Unsupported TE3 layout action"),
         };
         return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
     }
+
+    // The running TE3's window, or the scripted layout a test passed (which has no window for the drag actions).
+    private (ILayoutSurface Surface, string Handle, Window? Window) Attach(JsonElement a, InputTally inputs)
+    {
+        if (attach != null)
+        {
+            return (attach(a, inputs), "", null);
+        }
+
+        var processId = Te3Companion.ResolveProcessId(a, Te3Companion.RunningTe3);
+        var hwnd = Te3Companion.MainWindow(Win32Desktop.GetTopLevelWindows(processId));
+        var handle = Bind(host, hwnd, processId);
+        var window = host.Sessions.GetWindow(handle) ?? throw new InvalidOperationException("TE3 window not readable.");
+        return (new UiaSurface(this, inputs, handle, window), handle, window);
+    }
+
+    private static Window Live(Window? window) =>
+        window ?? throw new InvalidOperationException("This action needs the live TE3 window.");
 
     internal static string DialogOpened(string closing, string dialog) => LayoutSteps.DialogOpened(closing, dialog);
 
@@ -90,26 +110,6 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
         return handle;
     }
 
-    private static object ShowPane(Window window, string title)
-    {
-        if (!Te3PanePlan.IsNamedPane(title))
-        {
-            throw new ArgumentException("show-pane accepts AI Assistant, TOM Explorer or Properties.");
-        }
-
-        if (Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title)))
-        {
-            return new
-            {
-                pane = title,
-                visible = true,
-                changed = false,
-            };
-        }
-
-        throw new InvalidOperationException(LayoutSteps.HiddenMessage(title));
-    }
-
     private Task<object> ReopenPane(InputTally inputs, string handle, Window window, string title) =>
         LayoutSteps.Reopen(host, handle, window, inputs, title);
 
@@ -118,40 +118,6 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
 
     internal static bool DocumentOpen(Window window, string title) =>
         Parts(window).Any(part => part.Kind == "document" && TitleMatches(part.Title, title));
-
-    private async Task<object> HidePane(InputTally inputs, string handle, Window window, string title)
-    {
-        if (!Te3PanePlan.IsNamedPane(title))
-        {
-            throw new ArgumentException("hide-pane accepts AI Assistant, TOM Explorer or Properties.");
-        }
-
-        var pane = Parts(window).FirstOrDefault(part => part.Kind == "pane" && TitleMatches(part.Title, title));
-        if (pane == null)
-        {
-            return new
-            {
-                pane = title,
-                visible = false,
-                changed = false,
-            };
-        }
-
-        var before = LayoutSteps.WindowsOf(window);
-        await Click(inputs, handle, pane.Close);
-        await LayoutSteps.RequireNoDialog(window, pane.Title, before);
-        if (Parts(window).Any(part => part.Kind == "pane" && TitleMatches(part.Title, title)))
-        {
-            throw new InvalidOperationException("Pane remained visible after Close; inspect before retrying.");
-        }
-
-        return new
-        {
-            pane = title,
-            visible = false,
-            changed = true,
-        };
-    }
 
     private string Required(JsonElement a, string name) =>
         GetStringArgument(a, name) ?? throw new ArgumentException($"{name} is required for this action.");
@@ -198,19 +164,6 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
     private static AutomationElement? CloseButton(AutomationElement owner) =>
         owner.FindFirstChild(cf => cf.ByControlType(ControlType.Button).And(cf.ByName("Close")));
 
-    private static object List(Window window)
-    {
-        var origin = window.BoundingRectangle;
-        return Parts(window)
-            .Select(p => new
-            {
-                p.Title,
-                p.Kind,
-                bounds = Relative(p.Container.BoundingRectangle, origin),
-            })
-            .ToList();
-    }
-
     private static object Relative(Rectangle r, Rectangle origin) =>
         new
         {
@@ -220,51 +173,7 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
             height = r.Height,
         };
 
-    private async Task<object> Close(InputTally inputs, string handle, Window window, string[] titles, bool keep)
-    {
-        if (keep)
-        {
-            LayoutChecks.RequireKept(titles, Parts(window).Select(p => p.Title));
-        }
-
-        var attempted = new HashSet<string>();
-        var closes = 0;
-        var closed = await LayoutSteps.Progress(
-            "closed",
-            async sent =>
-            {
-                var next =
-                    closes++ < MaxCloses
-                        ? Parts(window)
-                            .FirstOrDefault(p => ShouldClose(p, titles, keep) && !attempted.Contains(p.Title))
-                        : null;
-                if (next == null)
-                {
-                    return null;
-                }
-
-                attempted.Add(next.Title);
-                var before = LayoutSteps.WindowsOf(window);
-                await LayoutSteps.Sending(inputs, sent, next.Title, () => Click(inputs, handle, next.Close));
-                await LayoutSteps.RequireNoDialog(window, next.Title, before);
-                return next.Title;
-            }
-        );
-
-        var remaining = Parts(window).Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
-        var unresolved = titles.Where(t => remaining.Any(r => TitleMatches(r, t)) != keep).ToList();
-        return new
-        {
-            closed,
-            remaining,
-            unresolved,
-        };
-    }
-
     internal static bool CanCloseKind(string kind) => kind == "pane";
-
-    private static bool ShouldClose(Part part, string[] titles, bool keep) =>
-        CanCloseKind(part.Kind) && titles.Any(t => TitleMatches(part.Title, t)) != keep;
 
     // TE3 retitles a pane while its Show changes filter is on ("TOM Explorer (Changed)").
     private const string ChangedSuffix = " (Changed)";
@@ -279,37 +188,6 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
     private static Part FindPane(Window window, string title) =>
         Parts(window).FirstOrDefault(p => p.Kind == "pane" && TitleMatches(p.Title, title))
         ?? throw new ArgumentException($"No docked pane titled '{title}'; use action list.");
-
-    // A docked pane shows Maximize; once maximized the same button is named Restore (observed on 3.27.1).
-    private async Task<object> PaneButton(InputTally inputs, string handle, Window window, string title, string button)
-    {
-        var pane = FindPane(window, title);
-        var target =
-            pane.Close.Parent?.FindFirstChild(cf => cf.ByControlType(ControlType.Button).And(cf.ByName(button)))
-            ?? throw new InvalidOperationException(
-                button == "Maximize"
-                    ? $"Pane '{pane.Title}' has no Maximize button (a tab-group pane may not, or it is already maximized)."
-                    : $"Pane '{pane.Title}' has no Restore button; it is not maximized."
-            );
-        await Click(inputs, handle, target);
-        // Maximize and Restore are one button renamed, so the other name showing is the read-back.
-        var other = button == "Maximize" ? "Restore" : "Maximize";
-        await LayoutChecks.ConfirmPaneButton(
-            pane.Title,
-            button,
-            () => PaneButtonShown(window, title, other),
-            ms => Task.Delay(ms)
-        );
-        return button == "Maximize"
-            ? new { maximized = pane.Title, readBack = other }
-            : (object)new { restored = pane.Title, readBack = other };
-    }
-
-    private static bool PaneButtonShown(Window window, string title, string button) =>
-        Parts(window)
-            .FirstOrDefault(p => p.Kind == "pane" && TitleMatches(p.Title, title))
-            ?.Close.Parent?.FindFirstChild(cf => cf.ByControlType(ControlType.Button).And(cf.ByName(button)))
-            is not null;
 
     private Task Click(InputTally inputs, string handle, AutomationElement element) =>
         Tool(inputs, "windows_click", new { @ref = host.Elements.Register(handle, element), handle });

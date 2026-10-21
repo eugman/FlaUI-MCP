@@ -50,7 +50,7 @@ public sealed partial class Te3Layout
         }
         catch (LayoutSteps.ProgressException failure)
         {
-            throw LayoutSteps.ReadBack(failure, () => List(window));
+            throw LayoutSteps.ReadBack(failure, () => List(new UiaSurface(this, inputs, handle, window)));
         }
     }
 
