@@ -335,6 +335,8 @@ public static class ArtifactFiles
 
     internal static async Task<int> RunGitCheck(ProcessStartInfo start, TimeSpan? timeLimit = null)
     {
+        // Raw on purpose: git only reads the repository's index here and changes neither the desktop nor TE3, so it
+        // needs no input lease or grant (Core's GuardedDesktop.StartProcess is for starts that change something).
         using var process = Process.Start(start) ?? throw new IOException("Git did not start");
         using var timeout = new CancellationTokenSource(timeLimit ?? TimeSpan.FromSeconds(30));
         var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
