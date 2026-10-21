@@ -16,6 +16,8 @@ public sealed partial class Te3Layout
         "restore-pane",
         "resize",
         "close-document",
+        "snapshot",
+        "restore",
     ];
 
     private string[] Actions => readOnly ? ReadActions : ChangeActions;
@@ -62,6 +64,9 @@ public sealed partial class Te3Layout
                 + "pane more than 4 px off it fails the call with the measured step. "
                 + "close-document: press a document tab's own Close (DAX Query, DAX Package Manager), refused before "
                 + "input for a pane or an unknown title, and read back as gone; a dialog it opens is reported. "
+                + "snapshot: copy Layouts.json, UiPreferences.json and Preferences.json from %LocalAppData%/TabularEditor3, which TE3 rewrites on "
+                + "close, into `path` (a new folder) with their hashes; restore: copy a snapshot back and read it back, "
+                + "refused while TE3 runs unless `whileRunning` (the user asked) and when the snapshot changed. "
                 + "Every action takes desktop focus and needs an active te3_interaction_begin grant. No model edits. "
                 + "Reads (list, show-pane, plan-preset) are te3_layout_read.";
 
@@ -82,7 +87,7 @@ public sealed partial class Te3Layout
                 title = new
                 {
                     type = "string",
-                    description = "show-pane/reopen-pane/hide-pane/maximize-pane/restore-pane/resize: the pane title.",
+                    description = "show-pane/reopen-pane/hide-pane/maximize-pane/restore-pane/resize: the pane title; close-document: the document tab's title.",
                 },
                 preset = new { type = "string", @enum = new[] { FlaUI.Mcp.Te3.Te3PanePlan.AssistantModelReview } },
                 windowWidth = new
@@ -99,6 +104,16 @@ public sealed partial class Te3Layout
                 },
                 width = new { type = "integer", description = "resize: target width in physical pixels." },
                 height = new { type = "integer", description = "resize: target height in physical pixels." },
+                path = new
+                {
+                    type = "string",
+                    description = "snapshot: a new folder to copy the layout files into; restore: a snapshot folder.",
+                },
+                whileRunning = new
+                {
+                    type = "boolean",
+                    description = "restore: only when the user asked to restore while TE3 runs (its close overwrites it).",
+                },
             },
             required = new[] { "action" },
             additionalProperties = false,
