@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Te3Page's own menu clicks go through `GuardedInput.Click` and Core's `ClickPoint`; a covered pointer target is refused as `point-not-on-target`.
 - The run journal's result entries carry `isError`, `content` and `structuredContent` explicitly.
 - The TE3 offline tests set `FLAUI_OFFLINE_TESTS=1` and install a fake desktop, so the real desktop refuses input from them.
+- `te3_model_state` and `te3_native_preflight` are annotated as Core status reads (`McpToolAnnotations.Status`), so they are answered at once even while a stranded call holds the serial slot. The TE CLI starts through Core's `GuardedDesktop.StartProcess`.
 - TE3 coverage and mutation testing moved to `scripts/coverage-te3.ps1` and `docs/mutation-te3.md`; `scripts/coverage.ps1`, `scripts/mutation.ps1` and `docs/mutation.md` now belong to the core and cover its own offline tests. `dotnet-stryker` comes from the core's root tool manifest.
 
 ### Added

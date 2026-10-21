@@ -15,9 +15,10 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
 
     public override string Name => name;
 
-    // A status-bar read changes nothing; navigation takes the desktop, types and clicks, but edits nothing.
+    // A status-bar read changes nothing and reports on TE3's state, so Core answers it at once (Status), even while a
+    // stranded call holds the serial slot; navigation takes the desktop, types and clicks, but edits nothing.
     public override McpToolAnnotations Annotations =>
-        name == ModelState ? McpToolAnnotations.ReadOnly : McpToolAnnotations.Input(destructive: false);
+        name == ModelState ? McpToolAnnotations.Status : McpToolAnnotations.Input(destructive: false);
     public override string Description =>
         name switch
         {

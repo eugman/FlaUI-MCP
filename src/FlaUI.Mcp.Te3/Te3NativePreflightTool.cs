@@ -17,8 +17,9 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
 
     public override string Name => ToolName;
 
-    // Talks only to a loopback endpoint and calls only a read-only identity tool there.
-    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
+    // Talks only to a loopback endpoint and calls only a read-only identity tool there: a status read, answered at
+    // once by Core.
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Status;
     public override string Description =>
         "Connect once to an explicit local TE3 native MCP endpoint, list tools, and call only a declared read-only identity tool. "
         + "Requires expected model identity; returns a mismatch error and never retries or modifies a model. "
