@@ -56,6 +56,11 @@ public class ModalDialogTests
             Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"Click took too long: {sw.Elapsed}");
             Assert.Contains("modal dialog", clickResult, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Test Modal Dialog", clickResult);
+            // Kills ClickTool:427 String (the modal reply's guidance emptied).
+            Assert.Contains(
+                "Find it with windows_list_windows, then use windows_screenshot or windows_send_keys (no ref) with its handle.",
+                clickResult
+            );
 
             // 2. While the dialog is open, snapshot must fail fast with guidance
             //    instead of hanging until the global timeout
