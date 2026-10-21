@@ -19,16 +19,17 @@ public sealed partial class Te3Layout
             .Where(w => w.Hwnd != surface.MainWindow && w.Title.Length > 0 && !w.IsToolWindow)
             .Select(w => new ListedPart(
                 w.Title,
-                "floating",
+                LayoutChecks.IsFloatingPane(w, surface.AutomationIdOf) ? "floating" : "dialog",
                 surface.BoundsOf(w.Hwnd) is { } bounds ? Relative(bounds, surface.Origin) : null
             ));
         return docked.Concat(floating).ToList();
     }
 
+    // Floating panes only (title and AutomationId, LayoutChecks); a dialog is never listed as one.
     private static List<string> FloatingTitles(ILayoutSurface surface) =>
         surface
             .Windows()
-            .Where(w => w.Hwnd != surface.MainWindow && w.Title.Length > 0 && !w.IsToolWindow)
+            .Where(w => w.Hwnd != surface.MainWindow && LayoutChecks.IsFloatingPane(w, surface.AutomationIdOf))
             .Select(w => w.Title)
             .ToList();
 

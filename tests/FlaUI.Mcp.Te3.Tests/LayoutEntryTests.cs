@@ -349,6 +349,8 @@ public sealed class LayoutEntryTests : IDisposable
             {
                 var layout = Standard(inputs);
                 layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
+                layout.AutomationIds[0x30] = "DaxDependencies";
+                layout.Extra.Add(new(0x40, "Save changes?", 7, true, false, false));
                 return layout;
             },
             readOnly: true
@@ -361,6 +363,11 @@ public sealed class LayoutEntryTests : IDisposable
         Assert.Contains(
             listed.RootElement.EnumerateArray(),
             p => p.GetProperty("title").GetString() == "Dependencies" && p.GetProperty("kind").GetString() == "floating"
+        );
+        // A dialog is a window of its own too, but not a floating pane.
+        Assert.Contains(
+            listed.RootElement.EnumerateArray(),
+            p => p.GetProperty("title").GetString() == "Save changes?" && p.GetProperty("kind").GetString() == "dialog"
         );
     }
 

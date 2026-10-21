@@ -157,5 +157,7 @@ internal static class LayoutChecks
     private static readonly (string Title, string AutomationId)[] FloatingPanes = [("Dependencies", "DaxDependencies")];
 
     internal static bool IsFloatingPane(Win32WindowInfo window, Func<nint, string?> automationIdOf) =>
-        FloatingPanes.Any(p => p.Title == window.Title && p.AutomationId == automationIdOf(window.Hwnd));
+        FloatingPanes.Any(p =>
+            Te3Layout.TitleMatches(window.Title, p.Title) && p.AutomationId == automationIdOf(window.Hwnd)
+        );
 }
