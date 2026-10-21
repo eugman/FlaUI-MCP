@@ -82,8 +82,9 @@ public sealed partial class Te3Layout(AutomationHost host, Te3Interaction? inter
     {
         var handle = host.Sessions.RegisterNativeWindow(hwnd, processId);
         // Parts come from FindAllDescendants, which bypasses ElementQuery, the step that otherwise
-        // records this identity before refs reach GuardedInput and the pending-provider check.
-        // TODO(core): ElementRegistry.Register should refuse a handle with no identity.
+        // records this identity before refs reach GuardedInput and the pending-provider check. Core
+        // now refuses a mutation through a ref without one ("no process identity; no action
+        // dispatched"), so without this every layout click would be refused rather than unguarded.
         host.Elements.SetWindowIdentity(handle, processId, hwnd);
         return handle;
     }

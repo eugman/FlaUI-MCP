@@ -83,6 +83,20 @@ public sealed class Te3LayoutTests
     }
 
     [Fact]
+    public void CoreRefusesALayoutRefWithoutTheWindowIdentity()
+    {
+        // Why Bind still records the identity: Core refuses the click rather than recording it itself.
+        using var host = new FlaUI.Mcp.Core.AutomationHost(FlaUI.Mcp.Core.ProcessPolicy.AllowAll);
+        using var form = new System.Windows.Forms.Form();
+        var handle = host.Sessions.RegisterNativeWindow(form.Handle, Environment.ProcessId);
+        var reference = host.Elements.Register(handle, host.Sessions.GetWindow(handle)!);
+
+        var error = Assert.Throws<InvalidOperationException>(() => host.Elements.ValidateReference(reference));
+
+        Assert.Contains("no process identity", error.Message);
+    }
+
+    [Fact]
     public async Task AFailedStepReportsTheStepsAlreadyDone()
     {
         // keep/close and apply-preset loop over panes; a dialog on the second close used to drop the
