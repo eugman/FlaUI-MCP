@@ -83,6 +83,7 @@ A product repo that merges this core must check the following.
   - `MouseTool.Drag` is internal.
   - `ClickTool` is a partial class; its replies are in `ClickToolReplies.cs`.
   - The transport calls the new `McpServer.RecordRefusedRequest`.
+- **Native focus and close.** `SessionManager.FocusWindow` and `CloseWindow` on a window with a native handle deliberately bypass the pending tracker: Win32 focus and `WM_CLOSE` never wait on UI Automation, and they are the documented way to reach or close the modal dialog that is blocking the provider. Hosts that want the stricter behaviour can check `PendingInvokeTracker.TryGetPending` for the window's process themselves before calling them, as TE3's `RunExecutor` does.
 - **Raw calls to switch.** Product code must not start processes, make pattern calls or write the clipboard raw. Use the public guarded calls instead; each takes the lease and the permission check, counts, and is refused under `FLAUI_OFFLINE_TESTS`:
   - `GuardedDesktop.StartProcess(startInfo)` for `Process.Start`.
   - `GuardedDesktop.CallPattern(processId, description, call, pending, validate, gracePeriod)` for a UI Automation call that changes the app. It refuses while the provider is blocked, runs `validate` and the integrity check, counts, and runs modal-aware, returning the `PatternCallResult` (pass it to `ToolOutcome.FromPattern`). It takes the lease itself, so do not hold a `GuardedInput` around it.
