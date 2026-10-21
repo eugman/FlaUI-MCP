@@ -18,7 +18,7 @@ internal static class CheckpointOutput
                 FileOptions.DeleteOnClose
             );
         }
-        catch (IOException error)
+        catch (IOException error) when (error is not (DirectoryNotFoundException or FileNotFoundException))
         {
             throw new IOException("Another command is updating this run's manifest; retry when it finishes.", error);
         }
