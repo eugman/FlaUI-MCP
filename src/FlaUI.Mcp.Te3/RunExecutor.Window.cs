@@ -71,14 +71,22 @@ public static partial class RunExecutor
     }
 
     /// <summary>
-    /// Asks Windows to focus the run's TE3 window: journaled, through Core's guarded and pending-aware focus, and
-    /// counted as input only when it changed the foreground or restored the window.
+    /// Asks Windows to focus the run's TE3 window: journaled, through Core's guarded focus, and counted as input only
+    /// when it changed the foreground or restored the window. Refused first, with nothing journaled or sent, while an
+    /// earlier call still holds TE3's provider: Core's native-handle focus does not consult the pending tracker.
     /// </summary>
-    internal static Task FocusOwnedWindow(AutomationHost host, string handle, string journal, InputTally inputs) =>
-        RunJournal.Input(
+    internal static Task FocusOwnedWindow(AutomationHost host, string handle, string journal, InputTally inputs)
+    {
+        if (host.Pending.TryGetPending(host.Sessions.GetInputTarget(handle).ProcessId, out var held))
+        {
+            throw new ProviderBlockedException(held);
+        }
+
+        return RunJournal.Input(
             journal,
             "te3_focus_window",
             new { handle },
             () => inputs.Dispatch(() => host.Sessions.FocusWindow(handle, host.Pending))
         );
+    }
 }
