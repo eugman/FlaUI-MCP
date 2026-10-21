@@ -74,21 +74,14 @@ public static class Te3StatusBar
         // window exists, even reading "(No model loaded)" / "(Nothing selected)".
         var connection = texts[^1];
         var selection = texts[^2];
-        var load = texts[0];
-        // If those collide the bar is not the shape this mapping knows, so say so instead of
-        // reporting one panel under two names.
-        // load vs caret was the gap: TE3 blanks the message panel during some operations, leaving
-        // [caret, selection, connection], so load became the caret panel and the bar still reported
-        // "recognized" with LoadState reading "Ln 5  Col 38  INS".
+        // TE3 blanks the message panel during some operations, leaving [caret, selection, connection]: then there is
+        // no load state, and the caret is never read as one. The other slots are still read.
+        var load = ReferenceEquals(texts[0], caret) ? null : texts[0];
+        // If those collide the bar is not the shape this mapping knows, so say so instead of reporting one panel under
+        // two names.
         if (
-            caret is not null
-                && (
-                    ReferenceEquals(caret, connection)
-                    || ReferenceEquals(caret, selection)
-                    || ReferenceEquals(caret, load)
-                )
-            || ReferenceEquals(load, selection)
-            || ReferenceEquals(load, connection)
+            caret is not null && (ReferenceEquals(caret, connection) || ReferenceEquals(caret, selection))
+            || load is not null && (ReferenceEquals(load, selection) || ReferenceEquals(load, connection))
         )
         {
             return new("unrecognized", null, null, null, null, null, slots);
@@ -96,7 +89,7 @@ public static class Te3StatusBar
 
         return new(
             "recognized",
-            Text(load),
+            load is null ? null : Text(load),
             bpa is null ? null : Text(bpa),
             caret is null ? null : Text(caret),
             Text(selection),

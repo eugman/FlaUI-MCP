@@ -202,11 +202,11 @@ public sealed class ModelStateTests
     }
 
     [Fact]
-    public void ABlankedMessagePanelIsNotReadAsTheLoadState()
+    public void ABlankedMessagePanelIsNotReadAsTheLoadStateAndTheRestIsStillRead()
     {
-        // TE3 blanks the message panel during some operations. That leaves
-        // [caret, selection, connection], so the leftmost text became the load state and the bar
-        // still reported "recognized" with LoadState reading "Ln 5	Col 38		INS".
+        // TE3 blanks the message panel during some operations, leaving [caret, selection, connection]. The leftmost
+        // text once became the load state ("Ln 5 Col 38 INS"); then the whole bar was refused, and te3_model_state
+        // and the object walk lost the selection and connection with it. The other slots are read on their own.
         var state = Te3StatusBar.Map([
             Text(null),
             Text(null),
@@ -216,8 +216,31 @@ public sealed class ModelStateTests
             Text("Measure \"Gross Sales\""),
             Text("(No connection)"),
         ]);
-        Assert.Equal("unrecognized", state.Layout);
+        Assert.Equal("recognized", state.Layout);
         Assert.Null(state.LoadState);
+        Assert.StartsWith("Ln 5", state.Caret);
+        Assert.Equal("Measure \"Gross Sales\"", state.Selection);
+        Assert.Equal("(No connection)", state.Connection);
+    }
+
+    [Fact]
+    public void TheLive3271BarAfterShowChangesOffIsRead()
+    {
+        // te3_model_state on 3.27.1 (2026-10-21, after tom-explorer/changes-off) replied unrecognized with no fields.
+        var state = Te3StatusBar.Map([
+            Text(null),
+            Text(null),
+            Panel("Button", "770 BP issues", null),
+            Text(null),
+            Text("Ln 0	Col 0		INS"),
+            Text("(Nothing selected)"),
+            Text("sp-demo-mcp@WORK-LAPTOP"),
+            Panel("Button", "MCP Stopped", null),
+        ]);
+        Assert.Equal("recognized", state.Layout);
+        Assert.Equal("(Nothing selected)", state.Selection);
+        Assert.Equal("sp-demo-mcp@WORK-LAPTOP", state.Connection);
+        Assert.Equal("770 BP issues", state.BpaSummary);
     }
 
     [Fact]
