@@ -9,9 +9,17 @@ public sealed class Te3Page(
     AutomationHost host,
     string handle,
     Func<string, object, Task> invoke,
-    Action<string>? reportStep = null
+    Action<string>? reportStep = null,
+    string? journal = null
 )
 {
+    /// <summary>
+    /// Sends input this page dispatches itself rather than through a Core tool, journaled like tool calls.
+    /// Every caller holds a GuardedInput, and the send completes synchronously inside it.
+    /// </summary>
+    private Task SendInput(string action, object arguments, Action send) =>
+        RunJournal.Input(journal, action, arguments, send);
+
     private readonly ElementQuery query = new(host.Sessions, host.Elements, host.Pending);
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
@@ -1421,7 +1429,16 @@ public sealed class Te3Page(
         }
 
         reportStep?.Invoke("Open Model menu");
-        input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(menuBarPoint));
+        await SendInput(
+            "te3_pointer_move",
+            new
+            {
+                target = "Model menu",
+                menuBarPoint.X,
+                menuBarPoint.Y,
+            },
+            () => input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(menuBarPoint))
+        );
         return ownerIdentity;
     }
 
@@ -1883,7 +1900,16 @@ public sealed class Te3Page(
         }
 
         reportStep?.Invoke("Apply default layout");
-        input.Send(() => FlaUI.Core.Input.Mouse.Click(point));
+        await SendInput(
+            "te3_click",
+            new
+            {
+                target = "Default layout",
+                point.X,
+                point.Y,
+            },
+            () => input.Send(() => FlaUI.Core.Input.Mouse.Click(point))
+        );
     }
 
     // TE3 menu commands are clicked physically inside their own popup window; UIA Invoke can stay pending.
@@ -1899,7 +1925,16 @@ public sealed class Te3Page(
         }
 
         reportStep?.Invoke("Click " + label);
-        input.Send(() => FlaUI.Core.Input.Mouse.Click(point));
+        await SendInput(
+            "te3_click",
+            new
+            {
+                target = label,
+                point.X,
+                point.Y,
+            },
+            () => input.Send(() => FlaUI.Core.Input.Mouse.Click(point))
+        );
     }
 
     // Discovery helpers: capture-only probes that record locators before recipes are written.
@@ -2133,7 +2168,16 @@ public sealed class Te3Page(
             throw new InvalidOperationException("TE3 title bar is obscured; pointer not moved");
         }
 
-        input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(point));
+        await SendInput(
+            "te3_pointer_move",
+            new
+            {
+                target = "title bar",
+                point.X,
+                point.Y,
+            },
+            () => input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(point))
+        );
         await Task.Delay(200);
     }
 

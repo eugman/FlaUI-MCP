@@ -30,6 +30,20 @@ public sealed class DirectInputJournalTests
         throw new DirectoryNotFoundException("src/FlaUI.Mcp.Te3 not found above " + AppContext.BaseDirectory);
     }
 
+    // The line and the call it is an argument of: back to the line whose unclosed '(' encloses it.
+    private static string EnclosingCall(string[] lines, int index)
+    {
+        var depth = 0;
+        var start = index;
+        while (start > 0 && depth <= 0 && !lines[start - 1].TrimEnd().EndsWith(';'))
+        {
+            start--;
+            depth += lines[start].Count(c => c == '(') - lines[start].Count(c => c == ')');
+        }
+
+        return string.Join(' ', lines[(depth > 0 ? start : index)..(index + 1)]);
+    }
+
     [Theory]
     [InlineData("Te3Page.cs")]
     [InlineData("RunExecutor.cs")]
@@ -40,7 +54,7 @@ public sealed class DirectInputJournalTests
         var unjournaled = Enumerable
             .Range(0, lines.Length)
             .Where(i => DirectInput.IsMatch(lines[i]) && !lines[i].TrimStart().StartsWith("//"))
-            .Where(i => !Enumerable.Range(Math.Max(0, i - 3), Math.Min(i, 3) + 1).Any(j => Journaled.IsMatch(lines[j])))
+            .Where(i => !Journaled.IsMatch(EnclosingCall(lines, i)))
             .Select(i => $"{file}:{i + 1}: {lines[i].Trim()}")
             .ToList();
 

@@ -59,7 +59,7 @@ public static class RunSafety
         }
     }
 
-    public static async Task CloseOwned(int pid, long startedTicks, string executable)
+    public static async Task CloseOwned(int pid, long startedTicks, string executable, string? journal = null)
     {
         if (pid == 0)
         {
@@ -83,7 +83,7 @@ public static class RunSafety
                 return;
             }
 
-            process.CloseMainWindow();
+            await RunJournal.Input(journal, "te3_close_main_window", new { pid }, () => process.CloseMainWindow());
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try
             {

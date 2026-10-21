@@ -27,10 +27,24 @@ internal static class RunJournal
     }
 
     /// <summary>Sends one input that no Core tool dispatches, journaled like a tool call when the run has a journal.</summary>
-    internal static Task Input(string? journal, string action, object arguments, Action send)
+    internal static async Task Input(string? journal, string action, object arguments, Action send)
     {
-        send();
-        return Task.CompletedTask;
+        if (journal == null)
+        {
+            send();
+            return;
+        }
+
+        await Tool(
+            journal,
+            action,
+            arguments,
+            () =>
+            {
+                send();
+                return Task.FromResult(new McpToolResult { Content = [new() { Text = action + " sent." }] });
+            }
+        );
     }
 
     /// <summary>

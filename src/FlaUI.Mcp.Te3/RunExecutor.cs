@@ -113,6 +113,7 @@ public static class RunExecutor
             ExpectedDpi = config.ExpectedDpi,
         };
         var manifestPath = Path.Combine(output, "manifest.json");
+        var journal = Path.Combine(output, "actions.jsonl");
         void Save() => AtomicJournal.Write(manifestPath, manifest, RunConfig.Json);
         Save();
         SettingsLease? settings = null;
@@ -157,9 +158,9 @@ public static class RunExecutor
             manifest.Te3Version = app.MainModule?.FileVersionInfo.ProductVersion;
             var marker = manifest.Database.Length > 0 ? manifest.Database : id;
             handle = await WaitForOwnedWindow(host, app, marker, cancellationToken);
-            await ActivateOwnedWindow(host, handle, app.Id, $"{manifest.Database} {id}", cancellationToken);
+            await ActivateOwnedWindow(host, handle, app.Id, $"{manifest.Database} {id}", journal, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken));
+            var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken), journal);
             await page.DefaultLayout();
             cancellationToken.ThrowIfCancellationRequested();
             await recipe.Execute(new RecipeContext(page, config, manifest, model, Save));
@@ -207,7 +208,7 @@ public static class RunExecutor
             var closed = false;
             try
             {
-                await RunSafety.CloseOwned(manifest.ProcessId, manifest.ProcessStartedTicks, manifest.Te3Path);
+                await RunSafety.CloseOwned(manifest.ProcessId, manifest.ProcessStartedTicks, manifest.Te3Path, journal);
                 RunSafety.RequireExclusiveTe3();
                 closed = true;
             }
@@ -282,7 +283,7 @@ public static class RunExecutor
             cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3(manifest.ProcessId);
             var result = await RunJournal.Tool(
-                Path.Combine(output, "actions.jsonl"),
+                journal,
                 tool,
                 arguments,
                 () => host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(arguments))
@@ -331,10 +332,11 @@ public static class RunExecutor
         string handle,
         int processId,
         string label,
+        string journal,
         CancellationToken cancellationToken
     )
     {
-        host.Sessions.FocusWindow(handle);
+        await RunJournal.Input(journal, "te3_focus_window", new { handle }, () => host.Sessions.FocusWindow(handle));
         var target = host.Sessions.GetInputTarget(handle);
         var activation = Stopwatch.StartNew();
         if (Win32Desktop.GetForegroundWindow() != target.Hwnd)
