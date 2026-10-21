@@ -65,7 +65,10 @@ public sealed class ProtocolCancellationTests
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
         registry.RegisterTool(new FakeTool(entered, release, ended));
-        registry.RegisterTool(new ImmediateTool());
+        var firstEndedWhenSecondRan = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        registry.RegisterTool(new ImmediateTool(() => firstEndedWhenSecondRan.TrySetResult(ended.Task.IsCompleted)));
         var server = new McpServer(registry);
         var first = server.HandleRequestAsync(
             Request("{\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"fake\"}}")
@@ -76,16 +79,15 @@ public sealed class ProtocolCancellationTests
         );
         Assert.Null(await first.WaitAsync(TimeSpan.FromSeconds(5)));
 
-        // The cancelled tool has not returned yet, so the next call must wait for the serial slot.
+        // The cancelled tool has not returned yet, so it still holds the serial slot and the next
+        // call can only run once it ends.
+        Assert.True(server.SerialSlotHeld);
         var second = server.HandleRequestAsync(
             Request("{\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"immediate\"}}")
         );
-        await Task.Delay(TimeSpan.FromMilliseconds(300));
-        Assert.False(second.IsCompleted);
-
         release.SetResult();
-        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.NotNull(await second.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(await firstEndedWhenSecondRan.Task.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
     [Fact]
@@ -99,14 +101,17 @@ public sealed class ProtocolCancellationTests
         Assert.Contains(result.Outcome.OperationId!, JsonSerializer.Serialize(registry.Operations.Status()));
     }
 
-    private sealed class ImmediateTool : ToolBase
+    private sealed class ImmediateTool(Action? onRun = null) : ToolBase
     {
         public override string Name => "immediate";
         public override string Description => "no desktop";
         public override object InputSchema => new { };
 
-        public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
-            Task.FromResult(TextResult("accepted"));
+        public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
+        {
+            onRun?.Invoke();
+            return Task.FromResult(TextResult("accepted"));
+        }
     }
 
     private sealed class FakeTool(

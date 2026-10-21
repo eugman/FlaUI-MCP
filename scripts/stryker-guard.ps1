@@ -1,4 +1,4 @@
-# Stops a TE3 mutation run that could reach more than the offline TE3 tests. coverage.ps1 checks each line Stryker
+# Stops a TE3 mutation run that could reach more than the offline TE3 tests. coverage-te3.ps1 checks each line Stryker
 # prints at startup, before its initial test run, and kills Stryker on the first line that shows a second test
 # project, a project other than FlaUI.Mcp.Te3.Tests (any *IntegrationTests* drives the desktop), or more tests than
 # the offline project has. Run directly, it checks one line: exit 1 with the reason, or exit 0.

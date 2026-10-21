@@ -23,106 +23,11 @@ public class McpServer
         _concurrentRequests = concurrentRequests;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken = default)
-    {
-        using var stdin = Console.OpenStandardInput();
-        using var stdout = Console.OpenStandardOutput();
-        using var reader = new StreamReader(stdin);
-        using var writer = new StreamWriter(stdout) { AutoFlush = true };
-        using var outputGate = new SemaphoreSlim(1, 1);
-        var requests = new List<Task>();
-        async Task Respond(JsonRpcRequest request)
-        {
-            try
-            {
-                var response = await HandleRequestAsync(request);
-                if (response == null)
-                {
-                    return;
-                }
+    /// <summary>True while a serialized tool call, possibly a cancelled one still running, owns the slot.</summary>
+    internal bool SerialSlotHeld => serialRequests.CurrentCount == 0;
 
-                await outputGate.WaitAsync();
-                try
-                {
-                    await writer.WriteLineAsync(JsonSerializer.Serialize(response, McpProtocol.JsonOptions));
-                }
-                finally
-                {
-                    outputGate.Release();
-                }
-            }
-            catch (Exception error)
-            {
-                Console.Error.WriteLine(error.Message);
-            }
-        }
-
-        // Redirect stderr for logging (MCP servers should not write to stdout except JSON-RPC)
-        Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            var line = await reader.ReadLineAsync(cancellationToken);
-            if (line == null)
-            {
-                break;
-            }
-
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            try
-            {
-                var request = JsonSerializer.Deserialize<JsonRpcRequest>(line, McpProtocol.JsonOptions);
-                if (request == null)
-                {
-                    continue;
-                }
-
-                if (request.Id == null)
-                {
-                    await Respond(request);
-                }
-                else
-                {
-                    requests.RemoveAll(t => t.IsCompleted);
-                    if (requests.Count >= 32)
-                    {
-                        await outputGate.WaitAsync(cancellationToken);
-                        try
-                        {
-                            var busy = new JsonRpcResponse
-                            {
-                                Id = request.Id,
-                                Error = new JsonRpcError
-                                {
-                                    Code = -32000,
-                                    Message = "Request capacity reached; no action dispatched.",
-                                },
-                            };
-                            await writer.WriteLineAsync(JsonSerializer.Serialize(busy, McpProtocol.JsonOptions));
-                        }
-                        finally
-                        {
-                            outputGate.Release();
-                        }
-
-                        continue;
-                    }
-
-                    requests.Add(Respond(request));
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error processing request: {ex.Message}");
-            }
-        }
-
-        await Task.WhenAll(requests);
-    }
+    public Task RunAsync(CancellationToken cancellationToken = default) =>
+        new McpLineTransport(this).RunConsoleAsync(cancellationToken);
 
     internal async Task<JsonRpcResponse?> HandleRequestAsync(JsonRpcRequest request)
     {
@@ -205,9 +110,11 @@ public class McpServer
         }
 
         notDispatched.TryRemove(key, out _);
+        // Operation status is read-only and must answer while a stranded call still holds the serial slot.
+        var serialized = !_concurrentRequests && callParams.Name != Tools.OperationStatusTool.ToolName;
         try
         {
-            if (!_concurrentRequests)
+            if (serialized)
             {
                 await serialRequests.WaitAsync(stop.Token);
             }
@@ -226,7 +133,7 @@ public class McpServer
             }
             finally
             {
-                if (!_concurrentRequests)
+                if (serialized)
                 {
                     ReleaseSerialSlot(stranded);
                 }
@@ -234,18 +141,35 @@ public class McpServer
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
-            notDispatched[key] = 1;
-            cancelledBeforeDispatch.Enqueue(key);
-            while (cancelledBeforeDispatch.Count > 128 && cancelledBeforeDispatch.TryDequeue(out var old))
-            {
-                notDispatched.TryRemove(old, out _);
-            }
-
+            RecordNotDispatched(key);
             return null;
         }
         finally
         {
             cancellations.TryRemove(key, out _);
+        }
+    }
+
+    /// <summary>
+    /// Remember a line the transport refused. A refused line that reuses the id of a request that is in flight
+    /// or already ran says nothing about that request, which may have sent input, so it is not marked.
+    /// </summary>
+    internal void RecordRefusedRequest(string key)
+    {
+        if (!cancellations.ContainsKey(key) && !_toolRegistry.Operations.Ran(key))
+        {
+            RecordNotDispatched(key);
+        }
+    }
+
+    /// <summary>Remember a request that never dispatched, so status can tell a broker it is safe to retry.</summary>
+    internal void RecordNotDispatched(string key)
+    {
+        notDispatched[key] = 1;
+        cancelledBeforeDispatch.Enqueue(key);
+        while (cancelledBeforeDispatch.Count > 128 && cancelledBeforeDispatch.TryDequeue(out var old))
+        {
+            notDispatched.TryRemove(old, out _);
         }
     }
 

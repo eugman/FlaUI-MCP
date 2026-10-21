@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - `FlaUI.Mcp.Te3 mcp` is now the one server to configure. It serves the generic `windows_*` tools (including the window-management extensions) alongside the TE3 tools from one registry, so element refs and window handles work across both. Running `FlaUI.Mcp.exe` next to it is no longer needed.
+- TE3 coverage and mutation testing moved to `scripts/coverage-te3.ps1` and `docs/mutation-te3.md`; `scripts/coverage.ps1`, `scripts/mutation.ps1` and `docs/mutation.md` now belong to the core and cover its own offline tests. `dotnet-stryker` comes from the core's root tool manifest.
 
 ### Added
 - `te3_layout` on the TE3 companion server arranges TE3 for a screenshot. `list` shows docked panes and document tabs with bounds. `close` and `keep` close panes or tabs by title, and stop at a save prompt. `maximize-pane` and `restore-pane` use the pane's own buttons. `resize` drags the dock splitter until a pane is a given width or height, and reports the size reached. Pane titles match with or without TE3's " (Changed)" suffix.

@@ -6,6 +6,7 @@ artifacts/
 TestResults/
 *.trx
 coverage/
+StrykerOutput/
 
 # IDE and OS
 .vs/

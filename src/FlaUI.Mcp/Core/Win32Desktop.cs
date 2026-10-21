@@ -348,7 +348,7 @@ public static partial class Win32Desktop
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(nint hWnd, int nCmdShow);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
 
     [DllImport("user32.dll")]
@@ -510,12 +510,9 @@ public static partial class Win32Desktop
     }
 
     /// <summary>
-    /// Request a window to close by posting WM_CLOSE (non-blocking).
+    /// Request a window to close by posting WM_CLOSE (non-blocking). False when the message was not posted.
     /// </summary>
-    public static void CloseWindow(nint hwnd)
-    {
-        PostMessage(hwnd, WM_CLOSE, 0, 0);
-    }
+    public static bool CloseWindow(nint hwnd) => PostMessage(hwnd, WM_CLOSE, 0, 0);
 
     /// <summary>
     /// Get the process id owning the current foreground window, or 0 if there

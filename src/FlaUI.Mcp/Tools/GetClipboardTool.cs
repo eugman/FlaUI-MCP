@@ -17,6 +17,8 @@ public sealed class GetClipboardTool(ProcessPolicy? policy = null, Func<int>? cl
 
     public override string Name => "windows_get_clipboard";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
+
     public override string Description =>
         "Read the Windows clipboard's text. Mainly for controls that expose no text to UI Automation, "
         + "such as Scintilla editors: focus one, select all, copy, then read it here. While an app "

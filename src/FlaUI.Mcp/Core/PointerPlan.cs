@@ -116,8 +116,10 @@ public static class PointerParking
             );
         using (GuardedInput.AcquireLease())
         {
-            OperationContext.Check();
-            FlaUI.Core.Input.Mouse.MoveTo(point);
+            MutationGuard.Execute(
+                OperationContext.Check,
+                () => InputDesktop.Current.Dispatch(() => FlaUI.Core.Input.Mouse.MoveTo(point))
+            );
         }
 
         Thread.Sleep(Settle);

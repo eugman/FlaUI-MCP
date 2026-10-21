@@ -1,0 +1,61 @@
+{
+  "name": "windows_batch",
+  "description": "Execute click/type/fill/wait/snapshot actions in order, returning numbered results and structured step outcomes. Stops on errors by default; always stops when an action is still pending. Never replay a pending action.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "actions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "click",
+                "type",
+                "fill",
+                "wait",
+                "snapshot"
+              ]
+            },
+            "ref": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Milliseconds to wait (default: 100)"
+            },
+            "handle": {
+              "type": "string",
+              "description": "Window handle for snapshot or input"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        }
+      },
+      "stopOnError": {
+        "type": "boolean",
+        "description": "Stop executing if an action fails (default: true)"
+      }
+    },
+    "required": [
+      "actions"
+    ]
+  },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false
+  }
+}

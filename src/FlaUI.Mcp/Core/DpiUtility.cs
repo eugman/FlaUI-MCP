@@ -11,9 +11,36 @@ public static class DpiUtility
     [DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
 
-    public static void EnablePerMonitorV2()
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetThreadDpiAwarenessContext();
+
+    [DllImport("user32.dll")]
+    private static extern bool AreDpiAwarenessContextsEqual(IntPtr first, IntPtr second);
+
+    public static void EnablePerMonitorV2() =>
+        EnablePerMonitorV2(
+            () => SetProcessDpiAwarenessContext(PerMonitorV2),
+            () => AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), PerMonitorV2)
+        );
+
+    /// <summary>
+    /// Make the process per-monitor-v2 aware or refuse to start. The call fails when a manifest or host
+    /// already set an awareness; that is acceptable only when the awareness in force is per-monitor-v2.
+    /// Anything else silently scales every capture bound and click point.
+    /// </summary>
+    internal static void EnablePerMonitorV2(Func<bool> set, Func<bool> isPerMonitorV2)
     {
-        SetProcessDpiAwarenessContext(PerMonitorV2);
+        if (set() || isPerMonitorV2())
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "Windows refused to make this process per-monitor-v2 DPI aware, and the awareness in force is "
+                + "something else. Capture bounds and click points would be scaled wrongly on this desktop, so "
+                + "FlaUI-MCP will not start. Remove any DPI setting from the host's manifest or compatibility "
+                + "options, or start it from a process that is not DPI-virtualized."
+        );
     }
 
     [DllImport("user32.dll")]

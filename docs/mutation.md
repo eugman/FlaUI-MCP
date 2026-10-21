@@ -1,67 +1,72 @@
-# Coverage and mutation testing (TE3)
+# Mutation testing
 
-Both run only the no-focus tests in `tests/FlaUI.Mcp.Te3.Tests`. They never launch TE3 and never run the integration tests.
+Stryker mutates the guard and protocol files listed in `stryker-config.json` and runs `tests/FlaUI.Mcp.Tests` against each mutant. Run it with `pwsh scripts/mutation.ps1` (see [code-quality.md](code-quality.md)).
 
-## Coverage
+A surviving mutant needs either a test that kills it or a line here saying why no offline test can tell it apart from the original. Mutants in code that only runs against a real desktop (UI Automation elements, Win32 calls, process starts) are listed under "Not reachable offline": the integration tests cover them, and mutation testing never runs those.
 
-```powershell
-pwsh scripts/coverage.ps1
-```
+## Never the desktop tests
 
-This runs the tests once with coverlet (`--collect:"XPlat Code Coverage"`), builds into `local/build-background` with one MSBuild node, and renders `local/build-background/coverage/index.html` with the global `reportgenerator` (`dotnet tool install -g dotnet-reportgenerator-globaltool`).
+Stryker runs every test once per mutant. The integration tests launch test apps and take keyboard focus, so a mutation run that included them would fight whoever is using the machine for hundreds of runs. `scripts/mutation.ps1` therefore:
 
-## Mutation
+- runs Stryker inside `tests/FlaUI.Mcp.Tests` and names that project with `--test-project`, so Stryker never opens `FlaUI.Mcp.slnx`;
+- stops Stryker when its options, which it logs before it builds anything, show a solution context or any test project but the offline one, or when it starts building before those options were checked; and stops it again if test discovery finds more tests than `dotnet test --list-tests` finds in the offline project. The discovery check comes as the initial test run starts, so the options check is the one that keeps desktop tests from ever running.
 
-```powershell
-pwsh scripts/coverage.ps1 -Mutation             # coverage first, then Stryker
-pwsh scripts/coverage.ps1 -Mutation -MutationMinutes 45
-```
+Separately, the offline test assembly sets `FLAUI_OFFLINE_TESTS=1` before any test runs (and the script sets it too). With it set, the real desktop refuses every change made through it: input, focus, close, window state and placement, the clipboard, process starts and UI Automation pattern calls (see [operation-recovery.md](operation-recovery.md#what-the-offline-switch-covers) for the exact list and what it does not cover). A test that forgot to install the fake desktop, or a mutant that skips a guard, then fails instead of typing into the window in front.
 
-Mutation testing never runs desktop tests. Stryker runs from `tests/FlaUI.Mcp.Te3.Tests` with that one test project named in its config, and no solution, and `MutationScopeTests` checks that. While it starts, `scripts/stryker-guard.ps1` reads its output and stops it before any test runs if it finds a second test project, any `*IntegrationTests*` project, or more tests than the offline run found.
+`MutationConfigTests` fails if the config names another test project, the script loses these checks, the variable is not set, or a test constructs an input tool without installing the fake desktop.
 
-Stryker mutates committed code only. It runs on an export of `HEAD` in `local/build-background/stryker-te3`, so its builds never land in the working tree. It uses one test runner and is stopped after `-MutationMinutes` (30 by default). The report is at `local/build-background/stryker-te3/tests/FlaUI.Mcp.Te3.Tests/StrykerOutput/run/reports/mutation-report.html`.
+## Run log
 
-- `tests/FlaUI.Mcp.Te3.Tests/stryker-config.json` lists the files that are mutated: the TE3 guard and protocol files in `src/FlaUI.Mcp.Te3`. The shared core and generated code are never mutated, and the export holds no `local/` recipes. Patterns match the full path, which runs through `local/`, so never exclude `**/local/**`.
-- `tests/FlaUI.Mcp.Te3.Tests/.config/dotnet-tools.json` pins `dotnet-stryker`. It is a non-root manifest, so the root one (owned by the core) still supplies CSharpier. When the core's root manifest gains `dotnet-stryker`, delete this one.
-- `scripts/check.ps1` is owned by the core, so the mutation switch lives here until the core's check script gains one.
+- 2026-10-20: the first runs started Stryker from the repository root. Stryker found `FlaUI.Mcp.slnx` and ran every test project in it, including `FlaUI.Mcp.IntegrationTests`, although `test-projects` named only the offline project. Those runs launched the WinForms and WPF test apps and took focus, once while the machine was in use. Two test apps were left running after a run was stopped. The script now runs Stryker inside the offline project and checks its log before any test runs (see above). Scores from those runs are discarded.
 
-A surviving mutant is either a missing test, which you fix with a red-green test, or an equivalent mutant, which you list below with the reason.
+## Results
 
-## Latest run
+Run on 2026-10-21 at commit 7fa11b4, concurrency 1, 608 offline tests and no desktop tests. The score counts mutants with no covering test as survivors.
 
-On 2026-10-20, run at `f463ab9`, before the input-accounting, journal, retry and cancel fixes that followed it (`93a3e6b` onwards). The scores and the survivor list below describe that commit; rerun `pwsh scripts/coverage.ps1 -Mutation` for the current code. That run tested 871 mutants, 757 killed, 5 timed out and 109 survived. The covered-mutant score is 87.5%; the score over all mutants is 28.5%, because 1801 mutants have no covering test. Almost all of the uncovered ones are in `Te3Page.cs`, `Te3Layout.cs` and `Te3Companion.cs` and drive the live TE3 desktop, so only the integration tests can reach them. The first run scored 75.6% covered, with 208 survivors; tests killed 99 of them, and `e84d006` kills 6 more.
+| Part | Files | Score | Killed | Timed out | Survived | No coverage |
+|---|---|---|---|---|---|---|
+| guards | GuardedInput, ProcessIntegrity, WindowMutation, ClickPoint, InputRefusal | 81.51% | 213 | 3 | 9 | 40 |
+| state | ElementRegistry, PendingInvokeTracker, OperationContext | 86.99% | 126 | 1 | 7 | 12 |
+| protocol | McpServer, McpLineTransport, ToolRegistry | 91.63% | 210 | 9 | 8 | 12 |
+| pointer | ClickTool (now with ClickToolReplies), MouseTool | 50.27% | 186 | 2 | 11 | 175 |
+| keyboard | SendKeysTool, TypeTools, BatchTool | 88.03% | 396 | 1 | 17 | 37 |
 
-## Equivalent and accepted survivors
+The first run with only the offline tests scored 77.74%, 73.29%, 72.38%, 24.87% and 62.97% for the same parts. The tests that killed the difference are in `GuardMutationTests`, `StateMutationTests`, `ProtocolMutationTests`, `StrandedCallMutationTests`, `PointerMutationTests`, `KeyboardMutationTests` and `ToolSchemaTests`.
 
-**Equivalent: no input changes behaviour**
+## Equivalent mutants
 
-- `PathWalker.Matches`, `objectType == "Table"` forced false or `""`: a table row sets `currentTable` to its own value just before the match, so both branches compare the same text.
-- `NativeMcpPreflight.TryProperty` and `TryTextProperty`, the initial `value = ""`: callers read `value` only when the method returns true, and every true return assigns it.
-- `NativeMcpProbeSession.Send`, `SingleOrDefault()` changed to `Single()`: the header is read only inside `TryGetValues`, so it has a value, and two values throw either way.
-- `NativeMcpProbeSession.ReadResult`, `detectEncodingFromByteOrderMarks` and `leaveOpen`: responses are UTF-8, and the stream is disposed with the response.
-- `NativeMcpProbeSession.AppendData`, the newline (`'\n'`) between `data:` lines: the payload is JSON, so a newline between lines is whitespace.
-- `SettingsLease.WriteAtomically`, the temporary name's parts: any unique name next to the target works. (Since `ef7ba61`, a failed write deletes its temporary file quietly and keeps the write's own error; that path postdates the run.)
-- `SettingsLease.Validate`, the `JsonException` text: it is the inner exception, and only the wrapping message is shown.
-- `SettingsLease.Recover`, the `", "` separator: the tests change one file, and the separator only appears between names.
-- `Te3Interaction.Begin`, `reason = "approved."`: the reason is shown only once the batch has ended or been revoked, and both overwrite it.
-- `Te3NativePreflightTool.Create`, the `HttpClient.Timeout`: each request already has a 10 s deadline and the whole probe 25 s, so the client timeout never fires first.
-- `Te3Page`'s `Indented` options: the text is used only for the human-readable output.
+No test can tell these from the original.
 
-**Accepted: needs the desktop or a live TE3**
+- `GuardedInput.Capture`, `hwnd == 0` changed to `hwnd != 0` or to `&&`: a zero handle still fails the ownership check, because `GetProcessId(0)` is 0.
+- `GuardedInput` constructor, `WindowMutation.Start` and `WindowMutation.Native`, the `OperationContext.Check()` right after the lease is taken: acquiring the lease already waits on the operation's token, so a cancelled operation never gets past it.
+- `SendKeysTool.ExecuteAsync` and `TypeTool.ExecuteAsync`, the `OperationContext.Check()` before the target is chosen: `GuardedInput` checks again before anything is focused or sent.
+- `GuardedInput.RequireActivated`, the foreground PID and name lookups when there is no foreground window: that refusal is desktop-unavailable, which uses neither.
+- `ProcessIntegrity.Read` and `ReadToken`, `OpenProcess` inheritance and the `CloseHandle`/`FreeHGlobal` calls: only handle and memory leaks, which no result shows.
+- `ElementRegistry.BeginSnapshot`, generation `+ 1` changed to `- 1`: consecutive generations still differ, and that is all they are compared for.
+- `ElementRegistry.BeginSnapshot`, removing `_refOrder.Remove`: stale queue entries are dequeued harmlessly before any new ref is evicted.
+- `PendingInvokeTracker.ReadProcessStart`, the `catch` bodies and `HasExited`: a missing or exited process reads as null either way, and an unreadable one as 0, which the tracker treats like null.
+- `McpLineTransport.Dispatch`, the `return` after a parse error; `Parse`, the `catch` body; `RecoverId`, the `reader.Read()` check: each path ends with the same reply, and only a line on stderr differs.
+- `McpServer.HandleInitialize`, `new ToolsCapability {}`: `ListChanged` already defaults to false.
+- `ToolRegistry.ExecuteToolAsync`, `await timer.CancelAsync()`: the timer only stops early.
+- `ToolRegistry.RunOperation`, the `finally` that clears `OperationContext.Current`: the operation runs in its own `Task.Run` flow, whose context is discarded.
+- `ToolRegistry.SettledOrTimedOut`, `remaining > 0` changed to `>=` or dropped: `Task.Delay(TimeSpan.Zero)` and a cancel that arrives after the timeout cannot be told apart.
+- `ClickTool.ObserveSelection`, the general `catch` body: removing `return null` returns null.
+- `ClickTool.Settled`, `waited < timeoutMs` changed to `<=`: one more 50 ms poll.
+- `MouseTool.Drag` `Thread.Sleep(StepDelay)` and `SendKeysTool` `Thread.Sleep(30)` with its `!hasChord` condition: pacing only.
+- `SendKeysTool.SplitChord`, the blank-input early return: splitting a blank string yields no parts either way.
 
-- `Te3Interaction.Begin` (`physicalInput == null`) and `Dispose` (`observer?.Dispose()`): only the real keyboard and mouse hook takes these branches, and offline tests never install it.
-- `Te3Companion.ExecuteAsync`, the pending-call check: it runs after attaching to a TE3 window.
-- `Te3Page` selector literals (`OpenFileNameTarget`, `PreferencesTarget`, `McpServerMarkerTarget`, `TomChangesTarget`, `IsPreferencesLookup`) and `WaitForAbsenceAsync` timing: the integration tests check these against TE3.
-- `Te3Page.ParkPoint` and `ScalarSceneBounds` at a few pixels from the edge: the offline tests check that the point stays inside the window, not its exact offset.
+## Not reachable offline
 
-**Accepted: size-cap off-by-ones**
+These need a real window, element, process or input device. The integration tests cover them, and mutation testing never runs those.
 
-`NativeMcpProbeSession` `AppendData`, `ReadJson`, `ReadLine` and `ReadSse` compare with `>` or `>=` against `MaxResponseChars` and `MaxLineChars`. A one-character shift moves a 256K or 64K cap by one character, and the offline tests already check that oversized responses are refused.
-
-**Accepted: text that does not change behaviour**
-
-Tool descriptions, `InputSchema` strings, and diagnostic messages that are not a guard's instruction to the agent or user: for example `VerifyArrival`'s detail, `ObjectNotFoundMessage` and `ModelStateReadFailure`. A guard's refusal message is tested when it says what to do next ("Ask the user", "--force", "retry when it finishes").
-
-**Accepted: deliberate behaviour**
-
-`Te3NativePreflightTool.BearerToken` and `Optional`, `&&` changed to `||`: the mutant throws on a non-string `tokenEnv` or `compatibleServer`, while the code ignores it. Refusing a non-string value may be the better behaviour, but that is a product decision, not a test gap.
+- `GuardedInput.Click`, `InputTarget.EnsureAliveOnWindows`, `GuardedInput.ForegroundTarget()`, `ClickGeometry.Read` and `ClickGeometry.ScrollIntoView`'s pattern lookup: read UI Automation geometry, real window ownership and the real foreground window. The guarded scroll itself (`ClickGeometry.Scroll`) is tested offline.
+- `ProcessIntegrity.Read` failure paths: need a process whose token cannot be opened.
+- `WindowMutation.Start` after a successful start: would start a process.
+- `ElementRegistry.SetWindowIdentity`, `InputForRef` and the identity check in `ResolveRef`: the identity comes from a real window handle.
+- `PendingInvokeTracker.ReadProcessStart` reading a real start time differently: needs a process that exits and is replaced under the same PID.
+- `McpLineTransport.RunConsoleAsync` and its stderr logging: process standard streams.
+- `ClickTool` after the ref resolves (`Click`, `MouseClick`, `RunPattern`, `Supports`, `IsSelected`) and the `button`, `doubleClick` and `physical` arguments read for them: need a UI Automation element.
+- `MouseTool` after the blocked-provider check (`WindowOrigin`, `ResolvePoint`, `Move`, `Scroll`, `Click`, `DragFromArguments`, `Ticks`, `HoverMs`): need the window's real bounds.
+- `SendKeysTool` and `TypeTool` with a ref that has an identity (the element passed to `GuardedInput`, the ref named in the reply), and ref-less, handle-less input (`ForegroundTarget`): need a real window.
+- `SendKeysTool`'s "focus afterwards" note: compares live focus before and after, which another process can move.
+- `SendKeysTool.PressKeys` and `FillTool.FillByValuePattern`: send real keys or call a real Value pattern.

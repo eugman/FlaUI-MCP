@@ -51,7 +51,7 @@ public sealed class BatchDispatchTests
         Assert.Equal(expectedCalls, calls);
         Assert.Contains("1. click: failed", result.Content[0].Text);
         Assert.Equal(stopOnError, result.Content[0].Text!.Contains("Stopped at action"));
-        Assert.Equal("failed", result.Outcome!.Dispatch);
+        Assert.Equal("not-dispatched", result.Outcome!.Dispatch);
         Assert.Equal(expectedCalls, result.Outcome.Steps!.Count);
     }
 
@@ -109,7 +109,7 @@ public sealed class BatchDispatchTests
     }
 
     [Theory]
-    [InlineData("failed", "pending", true)]
+    [InlineData("not-dispatched", "pending", true)]
     [InlineData("timed_out_pending", "unknown", true)]
     public async Task ExistingPendingOrTimeoutNeverDispatchesNextStep(string dispatch, string provider, bool error)
     {

@@ -12,6 +12,8 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
     private static readonly TimeSpan SettlePoll = TimeSpan.FromMilliseconds(50);
 
     public override string Name => "windows_set_window_state";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
     public override string Description =>
         "Maximize, restore (normal) or minimize a top-level window. Use restore before windows_place_window, which only moves normal-state windows. Returns the state and bounds observed afterwards; one attempt, never replayed.";
     public override object InputSchema =>
@@ -53,14 +55,23 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
 
         OperationContext.Check();
         var target = reference == null ? sessions!.GetInputTarget(handle!) : refs.InputForRef(reference);
-        var before = Win32Desktop.GetWindowState(target.Hwnd);
+        var desktop = InputDesktop.Current;
+        var before = desktop.WindowState(target.Hwnd);
         using (GuardedInput.AcquireLease())
         {
-            MutationGuard.Execute(target.EnsureAlive, () => Win32Desktop.SetWindowState(target.Hwnd, requested));
+            // Windows drops window messages to a higher-integrity window, as it drops input.
+            MutationGuard.Execute(
+                () =>
+                {
+                    target.EnsureAlive();
+                    GuardedInput.RequireDrivable(target.ProcessId, desktop);
+                },
+                () => desktop.SetWindowState(target.Hwnd, requested)
+            );
         }
 
         var after = WaitForState(target.Hwnd, requested);
-        var bounds = Win32Desktop.GetWindowBounds(target.Hwnd);
+        var bounds = desktop.WindowBounds(target.Hwnd);
         var result = JsonSerializer.Serialize(
             new
             {
@@ -79,19 +90,25 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
             }
         );
         return Task.FromResult(
-            after == requested ? TextResult(result) : ErrorResult($"State did not settle: {result}")
+            after == requested
+                ? TextResult(result)
+                : ErrorResult($"State did not settle: {result}") with
+                {
+                    // The request went out in full; only its effect was not observed.
+                    Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "not-settled" },
+                }
         );
     }
 
     private static string WaitForState(nint hwnd, string requested)
     {
         var clock = Stopwatch.StartNew();
-        var observed = Win32Desktop.GetWindowState(hwnd);
+        var observed = InputDesktop.Current.WindowState(hwnd);
         while (observed != requested && clock.Elapsed < SettleTimeout)
         {
             OperationContext.Check();
             Thread.Sleep(SettlePoll);
-            observed = Win32Desktop.GetWindowState(hwnd);
+            observed = InputDesktop.Current.WindowState(hwnd);
         }
 
         return observed;

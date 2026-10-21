@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
 using FlaUI.Mcp.Core;
@@ -29,6 +30,8 @@ public class TypeTool : ToolBase
     }
 
     public override string Name => "windows_type";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false);
 
     public override string Description =>
         "Type text into an element. The element will be focused first. Line breaks are sent as Enter. "
@@ -177,6 +180,19 @@ public class FillTool : ToolBase
 
     public override string Name => "windows_fill";
 
+    /// <summary>The reply when SetValue has not returned within the grace period.</summary>
+    internal static McpToolResult PendingSetValueResult(PatternCallResult result) =>
+        TextResult(
+            result.Dispatched
+                ? "SetValue dispatched; the provider call is still pending. The final value is not verified. Inspect the dialog before continuing; do not repeat the fill."
+                : "SetValue has not been sent yet: it is still waiting on the app's UI Automation provider. Check windows_operation_status before continuing; do not repeat the fill."
+        ) with
+        {
+            Outcome = ToolOutcome.FromPattern(result),
+        };
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
+
     public override string Description =>
         "Clear and fill a text field with new value. Prefers Value pattern for reliability.";
 
@@ -225,75 +241,9 @@ public class FillTool : ToolBase
             var elementName = element.Properties.Name.ValueOrDefault ?? refId;
 
             // Try Value pattern first
-            if (element.Patterns.Value.IsSupported)
+            if (FillByValuePattern(element, refId, handle, value, elementName) is { } filled)
             {
-                var valuePattern = element.Patterns.Value.Pattern;
-                if (!valuePattern.IsReadOnly.ValueOrDefault)
-                {
-                    OperationContext.Check();
-                    using var lease = GuardedInput.AcquireLease();
-                    var result = ModalAwareInvoker.Execute(
-                        _elementRegistry.GetProcessIdForRef(refId),
-                        "SetValue",
-                        () =>
-                            MutationGuard.Execute(
-                                () => _elementRegistry.ValidateReference(refId, handle),
-                                () => valuePattern.SetValue(value)
-                            ),
-                        _invokeTracker
-                    );
-                    if (result.Outcome != PatternCallOutcome.Completed)
-                    {
-                        return Task.FromResult(
-                            TextResult(
-                                "SetValue dispatched; the provider call is still pending. The final value is not verified. Inspect the dialog before continuing; do not repeat the fill."
-                            ) with
-                            {
-                                Outcome = ToolOutcome.FromPattern(result),
-                            }
-                        );
-                    }
-                    // Some providers accept SetValue without applying it (e.g. a file dialog's ComboBox).
-                    string? observed = null;
-                    if (!element.Properties.IsPassword.ValueOrDefault)
-                    {
-                        observed = ControlText
-                            .WaitForExpected(
-                                value,
-                                () =>
-                                {
-                                    try
-                                    {
-                                        return new(valuePattern.Value.ValueOrDefault, "Value");
-                                    }
-                                    catch
-                                    {
-                                        return new(null, "unavailable");
-                                    }
-                                },
-                                () =>
-                                {
-                                    OperationContext.Check();
-                                    _elementRegistry.ValidateReference(refId, handle);
-                                },
-                                () => Thread.Sleep(50)
-                            )
-                            .Text;
-                    }
-
-                    return Task.FromResult(
-                        TextResult(
-                            $"Filled {elementName} with \"{value}\""
-                                + FillMismatch(value, observed, element.Properties.ControlType.ValueOrDefault)
-                        ) with
-                        {
-                            Outcome = ToolOutcome.FromPattern(result) with
-                            {
-                                Verification = new TextObservation(observed, "Value").Verify(value),
-                            },
-                        }
-                    );
-                }
+                return Task.FromResult(filled);
             }
 
             // Fall back to focus + select all + type
@@ -304,49 +254,141 @@ public class FillTool : ToolBase
                 element,
                 GetBoolArgument(arguments, "verifyFocus")
             );
-            ReplaceByKeyboard(
-                value,
-                () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A)),
-                () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.BACK)),
-                input.Type
-            );
-
-            TextObservation keyboardObservation;
-            keyboardObservation = ControlText.WaitForExpected(
-                value,
-                () =>
-                {
-                    try
-                    {
-                        return ControlText.Read(element);
-                    }
-                    catch
-                    {
-                        return new(null, "unavailable");
-                    }
-                },
-                () =>
-                {
-                    OperationContext.Check();
-                    _elementRegistry.ValidateReference(refId, handle);
-                    input.Verify();
-                },
-                () => Thread.Sleep(50)
-            );
             return Task.FromResult(
-                TextResult($"Filled {elementName} with \"{value}\"") with
-                {
-                    Outcome = new ToolOutcome("completed", "returned")
+                FillByKeyboard(
+                    input,
+                    value,
+                    elementName,
+                    () =>
                     {
-                        Verification = keyboardObservation.Verify(value),
+                        try
+                        {
+                            return ControlText.Read(element);
+                        }
+                        catch
+                        {
+                            return new(null, "unavailable");
+                        }
                     },
-                }
+                    () =>
+                    {
+                        OperationContext.Check();
+                        _elementRegistry.ValidateReference(refId, handle);
+                    }
+                )
             );
         }
         catch (Exception ex)
         {
             return Task.FromResult(ErrorResult($"Failed to fill {refId}: {ex.Message}"));
         }
+    }
+
+    /// <summary>Fill through the Value pattern, or null when the control has no writable value.</summary>
+    private McpToolResult? FillByValuePattern(
+        AutomationElement element,
+        string refId,
+        string? handle,
+        string value,
+        string elementName
+    )
+    {
+        if (!element.Patterns.Value.IsSupported)
+        {
+            return null;
+        }
+
+        var valuePattern = element.Patterns.Value.Pattern;
+        if (valuePattern.IsReadOnly.ValueOrDefault)
+        {
+            return null;
+        }
+
+        OperationContext.Check();
+        using var lease = GuardedInput.AcquireLease();
+        var result = ModalAwareInvoker.Execute(
+            _elementRegistry.GetProcessIdForRef(refId),
+            "SetValue",
+            () =>
+                MutationGuard.Execute(
+                    () => _elementRegistry.ValidateReference(refId, handle),
+                    () => InputDesktop.Current.CallPattern(() => valuePattern.SetValue(value))
+                ),
+            _invokeTracker
+        );
+        if (result.Outcome != PatternCallOutcome.Completed)
+        {
+            return PendingSetValueResult(result);
+        }
+        // Some providers accept SetValue without applying it (e.g. a file dialog's ComboBox).
+        string? observed = null;
+        if (!element.Properties.IsPassword.ValueOrDefault)
+        {
+            observed = ControlText
+                .WaitForExpected(
+                    value,
+                    () =>
+                    {
+                        try
+                        {
+                            return new(valuePattern.Value.ValueOrDefault, "Value");
+                        }
+                        catch
+                        {
+                            return new(null, "unavailable");
+                        }
+                    },
+                    () =>
+                    {
+                        OperationContext.Check();
+                        _elementRegistry.ValidateReference(refId, handle);
+                    },
+                    () => Thread.Sleep(50)
+                )
+                .Text;
+        }
+
+        return TextResult(
+            $"Filled {elementName} with \"{value}\""
+                + FillMismatch(value, observed, element.Properties.ControlType.ValueOrDefault)
+        ) with
+        {
+            Outcome = ToolOutcome.FromPattern(result) with
+            {
+                Verification = new TextObservation(observed, "Value").Verify(value),
+            },
+        };
+    }
+
+    /// <summary>Select all, replace by typing, then observe the text without retyping.</summary>
+    internal static McpToolResult FillByKeyboard(
+        GuardedInput input,
+        string value,
+        string elementName,
+        Func<TextObservation> read,
+        Action validate
+    )
+    {
+        ReplaceByKeyboard(
+            value,
+            () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A)),
+            () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.BACK)),
+            input.Type
+        );
+        var observation = ControlText.WaitForExpected(
+            value,
+            read,
+            () =>
+            {
+                validate();
+                input.Verify();
+            },
+            () => Thread.Sleep(50)
+        );
+        return TextResult($"Filled {elementName} with \"{value}\"") with
+        {
+            Outcome = new ToolOutcome("completed", "returned") { Verification = observation.Verify(value) },
+        };
     }
 
     internal static string FillMismatch(string expected, string? observed, FlaUI.Core.Definitions.ControlType type) =>

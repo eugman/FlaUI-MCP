@@ -138,6 +138,7 @@ public sealed class LocateTests
     [Fact]
     public async Task LocateOnFullScreenIsRefusedBeforeAnythingIsCaptured()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         // fullScreen records no origin, so there is nothing to translate against. Refusing up front
         // means a malformed call does not grab and encode a PNG only to throw it away.
         var tool = new ScreenshotTool(new SessionManager(null, ProcessPolicy.AllowAll), new ElementRegistry());
@@ -151,6 +152,7 @@ public sealed class LocateTests
     [Fact]
     public async Task LocateRejectsAnUnknownRefBeforeCapturing()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new ScreenshotTool(new SessionManager(null, ProcessPolicy.AllowAll), new ElementRegistry());
         var result = await tool.ExecuteAsync(
             JsonSerializer.SerializeToElement(new { handle = "w1", locate = new[] { "nope" } })

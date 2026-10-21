@@ -37,6 +37,7 @@ public sealed class CaptureFrameTests
     [InlineData(true, true)]
     public async Task StrictCaptureRequiresExplicitWindowBeforeDesktopAccess(bool restricted, bool strict)
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new ScreenshotTool(
             null!,
             new ElementRegistry(),

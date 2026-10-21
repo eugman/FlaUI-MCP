@@ -1,0 +1,41 @@
+{
+  "stryker-config": {
+    "project": "FlaUI.Mcp.csproj",
+    "test-projects": [
+      "FlaUI.Mcp.Tests.csproj"
+    ],
+    "mutate": [
+      "**/Core/GuardedInput.cs",
+      "**/Core/ProcessIntegrity.cs",
+      "**/Core/WindowMutation.cs",
+      "**/Core/ClickPoint.cs",
+      "**/Core/InputRefusal.cs",
+      "**/Core/ElementRegistry.cs",
+      "**/Core/PendingInvokeTracker.cs",
+      "**/Core/OperationContext.cs",
+      "**/Mcp/McpServer.cs",
+      "**/Mcp/McpLineTransport.cs",
+      "**/Mcp/ToolRegistry.cs",
+      "**/Mcp/ToolBase.cs",
+      "**/Tools/ClickTool.cs",
+      "**/Tools/ClickToolReplies.cs",
+      "**/Tools/MouseTool.cs",
+      "**/Tools/PointerActions.cs",
+      "**/Tools/SendKeysTool.cs",
+      "**/Tools/TypeTools.cs",
+      "**/Tools/BatchTool.cs"
+    ],
+    "concurrency": 2,
+    "coverage-analysis": "perTest",
+    "reporters": [
+      "html",
+      "json",
+      "progress"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    }
+  }
+}

@@ -1,5 +1,8 @@
 # The full local gate, also run by the pre-push hook and CI: formatting, analyzers, no-focus tests.
 # Integration tests are excluded because they launch apps and take desktop focus.
+# -Mutation also runs mutation testing (scripts/mutation.ps1), which can take up to 45 minutes.
+param([switch]$Mutation)
+
 $ErrorActionPreference = 'Stop'
 Set-Location (git rev-parse --show-toplevel)
 
@@ -76,4 +79,8 @@ $unknownTests = Get-ChildItem tests -Filter '*Tests.csproj' -Recurse |
 if ($unknownTests) { throw 'Unclassified test project: review desktop requirements before adding it to the background allowlist.' }
 foreach ($project in $unitTests) {
     Step "Test $($project.BaseName)" { dotnet test $project.FullName --no-build -nologo -v q }
+}
+
+if ($Mutation) {
+    Step 'Mutation testing' { & ./scripts/mutation.ps1 }
 }

@@ -17,9 +17,6 @@ if ($CoreRevision -eq 'core/main' -and (git remote) -notcontains 'core') {
     exit 1
 }
 
-$corePaths = Get-Content (Join-Path $root 'scripts/core-paths.txt') |
-    Where-Object { $_ -and -not $_.StartsWith('#') }
-
 if ($Staged) {
     # A merge commit is how core changes arrive. Anything extra it slips in is caught on push and in CI,
     # which compare the whole branch with core/main.
@@ -27,6 +24,7 @@ if ($Staged) {
     if ($LASTEXITCODE -eq 0) { exit 0 }
     # --no-renames: a file moved out of a core folder must count as a change to the core.
     $changed = git diff --cached --name-only --no-renames
+    $base = 'HEAD'
 }
 elseif ($CoreRevision -eq 'core/main') {
     git rev-parse -q --verify core/main *> $null
@@ -38,6 +36,13 @@ elseif ($CoreRevision -eq 'core/main') {
     # Compare with the point this branch last took from core/main, so a core release that is not merged
     # yet does not fail a branch that touched no core file.
     $base = git merge-base HEAD core/main
+    if ($LASTEXITCODE -ne 0 -or -not $base) {
+        # Without a merge-base the diff below would compare nothing and pass any change.
+        Write-Host 'This branch has no common history with core/main, so core ownership cannot be checked.' -ForegroundColor Red
+        Write-Host 'Run: git fetch core; git merge core/main'
+        exit 1
+    }
+
     $changed = git diff --name-only --no-renames $base HEAD
 }
 else {
@@ -63,6 +68,16 @@ else {
     }
 
     $changed = git diff --name-only --no-renames $CoreRevision HEAD
+    $base = $CoreRevision
+}
+
+# Read the owned paths from the base, not from the branch under test: a branch that deletes lines from
+# core-paths.txt must not hide its own changes to those paths.
+$corePaths = git show "${base}:scripts/core-paths.txt" |
+    Where-Object { $_ -and -not $_.StartsWith('#') }
+if ($LASTEXITCODE -ne 0 -or -not $corePaths) {
+    Write-Host "Cannot read scripts/core-paths.txt at $base." -ForegroundColor Red
+    exit 1
 }
 
 $touched = $changed | Where-Object { $file = $_; $corePaths | Where-Object { $file.StartsWith($_) } }

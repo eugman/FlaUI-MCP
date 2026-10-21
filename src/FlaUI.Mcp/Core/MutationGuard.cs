@@ -7,12 +7,16 @@ public static class MutationGuard
 
     public static void CheckPermission() => BeforeMutation.Value?.Invoke();
 
+    /// <summary>Count one input or mutation against the running operation, just before it is sent.</summary>
+    public static void RecordDispatch() => OperationContext.Current.Value?.RecordInput();
+
     public static void Execute(Action validateIdentity, Action mutation)
     {
         OperationContext.Check();
         validateIdentity();
         OperationContext.Check();
         CheckPermission();
+        RecordDispatch();
         mutation();
     }
 }

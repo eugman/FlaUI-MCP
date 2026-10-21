@@ -11,6 +11,8 @@ public sealed class BatchTool : ToolBase
     internal BatchTool(ToolRegistry registry) => this.registry = registry;
 
     public override string Name => "windows_batch";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
     public override string Description =>
         "Execute click/type/fill/wait/snapshot actions in order, returning numbered results and structured step outcomes. Stops on errors by default; always stops when an action is still pending. Never replay a pending action.";
     public override object InputSchema =>
@@ -81,61 +83,33 @@ public sealed class BatchTool : ToolBase
         bool stopOnError = true
     )
     {
-        var trace = new List<string>();
-        var steps = new List<ToolStepOutcome>();
-        ToolOutcome? pending = null;
+        var batch = new BatchRun(invoke, stopOnError, rows.Length);
         foreach (var (row, index) in rows.Select((row, index) => (row, index)))
         {
             OperationContext.Check();
+            if (!await batch.Run(row, index + 1))
+            {
+                break;
+            }
+        }
+
+        return batch.Result();
+    }
+
+    /// <summary>The trace and step outcomes of one batch, filled in step by step.</summary>
+    private sealed class BatchRun(Func<string, JsonElement, Task<McpToolResult>> invoke, bool stopOnError, int rowCount)
+    {
+        private readonly List<string> trace = [];
+        private readonly List<ToolStepOutcome> steps = [];
+        private ToolOutcome? pending;
+        private int pendingNumber;
+
+        /// <summary>Run one step; false when the batch must stop after it.</summary>
+        public async Task<bool> Run(JsonElement row, int number)
+        {
             try
             {
-                var op = row.GetProperty("action").GetString();
-                if (op == "wait")
-                {
-                    var ms = row.TryGetProperty("ms", out var delay) ? delay.GetInt32() : 100;
-                    if (ms < 0)
-                    {
-                        throw new ArgumentException("Wait must be nonnegative");
-                    }
-
-                    await Task.Delay(ms, OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None);
-                    trace.Add($"{index + 1}. wait: Waited {ms}ms");
-                    steps.Add(new(index + 1, op, false, new("completed", "returned")));
-                    continue;
-                }
-
-                if (op == "snapshot" && row.TryGetProperty("ref", out _))
-                {
-                    throw new ArgumentException(
-                        "Snapshot does not support ref; use handle or omit both for the focused window"
-                    );
-                }
-
-                var tool = op switch
-                {
-                    "click" => "windows_click",
-                    "fill" => "windows_fill",
-                    "type" => "windows_type",
-                    "snapshot" => "windows_snapshot",
-                    _ => throw new ArgumentException($"Unknown action: {op}"),
-                };
-                var result = await invoke(tool, row);
-                trace.Add($"{index + 1}. {op}: {string.Join("\n", result.Content.Select(c => c.Text ?? ""))}");
-                steps.Add(new(index + 1, op, result.IsError == true, result.Outcome));
-                if (result.Outcome?.IsPending == true)
-                {
-                    pending = result.Outcome;
-                    trace.Add(
-                        $"Stopped at action {index + 1}: operation still pending; inspect state before continuing, do not replay."
-                    );
-                    break;
-                }
-
-                if (result.IsError == true && stopOnError)
-                {
-                    trace.Add($"Stopped at action {index + 1} due to error");
-                    break;
-                }
+                return await RunStep(row, number);
             }
             catch (OperationCanceledException)
             {
@@ -143,28 +117,110 @@ public sealed class BatchTool : ToolBase
             }
             catch (Exception ex)
             {
-                trace.Add($"{index + 1}. ERROR: {ex.Message}");
-                steps.Add(new(index + 1, null, true, new("failed", "unknown")));
+                trace.Add($"{number}. ERROR: {ex.Message}");
+                steps.Add(new(number, null, true, new("not-dispatched", "unknown")));
                 if (!stopOnError)
                 {
-                    continue;
+                    return true;
                 }
 
-                trace.Add($"Stopped at action {index + 1} due to error");
-                break;
+                trace.Add($"Stopped at action {number} due to error");
+                return false;
             }
         }
-        // Preserve the legacy numbered text and IsError contract. Structured
-        // outcomes expose failures/pending state without interpreting UI text.
-        return TextResult(string.Join("\n", trace)) with
+
+        private async Task<bool> RunStep(JsonElement row, int number)
         {
-            Outcome =
-                pending != null
-                    ? pending with
-                    {
-                        Steps = steps,
-                    }
-                    : new(steps.Any(s => s.IsError) ? "failed" : "completed", "returned", Steps: steps),
-        };
+            var op = row.GetProperty("action").GetString();
+            if (op == "wait")
+            {
+                await Wait(row, number);
+                return true;
+            }
+
+            if (op == "snapshot" && row.TryGetProperty("ref", out _))
+            {
+                throw new ArgumentException(
+                    "Snapshot does not support ref; use handle or omit both for the focused window"
+                );
+            }
+
+            var tool = op switch
+            {
+                "click" => "windows_click",
+                "fill" => "windows_fill",
+                "type" => "windows_type",
+                "snapshot" => "windows_snapshot",
+                _ => throw new ArgumentException($"Unknown action: {op}"),
+            };
+            var result = await invoke(tool, row);
+            trace.Add($"{number}. {op}: {string.Join("\n", result.Content.Select(c => c.Text ?? ""))}");
+            steps.Add(new(number, op, result.IsError == true, result.Outcome));
+            if (result.Outcome?.IsPending == true)
+            {
+                pending = result.Outcome;
+                pendingNumber = number;
+                trace.Add(
+                    $"Stopped at action {number}: operation still pending; inspect state before continuing, do not replay."
+                );
+                return false;
+            }
+
+            if (result.IsError == true && stopOnError)
+            {
+                trace.Add($"Stopped at action {number} due to error");
+                return false;
+            }
+
+            return true;
+        }
+
+        private async Task Wait(JsonElement row, int number)
+        {
+            var ms = row.TryGetProperty("ms", out var delay) ? delay.GetInt32() : 100;
+            if (ms < 0)
+            {
+                throw new ArgumentException("Wait must be nonnegative");
+            }
+
+            await Task.Delay(ms, OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None);
+            trace.Add($"{number}. wait: Waited {ms}ms");
+            steps.Add(new(number, "wait", false, new("completed", "returned")));
+        }
+
+        /// <summary>
+        /// A batch stopped at a pending step after earlier steps sent input is partial, with the pending marker
+        /// kept. Reporting the pending step's own "not-dispatched" would invite a replay of input already sent.
+        /// </summary>
+        private static ToolOutcome PendingOutcome(ToolOutcome pending, int sent, bool stoppedEarly)
+        {
+            if (sent == 0 || pending.Dispatch == "completed" && !stoppedEarly)
+            {
+                return pending;
+            }
+
+            return pending with
+            {
+                Dispatch = "partial",
+                Provider = "pending",
+            };
+        }
+
+        /// <summary>
+        /// The numbered trace as text, with IsError left as before, and the structured outcome beside it. A step
+        /// that fails after completed ones makes the batch partial: earlier input reached the app.
+        /// </summary>
+        public McpToolResult Result()
+        {
+            var failed = steps.Any(s => s.IsError);
+            var sent = steps.Sum(s => s.Outcome?.InputsSent ?? 0);
+            var outcome = pending is null
+                ? new(ToolOutcome.DispatchFor(failed, sent), "returned")
+                : PendingOutcome(pending, sent, pendingNumber < rowCount);
+            return TextResult(string.Join("\n", trace)) with
+            {
+                Outcome = outcome with { Steps = steps, InputsSent = sent, Status = failed ? "failed" : null },
+            };
+        }
     }
 }

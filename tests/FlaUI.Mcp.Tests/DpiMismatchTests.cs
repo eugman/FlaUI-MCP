@@ -54,4 +54,19 @@ public sealed class DpiMismatchTests
         Assert.NotNull(DpiUtility.DescribeMismatch(120, 168));
         Assert.NotNull(DpiUtility.DescribeMismatch(168, 120));
     }
+
+    [Fact]
+    public void RefusedAwarenessFailsClosedAtStartup()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            DpiUtility.EnablePerMonitorV2(() => false, () => false)
+        );
+        Assert.Contains("per-monitor-v2", error.Message);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void AwarenessThatHoldsIsAccepted(bool set, bool current) =>
+        DpiUtility.EnablePerMonitorV2(() => set, () => current);
 }

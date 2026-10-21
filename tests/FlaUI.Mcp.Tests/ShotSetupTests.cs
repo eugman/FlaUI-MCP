@@ -28,6 +28,7 @@ public sealed class ShotSetupTests
     [Fact]
     public async Task WindowStateNeedsATarget()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new WindowStateTool(new ElementRegistry(), new PendingInvokeTracker());
         var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { state = "maximize" }));
         Assert.True(result.IsError);
@@ -37,6 +38,7 @@ public sealed class ShotSetupTests
     [Fact]
     public void CoordinateClickIsInMouseSchema()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new MouseTool(new ElementRegistry(), new PendingInvokeTracker(), new SessionManager());
         var schema = JsonSerializer.SerializeToElement(tool.InputSchema);
         var actions = schema.GetProperty("properties").GetProperty("action").GetProperty("enum");
@@ -47,6 +49,7 @@ public sealed class ShotSetupTests
     [Fact]
     public async Task CoordinateClickWithoutTargetReturnsBeforeInput()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new MouseTool(new ElementRegistry(), new PendingInvokeTracker(), new SessionManager());
         var result = await tool.ExecuteAsync(
             JsonSerializer.SerializeToElement(new { action = "click", to = new { x = 10, y = 20 } })
@@ -61,7 +64,9 @@ public sealed class ShotSetupTests
     public void CoordinateClickRejectsOffWindowOrOccludedPoint(int hit)
     {
         var target = new InputTarget(42, 1, 1);
-        Assert.Throws<InvalidOperationException>(() => MouseTool.RequireHit(target, new Point(10, 20), _ => (nint)hit));
+        Assert.Throws<InputRefusedException>(() =>
+            PointerActions.RequireHit(target, new Point(10, 20), _ => (nint)hit)
+        );
     }
 
     [Fact]
@@ -69,11 +74,11 @@ public sealed class ShotSetupTests
     {
         var target = new InputTarget(42, 1, 1);
         var clicks = 0;
-        Assert.Throws<InvalidOperationException>(() =>
-            MouseTool.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 99)
+        Assert.Throws<InputRefusedException>(() =>
+            PointerActions.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 99)
         );
         Assert.Equal(0, clicks);
-        MouseTool.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 42);
+        PointerActions.ClickGuarded(target, new Point(10, 20), _ => clicks++, _ => 42);
         Assert.Equal(1, clicks);
     }
 
@@ -81,7 +86,7 @@ public sealed class ShotSetupTests
     public void CoordinateClickAcceptsTheCapturedWindowHit()
     {
         var target = new InputTarget(42, 1, 1, 43);
-        Assert.Null(Record.Exception(() => MouseTool.RequireHit(target, new Point(10, 20), _ => 43)));
+        Assert.Null(Record.Exception(() => PointerActions.RequireHit(target, new Point(10, 20), _ => 43)));
     }
 
     [Fact]

@@ -28,6 +28,7 @@ public sealed class AgentHintTests
     [Fact]
     public void PageKeyAliasesMapToPageUpAndPageDown()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var sequence = new SendKeysTool(new ElementRegistry()).PrepareSequence(["Next", "PgDn", "Prior", "PgUp"]);
         Assert.Equal(4, sequence.Count);
         Assert.Equal(sequence[0].Keys, sequence[1].Keys);
@@ -72,6 +73,7 @@ public sealed class AgentHintTests
     [Fact]
     public void SpacedAndContextMenuKeyNamesResolve()
     {
+        using var offlineDesktop = new FakeDesktop().Install();
         var tool = new SendKeysTool(new ElementRegistry());
         Assert.Equal(tool.PrepareSequence(["PageDown"])[0].Keys, tool.PrepareSequence(["Page Down"])[0].Keys);
         Assert.Equal([FlaUI.Core.WindowsAPI.VirtualKeyShort.APPS], tool.PrepareSequence(["Context Menu"])[0].Keys);

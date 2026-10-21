@@ -17,6 +17,8 @@ public class LaunchTool : ToolBase
 
     public override string Name => "windows_launch";
 
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false);
+
     public override string Description =>
         "Launch a Windows application. Returns a window handle for use with other tools.";
 

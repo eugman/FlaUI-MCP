@@ -1,0 +1,38 @@
+{
+  "name": "windows_type",
+  "description": "Type text into an element. The element will be focused first. Line breaks are sent as Enter. Code editors can autocomplete typed text; use windows_paste for code. Use this for typing without clearing existing content. Use windows_fill to replace content.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "handle": {
+        "type": "string",
+        "description": "Optional explicit window handle; otherwise uses the focused element."
+      },
+      "verifyFocus": {
+        "type": "boolean",
+        "description": "Require ref and verified keyboard focus on that exact control before typing (default false)."
+      },
+      "ref": {
+        "type": "string",
+        "description": "Element ref from windows_snapshot (e.g., \u0027w1e5\u0027). If omitted, types to currently focused element."
+      },
+      "text": {
+        "type": "string",
+        "description": "Text to type"
+      },
+      "submit": {
+        "type": "boolean",
+        "description": "Press Enter after typing (default: false)"
+      }
+    },
+    "required": [
+      "text"
+    ]
+  },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  }
+}

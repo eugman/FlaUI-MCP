@@ -12,6 +12,8 @@ public sealed class WindowPlacementTool(
 ) : ToolBase
 {
     public override string Name => "windows_place_window";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
     public override string Description =>
         "Move or resize an observed normal-state native window in physical screen pixels without activating it. Returns requested and observed bounds; the operating system may constrain size. Rejects clipping and child controls; never replays the move.";
     public override object InputSchema =>
@@ -117,6 +119,7 @@ public sealed class WindowPlacementTool(
             }
         }
 
+        var desktop = InputDesktop.Current;
         using var lease = GuardedInput.AcquireLease();
         void Validate()
         {
@@ -127,7 +130,9 @@ public sealed class WindowPlacementTool(
             }
 
             target.EnsureAlive();
-            if (!Win32Desktop.IsNormalWindow(target.Hwnd))
+            // Windows drops window messages to a higher-integrity window, as it drops input.
+            GuardedInput.RequireDrivable(target.ProcessId, desktop);
+            if (!desktop.IsNormalWindow(target.Hwnd))
             {
                 throw new InvalidOperationException(
                     "Placement requires a visible, normal-state window; restore/maximize is a separate action"
@@ -138,12 +143,11 @@ public sealed class WindowPlacementTool(
         }
 
         var before =
-            Win32Desktop.GetWindowBounds(target.Hwnd)
-            ?? throw new InvalidOperationException("Window bounds unavailable");
-        MutationGuard.Execute(Validate, () => Win32Desktop.PlaceWindow(target.Hwnd, placement.Bounds));
+            desktop.WindowBounds(target.Hwnd) ?? throw new InvalidOperationException("Window bounds unavailable");
+        MutationGuard.Execute(Validate, () => desktop.PlaceWindow(target.Hwnd, placement.Bounds));
         target.EnsureAlive();
         var after =
-            Win32Desktop.GetWindowBounds(target.Hwnd)
+            desktop.WindowBounds(target.Hwnd)
             ?? throw new InvalidOperationException("Window disappeared after placement; mutation not replayed");
         static object Box(System.Drawing.Rectangle r) =>
             new

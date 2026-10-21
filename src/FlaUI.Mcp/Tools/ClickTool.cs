@@ -9,7 +9,7 @@ namespace FlaUI.Mcp.Tools;
 /// <summary>
 /// Click an element by ref
 /// </summary>
-public class ClickTool : ToolBase
+public partial class ClickTool : ToolBase
 {
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
@@ -21,6 +21,8 @@ public class ClickTool : ToolBase
     }
 
     public override string Name => "windows_click";
+
+    public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 
     public override string Description =>
         "Click an element by its ref (from windows_snapshot). Prefers Invoke pattern for reliability (tree and list rows: select), "
@@ -72,116 +74,41 @@ public class ClickTool : ToolBase
             return Task.FromResult(ErrorResult("Missing required argument: ref"));
         }
 
-        var button = GetStringArgument(arguments, "button") ?? "left";
-        var doubleClick = GetBoolArgument(arguments, "doubleClick", false);
-        bool? requestedPhysical =
+        var request = new ClickRequest(
+            refId,
+            null,
+            GetStringArgument(arguments, "button") ?? "left",
+            GetBoolArgument(arguments, "doubleClick", false),
             arguments is { ValueKind: JsonValueKind.Object } a && a.TryGetProperty("physical", out _)
                 ? GetBoolArgument(arguments, "physical", false)
-                : null;
-
-        // Fail fast if this app's UIA provider is already blocked by an earlier call
-        var processId = _elementRegistry.GetProcessIdForRef(refId);
-        if (_invokeTracker.TryGetPending(processId, out var pending))
+                : null,
+            null,
+            // Fail fast if this app's UIA provider is already blocked by an earlier call
+            _elementRegistry.GetProcessIdForRef(refId)
+        );
+        if (_invokeTracker.TryGetPending(request.ProcessId, out var pending))
         {
             return Task.FromResult(BlockedResult(pending));
         }
 
+        ClickRequest? resolved = null;
         try
         {
-            OperationContext.Check();
-            var handle = GetStringArgument(arguments, "handle");
-            var element = _elementRegistry.ResolveRef(refId, handle);
-            void Validate() => _elementRegistry.ValidateReference(refId, handle);
-            OperationContext.Check();
-            var elementName = element.Properties.Name.ValueOrDefault ?? refId;
-            var physical =
-                requestedPhysical ?? PrefersPhysical(element.Properties.ControlType.ValueOrDefault, elementName);
-
-            var action = ChooseAction(
-                GetStringArgument(arguments, "action"),
-                physical || button != "left" || doubleClick,
-                element.Properties.ControlType.ValueOrDefault,
-                pattern => Supports(element, pattern)
-            );
-            var selectionFallback = false;
-            if (action != null)
+            // Read inside the try, as before, so a malformed argument is reported as a failed click.
+            resolved = request with
             {
-                // In some tree controls, clicking a row that is already selected starts inline rename, and the
-                // next keystroke then renames the object; selecting it again is never needed.
-                if (
-                    action == "select"
-                    && element.Properties.ControlType.ValueOrDefault == ControlType.TreeItem
-                    && IsSelected(element)
-                )
-                {
-                    return Task.FromResult(TextResult($"{elementName} is already selected; nothing was clicked"));
-                }
-
-                var patternResult = RunPattern(element, action, processId, elementName, Validate);
-                if (
-                    action != "select"
-                    || patternResult.IsError == true
-                    || patternResult.Outcome?.IsPending == true
-                    || Settled(() => IsSelected(element), 300)
-                )
-                {
-                    return Task.FromResult(patternResult);
-                }
-
-                // Some tree providers accept Select() and change nothing; a real click selects.
-                selectionFallback = true;
-            }
-
-            // Fall back to mouse click
-            using var input = new GuardedInput(_elementRegistry.InputForRef(refId));
-
-            var mouseButton = button switch
-            {
-                "right" => MouseButton.Right,
-                "middle" => MouseButton.Middle,
-                _ => MouseButton.Left,
+                Handle = GetStringArgument(arguments, "handle"),
+                Action = GetStringArgument(arguments, "action"),
             };
-
-            if (doubleClick)
-            {
-                input.Click(element, mouseButton, true);
-                return Task.FromResult(TextResult($"Double-clicked {elementName}"));
-            }
-            else
-            {
-                var opensDialog = physical && EndsWithEllipsis(elementName) && processId != 0;
-                var before = opensDialog ? Win32Desktop.GetTopLevelWindows(processId) : [];
-                input.Click(element, mouseButton);
-                if (!opensDialog)
-                {
-                    if (selectionFallback)
-                    {
-                        var selected = ObserveSelection(() => IsSelected(element));
-                        return Task.FromResult(TextResult(SelectionClickOutcome(elementName, selected)));
-                    }
-
-                    return Task.FromResult(TextResult($"Clicked {elementName}"));
-                }
-                // A physical click returns before its dialog exists; report the window so agents don't list too early.
-                for (var waited = 0; waited < 2000; waited += 100)
-                {
-                    if (NewWindowTitle(before, Win32Desktop.GetTopLevelWindows(processId)) is { } title)
-                    {
-                        return Task.FromResult(
-                            TextResult(
-                                $"Clicked {elementName}; window \"{title}\" opened. Get its handle from windows_list_windows."
-                            )
-                        );
-                    }
-
-                    Thread.Sleep(100);
-                }
-
-                return Task.FromResult(TextResult($"Clicked {elementName}; no new window appeared within 2 seconds."));
-            }
+            return Task.FromResult(Click(resolved));
         }
         catch (Exception ex)
         {
+            if (resolved?.PatternSent == true)
+            {
+                NoteSelectSent(ex);
+            }
+
             IReadOnlyList<Win32WindowInfo> windows = [];
             try
             {
@@ -194,9 +121,139 @@ public class ClickTool : ToolBase
             catch { }
 
             return Task.FromResult(
-                ErrorResult($"Failed to click {refId}: {ClickFailure(ex.Message, ex.GetType().Name, windows)}")
+                ErrorResult(
+                    $"Failed to click {refId}: {ClickFailure(ex.Message, ex.GetType().Name, windows, resolved?.PatternSent == true)}"
+                )
             );
         }
+    }
+
+    /// <summary>What one windows_click call asks for, read from its arguments.</summary>
+    private sealed record ClickRequest(
+        string RefId,
+        string? Handle,
+        string Button,
+        bool DoubleClick,
+        bool? RequestedPhysical,
+        string? Action,
+        int ProcessId
+    )
+    {
+        /// <summary>Set once a pattern call went out, so a later refusal does not claim nothing was sent.</summary>
+        public bool PatternSent { get; set; }
+    }
+
+    /// <summary>Resolve the ref, then use a pattern when one fits and a guarded mouse click otherwise.</summary>
+    private McpToolResult Click(ClickRequest request)
+    {
+        OperationContext.Check();
+        var element = _elementRegistry.ResolveRef(request.RefId, request.Handle);
+        void Validate() => _elementRegistry.ValidateReference(request.RefId, request.Handle);
+        OperationContext.Check();
+        var elementName = element.Properties.Name.ValueOrDefault ?? request.RefId;
+        var physical =
+            request.RequestedPhysical ?? PrefersPhysical(element.Properties.ControlType.ValueOrDefault, elementName);
+
+        var action = ChooseAction(
+            request.Action,
+            physical || request.Button != "left" || request.DoubleClick,
+            element.Properties.ControlType.ValueOrDefault,
+            pattern => Supports(element, pattern)
+        );
+        var selectionFallback = false;
+        if (action != null)
+        {
+            // In some tree controls, clicking a row that is already selected starts inline rename, and the
+            // next keystroke then renames the object; selecting it again is never needed.
+            if (
+                action == "select"
+                && element.Properties.ControlType.ValueOrDefault == ControlType.TreeItem
+                && IsSelected(element)
+            )
+            {
+                return TextResult($"{elementName} is already selected; nothing was clicked");
+            }
+
+            var patternResult = RunPattern(element, action, request.ProcessId, elementName, Validate);
+            if (
+                action != "select"
+                || patternResult.IsError == true
+                || patternResult.Outcome?.IsPending == true
+                || Settled(() => IsSelected(element), 300)
+            )
+            {
+                return patternResult;
+            }
+
+            // Some tree providers accept Select() and change nothing; a real click selects.
+            selectionFallback = true;
+            request.PatternSent = true;
+        }
+
+        // Scrolling the row into view changes the app, so it goes through the guards before the click's lease.
+        var scrolled = ClickGeometry.ScrollIntoView(element, request.ProcessId, _invokeTracker, Validate);
+        try
+        {
+            return MouseClick(request, element, elementName, physical, selectionFallback);
+        }
+        catch (InvalidOperationException error) when (scrolled != null)
+        {
+            throw GuardedInput.ChangedFirst(error, scrolled);
+        }
+    }
+
+    /// <summary>Fall back to a guarded mouse click, and report a dialog it opens.</summary>
+    private McpToolResult MouseClick(
+        ClickRequest request,
+        AutomationElement element,
+        string elementName,
+        bool physical,
+        bool selectionFallback
+    )
+    {
+        using var input = new GuardedInput(_elementRegistry.InputForRef(request.RefId));
+
+        var mouseButton = request.Button switch
+        {
+            "right" => MouseButton.Right,
+            "middle" => MouseButton.Middle,
+            _ => MouseButton.Left,
+        };
+
+        if (request.DoubleClick)
+        {
+            input.Click(element, mouseButton, true);
+            return TextResult($"Double-clicked {elementName}");
+        }
+
+        var processId = request.ProcessId;
+        var opensDialog = physical && EndsWithEllipsis(elementName) && processId != 0;
+        var before = opensDialog ? Win32Desktop.GetTopLevelWindows(processId) : [];
+        input.Click(element, mouseButton);
+        if (!opensDialog)
+        {
+            if (selectionFallback)
+            {
+                var selected = ObserveSelection(() => IsSelected(element));
+                return TextResult(SelectionClickOutcome(elementName, selected));
+            }
+
+            return TextResult($"Clicked {elementName}");
+        }
+        // A physical click returns before its dialog exists; report the window so agents don't list too early.
+        for (var waited = 0; waited < 2000; waited += 100)
+        {
+            if (NewWindowTitle(before, Win32Desktop.GetTopLevelWindows(processId)) is { } title)
+            {
+                return TextResult(
+                    $"Clicked {elementName}; window \"{title}\" opened. Get its handle from windows_list_windows."
+                );
+            }
+
+            Thread.Sleep(100);
+        }
+
+        return TextResult($"Clicked {elementName}; no new window appeared within 2 seconds.");
     }
 
     internal static readonly string[] PatternActions = ["invoke", "select", "expand", "collapse", "toggle"];
@@ -247,16 +304,6 @@ public class ClickTool : ToolBase
         && selection.IsSelected.TryGetValue(out var selected)
         && selected;
 
-    internal static string SelectionClickOutcome(string name, bool? selected) =>
-        selected switch
-        {
-            true => $"Selected {name} after fallback click (SelectionItem confirmed)",
-            false =>
-                $"Clicked {name} after Select changed nothing; selection was not observed. Inspect the current selection before continuing; do not repeat the click blindly.",
-            _ =>
-                $"Clicked {name} after Select changed nothing; selection could not be read. Inspect the current selection before continuing; do not repeat the click blindly.",
-        };
-
     internal static bool? ObserveSelection(Func<bool> isSelected)
     {
         try
@@ -291,15 +338,6 @@ public class ClickTool : ToolBase
             ? state
             : null;
 
-    /// <summary>What a toggle did, from the state read before and after it.</summary>
-    internal static string ToggleOutcome(string name, ToggleState? before, ToggleState? after) =>
-        (before, after) switch
-        {
-            (null, _) or (_, null) => $"Sent toggle request to {name}; its state could not be read",
-            var (b, a) when b == a => $"Toggled {name}, but it is still {b}",
-            var (b, a) => $"{name}: {b} -> {a}",
-        };
-
     private static bool Supports(AutomationElement element, string action) =>
         action switch
         {
@@ -333,7 +371,7 @@ public class ClickTool : ToolBase
         var result = ModalAwareInvoker.Execute(
             processId,
             $"{verb} on '{elementName}'",
-            () => MutationGuard.Execute(validate, call),
+            () => MutationGuard.Execute(validate, () => InputDesktop.Current.CallPattern(call)),
             _invokeTracker
         );
         // Providers may update toggle state asynchronously, so wait briefly for it to move.
@@ -363,18 +401,6 @@ public class ClickTool : ToolBase
         return PatternResult(result, message);
     }
 
-    // An empty reason invites a blind retry; name the exception and any dialog that seems to block input.
-    internal static string ClickFailure(string message, string exceptionType, IReadOnlyList<Win32WindowInfo> windows)
-    {
-        var reason = string.IsNullOrWhiteSpace(message) ? exceptionType : message;
-        var modal = windows.Any(w => !w.IsEnabled && !w.IsToolWindow)
-            ? windows.FirstOrDefault(w => w.IsEnabled && !w.IsToolWindow && !w.IsCloaked && w.Title.Length > 0)
-            : null;
-        return modal == null
-            ? reason
-            : $"{reason.TrimEnd('.')}. Window \"{modal.Title}\" appears to be a modal dialog blocking input; handle it first (see windows_list_windows).";
-    }
-
     /// <summary>
     /// Menus and "..." commands usually open a popup or modal. Invoke on them does not return
     /// until it closes, which blocks the provider the agent needs to inspect that popup.
@@ -388,16 +414,10 @@ public class ClickTool : ToolBase
         return trimmed.EndsWith("...") || trimmed.EndsWith('…');
     }
 
-    internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after)
-    {
-        var known = before.Select(w => w.Hwnd).ToHashSet();
-        return after.FirstOrDefault(w => !known.Contains(w.Hwnd) && w.Title.Length > 0)?.Title;
-    }
-
     /// <summary>
     /// Map a modal-aware pattern call result to a tool result.
     /// </summary>
-    private static McpToolResult PatternResult(PatternCallResult result, string completedMessage)
+    internal static McpToolResult PatternResult(PatternCallResult result, string completedMessage)
     {
         var response = result.Outcome switch
         {
@@ -405,6 +425,10 @@ public class ClickTool : ToolBase
             PatternCallOutcome.ModalDetected => TextResult(
                 $"{completedMessage}; a modal dialog \"{result.ModalTitle}\" opened and blocks UI Automation on this app until it closes. "
                     + "Find it with windows_list_windows, then use windows_screenshot or windows_send_keys (no ref) with its handle."
+            ),
+            _ when !result.Dispatched => TextResult(
+                "Not sent yet: the request is still waiting on the app, whose UI Automation provider has not answered. "
+                    + "Check windows_operation_status or take a screenshot by handle before continuing; do not repeat the click."
             ),
             _ => TextResult(
                 $"{completedMessage}; the app's handler is still running. Check windows_operation_status or take a screenshot "

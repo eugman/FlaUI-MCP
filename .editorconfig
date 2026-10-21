@@ -112,11 +112,6 @@ dotnet_diagnostic.S3776.severity = suggestion
 [src/FlaUI.Mcp/Mcp/ToolRegistry.cs]
 dotnet_diagnostic.S138.severity = suggestion
 
-[src/FlaUI.Mcp/Tools/BatchTool.cs]
-dotnet_diagnostic.S138.severity = suggestion
-dotnet_diagnostic.S3358.severity = suggestion
-dotnet_diagnostic.S3776.severity = suggestion
-
 [src/FlaUI.Mcp/Tools/ClickTool.cs]
 dotnet_diagnostic.S134.severity = suggestion
 dotnet_diagnostic.S138.severity = suggestion
@@ -137,11 +132,13 @@ dotnet_diagnostic.S134.severity = suggestion
 dotnet_diagnostic.S138.severity = suggestion
 dotnet_diagnostic.S3776.severity = suggestion
 
+# Long methods still to split: SendKeysTool.ExecuteAsync (~120 lines).
 [src/FlaUI.Mcp/Tools/SendKeysTool.cs]
 dotnet_diagnostic.S138.severity = suggestion
 dotnet_diagnostic.S3358.severity = suggestion
 dotnet_diagnostic.S3776.severity = suggestion
 
+# Long methods still to split: TypeTool.ExecuteAsync (~95 lines), FillTool.ExecuteAsync (~70 lines).
 [src/FlaUI.Mcp/Tools/TypeTools.cs]
 dotnet_diagnostic.S134.severity = suggestion
 dotnet_diagnostic.S138.severity = suggestion

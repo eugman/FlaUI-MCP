@@ -22,10 +22,16 @@ public enum PatternCallOutcome
 /// </summary>
 /// <param name="Outcome">What happened within the grace period.</param>
 /// <param name="ModalTitle">Title of the detected modal window, if any.</param>
+/// <param name="Dispatched">
+/// False while a still-pending call has not counted its dispatch. Callers of <see cref="ModalAwareInvoker.Execute"/>
+/// must count through <see cref="MutationGuard.Execute"/> or <see cref="MutationGuard.RecordDispatch"/>, or a
+/// pending call reports timed_out_pending. Always true for a completed call or a detected modal.
+/// </param>
 public sealed record PatternCallResult(
     PatternCallOutcome Outcome,
     string? ModalTitle = null,
-    string? PendingPatternId = null
+    string? PendingPatternId = null,
+    bool Dispatched = true
 );
 
 /// <summary>
@@ -77,6 +83,8 @@ public static class ModalAwareInvoker
                 ? windowEnumerator(processId).ToDictionary(w => w.Hwnd)
                 : new Dictionary<nint, Win32WindowInfo>();
 
+        var operation = OperationContext.Current.Value;
+        var sentBefore = operation?.InputsSent ?? 0;
         var info = tracker.Begin(processId, description);
         var task = Task.Run(() =>
         {
@@ -96,7 +104,29 @@ public static class ModalAwareInvoker
             TaskScheduler.Default
         );
 
-        var deadline = DateTime.UtcNow + grace;
+        var result = AwaitResult(task, info, processId, windowsBefore, windowEnumerator, DateTime.UtcNow + grace);
+        // A pattern call must count itself through MutationGuard.Execute (or RecordDispatch) once it is sent;
+        // that happens only after validation, which a hung provider can hold up. A call still pending that has
+        // not counted itself is reported as not yet sent (timed_out_pending). A modal dialog proves the call
+        // reached the app, and without an operation to count against the answer stays that it may have been sent.
+        return result.Outcome != PatternCallOutcome.StillPending || operation == null
+            ? result
+            : result with
+            {
+                Dispatched = operation.InputsSent > sentBefore,
+            };
+    }
+
+    /// <summary>Wait for the call until it returns, a modal appears, or the deadline passes.</summary>
+    private static PatternCallResult AwaitResult(
+        Task task,
+        PendingInvokeInfo info,
+        int processId,
+        IReadOnlyDictionary<nint, Win32WindowInfo> windowsBefore,
+        Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
+        DateTime deadline
+    )
+    {
         while (true)
         {
             // WaitAny (unlike Task.Wait) does not throw for faulted tasks,
