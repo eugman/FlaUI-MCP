@@ -110,4 +110,24 @@ public sealed class FillKeyboardTests
         Assert.Contains("not verified", result.Content[0].Text);
         Assert.Equal("unavailable", result.Outcome!.Verification);
     }
+
+    [Fact]
+    public void FocusThatLeavesTheControlAfterCtrlAStopsBeforeBackspace()
+    {
+        var desktop = new FakeDesktop { KeyboardFocus = false, ElementFocusLostAfter = 1 };
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InvalidOperationException>(() => Fallback(Element(), verifyFocus: true, reads: ""));
+
+        Assert.Contains("left the control after Ctrl+A", error.Message);
+        Assert.Equal(1, desktop.Dispatched);
+    }
+
+    [Theory]
+    [InlineData("w1e1", null, true)]
+    [InlineData("w1e1", false, false)]
+    [InlineData(null, null, false)]
+    [InlineData(null, true, true)]
+    public void SendKeysWithARefVerifiesFocusUnlessTurnedOff(string? refId, bool? requested, bool verifies) =>
+        Assert.Equal(verifies, SendKeysTool.VerifiesFocus(refId, requested));
 }

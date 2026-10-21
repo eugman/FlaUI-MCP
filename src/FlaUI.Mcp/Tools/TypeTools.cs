@@ -168,7 +168,7 @@ public class TypeTool : ToolBase
 /// <summary>
 /// Fill (clear and type) an element
 /// </summary>
-public class FillTool : ToolBase
+public partial class FillTool : ToolBase
 {
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
@@ -377,7 +377,7 @@ public class FillTool : ToolBase
     )
     {
         using var input = new GuardedInput(target, element, verifyFocus);
-        return FillByKeyboard(input, value, elementName, read, validate);
+        return FillByKeyboard(input, value, elementName, read, validate, verifyFocus ? element : null);
     }
 
     /// <summary>The SetValue call through the guarded pattern call: lease, integrity check, counted, modal-aware.</summary>
@@ -390,14 +390,23 @@ public class FillTool : ToolBase
         string value,
         string elementName,
         Func<TextObservation> read,
-        Action validate
+        Action validate,
+        AutomationElement? focused = null
     )
     {
         ReplaceByKeyboard(
             value,
             () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A)),
-            () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.BACK)),
-            input.Type
+            () =>
+            {
+                RequireStillFocused(focused);
+                input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.BACK));
+            },
+            text =>
+            {
+                RequireStillFocused(focused);
+                input.Type(text);
+            }
         );
         var observation = ControlText.WaitForExpected(
             value,
@@ -410,54 +419,5 @@ public class FillTool : ToolBase
             () => Thread.Sleep(50)
         );
         return FillReply(elementName, value, observation, new ToolOutcome("completed", "returned"));
-    }
-
-    /// <summary>
-    /// "Filled" only when the control reads back the requested value. A different value is a failure (the input
-    /// went out, so dispatch stays completed); a control that cannot be read back is reported as not verified.
-    /// </summary>
-    internal static McpToolResult FillReply(
-        string elementName,
-        string value,
-        TextObservation observed,
-        ToolOutcome outcome,
-        FlaUI.Core.Definitions.ControlType type = FlaUI.Core.Definitions.ControlType.Edit
-    )
-    {
-        var verification = observed.Verify(value);
-        var reply = verification switch
-        {
-            "verified" => TextResult($"Filled {elementName} with \"{value}\""),
-            "mismatch" => ErrorResult($"Sent \"{value}\" to {elementName}" + FillMismatch(value, observed.Text, type)),
-            _ => TextResult(
-                $"Sent \"{value}\" to {elementName}; it could not be read back, so the fill is not verified."
-            ),
-        };
-        return reply with { Outcome = outcome with { Verification = verification } };
-    }
-
-    internal static string FillMismatch(string expected, string? observed, FlaUI.Core.Definitions.ControlType type) =>
-        observed == null || observed == expected
-            ? ""
-            : $"; warning: it now reads \"{observed}\", so the value may not have applied"
-                + (
-                    type == FlaUI.Core.Definitions.ControlType.ComboBox
-                        ? ". For a ComboBox, fill its Edit child instead."
-                        : "."
-                );
-
-    internal static void ReplaceByKeyboard(string value, Action selectAll, Action deleteSelection, Action<string> type)
-    {
-        selectAll();
-        // Typing an empty string sends no input and does not replace selection.
-        // Each supplied operation retains the normal focus/cancellation guard.
-        if (value.Length == 0)
-        {
-            deleteSelection();
-        }
-        else
-        {
-            type(value);
-        }
     }
 }

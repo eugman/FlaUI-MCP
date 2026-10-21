@@ -11,7 +11,7 @@
       },
       "verifyFocus": {
         "type": "boolean",
-        "description": "Require ref and verified keyboard focus on that exact control before the sequence (default false)."
+        "description": "Require verified keyboard focus on the ref\u0027s exact control before the sequence. Default true when a ref is given (keys such as Ctrl\u002BA or Delete go wherever focus is); set false for a control that never reports focus."
       },
       "expectFocusClass": {
         "type": "string",

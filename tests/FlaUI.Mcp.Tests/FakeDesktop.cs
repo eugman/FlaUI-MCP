@@ -147,8 +147,11 @@ internal sealed class FakeDesktop : InputDesktop
         }
     }
 
+    /// <summary>After this many inputs every control loses keyboard focus, as when a popup takes it.</summary>
+    public int ElementFocusLostAfter { get; set; } = int.MaxValue;
+
     public override bool HasKeyboardFocus(AutomationElement element) =>
-        KeyboardFocus && !ignoresFocus.Contains(element);
+        KeyboardFocus && !ignoresFocus.Contains(element) && Dispatched < ElementFocusLostAfter;
 
     public override void Dispatch(Action input) => Interlocked.Increment(ref dispatched);
 

@@ -81,7 +81,7 @@ public class SendKeysTool : ToolBase
                 verifyFocus = new
                 {
                     type = "boolean",
-                    description = "Require ref and verified keyboard focus on that exact control before the sequence (default false).",
+                    description = "Require verified keyboard focus on the ref's exact control before the sequence. Default true when a ref is given (keys such as Ctrl+A or Delete go wherever focus is); set false for a control that never reports focus.",
                 },
                 expectFocusClass = new
                 {
@@ -115,10 +115,14 @@ public class SendKeysTool : ToolBase
     /// </summary>
     /// <param name="arguments">Tool arguments containing optional target ref and either chord or keys.</param>
     /// <returns>An MCP result with operation status or error details.</returns>
+    /// <summary>Whether a sequence requires verified focus: as requested, else whenever it targets a ref.</summary>
+    internal static bool VerifiesFocus(string? refId, bool? requested) =>
+        requested ?? !string.IsNullOrWhiteSpace(refId);
+
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var refId = GetStringArgument(arguments, "ref");
-        var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
+        var verifyFocus = VerifiesFocus(refId, GetArgument<bool?>(arguments, "verifyFocus"));
         if (verifyFocus && string.IsNullOrWhiteSpace(refId))
         {
             return Task.FromResult(ErrorResult("verifyFocus requires an element ref; no input sent."));
