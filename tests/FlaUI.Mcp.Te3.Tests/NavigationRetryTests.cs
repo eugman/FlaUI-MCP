@@ -1,8 +1,13 @@
+using FlaUI.Mcp;
+using FlaUI.Mcp.Core;
 using Xunit;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
-/// <summary>A navigation is retried only when the whole attempt sent no input and was refused before any.</summary>
+/// <summary>
+/// A navigation is retried only when the whole attempt sent no input and Core's outcome for the failing call says it
+/// was not dispatched. No text is read to decide.
+/// </summary>
 public sealed class NavigationRetryTests
 {
     private int inputs;
@@ -10,8 +15,30 @@ public sealed class NavigationRetryTests
     private Task Retry(Func<Task> attempt, List<string>? reports = null) =>
         NavigationRetry.Once(attempt, () => inputs, reports == null ? null : reports.Add);
 
+    private static CoreCallException Core(
+        string dispatch,
+        string text = "Failed to click w1e3.",
+        int inputsSent = 0,
+        string provider = "not-tracked",
+        string? code = null
+    ) =>
+        new(
+            "windows_click",
+            new McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Text = text }],
+                Outcome = new ToolOutcome(dispatch, provider)
+                {
+                    Status = "failed",
+                    InputsSent = inputsSent,
+                    Failure = code == null ? null : new InputRefusal(code, text),
+                },
+            }
+        );
+
     [Fact]
-    public async Task AFailureThatMayHaveSentInputIsNotRetried()
+    public async Task AFailureThatIsNotACoreCallIsNotRetried()
     {
         var attempts = 0;
 
@@ -28,16 +55,30 @@ public sealed class NavigationRetryTests
     }
 
     [Fact]
-    public async Task ARefusalBeforeAnyInputIsRetriedOnce()
+    public async Task TextThatSaysNoInputWasSentIsNotEnough()
+    {
+        // The host's own lease wait, not a Core call: nothing structured says what went out.
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            Retry(() =>
+            {
+                attempts++;
+                throw new TimeoutException("Desktop input is busy; no input sent.");
+            })
+        );
+
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task ACoreCallThatWasNotDispatchedIsRetriedOnce()
     {
         var attempts = 0;
         var reports = new List<string>();
 
         await Retry(
-            () =>
-                attempts++ == 0
-                    ? throw new TimeoutException("Desktop input is busy; no input sent.")
-                    : Task.CompletedTask,
+            () => attempts++ == 0 ? throw Core("not-dispatched", "Desktop input is busy.") : Task.CompletedTask,
             reports
         );
 
@@ -46,22 +87,38 @@ public sealed class NavigationRetryTests
     }
 
     [Theory]
-    [InlineData(
-        "Failed to type w1e2: activation-denied: Windows kept 'WindowsTerminal' (PID 9) in the foreground instead of target PID 7. "
-    )]
-    [InlineData(
-        "Failed to type w1e2: desktop-unavailable: Windows reports no foreground window; the session may be locked."
-    )]
-    public async Task ABlockedDesktopIsNotRetried(string refusal)
+    [InlineData("activation-denied")]
+    [InlineData("desktop-unavailable")]
+    public async Task ABlockedDesktopIsNotRetried(string code)
     {
         // The companion tells the caller that retrying will not help; the walk must not retry either.
         var attempts = 0;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<CoreCallException>(() =>
             Retry(() =>
             {
                 attempts++;
-                throw new InvalidOperationException(refusal);
+                throw Core("not-dispatched", code: code);
+            })
+        );
+
+        Assert.Equal(1, attempts);
+    }
+
+    [Theory]
+    [InlineData("partial", "not-tracked")]
+    [InlineData("completed", "pending")]
+    [InlineData("timed_out_pending", "unknown")]
+    public async Task ACallThatMayHaveGoneOutIsNotRetried(string dispatch, string provider)
+    {
+        // Core's outcome says input went out or may still go out, whatever the page's own tally shows.
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<CoreCallException>(() =>
+            Retry(() =>
+            {
+                attempts++;
+                throw Core(dispatch, "Failed to send keys: no further input sent.", provider: provider);
             })
         );
 
@@ -79,9 +136,7 @@ public sealed class NavigationRetryTests
             {
                 attempts++;
                 inputs += 3;
-                throw new InvalidOperationException(
-                    "Point is not on the target window (off-window or covered); no input sent."
-                );
+                throw Core("not-dispatched", "Point is not on the target window (off-window or covered).");
             })
         );
 
@@ -97,14 +152,14 @@ public sealed class NavigationRetryTests
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             Retry(() =>
-                throw new InvalidOperationException(
-                    attempts++ == 0 ? "Clipboard is busy; no input sent." : "Object identity unverified"
-                )
+                attempts++ == 0
+                    ? throw Core("not-dispatched", "Clipboard is busy.")
+                    : throw new InvalidOperationException("Object identity unverified")
             )
         );
 
-        Assert.StartsWith("Clipboard is busy; no input sent.", error.Message);
+        Assert.StartsWith("Clipboard is busy.", error.Message);
         Assert.Contains("Object identity unverified", error.Message);
-        Assert.Equal("Clipboard is busy; no input sent.", error.InnerException?.Message);
+        Assert.Equal("Clipboard is busy.", error.InnerException?.Message);
     }
 }
