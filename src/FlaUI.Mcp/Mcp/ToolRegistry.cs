@@ -326,6 +326,26 @@ public abstract class ToolBase : ITool
             IsError = true,
         };
 
+    /// <summary>
+    /// The reply for a UI Automation focus or close that has not returned, or null when it completed (or ran
+    /// natively). Its outcome says whether the request was sent yet.
+    /// </summary>
+    protected static McpToolResult? StillPending(PatternCallResult? result, string request)
+    {
+        if (result is null || result.Outcome == PatternCallOutcome.Completed)
+        {
+            return null;
+        }
+
+        var text = result.Dispatched
+            ? $"{request} was sent; the app's UI Automation provider has not returned."
+            : $"{request} is still waiting on the app's UI Automation provider and may not have been sent.";
+        return TextResult($"{text} Check windows_operation_status before continuing; do not repeat it.") with
+        {
+            Outcome = ToolOutcome.FromPattern(result),
+        };
+    }
+
     protected static McpToolResult BlockedResult(PendingInvokeInfo pending) =>
         ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)) with
         {

@@ -103,24 +103,46 @@ public class FocusWindowTool : ToolBase
         {
             if (!string.IsNullOrEmpty(handle))
             {
-                _sessionManager.FocusWindow(handle, _pending);
-                return Task.FromResult(FocusResult(handle, _sessionManager.GetWindowHwnd(handle)));
+                var uia = Focus(handle);
+                return Task.FromResult(
+                    StillPending(uia, $"Focus on {handle}")
+                        ?? FocusResult(handle, _sessionManager.GetWindowHwnd(handle))
+                );
             }
             else if (!string.IsNullOrEmpty(title))
             {
                 var (windowHandle, window) = _sessionManager.AttachToWindow(title);
-                _sessionManager.FocusWindow(windowHandle, _pending);
-                return Task.FromResult(FocusResult(windowHandle, _sessionManager.GetWindowHwnd(windowHandle)));
+                var uia = Focus(windowHandle);
+                return Task.FromResult(
+                    StillPending(uia, $"Focus on {windowHandle}")
+                        ?? FocusResult(windowHandle, _sessionManager.GetWindowHwnd(windowHandle))
+                );
             }
             else
             {
                 return Task.FromResult(ErrorResult("Either 'handle' or 'title' is required"));
             }
         }
+        catch (ProviderBlockedException blocked)
+        {
+            return Task.FromResult(BlockedResult(blocked.Pending));
+        }
         catch (Exception ex)
         {
             return Task.FromResult(ErrorResult($"Failed to focus window: {ex.Message}"));
         }
+    }
+
+    /// <summary>Focus by Win32 (null result), or by UIA for a window without a native handle.</summary>
+    private PatternCallResult? Focus(string handle)
+    {
+        if (_sessionManager.UiaWindowFor(handle, _pending) is not { } window)
+        {
+            _sessionManager.FocusWindow(handle, _pending);
+            return null;
+        }
+
+        return WindowMutation.Uia(window.Properties.ProcessId.Value, $"Focus on {handle}", window.Focus, _pending);
     }
 
     private static McpToolResult FocusResult(string handle, nint hwnd) =>
@@ -169,12 +191,32 @@ public class CloseWindowTool : ToolBase
 
         try
         {
-            _sessionManager.CloseWindow(handle, _pending);
+            PatternCallResult? uia = null;
+            if (_sessionManager.UiaWindowFor(handle, _pending) is { } window)
+            {
+                // UIA Close is also a request, not proof of disappearance.
+                uia = WindowMutation.Uia(
+                    window.Properties.ProcessId.Value,
+                    $"Close on {handle}",
+                    window.Close,
+                    _pending
+                );
+            }
+            else
+            {
+                _sessionManager.CloseWindow(handle, _pending);
+            }
+
             return Task.FromResult(
-                TextResult(
-                    $"Close requested for window {handle}. A save prompt may keep it open; use windows_list_windows to verify before continuing."
-                )
+                StillPending(uia, $"Close on {handle}")
+                    ?? TextResult(
+                        $"Close requested for window {handle}. A save prompt may keep it open; use windows_list_windows to verify before continuing."
+                    )
             );
+        }
+        catch (ProviderBlockedException blocked)
+        {
+            return Task.FromResult(BlockedResult(blocked.Pending));
         }
         catch (Exception ex)
         {

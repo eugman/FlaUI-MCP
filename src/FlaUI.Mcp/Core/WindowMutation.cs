@@ -88,9 +88,9 @@ internal static class WindowMutation
 
     /// <summary>
     /// A UIA focus or close for a window without a native handle. With a tracker it runs modal-aware, so a
-    /// provider that blocks returns as pending instead of hanging the tool.
+    /// provider that blocks returns as pending instead of hanging the tool; the result says which.
     /// </summary>
-    public static void Uia(int processId, string description, Action call, PendingInvokeTracker? pending)
+    public static PatternCallResult Uia(int processId, string description, Action call, PendingInvokeTracker? pending)
     {
         RefuseIfBlocked(processId, pending);
         using var lease = GuardedInput.AcquireLease();
@@ -98,9 +98,9 @@ internal static class WindowMutation
         if (pending == null)
         {
             MutationGuard.Execute(Validate, call);
-            return;
+            return new PatternCallResult(PatternCallOutcome.Completed);
         }
 
-        ModalAwareInvoker.Execute(processId, description, () => MutationGuard.Execute(Validate, call), pending);
+        return ModalAwareInvoker.Execute(processId, description, () => MutationGuard.Execute(Validate, call), pending);
     }
 }

@@ -520,6 +520,16 @@ public class SessionManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// The UIA window a focus or close must go through, or null when the handle has a native HWND and Win32
+    /// does it. Refuses while the window's provider is blocked.
+    /// </summary>
+    internal Window? UiaWindowFor(string handle, PendingInvokeTracker? pending)
+    {
+        OperationContext.Check();
+        return GetWindowHwnd(handle) != 0 ? null : AttachedForFallback(handle, pending);
+    }
+
     /// <summary>The UIA window behind a handle with no native HWND, once its provider is known to be free.</summary>
     private Window AttachedForFallback(string handle, PendingInvokeTracker? pending)
     {
