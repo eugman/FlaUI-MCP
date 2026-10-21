@@ -19,4 +19,51 @@ public static partial class Win32Desktop
         var threadId = read(hwnd, out var processId);
         return threadId == 0 ? 0 : (int)processId;
     }
+
+    /// <summary>The shape of GetWindowText and GetClassName: the characters copied, or 0 when none were.</summary>
+    internal delegate int WindowTextReader(nint hwnd, char[] buffer, int capacity);
+
+    private const int TitleCapacity = 512;
+    private const int ClassNameCapacity = 256;
+
+    /// <summary>
+    /// The characters Windows reports it copied, or null when it copied none. Only the reported length is read,
+    /// so a failed read cannot hand back what the buffer held before.
+    /// </summary>
+    internal static string? ReadText(nint hwnd, int capacity, WindowTextReader read)
+    {
+        var buffer = new char[capacity];
+        var length = read(hwnd, buffer, capacity);
+        return length > 0 ? new string(buffer, 0, Math.Min(length, capacity)) : null;
+    }
+
+    /// <summary>
+    /// A visible top-level window as <see cref="GetTopLevelWindows"/> lists it, or null when it is skipped:
+    /// another process's window when <paramref name="processId"/> is set, or a window whose owner cannot be
+    /// read, which no process filter or allowlist could then vouch for. An untitled window keeps an empty title.
+    /// </summary>
+    internal static Win32WindowInfo? ReadWindow(
+        nint hwnd,
+        int? processId,
+        ThreadProcessReader owner,
+        WindowTextReader title
+    )
+    {
+        var pid = OwnerProcessId(hwnd, owner);
+        if (pid == 0 || (processId.HasValue && pid != processId.Value))
+        {
+            return null;
+        }
+
+        var exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
+        var isCloaked = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out var cloaked, sizeof(int)) == 0 && cloaked != 0;
+        return new Win32WindowInfo(
+            hwnd,
+            ReadText(hwnd, TitleCapacity, title) ?? string.Empty,
+            pid,
+            IsWindowEnabled(hwnd),
+            (exStyle & WS_EX_TOOLWINDOW) != 0,
+            isCloaked
+        );
+    }
 }

@@ -328,7 +328,7 @@ public static partial class Win32Desktop
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowText(nint hWnd, StringBuilder lpString, int nMaxCount);
+    private static extern int GetWindowText(nint hWnd, [Out] char[] lpString, int nMaxCount);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
@@ -401,7 +401,7 @@ public static partial class Win32Desktop
         && (hwnd == target || ancestor(hwnd, GaRoot) == target || ancestor(hwnd, GaRootOwner) == target);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(nint hWnd, StringBuilder lpClassName, int nMaxCount);
+    private static extern int GetClassName(nint hWnd, [Out] char[] lpClassName, int nMaxCount);
 
     /// <summary>Compact diagnostic identity for a window: handle, process id and class name.</summary>
     public static string Describe(nint hwnd)
@@ -411,8 +411,7 @@ public static partial class Win32Desktop
             return "hwnd=0";
         }
 
-        var name = new StringBuilder(256);
-        GetClassName(hwnd, name, name.Capacity);
+        var name = ReadText(hwnd, ClassNameCapacity, GetClassName);
         return $"hwnd={hwnd}, pid={GetProcessId(hwnd)}, class={name}";
     }
 
@@ -443,34 +442,11 @@ public static partial class Win32Desktop
                     return true;
                 }
 
-                GetWindowThreadProcessId(hwnd, out var pid);
-                if (processId.HasValue && pid != (uint)processId.Value)
+                if (ReadWindow(hwnd, processId, GetWindowThreadProcessId, GetWindowText) is { } window)
                 {
-                    return true;
+                    result.Add(window);
                 }
 
-                var titleBuilder = new StringBuilder(512);
-                GetWindowText(hwnd, titleBuilder, titleBuilder.Capacity);
-
-                var exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
-                var isToolWindow = (exStyle & WS_EX_TOOLWINDOW) != 0;
-
-                var isCloaked = false;
-                if (DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out var cloaked, sizeof(int)) == 0)
-                {
-                    isCloaked = cloaked != 0;
-                }
-
-                result.Add(
-                    new Win32WindowInfo(
-                        hwnd,
-                        titleBuilder.ToString(),
-                        (int)pid,
-                        IsWindowEnabled(hwnd),
-                        isToolWindow,
-                        isCloaked
-                    )
-                );
                 return true;
             },
             0
@@ -682,15 +658,13 @@ public static partial class Win32Desktop
     /// <summary>Get a window's class name, or an empty string on failure.</summary>
     public static string GetWindowClassName(nint hwnd)
     {
-        var builder = new StringBuilder(256);
-        return GetClassName(hwnd, builder, builder.Capacity) > 0 ? builder.ToString() : string.Empty;
+        return ReadText(hwnd, ClassNameCapacity, GetClassName) ?? string.Empty;
     }
 
     /// <summary>Get a window's title, or an empty string on failure.</summary>
     public static string GetWindowTitle(nint hwnd)
     {
-        var builder = new StringBuilder(512);
-        return GetWindowText(hwnd, builder, builder.Capacity) > 0 ? builder.ToString() : string.Empty;
+        return ReadText(hwnd, TitleCapacity, GetWindowText) ?? string.Empty;
     }
 
     /// <summary>

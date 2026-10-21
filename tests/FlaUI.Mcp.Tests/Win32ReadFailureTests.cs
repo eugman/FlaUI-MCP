@@ -32,4 +32,49 @@ public sealed class Win32ReadFailureTests
     {
         Assert.Equal((int)StaleProcessId, Win32Desktop.OwnerProcessId(100, OwnerRead));
     }
+
+    // Windows copied nothing, but the buffer already holds text.
+    private static int FailedTextRead(nint hwnd, char[] buffer, int capacity)
+    {
+        "stale".CopyTo(buffer);
+        return 0;
+    }
+
+    // Windows copied three characters into a buffer that holds more.
+    private static int ShortTextRead(nint hwnd, char[] buffer, int capacity)
+    {
+        "abcdef".CopyTo(buffer);
+        return 3;
+    }
+
+    [Fact]
+    public void AFailedTextReadReportsNoText()
+    {
+        Assert.Null(Win32Desktop.ReadText(100, 16, FailedTextRead));
+    }
+
+    [Fact]
+    public void ATextReadReportsOnlyTheCopiedLength()
+    {
+        Assert.Equal("abc", Win32Desktop.ReadText(100, 16, ShortTextRead));
+    }
+
+    // hwnd 0 keeps the window style and cloak reads, which are not faked, from reaching a real window.
+    [Fact]
+    public void EnumerationSkipsAWindowWhoseOwnerCannotBeRead()
+    {
+        Assert.Null(Win32Desktop.ReadWindow(0, null, FailedOwnerRead, ShortTextRead));
+        Assert.Null(Win32Desktop.ReadWindow(0, (int)StaleProcessId, FailedOwnerRead, ShortTextRead));
+    }
+
+    [Fact]
+    public void EnumerationKeepsAnUntitledWindowOfTheRequestedProcess()
+    {
+        var window = Win32Desktop.ReadWindow(0, (int)StaleProcessId, OwnerRead, FailedTextRead);
+
+        Assert.NotNull(window);
+        Assert.Equal(string.Empty, window.Title);
+        Assert.Equal((int)StaleProcessId, window.ProcessId);
+        Assert.Null(Win32Desktop.ReadWindow(0, 1, OwnerRead, ShortTextRead));
+    }
 }
