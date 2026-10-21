@@ -30,12 +30,31 @@ public sealed partial class Te3Page
             )
             .WaitAsync(TimeSpan.FromSeconds(5));
 
-    // One guarded select of TreeItem NodeN (Core's windows_click action select; it clicks when Select is ignored).
+    // One guarded select of TreeItem NodeN (Core's windows_click action select; it clicks when Select is ignored). A
+    // row read on a later page is no longer realized once the tree paged on: Home and the same PageDowns bring it back.
     private async Task SelectRow(TreeRow row)
     {
-        var reference = await Reference(
-            new(new(Name: "Node" + row.Index, ControlType: "TreeItem"), TomExplorerTarget().Selector, false)
+        var target = new Target(
+            new(Name: "Node" + row.Index, ControlType: "TreeItem"),
+            TomExplorerTarget().Selector,
+            false
         );
+        string reference;
+        try
+        {
+            reference = await Reference(target);
+        }
+        catch (ElementNotFoundException)
+        {
+            await Keys("Home", TomExplorerTarget());
+            for (var page = 0; page < row.Page; page++)
+            {
+                await Keys("PageDown", TomExplorerTarget());
+            }
+
+            reference = await Reference(target);
+        }
+
         reportStep?.Invoke($"Select TOM Explorer row {row.Index} '{row.Value}'");
         await invoke("windows_click", new { @ref = reference, action = "select" });
     }
@@ -50,15 +69,37 @@ public sealed partial class Te3Page
             : new(PropertiesValue("Name"), PropertiesValue("ObjectType"), folder);
     }
 
-    private sealed class RowTree(Te3Page page) : IRowTree
+    // PageDown presses at most, to realize a filtered tree longer than the viewport (about 23 rows at 1080 px).
+    private const int MaxPages = 6;
+
+    private sealed class RowTree(Te3Page page, Func<bool> outOfTime) : IRowTree
     {
+        // Home first, so the model root and its first child are in view to measure the indent whatever was selected
+        // before; then every realized row, paging down while the tree scrolls (treeList has no Scroll pattern).
         public async Task<RowRead> Read()
         {
-            var found = await page.ReadTree();
-            page.depthScale ??= TomRows.Calibrate(found.Elements);
-            var scale = page.depthScale;
-            var rows = scale == null ? null : TomRows.Rows(found.Elements, scale);
-            return new(rows, !TomRows.Scrolls(found.Elements), scale?.Step, found.Truncated);
+            await page.Keys("Home", TomExplorerTarget());
+            var truncated = false;
+            var paged = await RowPager.ReadAll(
+                async () =>
+                {
+                    var found = await page.ReadTree();
+                    truncated |= found.Truncated;
+                    page.depthScale ??= TomRows.Calibrate(found.Elements);
+                    return (TomRows.Rows(found.Elements, page.depthScale), TomRows.Scrolls(found.Elements));
+                },
+                () => page.Keys("PageDown", TomExplorerTarget()),
+                MaxPages,
+                outOfTime
+            );
+            return new(
+                page.depthScale == null ? null : paged.Rows,
+                paged.Complete,
+                page.depthScale?.Step,
+                truncated,
+                paged.Pages,
+                paged.TruncatedByViewport
+            );
         }
 
         public async Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected()

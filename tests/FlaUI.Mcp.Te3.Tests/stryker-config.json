@@ -22,6 +22,8 @@
       "**/ObjectWalk.cs",
       "**/ObjectSelect.cs",
       "**/SearchPick.cs",
+      "**/RowPager.cs",
+      "**/WindowShape.cs",
       "**/Te3Page.Rows.cs",
       "**/RunGrant.cs",
       "**/WalkPlace.cs",

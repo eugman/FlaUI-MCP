@@ -85,7 +85,11 @@ public sealed partial class Te3Page
     // only when the rows cannot be placed or may not all be realized, and the 18 s stop bounds both.
     private async Task<WalkResult> FindObject(WalkRequest request, TomCursor cursor, Func<TimeSpan> elapsed)
     {
-        var picked = await ObjectSelect.Run(new RowTree(this), request, WalkClock.OutOfTime(elapsed));
+        var picked = await ObjectSelect.Run(
+            new RowTree(this, WalkClock.OutOfTime(elapsed)),
+            request,
+            WalkClock.OutOfTime(elapsed)
+        );
         WalkReport = new
         {
             strategy = "rows",
@@ -94,6 +98,8 @@ public sealed partial class Te3Page
             indentPx = picked.IndentPx,
             selects = picked.Tried,
             truncated = picked.Truncated,
+            pages = picked.Pages,
+            truncatedByViewport = picked.TruncatedByViewport,
             rejected = picked.Rejected,
         };
         if (!picked.FallBack)
@@ -117,6 +123,8 @@ public sealed partial class Te3Page
             indentPx = picked.IndentPx,
             selects = picked.Tried,
             truncated = picked.Truncated,
+            pages = picked.Pages,
+            truncatedByViewport = picked.TruncatedByViewport,
             rejected = picked.Rejected,
             rowsWalked = walk.RowsVisited,
         };

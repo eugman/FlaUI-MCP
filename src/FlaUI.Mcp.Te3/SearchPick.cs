@@ -1,5 +1,6 @@
 /// <summary>One realized TOM Explorer row: its index in the tree (TreeItem <c>NodeN</c>), its text and its depth.</summary>
-public sealed record TreeRow(int Index, string? Value, int? Depth);
+/// <param name="Page">The PageDown presses after Home at which the row was in view (0 for the first screen).</param>
+public sealed record TreeRow(int Index, string? Value, int? Depth, int Page = 0);
 
 /// <summary>The rows that can be the object, and whether a row of unknown depth broke the placement on the way.</summary>
 public sealed record Pick(IReadOnlyList<TreeRow> Candidates, bool Unplaced);

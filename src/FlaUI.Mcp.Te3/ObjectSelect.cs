@@ -1,7 +1,16 @@
 /// <summary>One read of the filtered tree: its rows (null when no depth is known), and what may be missing from it.</summary>
 /// <param name="Complete">False when the tree may hold rows that are not realized (it scrolls, or the read was cut).</param>
 /// <param name="Truncated">The read hit its element limit: rows past the cut are not in it.</param>
-public sealed record RowRead(IReadOnlyList<TreeRow>? Rows, bool Complete, double? IndentPx, bool Truncated);
+/// <param name="Pages">PageDown presses used to realize rows past the viewport.</param>
+/// <param name="TruncatedByViewport">Paging stopped while the viewport still hid rows.</param>
+public sealed record RowRead(
+    IReadOnlyList<TreeRow>? Rows,
+    bool Complete,
+    double? IndentPx,
+    bool Truncated,
+    int Pages = 0,
+    bool TruncatedByViewport = false
+);
 
 /// <summary>The search-filtered TOM Explorer as the row strategy uses it: one read of every realized row, one select.</summary>
 public interface IRowTree
@@ -42,6 +51,11 @@ public sealed record SelectResult(
     string? ConfirmedType = null
 )
 {
+    /// <summary>PageDown presses the read used, and whether the viewport still hid rows when it stopped.</summary>
+    public int Pages { get; init; }
+
+    public bool TruncatedByViewport { get; init; }
+
     public IReadOnlyList<RejectedRow> Rejected => RejectedRows ?? [];
 }
 
@@ -58,6 +72,12 @@ internal static class ObjectSelect
     public static async Task<SelectResult> Run(IRowTree tree, WalkRequest request, Func<bool> outOfTime)
     {
         var read = await tree.Read();
+        var result = await Pick(tree, read, request, outOfTime);
+        return result with { Pages = read.Pages, TruncatedByViewport = read.TruncatedByViewport };
+    }
+
+    private static async Task<SelectResult> Pick(IRowTree tree, RowRead read, WalkRequest request, Func<bool> outOfTime)
+    {
         if (Unpicked(read, request) is { } early)
         {
             return early;
