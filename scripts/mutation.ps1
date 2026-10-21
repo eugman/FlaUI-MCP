@@ -25,11 +25,11 @@ $offlineProject = 'FlaUI.Mcp.Tests.csproj'
 $integrationProject = 'FlaUI.Mcp.IntegrationTests.csproj'
 $testApps = 'WinFormsTestApp', 'WpfTestApp'
 $parts = [ordered]@{
-    guards = 'GuardedInput', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'InputRefusal'
-    state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext'
+    guards = 'GuardedInput', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'InputRefusal', 'WindowBaseline', 'Diagnostics'
+    state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext', 'WaitOutcome'
     protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolBase'
     pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'PointerActions'
-    keyboard = 'SendKeysTool', 'TypeTools', 'BatchTool'
+    keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'BatchTool'
 }
 
 function RemoveWorktree($path) {

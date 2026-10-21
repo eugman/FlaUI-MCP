@@ -31,7 +31,11 @@ public sealed class MutationConfigTests
         "Tools/PointerActions.cs",
         "Tools/SendKeysTool.cs",
         "Tools/TypeTools.cs",
+        "Tools/FillToolReplies.cs",
         "Tools/BatchTool.cs",
+        "Core/WindowBaseline.cs",
+        "Core/WaitOutcome.cs",
+        "Core/Diagnostics.cs",
     ];
 
     private static string RepoFile(string relative)
@@ -69,6 +73,16 @@ public sealed class MutationConfigTests
         var mutate = Config().GetProperty("mutate").EnumerateArray().Select(p => p.GetString()).ToArray();
 
         Assert.Equal(GuardFiles.Select(file => $"**/{file}").Order(), mutate.Order());
+    }
+
+    [Fact]
+    public void EveryMutatedFileBelongsToAPartOfTheScript()
+    {
+        var script = File.ReadAllText(RepoFile(Path.Combine("scripts", "mutation.ps1")));
+        var parts = script[script.IndexOf("$parts = [ordered]@{", StringComparison.Ordinal)..];
+        parts = parts[..parts.IndexOf('}')];
+
+        Assert.All(GuardFiles, file => Assert.Contains($"'{Path.GetFileNameWithoutExtension(file)}'", parts));
     }
 
     [Fact]

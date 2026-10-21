@@ -24,7 +24,11 @@
       "**/Tools/PointerActions.cs",
       "**/Tools/SendKeysTool.cs",
       "**/Tools/TypeTools.cs",
-      "**/Tools/BatchTool.cs"
+      "**/Tools/FillToolReplies.cs",
+      "**/Tools/BatchTool.cs",
+      "**/Core/WindowBaseline.cs",
+      "**/Core/WaitOutcome.cs",
+      "**/Core/Diagnostics.cs"
     ],
     "concurrency": 2,
     "coverage-analysis": "perTest",
