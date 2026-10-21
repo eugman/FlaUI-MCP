@@ -103,16 +103,17 @@ public sealed class InputTallyTests
     }
 
     [Fact]
-    public void ADirectInputCountsOnlyOnceItWasSent()
+    public void ADirectInputThatFailsAfterItsChecksPassedCounts()
     {
+        // GuardedInput's last check passed, so the click may have pressed the button before it threw.
         var inputs = new InputTally();
 
         Assert.Throws<InvalidOperationException>(() =>
-            inputs.Send(() => throw new InvalidOperationException("Default layout click point is obscured"))
+            inputs.Dispatch(() => throw new InvalidOperationException("Mouse up failed after mouse down"))
         );
-        inputs.Send(() => { });
+        inputs.Dispatch(() => { });
 
-        Assert.Equal(1, inputs.Sent);
+        Assert.Equal(2, inputs.Sent);
     }
 
     [Fact]

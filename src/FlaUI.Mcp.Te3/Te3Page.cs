@@ -41,7 +41,7 @@ public sealed class Te3Page(
                     throw new InvalidOperationException(obscured);
                 }
 
-                Inputs.Send(() => input.Send(send));
+                input.Send(() => Inputs.Dispatch(send));
             }
         );
 

@@ -33,8 +33,8 @@ public sealed class InputTally
         }
     }
 
-    /// <summary>Sends one direct input and counts it once send returns.</summary>
-    public void Send(Action send)
+    /// <summary>Dispatches one direct input; call it once every check before the input has passed.</summary>
+    public void Dispatch(Action send)
     {
         send();
         Sent++;
