@@ -1,7 +1,8 @@
 /// <summary>What the TOM Explorer shows for the selected row: its text and the status bar's object type.</summary>
 /// <param name="Value">The selected tree row's text, e.g. "Date".</param>
 /// <param name="Type">The status bar's type for the selection, e.g. "Calculated Table", or null.</param>
-public sealed record RowObservation(string? Value, string? Type);
+/// <param name="Left">The row's left edge in screen pixels, which TOM Explorer indents by depth, or null.</param>
+public sealed record RowObservation(string? Value, string? Type, double? Left = null);
 
 /// <summary>The keyboard view of TOM Explorer that <see cref="PathWalker"/> drives.</summary>
 public interface ITreeCursor

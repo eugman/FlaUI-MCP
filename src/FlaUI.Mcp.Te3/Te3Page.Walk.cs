@@ -162,6 +162,9 @@ public sealed partial class Te3Page
         var selected = rows.Elements.FirstOrDefault(r => r.Selected == true);
         var bar = await Task.Run(() => ObserveModelState().Selection);
         var below = TomSelection.RowShownBelow(rows.Elements.Select(r => r.Bounds?.Y), selected?.Bounds?.Y);
-        return (new(TomSelection.ObservedRow(selected?.Value, bar), bar, selected?.Bounds?.Y), below);
+        return (
+            new(TomSelection.ObservedRow(selected?.Value, bar, selected?.Bounds?.X), bar, selected?.Bounds?.Y),
+            below
+        );
     }
 }

@@ -26,8 +26,8 @@ internal static class TomSelection
     /// takes its name from the status bar, so the table it opens is carried to the column, hierarchy and level rows
     /// below it instead of being lost as 'none'.
     /// </summary>
-    internal static RowObservation ObservedRow(string? treeValue, string? bar) =>
-        new(treeValue ?? SelectionName(bar), SelectionType(bar));
+    internal static RowObservation ObservedRow(string? treeValue, string? bar, double? left = null) =>
+        new(treeValue ?? SelectionName(bar), SelectionType(bar), left);
 
     /// <summary>
     /// True when a realized row's top lies below the selected row's: the selection had somewhere to move. A selection
