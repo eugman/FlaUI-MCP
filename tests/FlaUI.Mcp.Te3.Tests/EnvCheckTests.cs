@@ -14,7 +14,7 @@ public sealed class EnvCheckTests : IDisposable
         Directory.CreateDirectory(settings);
         File.WriteAllText(
             Path.Combine(settings, "Preferences.json"),
-            """{"Mcp":{"Enabled":true,"Port":42100,"AutoStart":false},"Other":1}"""
+            """{"Mcp":{"Enabled":true,"Port":42100,"AutoStart":false,"AccessToken":"tok-123"},"Other":1}"""
         );
         File.WriteAllText(
             Path.Combine(settings, "UiPreferences.json"),
@@ -28,7 +28,11 @@ public sealed class EnvCheckTests : IDisposable
     private static IReadOnlyDictionary<string, object?>? Registry(string key) =>
         key switch
         {
-            Te3EnvCheck.UserPolicies => new Dictionary<string, object?> { ["DisableUpdates"] = 1 },
+            Te3EnvCheck.UserPolicies => new Dictionary<string, object?>
+            {
+                ["DisableUpdates"] = 1,
+                ["McpAccessTokenValue"] = "tok-456",
+            },
             Te3EnvCheck.Licence => new Dictionary<string, object?> { ["LicenseKey"] = "SECRET-KEY", ["User"] = "u" },
             _ => null,
         };
@@ -71,4 +75,17 @@ public sealed class EnvCheckTests : IDisposable
 
     [Fact]
     public void ItIsAReadOnlyTool() => Assert.Equal(McpToolAnnotations.ReadOnly, new Te3EnvCheck().Annotations);
+
+    [Fact]
+    public async Task OnlyTheMcpSettingsItNamesAreReportedAndSecretsAreMasked()
+    {
+        var report = await Check();
+
+        Assert.False(report.GetProperty("mcp").TryGetProperty("AccessToken", out _));
+        Assert.Equal(
+            "(masked)",
+            report.GetProperty("policies").GetProperty("user").GetProperty("McpAccessTokenValue").GetString()
+        );
+        Assert.DoesNotContain("tok-", report.GetRawText());
+    }
 }

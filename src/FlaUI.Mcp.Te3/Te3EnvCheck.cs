@@ -61,14 +61,12 @@ public sealed class Te3EnvCheck(
             settings = folder,
             policies = new
             {
-                user = (object?)read(UserPolicies) ?? NotSet,
-                machine = (object?)read(MachinePolicies) ?? NotSet,
+                user = (object?)Masked(read(UserPolicies)) ?? NotSet,
+                machine = (object?)Masked(read(MachinePolicies)) ?? NotSet,
             },
             licence = read(Licence)?.ToDictionary(v => v.Key, _ => true),
-            mcp = Property(preferences, "Mcp"),
-            window = ui is { } u
-                ? WindowKeys.Where(k => u.TryGetProperty(k, out _)).ToDictionary(k => k, k => u.GetProperty(k))
-                : null,
+            mcp = Named(Property(preferences, "Mcp"), McpKeys),
+            window = Named(ui, WindowKeys),
             keyboardCustomizations = Property(ui, "KeyboardCustomizations"),
             layouts = layouts is { } l
                 ? new { version = Property(l, "Version"), count = Property(l, "Layouts")?.GetArrayLength() }
@@ -76,6 +74,24 @@ public sealed class Te3EnvCheck(
         };
         return Task.FromResult(TextResult(JsonSerializer.Serialize(report, McpProtocol.JsonOptions)));
     }
+
+    private static readonly string[] McpKeys = ["Enabled", "Port", "AutoStart"];
+
+    // Names that may hold a secret; their values are never reported.
+    private static readonly string[] SecretWords = ["key", "token", "licence", "license", "secret", "password"];
+
+    private static bool Secret(string name) =>
+        SecretWords.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
+
+    private static Dictionary<string, object?>? Masked(IReadOnlyDictionary<string, object?>? values) =>
+        values?.ToDictionary(v => v.Key, v => Secret(v.Key) ? "(masked)" : v.Value);
+
+    // Only the properties this check names, each masked when its name may hold a secret.
+    private static Dictionary<string, object?>? Named(JsonElement? element, string[] keys) =>
+        element is { ValueKind: JsonValueKind.Object } e
+            ? keys.Where(k => e.TryGetProperty(k, out _))
+                .ToDictionary(k => k, k => Secret(k) ? "(masked)" : (object?)e.GetProperty(k))
+            : null;
 
     private static JsonElement? ReadJson(string path)
     {
