@@ -91,7 +91,7 @@ internal static class ObjectSelect
         {
             await tree.Select(row);
             last = row;
-            var (why, type) = await Confirmed(tree, row, request);
+            var (why, type) = await Confirmed(tree, rows, row, request);
             if (why != null)
             {
                 rejected.Add(new(row.Index, row.Value, why));
@@ -161,7 +161,12 @@ internal static class ObjectSelect
     // Why the selected candidate is not the object (null when it is), and its type: a fresh read must show this very
     // row selected, still in the requested table and folder, before TE3's own account of the selection is compared.
     // A column's Properties grid has no ObjectType row (3.27.1), so the type comes from the status bar first.
-    private static async Task<(string? Why, string? Type)> Confirmed(IRowTree tree, TreeRow row, WalkRequest request)
+    private static async Task<(string? Why, string? Type)> Confirmed(
+        IRowTree tree,
+        IReadOnlyList<TreeRow> paged,
+        TreeRow row,
+        WalkRequest request
+    )
     {
         var (fresh, selected) = await tree.ReadSelected();
         if (selected != row.Index)
@@ -169,13 +174,29 @@ internal static class ObjectSelect
             return ($"the selection is row {selected?.ToString() ?? "unknown"}, which is not row {row.Index}", null);
         }
 
-        if (fresh == null || SearchPick.Candidates(fresh, request).Candidates.All(c => c.Index != row.Index))
+        // The fresh read realizes only the screen around the row; its table and folders may be pages above.
+        if (
+            fresh == null
+            || SearchPick.Candidates(Merged(paged, fresh), request).Candidates.All(c => c.Index != row.Index)
+        )
         {
             return ("a fresh read does not place it in the requested table and folder", null);
         }
 
         var seen = await tree.Selected(row);
         return (Mismatch(seen, request), seen.Type);
+    }
+
+    // The paged rows with the fresh read laid over them by index: placement is computed over the whole list.
+    internal static IReadOnlyList<TreeRow> Merged(IReadOnlyList<TreeRow> paged, IReadOnlyList<TreeRow> fresh)
+    {
+        var rows = paged.ToDictionary(r => r.Index);
+        foreach (var row in fresh)
+        {
+            rows[row.Index] = row;
+        }
+
+        return [.. rows.Values.OrderBy(r => r.Index)];
     }
 
     private static string? Mismatch(Confirmation seen, WalkRequest request)

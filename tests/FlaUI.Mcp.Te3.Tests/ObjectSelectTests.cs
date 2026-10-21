@@ -34,8 +34,19 @@ public sealed class ObjectSelectTests
             return Task.CompletedTask;
         }
 
+        /// <summary>Rows a read realizes around the selection; null realizes them all.</summary>
+        public int? Viewport { get; init; }
+
+        // As TE3 does: only the rows on screen around the selection, not the whole tree.
         public Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected() =>
-            Task.FromResult<(IReadOnlyList<TreeRow>?, int?)>((All, selected?.Index));
+            Task.FromResult<(IReadOnlyList<TreeRow>?, int?)>(
+                (
+                    Viewport is { } size && selected != null
+                        ? [.. All.Where(r => r.Index > selected.Index - size && r.Index <= selected.Index)]
+                        : All,
+                    selected?.Index
+                )
+            );
 
         public Task<Confirmation> Selected(TreeRow row) =>
             Task.FromResult(
@@ -287,5 +298,20 @@ public sealed class ObjectSelectTests
 
         Assert.True(result.Found, result.Reason);
         Assert.Equal("Level", result.ConfirmedType);
+    }
+
+    [Fact]
+    public async Task ARowPickedOnALaterPageIsPlacedOnThePagedRowsNotTheFreshScreenAlone()
+    {
+        // The fresh read after the select shows only the screen around the row; Tables and the table row are on
+        // page 0, so placing the row on that read alone turned the right column down.
+        var rows = new List<(string?, int?, string)> { ("Tables", 1, "Group"), ("Brands", 2, "Table") };
+        rows.AddRange(Enumerable.Range(0, 30).Select(i => ((string?)$"Other {i}", (int?)3, "Column")));
+        rows.Add(("Brand", 3, "Column"));
+        var tree = new FakeRows([.. rows]) { Viewport = 5 };
+
+        var result = await ObjectSelect.Run(tree, NoFolder, () => false);
+
+        Assert.True(result.Found, string.Join("; ", result.Rejected.Select(r => r.Reason)));
     }
 }
