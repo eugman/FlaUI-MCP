@@ -79,15 +79,59 @@ public sealed class DialogCancelTests
                 Dialog(click: reference =>
                 {
                     clicks.Add(reference);
-                    return reference == "Cancel"
-                        ? throw new InvalidOperationException("Point is covered; no input sent.")
-                        : Task.CompletedTask;
+                    return reference == "Cancel" ? throw ClickFailed("Point is covered.") : Task.CompletedTask;
                 })
             )
         );
 
         Assert.Equal(["Cancel", "Close"], clicks);
     }
+
+    [Theory]
+    [InlineData("partial")]
+    [InlineData("timed_out_pending")]
+    public async Task ACancelCoreSaysMayHaveGoneOutIsNotFollowedByClose(string dispatch)
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            DialogCancel.Run(
+                Dialog(click: reference =>
+                {
+                    clicks.Add(reference);
+                    throw ClickFailed("Click is pending; no input sent.", dispatch);
+                })
+            )
+        );
+
+        Assert.Equal(["Cancel"], clicks);
+    }
+
+    [Fact]
+    public async Task TextThatSaysNoInputWasSentDoesNotProveIt()
+    {
+        // Only Core's outcome proves the click never went out.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            DialogCancel.Run(
+                Dialog(click: reference =>
+                {
+                    clicks.Add(reference);
+                    throw new InvalidOperationException("Point is covered; no input sent.");
+                })
+            )
+        );
+
+        Assert.Equal(["Cancel"], clicks);
+    }
+
+    private static CoreCallException ClickFailed(string text, string dispatch = "not-dispatched") =>
+        new(
+            "windows_click",
+            new FlaUI.Mcp.McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Text = text }],
+                Outcome = new ToolOutcome(dispatch, "not-tracked") { Status = "failed", InputsSent = 0 },
+            }
+        );
 
     [Fact]
     public async Task ADialogThatClosesNeedsNoClick()
