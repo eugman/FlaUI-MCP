@@ -160,4 +160,17 @@ public sealed class RunJournalTests : IDisposable
         Assert.False(InputProof.NotSent(RunExecutor.ActivationTimeout));
         Assert.Contains("focus", RunExecutor.ActivationTimeout);
     }
+
+    [Fact]
+    public void AJournalErrorUnderAWrappingFailureStillReachesTheManifest()
+    {
+        // NavigationRetry and DialogCancel wrap the call's own exception.
+        var call = new TimeoutException("provider hung");
+        call.Data[RunJournal.JournalErrorKey] = "Journal: this call's outcome could not be recorded.";
+        var manifest = new RunManifest();
+
+        RunExecutor.RecordFailure(manifest, new InvalidOperationException("provider hung The retry also failed", call));
+
+        Assert.Contains("could not be recorded", manifest.JournalError);
+    }
 }
