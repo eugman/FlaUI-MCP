@@ -7,9 +7,6 @@ using FlaUI.Mcp.Te3;
 /// <summary>te3_layout resize and apply-preset: one splitter drag per pane, measured after each.</summary>
 public sealed partial class Te3Layout
 {
-    // A pane within this many pixels of its requested size has reached it.
-    private const int SizeTolerance = 4;
-
     private const int SettleMs = 300;
 
     private async Task<object> ApplyPreset(InputTally inputs, string handle, Window window, string preset)
@@ -44,7 +41,7 @@ public sealed partial class Te3Layout
                         inputs,
                         sent,
                         size.Pane,
-                        async () => changed = await Resize(inputs, handle, window, size.Pane, args, strict: true)
+                        async () => changed = await Resize(inputs, handle, window, size.Pane, args)
                     );
                     return changed;
                 }
@@ -57,14 +54,8 @@ public sealed partial class Te3Layout
         }
     }
 
-    private async Task<object> Resize(
-        InputTally inputs,
-        string handle,
-        Window window,
-        string title,
-        JsonElement a,
-        bool strict = false
-    )
+    // A drag that leaves the pane outside the tolerance fails the call, for resize as for each preset step.
+    private async Task<object> Resize(InputTally inputs, string handle, Window window, string title, JsonElement a)
     {
         var parts = Parts(window);
         var pane = FindPane(window, title);
@@ -88,31 +79,19 @@ public sealed partial class Te3Layout
         var after = FindPane(window, title).Container.BoundingRectangle;
         var requested = width ?? GetArgument<int?>(a, "height")!.Value;
         var reached = width is null ? after.Height : after.Width;
-        var missed = Math.Abs(reached - requested) > SizeTolerance;
-        var edge = SplitterPlan.Edge(before, from, width is not null);
-        var step = new
-        {
-            title,
-            edge,
-            from = new { x = start.X, y = start.Y },
-            to = new { x = end.X, y = end.Y },
-            before = Relative(before, origin),
-            after = Relative(after, origin),
-            requested,
-            reached,
-            attempts = SplitterPlan.MaxAttempts,
-            inputsSent = inputs.Sent - sentBefore,
-            note = missed ? "The pane did not reach the requested size; the drag may have missed the splitter." : null,
-        };
-        if (strict && missed)
-        {
-            throw new LayoutSteps.StepFailedException(
-                SplitterPlan.Missed(title, edge, start, end, requested, reached, SplitterPlan.MaxAttempts),
-                step
-            );
-        }
-
-        return step;
+        return LayoutChecks.Measured(
+            new(
+                title,
+                SplitterPlan.Edge(before, from, width is not null),
+                start,
+                end,
+                Relative(before, origin),
+                Relative(after, origin),
+                requested,
+                reached,
+                inputs.Sent - sentBefore
+            )
+        );
     }
 
     /// <summary>One drag in window pixels, then a check that it did not float the pane (see KNOWN-ISSUES).</summary>

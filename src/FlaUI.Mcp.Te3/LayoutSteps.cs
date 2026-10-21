@@ -152,6 +152,12 @@ internal static class LayoutSteps
             reply["layoutAfterFailure"] = readback;
         }
 
+        // A single resize that missed: what the drag did and measured.
+        if (ex is StepFailedException failed)
+        {
+            reply["step"] = failed.Step;
+        }
+
         return JsonSerializer.Serialize(reply, McpProtocol.JsonOptions);
     }
 
