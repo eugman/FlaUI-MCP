@@ -18,7 +18,7 @@ Locators and behaviour observed in TE3 3.26.3, 3.27.0 and 3.27.1. Treat every la
 |---|---|---|
 | Main menu | MenuBar `Main menu` | MenuItems File … Help. Popup entries are Buttons; only submenu parents are MenuItems. |
 | TOM Explorer | `treeList` in `TabularExplorerView` | Rows expose names as Value. Qualify the table. |
-| TOM Explorer Show changes | CheckBox `Show changes` in `TabularExplorerView` > ToolBar `TOM Explorer` | Observed 3.27.1 with Toggle pattern; `tom-explorer/changes` turns it on and verifies it is on, and `te3_navigate object` turns it off before walking the tree. |
+| TOM Explorer Show changes | CheckBox `Show changes` in ToolBar `TOM Explorer` > Group `Dock Top` > Pane `TabularExplorerView` | Observed 3.27.1 with Toggle and Invoke patterns; `tom-explorer/changes` turns it on and verifies it is on, and `te3_navigate object` turns it off before walking the tree. |
 | Properties | `PropertyGridView` | Categories are TreeItems, properties DataItems with values. |
 | Expression editor | `DaxEditor` / `daxscilla` in `QuickEditorView` | A Property ComboBox picks which DAX property is edited. |
 | DAX query | `daxEditor` / `daxscilla` | Result cell: DataItem `[Value] row 1`. |
@@ -115,9 +115,10 @@ A dialog can disappear between window enumeration and a UIA read. Treat `Element
 | Preferences > AI Features > Permissions | Live UIA tree and pane controls | `preferences/permissions` |
 | Preferences > AI Features > AI Assistant > AI Provider | Live UIA tree and pane controls | `preferences/ai-provider` |
 | Preferences > AI Features > AI Assistant > Preferences | Live UIA tree and pane controls | `preferences/ai-assistant` |
-| View > AI Assistant | Live View popup Button `AI Assistant` and Pane `AI Assistant` (2026-10-21) | `te3_layout reopen-pane` (reopen verified by hand; the action needs live verification) |
+| View > AI Assistant | Live View popup Button `AI Assistant` and Pane `AI Assistant` (2026-10-21) | `te3_layout reopen-pane` (reopen verified by hand; the action itself is verified live for Properties only) |
+| View > Properties | Live View popup Button `Properties` (shortcut F4) and Pane `Properties` (2026-10-21) | `te3_layout reopen-pane`, verified live: see Docked panes |
 | TOM Explorer > Show changes | Live UIA CheckBox with Toggle pattern; [official behavior](https://docs.tabulareditor.com/en/features/unsaved-changes.html) | `tom-explorer/changes` |
-| Properties > Show changes | Live CheckBox `Show changes` in `PropertyGridView` > ToolBar `Tools` (2026-10-21) | Observed only |
+| Properties > Show changes | Live CheckBox `Show changes` in ToolBar `Tools` > Group `Dock Top` > Pane `PropertyGridView`, Toggle and Invoke patterns (2026-10-21) | Observed only |
 
 The MCP Server and Permissions routes inspect settings only. They do not change grants or start the MCP server.
 
@@ -140,11 +141,21 @@ Not open in this layout, so not observed: DAX query, Messages, Macros, Data prev
 
 Reopening a pane: hide it, click MenuItem `View` with `physical: true`, find Button `<pane title>` with `includeOwned: true`, click it with `physical: true`. Verified for Properties, AI Assistant and TOM Explorer; each came back at its previous bounds.
 
+`te3_layout reopen-pane` verified live on 3.27.1 for Properties (2026-10-21): `hide-pane` took 1 input, `reopen-pane` 3, and Properties came back at its previous bounds (TOM Explorer shrank back to its old height). A second `reopen-pane` on the visible pane sent no input and returned `changed: false`. A document title (`Expression Editor`) is refused before input as a document, not a dockable pane in the View menu map.
+
+View popup (3.27.1): Button `Properties` shows shortcut F4. Its ancestry is a nameless `Menu` with its own hwnd inside a nameless owned `Window`, so find it with `includeOwned: true`. Escape closes the popup. A `windows_screenshot` of the main window handle includes the open popup; a `fullScreen` capture is refused under the app allowlist.
+
 Pane bounds from `te3_layout_read list` (UIA-window-relative): AI Assistant (0,61,1000,1017), Expression Editor document (1000,61,160,1017), TOM Explorer (1160,61,760,590), Properties (1160,651,760,427). `maximize-pane Properties` gave TOM Explorer height 36 and Properties (1160,97,760,981); `restore-pane` returned the original sizes.
 
-Coordinate spaces: `te3_layout_read list` is relative to the UIA window rectangle; a `strictNative` capture's origin is the native window rectangle. Here a listed point maps to PNG pixels at (+9, +39). Use `windows_screenshot` with `locate` instead of converting: located AI Assistant (9,100,1000,1017), Properties (1169,690,760,427) and the menu bar (9,39,1920,29) matched the pixels.
+Coordinate spaces: `te3_layout_read list` is relative to the UIA window rectangle; a `strictNative` capture's origin is the native window rectangle. Maximized, a listed point maps to PNG pixels at (+9, +39). Restored and placed at (0,0,1920,1080), the UIA root is (1,39,1918,1040) and a listed point maps at about (+1, +39). Use `windows_screenshot` with `locate` instead of converting: located AI Assistant (9,100,1000,1017), Properties (1169,690,760,427) and the menu bar (9,39,1920,29) matched the pixels.
 
 Touching panes: the TOM Explorer and Properties containers share an edge (y 651) with no gap. The splitter sits in TOM Explorer's last rows; y 651 is the top of the Properties title bar.
+
+Restored at (0,0,1920,1080) the panes listed as AI Assistant (0,61,638,947), Expression Editor document (638,61,520,947), TOM Explorer (1158,61,760,549) and Properties (1158,610,760,398). TOM Explorer's left edge touches the document with no gap. `apply-preset assistant-model-review` there moved AI Assistant to 680 with a drag 3 px inside AI Assistant. The TOM Explorer drag, 3 px inside the document, left it at 760, and nothing undocked. The host now starts that drag 3 px inside TOM Explorer; see [KNOWN-ISSUES](KNOWN-ISSUES.md).
+
+Pane bounds versus content bounds: `te3_layout_read list` gives the pane container including its title bar, TOM Explorer (1159,100,760,549) in screen pixels with the window at (0,0). The content Pane `TabularExplorer` located in a `strictNative` capture starts below the title bar at (1164,132,751,478), and Edit `searchControl1` at (1164,162,751,26). Pick the rectangle you mean when you crop.
+
+TOM Explorer object walk (SpaceParts, 2026-10-21): column `Brands[Brand]` is in display folder `1. Brand Hierarchy`. `te3_navigate object` reaches it only with `folder: "1. Brand Hierarchy"` (16.7 s, 13 inputs). Without `folder` the walk stops on the 18 s clock after 8 rows.
 
 | Dialog (3.27.1) | Selector | Notes |
 |---|---|---|
