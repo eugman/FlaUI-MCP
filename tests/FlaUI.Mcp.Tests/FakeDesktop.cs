@@ -62,7 +62,10 @@ internal sealed class FakeDesktop : InputDesktop
         return new Uninstall();
     }
 
-    public override void EnsureAlive(InputTarget target) { }
+    /// <summary>Runs when guarded code revalidates the target's identity; throw from it for a stale target.</summary>
+    public Action? OnEnsureAlive { get; set; }
+
+    public override void EnsureAlive(InputTarget target) => OnEnsureAlive?.Invoke();
 
     public override nint Foreground() => Dispatched >= FocusLostAfter ? OtherHwnd : ForegroundWindow;
 
