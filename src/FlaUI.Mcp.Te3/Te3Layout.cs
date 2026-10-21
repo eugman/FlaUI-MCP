@@ -318,13 +318,15 @@ public sealed class Te3Layout(AutomationHost host, Te3Interaction? interaction =
             {
                 var next =
                     closes++ < MaxCloses
-                        ? Parts(window).FirstOrDefault(p => ShouldClose(p, titles, keep) && attempted.Add(p.Title))
+                        ? Parts(window)
+                            .FirstOrDefault(p => ShouldClose(p, titles, keep) && !attempted.Contains(p.Title))
                         : null;
                 if (next == null)
                 {
                     return null;
                 }
 
+                attempted.Add(next.Title);
                 await LayoutSteps.Sending(inputs, sent, next.Title, () => Click(handle, next.Close));
                 await RequireNoDialog(window, next.Title);
                 return next.Title;
