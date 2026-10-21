@@ -5,16 +5,27 @@ using System.Runtime.InteropServices;
 /// Counts non-injected input; never records keys, coordinates, or text. The same observer as the Camtasia and
 /// Power BI hosts; Core does not expose one. TODO(core): share it from Core.
 /// </summary>
+/// <remarks>
+/// The hooks live on a thread that runs only a message loop. A separate pulse thread posts it a beat every
+/// HeartbeatMs and the loop records it, so a hook thread that stops pumping (which makes Windows drop its hooks
+/// silently) shows as a missed beat, and the observer stays unavailable from then on. The pulse is a plain thread,
+/// not WM_TIMER, which Windows may throttle for a background process.
+/// </remarks>
 internal sealed class PhysicalInputObserver : IInputObserver
 {
+    private const int HeartbeatMs = 250;
+    private const uint BeatMessage = 0x8001; // WM_APP + 1
+    private const uint QuitMessage = 0x0012; // WM_QUIT
+
     private readonly Thread thread;
+    private readonly Thread pulse;
     private readonly ManualResetEventSlim ready = new();
+    private readonly ManualResetEventSlim stopping = new();
+    private readonly Heartbeat heartbeat = new(Environment.TickCount64);
     private readonly Hook keyboard;
     private readonly Hook mouse;
-    private System.Windows.Forms.ApplicationContext? context;
     private Exception? failure;
     private long sequence;
-    private long lastBeat = Environment.TickCount64;
     private int disposed;
     private uint threadId;
 
@@ -23,7 +34,7 @@ internal sealed class PhysicalInputObserver : IInputObserver
         keyboard = (code, message, data) => OnInput(code, message, data, true);
         mouse = (code, message, data) => OnInput(code, message, data, false);
         thread = new Thread(Run) { IsBackground = true, Name = "TE3 input observer" };
-        thread.SetApartmentState(ApartmentState.STA);
+        pulse = new Thread(Pulse) { IsBackground = true, Name = "TE3 input observer heartbeat" };
         thread.Start();
         ready.Wait();
         if (failure != null)
@@ -31,17 +42,15 @@ internal sealed class PhysicalInputObserver : IInputObserver
             Dispose();
             throw new InvalidOperationException("Cannot observe physical input; interaction remains disabled", failure);
         }
+
+        pulse.Start();
     }
 
     public long Sequence
     {
         get
         {
-            if (
-                !thread.IsAlive
-                || Volatile.Read(ref disposed) != 0
-                || !IsResponsive(Interlocked.Read(ref lastBeat), Environment.TickCount64)
-            )
+            if (!thread.IsAlive || Volatile.Read(ref disposed) != 0 || !heartbeat.Alive(Environment.TickCount64))
             {
                 throw new InvalidOperationException("Physical input observer is unavailable");
             }
@@ -49,14 +58,6 @@ internal sealed class PhysicalInputObserver : IInputObserver
             return Interlocked.Read(ref sequence);
         }
     }
-
-    // The hook thread beats every HeartbeatMs. Windows silently removes a low-level hook whose thread stops pumping
-    // messages, so a thread that missed StaleAfterMs of beats can no longer vouch that the user is away.
-    private const int HeartbeatMs = 250;
-    private const int StaleAfterMs = 2_000;
-
-    /// <summary>Whether the hook thread's last heartbeat is recent enough to trust that its hooks still run.</summary>
-    internal static bool IsResponsive(long lastBeat, long now) => now - lastBeat <= StaleAfterMs;
 
     // LLKHF_INJECTED / LLKHF_LOWER_IL_INJECTED and LLMHF equivalents.
     internal static bool IsPhysical(bool keyboard, uint flags) => (flags & (keyboard ? 0x12u : 0x03u)) == 0;
@@ -82,8 +83,9 @@ internal sealed class PhysicalInputObserver : IInputObserver
             mouseHook = 0;
         try
         {
-            context = new System.Windows.Forms.ApplicationContext();
             threadId = GetCurrentThreadId();
+            // Creates this thread's message queue before anyone posts to it.
+            PeekMessage(out _, 0, 0, 0, 0);
             keyHook = SetWindowsHookEx(13, keyboard, GetModuleHandle(null), 0);
             if (keyHook == 0)
             {
@@ -96,12 +98,9 @@ internal sealed class PhysicalInputObserver : IInputObserver
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             }
 
-            using var heartbeat = new System.Windows.Forms.Timer { Interval = HeartbeatMs };
-            heartbeat.Tick += (_, _) => Interlocked.Exchange(ref lastBeat, Environment.TickCount64);
-            heartbeat.Start();
-            Interlocked.Exchange(ref lastBeat, Environment.TickCount64);
+            heartbeat.Beat(Environment.TickCount64);
             ready.Set();
-            System.Windows.Forms.Application.Run(context);
+            Pump();
         }
         catch (Exception error)
         {
@@ -119,8 +118,31 @@ internal sealed class PhysicalInputObserver : IInputObserver
                 UnhookWindowsHookEx(mouseHook);
             }
 
-            context?.Dispose();
             ready.Set();
+        }
+    }
+
+    // The hooks are called from inside GetMessage; a beat is recorded only when the loop gets to it.
+    private void Pump()
+    {
+        while (GetMessage(out var message, 0, 0, 0) > 0)
+        {
+            if (message.Message == BeatMessage)
+            {
+                heartbeat.Beat(Environment.TickCount64);
+                continue;
+            }
+
+            TranslateMessage(in message);
+            DispatchMessage(in message);
+        }
+    }
+
+    private void Pulse()
+    {
+        while (!stopping.Wait(HeartbeatMs))
+        {
+            PostThreadMessage(threadId, BeatMessage, 0, 0);
         }
     }
 
@@ -131,9 +153,10 @@ internal sealed class PhysicalInputObserver : IInputObserver
             return;
         }
 
+        stopping.Set();
         if (thread.IsAlive)
         {
-            PostThreadMessage(threadId, 0x0012, 0, 0); // WM_QUIT on observer thread only
+            PostThreadMessage(threadId, QuitMessage, 0, 0); // on the observer thread only
         }
 
         if (Thread.CurrentThread != thread)
@@ -143,6 +166,19 @@ internal sealed class PhysicalInputObserver : IInputObserver
     }
 
     private delegate nint Hook(int code, nint message, nint data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Msg
+    {
+        public nint Hwnd;
+        public uint Message;
+        public nint WParam;
+        public nint LParam;
+        public uint Time;
+        public int X;
+        public int Y;
+        public uint Private;
+    }
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint SetWindowsHookEx(int id, Hook hook, nint module, uint threadId);
@@ -161,4 +197,16 @@ internal sealed class PhysicalInputObserver : IInputObserver
 
     [DllImport("user32.dll")]
     private static extern bool PostThreadMessage(uint threadId, uint message, nint wParam, nint lParam);
+
+    [DllImport("user32.dll")]
+    private static extern int GetMessage(out Msg message, nint hwnd, uint filterMin, uint filterMax);
+
+    [DllImport("user32.dll")]
+    private static extern bool PeekMessage(out Msg message, nint hwnd, uint filterMin, uint filterMax, uint remove);
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage(in Msg message);
+
+    [DllImport("user32.dll")]
+    private static extern nint DispatchMessage(in Msg message);
 }
