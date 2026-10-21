@@ -105,6 +105,23 @@ public sealed class NavigationRetryTests
         Assert.Equal(1, attempts);
     }
 
+    [Fact]
+    public async Task ACallBlockedByAHeldProviderIsNotRetried()
+    {
+        // Not dispatched, but an earlier call still holds TE3's provider: a retry would be refused the same way.
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<CoreCallException>(() =>
+            Retry(() =>
+            {
+                attempts++;
+                throw Core("not-dispatched", "Blocked: an earlier call is still pending.", provider: "pending");
+            })
+        );
+
+        Assert.Equal(1, attempts);
+    }
+
     [Theory]
     [InlineData("partial", "not-tracked")]
     [InlineData("completed", "pending")]
