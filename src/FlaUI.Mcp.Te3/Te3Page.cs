@@ -423,20 +423,13 @@ public sealed partial class Te3Page(
         var reference = await Reference(PreferencesTarget());
         var window = host.Elements.InputForRef(reference);
         var area = Screen.FromHandle(window.Hwnd).WorkingArea;
-        await invoke(
-            "windows_place_window",
-            new
-            {
-                @ref = reference,
-                placement = new
-                {
-                    x = area.Left + (area.Width - width) / 2,
-                    y = area.Top + (area.Height - height) / 2,
-                    width,
-                    height,
-                },
-            }
+        var requested = new System.Drawing.Rectangle(
+            area.Left + (area.Width - width) / 2,
+            area.Top + (area.Height - height) / 2,
+            width,
+            height
         );
+        await PlaceWindow(reference, window.Hwnd, requested);
         using var process = Process.GetProcessById(window.ProcessId);
         if (!await Task.Run(() => process.WaitForInputIdle(15000)).WaitAsync(TimeSpan.FromSeconds(16)))
         {
@@ -1323,20 +1316,7 @@ public sealed partial class Te3Page(
         var dialog = host.Elements.InputForRef(reference);
         var requested = new System.Drawing.Rectangle(ownerBounds.Left + 96, ownerBounds.Top + 192, 555, 254);
         reportStep?.Invoke("Place scalar output dialog beside its source");
-        await invoke(
-            "windows_place_window",
-            new
-            {
-                @ref = reference,
-                placement = new
-                {
-                    x = requested.X,
-                    y = requested.Y,
-                    width = requested.Width,
-                    height = requested.Height,
-                },
-            }
-        );
+        await PlaceWindow(reference, dialog.Hwnd, requested);
         // Native bounds change before DevExpress finishes repainting its resized controls.
         await Task.Delay(500);
         var observed =
@@ -1346,6 +1326,33 @@ public sealed partial class Te3Page(
         var scene = ScalarSceneBounds(ownerBounds, observed, Screen.FromHandle(owner.Hwnd).WorkingArea);
         CaptureScene(path, owner, dialog, scene, modal: true);
     }
+
+    // A placement Core reports as not exact, after the window moved, is read back and reported (PlacementReadBack).
+    private Task<System.Drawing.Rectangle> PlaceWindow(
+        string reference,
+        nint hwnd,
+        System.Drawing.Rectangle requested
+    ) =>
+        PlacementReadBack.Place(
+            () =>
+                invoke(
+                    "windows_place_window",
+                    new
+                    {
+                        @ref = reference,
+                        placement = new
+                        {
+                            x = requested.X,
+                            y = requested.Y,
+                            width = requested.Width,
+                            height = requested.Height,
+                        },
+                    }
+                ),
+            () => Win32Desktop.GetWindowBounds(hwnd),
+            requested,
+            reportStep
+        );
 
     private void CaptureScene(
         string path,
