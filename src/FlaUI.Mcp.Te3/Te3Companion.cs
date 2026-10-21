@@ -12,7 +12,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
     private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
     public const string ModelState = "te3_model_state";
 
-    // Tools the page calls that only read; every other call is counted as input sent.
+    // Tools the page calls that only read; every other call counts as input once it went out.
     private static readonly HashSet<string> ReadOnlyTools = ["windows_screenshot"];
     public static readonly string[] Names = [Navigate, ModelState];
     public override string Name => name;
@@ -88,9 +88,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
     {
         var lastStep = "validate request";
         var phase = "validate";
-        // Counted before each dispatch: an input that then fails may still have gone out.
-        var invoked = 0;
-        Te3Page? page = null;
+        var inputs = new InputTally();
         try
         {
             var a = arguments ?? JsonSerializer.SerializeToElement(new { });
@@ -105,19 +103,13 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             {
                 identity.EnsureAlive();
                 OperationContext.Check();
-                if (!ReadOnlyTools.Contains(tool))
-                {
-                    invoked++;
-                }
-
-                var result = await host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args));
-                if (result.IsError == true || result.Outcome?.IsPending == true)
-                {
-                    throw new InvalidOperationException(string.Join("; ", result.Content.Select(c => c.Text)));
-                }
+                await inputs.Invoke(
+                    () => host.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(args)),
+                    ReadOnlyTools.Contains(tool)
+                );
             }
 
-            page = new Te3Page(host, handle, Invoke, step => lastStep = step);
+            var page = new Te3Page(host, handle, Invoke, step => lastStep = step, inputs: inputs);
 
             if (name == ModelState)
             {
@@ -162,7 +154,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         }
         catch (Exception ex)
         {
-            return Failure(phase, lastStep, ex.Message, invoked + (page?.InputsSent ?? 0));
+            return Failure(phase, lastStep, ex.Message, inputs.Sent);
         }
     }
 
@@ -264,7 +256,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
 
     internal static McpToolResult Failure(string phase, string lastStep, string error, int inputsSent = 0)
     {
-        var blocker = Blocker(error);
+        var blocker = InputProof.Blocker(error);
         var next = blocker switch
         {
             "activation-denied" =>
@@ -292,16 +284,6 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             )
         );
     }
-
-    // Core's GuardedInput text, at the start of the error or after a tool's "Failed to ...: " prefix.
-    // TODO(core): report activation-denied as a structured outcome instead of matching its text.
-    private static readonly System.Text.RegularExpressions.Regex Blockers = new(
-        "(?:^|: )(?<blocker>activation-denied): Windows kept |(?:^|: )(?<blocker>desktop-unavailable): Windows reports no foreground window",
-        System.Text.RegularExpressions.RegexOptions.CultureInvariant
-    );
-
-    private static string? Blocker(string error) =>
-        Blockers.Match(error) is { Success: true } match ? match.Groups["blocker"].Value : null;
 
     internal static void Validate(JsonElement a, string tool)
     {

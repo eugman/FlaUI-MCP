@@ -48,7 +48,7 @@ internal static class DialogCancel
             {
                 await steps.Click(reference);
             }
-            catch (Exception error) when (NavigationRetry.SentNoInput(error))
+            catch (Exception error) when (InputProof.NotSent(error.Message))
             {
                 continue;
             }

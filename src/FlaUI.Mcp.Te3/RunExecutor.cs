@@ -114,6 +114,7 @@ public static class RunExecutor
         };
         var manifestPath = Path.Combine(output, "manifest.json");
         var journal = Path.Combine(output, "actions.jsonl");
+        var inputs = new InputTally();
         void Save() => AtomicJournal.Write(manifestPath, manifest, RunConfig.Json);
         Save();
         SettingsLease? settings = null;
@@ -160,7 +161,7 @@ public static class RunExecutor
             handle = await WaitForOwnedWindow(host, app, marker, cancellationToken);
             await ActivateOwnedWindow(host, handle, app.Id, $"{manifest.Database} {id}", journal, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken), journal);
+            var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken), journal, inputs);
             await page.DefaultLayout();
             cancellationToken.ThrowIfCancellationRequested();
             await recipe.Execute(new RecipeContext(page, config, manifest, model, Save));
@@ -282,16 +283,16 @@ public static class RunExecutor
         {
             cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3(manifest.ProcessId);
-            var result = await RunJournal.Tool(
-                journal,
-                tool,
-                arguments,
-                () => host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(arguments))
+            await inputs.Invoke(
+                () =>
+                    RunJournal.Tool(
+                        journal,
+                        tool,
+                        arguments,
+                        () => host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(arguments))
+                    ),
+                tool is "windows_screenshot" or "windows_find"
             );
-            if (result.IsError == true || result.Outcome?.IsPending == true)
-            {
-                throw new InvalidOperationException(string.Join("; ", result.Content.Select(c => c.Text)));
-            }
         }
     }
 

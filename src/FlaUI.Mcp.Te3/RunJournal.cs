@@ -58,15 +58,23 @@ internal static class RunJournal
         Func<Task<McpToolResult>> execute
     )
     {
-        Append(
-            journal,
-            new
-            {
-                phase = "intent",
-                tool,
-                arguments,
-            }
-        );
+        try
+        {
+            Append(
+                journal,
+                new
+                {
+                    phase = "intent",
+                    tool,
+                    arguments,
+                }
+            );
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException($"Could not journal the intent for {tool} in {journal}; no input sent.", ex);
+        }
+
         McpToolResult result;
         try
         {

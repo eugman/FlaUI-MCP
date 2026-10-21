@@ -10,21 +10,19 @@ public sealed class Te3Page(
     string handle,
     Func<string, object, Task> invoke,
     Action<string>? reportStep = null,
-    string? journal = null
+    string? journal = null,
+    InputTally? inputs = null
 )
 {
     /// <summary>
-    /// Sends input this page dispatches itself rather than through a Core tool, journaled like tool calls.
-    /// Every caller holds a GuardedInput, and the send completes synchronously inside it.
+    /// Sends input this page dispatches itself rather than through a Core tool, journaled like tool calls and
+    /// counted once it was sent. Every caller holds a GuardedInput, and the send completes synchronously inside it.
     /// </summary>
-    private Task SendInput(string action, object arguments, Action send)
-    {
-        InputsSent++;
-        return RunJournal.Input(journal, action, arguments, send);
-    }
+    private Task SendInput(string action, object arguments, Action send) =>
+        RunJournal.Input(journal, action, arguments, () => Inputs.Send(send));
 
-    /// <summary>Inputs this page has dispatched itself, counted before each one goes out.</summary>
-    public int InputsSent { get; private set; }
+    /// <summary>Inputs sent for this page: the caller's tool calls (when it shares the tally) and the page's own.</summary>
+    public InputTally Inputs { get; } = inputs ?? new();
 
     private readonly ElementQuery query = new(host.Sessions, host.Elements, host.Pending);
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };

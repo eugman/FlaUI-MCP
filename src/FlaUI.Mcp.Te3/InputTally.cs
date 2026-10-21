@@ -1,7 +1,10 @@
 using FlaUI.Mcp;
 
 /// <summary>
-/// The inputs one TE3 tool call or run has sent. TODO(core): switch to Core's inputsSent after the rebase.
+/// The inputs one TE3 tool call or run has sent, each counted once it went out: a Core tool call that completed or is
+/// pending, a failed one whose text does not prove a refusal before input, and a direct send that returned. A refusal
+/// before input (activation denied, no desktop, no grant, a stale ref, a covered point, a failed intent write)
+/// counts nothing. TODO(core): switch to Core's inputsSent after the rebase.
 /// </summary>
 public sealed class InputTally
 {
@@ -10,22 +13,38 @@ public sealed class InputTally
     /// <summary>Runs one Core tool call and counts it; throws on an error or pending result.</summary>
     public async Task Invoke(Func<Task<McpToolResult>> call, bool readOnly = false)
     {
-        if (!readOnly)
+        McpToolResult result;
+        try
         {
-            Sent++;
+            result = await call();
+        }
+        catch (Exception error)
+        {
+            Count(readOnly, error.Message);
+            throw;
         }
 
-        var result = await call();
+        var text = string.Join("; ", result.Content.Select(c => c.Text));
+        Count(readOnly, result.IsError == true ? text : null);
         if (result.IsError == true || result.Outcome?.IsPending == true)
         {
-            throw new InvalidOperationException(string.Join("; ", result.Content.Select(c => c.Text)));
+            throw new InvalidOperationException(text);
         }
     }
 
-    /// <summary>Sends one direct input and counts it.</summary>
+    /// <summary>Sends one direct input and counts it once send returns.</summary>
     public void Send(Action send)
     {
-        Sent++;
         send();
+        Sent++;
+    }
+
+    // failure: null when the call returned normally; otherwise its text, which may prove nothing was sent.
+    private void Count(bool readOnly, string? failure)
+    {
+        if (!readOnly && (failure == null || !InputProof.NotSent(failure)))
+        {
+            Sent++;
+        }
     }
 }
