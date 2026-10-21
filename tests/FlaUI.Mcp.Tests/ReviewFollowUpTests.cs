@@ -217,6 +217,30 @@ public sealed class ReviewFollowUpTests
         );
     }
 
+    [Fact]
+    public void AFallbackRefusalAfterSelectCarriesTheSameTextAsTheReply()
+    {
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        try
+        {
+            var refusal = InputRefusedException.Record(
+                new InputRefusal("activation-denied", "activation-denied: blocked. No input sent.")
+            );
+
+            ClickTool.NoteSelectSent(refusal);
+
+            Assert.Equal(
+                "activation-denied: blocked. No keys or clicks were sent, but Select was sent first.",
+                operation.Refusal!.Message
+            );
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
     private static bool LeaseHeld()
     {
         var gate = (SemaphoreSlim)

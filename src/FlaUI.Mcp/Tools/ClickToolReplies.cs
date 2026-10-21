@@ -48,6 +48,22 @@ public partial class ClickTool
             : $"{reason.TrimEnd('.')}. Window \"{modal.Title}\" appears to be a modal dialog blocking input; handle it first (see windows_list_windows).";
     }
 
+    /// <summary>
+    /// After Select went out, a refused fallback click's structured refusal must say so too, not only the text.
+    /// </summary>
+    internal static void NoteSelectSent(Exception error)
+    {
+        if (error is InputRefusedException refused)
+        {
+            InputRefusedException.Record(
+                refused.Refusal with
+                {
+                    Message = GuardedInput.NoteFocusChange(refused.Refusal.Message, "Select was sent"),
+                }
+            );
+        }
+    }
+
     internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after)
     {
         var known = before.Select(w => w.Hwnd).ToHashSet();

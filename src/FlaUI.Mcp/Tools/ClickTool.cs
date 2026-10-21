@@ -104,6 +104,11 @@ public partial class ClickTool : ToolBase
         }
         catch (Exception ex)
         {
+            if (resolved?.PatternSent == true)
+            {
+                NoteSelectSent(ex);
+            }
+
             IReadOnlyList<Win32WindowInfo> windows = [];
             try
             {
