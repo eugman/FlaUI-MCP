@@ -18,7 +18,7 @@ $offlineProject = 'FlaUI.Mcp.Tests.csproj'
 $parts = [ordered]@{
     guards = 'GuardedInput', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'InputRefusal'
     state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext'
-    protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry'
+    protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolBase'
     pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool'
     keyboard = 'SendKeysTool', 'TypeTools', 'BatchTool'
 }

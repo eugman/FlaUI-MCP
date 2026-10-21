@@ -23,6 +23,7 @@ public sealed class MutationConfigTests
         "Mcp/McpServer.cs",
         "Mcp/McpLineTransport.cs",
         "Mcp/ToolRegistry.cs",
+        "Mcp/ToolBase.cs",
         "Tools/ClickTool.cs",
         "Tools/ClickToolReplies.cs",
         "Tools/MouseTool.cs",
