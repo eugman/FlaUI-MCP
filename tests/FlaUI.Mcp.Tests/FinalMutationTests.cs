@@ -68,6 +68,11 @@ public sealed class FinalMutationTests
     {
         var refusal = GuardedInput.DescribeActivationFailure(42, 7, 9, "other");
 
+        Assert.StartsWith(
+            "activation-denied: Windows kept 'other' (PID 9) in the foreground instead of target PID 42. ",
+            refusal.Message
+        );
+
         Assert.EndsWith(
             "No input sent. Attended: ask the user to click the target window's title bar, then observe before retrying. Unattended: activation cannot be forced.",
             refusal.Message
