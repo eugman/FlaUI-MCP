@@ -125,23 +125,27 @@ public sealed class LayoutChecksTests
 
         Assert.Equal(
             [main.Hwnd, dependencies.Hwnd],
-            LayoutChecks.Baseline([main, dependencies], main.Hwnd, _ => "DaxDependencies")
+            LayoutChecks.Baseline(
+                [main, dependencies],
+                main.Hwnd,
+                _ => new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0)
+            )
         );
     }
 
     [Theory]
-    [InlineData("Dependencies", null)]
-    [InlineData("Dependencies", "SomethingElse")]
-    [InlineData("Properties", "PropertyGrid")]
-    public void ATitleAloneDoesNotMakeAWindowAFloatingPane(string title, string? automationId)
+    [InlineData("Dependencies", "WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0x10)] // owned: a dialog
+    [InlineData("Dependencies", "#32770", 0)] // a Win32 dialog class
+    [InlineData("Properties", "WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0)] // not a pane seen floating
+    public void ATitleAloneDoesNotMakeAWindowAFloatingPane(string title, string className, int owner)
     {
-        // A dialog titled like a pane must not be waved through: only a window with the pane's own AutomationId,
-        // observed for the floating Dependencies window (DaxDependencies, 3.27.1), is a floating pane.
+        // A dialog titled like a pane must not be waved through: a floating pane is unowned and of the WinForms
+        // window class (vte3b finding 7); TE3's dialogs are owned by its main window.
         var main = new Win32WindowInfo(0x10, "Model - Tabular Editor 3", 7, true, false, false);
         var window = new Win32WindowInfo(0x30, title, 7, true, false, false);
 
         Assert.Throws<InvalidOperationException>(() =>
-            LayoutChecks.Baseline([main, window], main.Hwnd, _ => automationId)
+            LayoutChecks.Baseline([main, window], main.Hwnd, _ => new WindowShape(className, owner))
         );
     }
 

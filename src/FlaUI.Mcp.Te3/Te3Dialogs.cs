@@ -22,20 +22,6 @@ internal static class Te3Dialogs
         ),
     ];
 
-    /// <summary>Reads a top-level window's UIA AutomationId; null when it cannot be read.</summary>
-    public static Func<nint, string?> AutomationIds(AutomationHost host) =>
-        hwnd =>
-        {
-            try
-            {
-                return host.Sessions.Automation.FromHandle(hwnd)?.Properties.AutomationId.ValueOrDefault;
-            }
-            catch (Exception error) when (error is not OperationCanceledException)
-            {
-                return null;
-            }
-        };
-
     /// <summary>What to do about a known prompt with this title, or null.</summary>
     public static string? Advice(string title) =>
         Known.FirstOrDefault(k => title.Contains(k.Match, StringComparison.OrdinalIgnoreCase)).Advice;
@@ -49,12 +35,13 @@ internal static class Te3Dialogs
         IReadOnlyList<Win32WindowInfo> windows,
         nint main,
         string allowedDialog,
-        Func<nint, string?> automationIdOf
+        Func<nint, WindowShape?>? shapeOf = null
     )
     {
+        shapeOf ??= WindowShape.Read;
         var unexpected = windows
             .Where(w => w.Hwnd != main && w.Title.Length > 0 && w.Title != allowedDialog)
-            .Where(w => !LayoutChecks.IsFloatingPane(w, automationIdOf) || Advice(w.Title) != null)
+            .Where(w => !LayoutChecks.IsFloatingPane(w, shapeOf) || Advice(w.Title) != null)
             .ToArray();
         if (unexpected.Length > 0)
         {

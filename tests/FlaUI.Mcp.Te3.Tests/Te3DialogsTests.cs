@@ -46,7 +46,7 @@ public sealed class Te3DialogsTests
             [Main, new Win32WindowInfo(0x30, "Dependencies", 7, true, false, false)],
             Main.Hwnd,
             "Preferences",
-            _ => "DaxDependencies"
+            _ => new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0)
         );
 
     [Fact]

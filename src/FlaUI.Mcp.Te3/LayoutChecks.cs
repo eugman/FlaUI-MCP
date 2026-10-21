@@ -130,16 +130,16 @@ internal static class LayoutChecks
     /// The TE3 windows when a layout call starts, which later checks compare with. Refuses, before any input, a titled
     /// window already open that is not the main window or a floating pane: a dialog nobody has answered.
     /// </summary>
-    /// <param name="automationIdOf">A window's UIA AutomationId, or null when it cannot be read.</param>
+    /// <param name="shapeOf">A window's class and owner, or null when it cannot be read.</param>
     public static IReadOnlyCollection<nint> Baseline(
         IReadOnlyList<Win32WindowInfo> windows,
         nint main,
-        Func<nint, string?> automationIdOf
+        Func<nint, WindowShape?> shapeOf
     )
     {
         if (
             windows.FirstOrDefault(w =>
-                w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow && !IsFloatingPane(w, automationIdOf)
+                w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow && !IsFloatingPane(w, shapeOf)
             ) is
             { } open
         )
@@ -152,12 +152,16 @@ internal static class LayoutChecks
         return windows.Select(w => w.Hwnd).ToList();
     }
 
-    // Floating dock panes observed on 3.27.1, by title and the window's own AutomationId: a window is one only when
-    // both match, so a dialog titled like a pane is never waved through.
-    private static readonly (string Title, string AutomationId)[] FloatingPanes = [("Dependencies", "DaxDependencies")];
+    // Floating dock panes observed on 3.27.1. A window is one only when its title matches, it has no owner, and its
+    // class is the WinForms window class the floating Dependencies pane showed; TE3's dialogs are owned by the main
+    // window, so a dialog titled like a pane is never waved through. The pane's AutomationId (DaxDependencies) is on
+    // a child, not on the top-level window, so it is not used.
+    private static readonly string[] FloatingPanes = ["Dependencies"];
 
-    internal static bool IsFloatingPane(Win32WindowInfo window, Func<nint, string?> automationIdOf) =>
-        FloatingPanes.Any(p =>
-            Te3Layout.TitleMatches(window.Title, p.Title) && p.AutomationId == automationIdOf(window.Hwnd)
-        );
+    private const string FloatingClass = "WindowsForms10.Window.8.";
+
+    internal static bool IsFloatingPane(Win32WindowInfo window, Func<nint, WindowShape?> shapeOf) =>
+        FloatingPanes.Any(title => Te3Layout.TitleMatches(window.Title, title))
+        && shapeOf(window.Hwnd) is { Owner: 0 } shape
+        && shape.ClassName.StartsWith(FloatingClass, StringComparison.Ordinal);
 }

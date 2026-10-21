@@ -19,11 +19,7 @@ internal sealed class LayoutViewMenu(AutomationHost host, string handle, Window 
         Task.FromResult(
             Win32Desktop
                 .GetTopLevelWindows(host.Sessions.GetWindowProcessId(handle))
-                .Any(w =>
-                    w.Title == title
-                    && !w.IsToolWindow
-                    && LayoutChecks.IsFloatingPane(w, Te3Dialogs.AutomationIds(host))
-                )
+                .Any(w => w.Title == title && !w.IsToolWindow && LayoutChecks.IsFloatingPane(w, WindowShape.Read))
         );
 
     private const int PopupWaitMs = 1500;

@@ -66,10 +66,10 @@ public sealed class LayoutEntryTests : IDisposable
 
         public Rectangle? BoundsOf(nint hwnd) => new Rectangle(200, 200, 400, 600);
 
-        /// <summary>AutomationIds of the extra windows; the floating Dependencies window's is DaxDependencies.</summary>
-        public Dictionary<nint, string> AutomationIds { get; } = [];
+        /// <summary>Class and owner of the extra windows; the floating Dependencies window is unowned WinForms.</summary>
+        public Dictionary<nint, WindowShape> Shapes { get; } = [];
 
-        public string? AutomationIdOf(nint hwnd) => AutomationIds.TryGetValue(hwnd, out var id) ? id : null;
+        public WindowShape? ShapeOf(nint hwnd) => Shapes.TryGetValue(hwnd, out var shape) ? shape : null;
 
         public bool ButtonShown(string title, string button) =>
             Documents.Contains(title) ? button == "Close" : PaneShows(title, button);
@@ -199,7 +199,7 @@ public sealed class LayoutEntryTests : IDisposable
         {
             var layout = Standard(inputs);
             layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
-            layout.AutomationIds[0x30] = "DaxDependencies";
+            layout.Shapes[0x30] = new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0);
             return layout;
         });
 
@@ -349,7 +349,7 @@ public sealed class LayoutEntryTests : IDisposable
             {
                 var layout = Standard(inputs);
                 layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
-                layout.AutomationIds[0x30] = "DaxDependencies";
+                layout.Shapes[0x30] = new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0);
                 layout.Extra.Add(new(0x40, "Save changes?", 7, true, false, false));
                 return layout;
             },
@@ -401,7 +401,7 @@ public sealed class LayoutEntryTests : IDisposable
         {
             var layout = Standard(inputs);
             layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
-            layout.AutomationIds[0x30] = "DaxDependencies";
+            layout.Shapes[0x30] = new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0);
             return layout;
         });
 

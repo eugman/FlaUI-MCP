@@ -19,7 +19,7 @@ public sealed partial class Te3Layout
             .Where(w => w.Hwnd != surface.MainWindow && w.Title.Length > 0 && !w.IsToolWindow)
             .Select(w => new ListedPart(
                 w.Title,
-                LayoutChecks.IsFloatingPane(w, surface.AutomationIdOf) ? "floating" : "dialog",
+                LayoutChecks.IsFloatingPane(w, surface.ShapeOf) ? "floating" : "dialog",
                 surface.BoundsOf(w.Hwnd) is { } bounds ? Relative(bounds, surface.Origin) : null
             ));
         return docked.Concat(floating).ToList();
@@ -29,7 +29,7 @@ public sealed partial class Te3Layout
     private static List<string> FloatingTitles(ILayoutSurface surface) =>
         surface
             .Windows()
-            .Where(w => w.Hwnd != surface.MainWindow && LayoutChecks.IsFloatingPane(w, surface.AutomationIdOf))
+            .Where(w => w.Hwnd != surface.MainWindow && LayoutChecks.IsFloatingPane(w, surface.ShapeOf))
             .Select(w => w.Title)
             .ToList();
 
@@ -39,7 +39,7 @@ public sealed partial class Te3Layout
     // for anything but an open document; read back as gone, and a dialog it opens (a save prompt) is reported.
     private static async Task<object> CloseDocument(ILayoutSurface surface, string title)
     {
-        var baseline = LayoutChecks.Baseline(surface.Windows(), surface.MainWindow, surface.AutomationIdOf);
+        var baseline = LayoutChecks.Baseline(surface.Windows(), surface.MainWindow, surface.ShapeOf);
         var parts = surface.Parts();
         var document =
             parts.FirstOrDefault(p => p.Kind == "document" && TitleMatches(p.Title, title))
@@ -92,7 +92,7 @@ public sealed partial class Te3Layout
             throw new ArgumentException("hide-pane accepts AI Assistant, TOM Explorer or Properties.");
         }
 
-        var baseline = LayoutChecks.Baseline(surface.Windows(), surface.MainWindow, surface.AutomationIdOf);
+        var baseline = LayoutChecks.Baseline(surface.Windows(), surface.MainWindow, surface.ShapeOf);
         if (VisiblePane(surface, title) is not { } pane)
         {
             return new
@@ -126,7 +126,7 @@ public sealed partial class Te3Layout
         }
 
         // One snapshot for the whole call: a dialog that opens late after one close still stops the next.
-        var baseline = LayoutChecks.Baseline(surface.Windows(), surface.MainWindow, surface.AutomationIdOf);
+        var baseline = LayoutChecks.Baseline(surface.Windows(), surface.MainWindow, surface.ShapeOf);
         var attempted = new HashSet<string>();
         var closes = 0;
         var closed = await LayoutSteps.Progress(
@@ -200,8 +200,6 @@ public sealed partial class Te3Layout
             : (object)new { restored = pane.Title, readBack = other };
     }
 
-    private string? AutomationIds(nint hwnd) => Te3Dialogs.AutomationIds(host)(hwnd);
-
     /// <summary>The live TE3 window: its parts through UIA, and presses through Core's guarded click.</summary>
     private sealed class UiaSurface(Te3Layout tool, InputTally inputs, string handle, Window window) : ILayoutSurface
     {
@@ -224,7 +222,7 @@ public sealed partial class Te3Layout
 
         public System.Drawing.Rectangle? BoundsOf(nint hwnd) => Win32Desktop.GetWindowBounds(hwnd);
 
-        public string? AutomationIdOf(nint hwnd) => tool.AutomationIds(hwnd);
+        public WindowShape? ShapeOf(nint hwnd) => WindowShape.Read(hwnd);
 
         public IReadOnlyList<Win32WindowInfo> Windows() =>
             Win32Desktop.GetTopLevelWindows(window.Properties.ProcessId.ValueOrDefault);
