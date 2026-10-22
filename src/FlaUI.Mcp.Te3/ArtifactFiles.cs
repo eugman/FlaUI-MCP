@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using FlaUI.Mcp.Core;
 
 public static class ArtifactFiles
 {
@@ -182,9 +183,10 @@ public static class ArtifactFiles
 
     public static string ContainedPath(string path, string root)
     {
-        root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        root = Path.GetFullPath(root);
         var full = Path.GetFullPath(path, root);
-        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        // Core's containment check; the root itself is not a path under it.
+        if (!HostPath.Within(root, full) || HostPath.Within(full, root))
         {
             throw new ArgumentException("Path escapes the configured root");
         }

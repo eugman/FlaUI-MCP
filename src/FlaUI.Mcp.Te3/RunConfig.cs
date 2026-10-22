@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FlaUI.Mcp.Core;
 
 public sealed record RunConfig
 {
@@ -29,11 +30,11 @@ public sealed record RunConfig
         var config =
             JsonSerializer.Deserialize<RunConfig>(File.ReadAllText(path), Json)
             ?? throw new ArgumentException("Missing config");
-        string Resolve(string value) =>
-            Path.GetFullPath(
-                Environment.ExpandEnvironmentVariables(value),
-                Path.GetDirectoryName(Path.GetFullPath(path))!
-            );
+        var folder = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        // Core's HostPath: a local, fully qualified Windows path, %NAME% expanded when defined; a plain relative path
+        // is taken from the config's folder first (its .. segments, as in the default output, resolved there). Anything else (UNC, ~, /mnt/..., $NAME) is refused by field name.
+        string Resolve(string value, string field) =>
+            HostPath.Validate(Relative(value) ? Path.GetFullPath(value, folder) : value, field);
         if (config.Repeat is < 1 or > 100 || config.FixtureMode is not ("auto" or "fixed" or "offline"))
         {
             throw new ArgumentException("repeat must be 1..100; fixtureMode must be auto, fixed or offline");
@@ -56,14 +57,19 @@ public sealed record RunConfig
 
         return config with
         {
-            Te3 = Resolve(config.Te3),
-            Te = Resolve(config.Te),
-            FixtureScript = Resolve(config.FixtureScript),
-            OfflineBaseline = config.OfflineBaseline == null ? null : Resolve(config.OfflineBaseline),
-            Output = Resolve(config.Output),
-            DocsRoot = config.DocsRoot == null ? null : Resolve(config.DocsRoot),
+            Te3 = Resolve(config.Te3, "te3"),
+            Te = Resolve(config.Te, "te"),
+            FixtureScript = Resolve(config.FixtureScript, "fixtureScript"),
+            OfflineBaseline =
+                config.OfflineBaseline == null ? null : Resolve(config.OfflineBaseline, "offlineBaseline"),
+            Output = Resolve(config.Output, "output"),
+            DocsRoot = config.DocsRoot == null ? null : Resolve(config.DocsRoot, "docsRoot"),
         };
     }
+
+    // Relative to the config's folder: not rooted, and none of the forms HostPath refuses on its own merits.
+    private static bool Relative(string value) =>
+        !Path.IsPathRooted(value) && !value.StartsWith('~') && !value.StartsWith('%') && !value.StartsWith('$');
 
     public void ValidateFiles(IEnumerable<Recipe> recipes)
     {
