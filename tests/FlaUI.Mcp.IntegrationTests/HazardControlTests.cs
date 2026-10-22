@@ -139,7 +139,8 @@ public class HazardControlTests(TestAppFixture fixture, ITestOutputHelper output
             Assert.Contains("parkPointer was refused", texts);
             Assert.Contains("covers its screen", texts);
             Assert.Equal(pointer, InputDesktop.Current.PointerPosition());
-            Assert.Equal(Proof.Unavailable, shot.Outcome?.Proof?.Verdict);
+            // The refused park is a detail of a capture that succeeded, not the capture's proof.
+            Assert.Equal(Proof.Unavailable, shot.Outcome?.Details?["park"].GetProperty("verdict").GetString());
         }
         finally
         {
