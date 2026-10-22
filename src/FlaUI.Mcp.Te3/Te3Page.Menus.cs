@@ -105,7 +105,9 @@ public sealed partial class Te3Page
 
         if (!await Poll.Until(Opened, timeout))
         {
-            throw new TimeoutException("No new TE3 dialog owned by its main window opened");
+            throw new TimeoutException(
+                "No new TE3 dialog opened (owned by its main window, or the only new dialog-class window)"
+            );
         }
 
         return (host.Sessions.RegisterNativeWindow(window!.Hwnd, window.ProcessId), window);

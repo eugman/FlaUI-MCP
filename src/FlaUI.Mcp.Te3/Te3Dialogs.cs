@@ -22,11 +22,11 @@ internal static class Te3Dialogs
         ),
     ];
 
-    /// <summary>What to do about a known prompt with this title, or null.</summary>
     /// <summary>Whether a window titled <paramref name="title"/> opened since <paramref name="before"/> was taken.</summary>
     public static bool Opened(WindowBaseline before, IEnumerable<Win32WindowInfo> now, string title) =>
         before.Opened(now).Any(w => w.Title == title);
 
+    /// <summary>What to do about a known prompt with this title, or null.</summary>
     public static string? Advice(string title) =>
         Known.FirstOrDefault(k => title.Contains(k.Match, StringComparison.OrdinalIgnoreCase)).Advice;
 

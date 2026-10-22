@@ -39,6 +39,17 @@ public sealed class ConfigPathTests : IDisposable
     public void ARelativePathIsResolvedAgainstTheConfigsFolder() =>
         Assert.Equal(Path.Combine(root, "tools", "te.exe"), Read("te3.exe", @"tools\te.exe").Te);
 
+    [Fact]
+    public void ARelativePathThatClimbsOutOfTheConfigsFolderIsAcceptedOnceResolved()
+    {
+        // HostPath refuses .. segments in a path as written; a relative config path is resolved first, as the
+        // default output (../artifacts/te3) is.
+        var config = Read("te3.exe", Path.Combine("..", "tools", "te.exe"));
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(root, "..", "tools", "te.exe")), config.Te);
+        Assert.DoesNotContain("..", config.Te);
+    }
+
     [Theory]
     [InlineData(".")]
     [InlineData(@"a\..\..\outside")]

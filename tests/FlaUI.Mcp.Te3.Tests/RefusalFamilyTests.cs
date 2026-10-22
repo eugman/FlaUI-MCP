@@ -98,6 +98,8 @@ public sealed class RefusalFamilyTests
     [InlineData(RefusalCodes.WindowOwnershipUnknown, true)]
     [InlineData(RefusalCodes.WindowNotFound, true)]
     [InlineData(RefusalCodes.FocusRevoked, false)]
+    [InlineData(RefusalCodes.TargetChanged, false)]
+    [InlineData(RefusalCodes.FocusLost, false)]
     public void AWindowThatClosedMeanwhileIsToldApartFromOtherRefusals(string code, bool gone) =>
         Assert.Equal(gone, CoreFailure.IsGone(InputRefusedException.Record(new InputRefusal(code, "x"))));
 }
