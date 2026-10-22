@@ -151,6 +151,20 @@ internal class InputDesktop
 
     public virtual Rectangle BoundsOf(AutomationElement element) => element.BoundingRectangle;
 
+    /// <summary>What a pointer action needs to know about an element, read now; the fake answers from its tables.</summary>
+    public virtual ClickGeometry Geometry(AutomationElement element) => ClickGeometry.Read(element);
+
+    /// <summary>
+    /// Scroll an element into view through the guards (<see cref="ClickGeometry.ScrollIntoView"/>); the note a
+    /// later refusal carries, or null when the element cannot scroll. The fake scrolls nothing.
+    /// </summary>
+    public virtual string? ScrollIntoView(
+        AutomationElement element,
+        int processId,
+        PendingInvokeTracker pending,
+        Action validate
+    ) => ClickGeometry.ScrollIntoView(element, processId, pending, validate);
+
     public virtual FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         element.Properties.ControlType.ValueOrDefault;
 

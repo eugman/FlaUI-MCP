@@ -17,13 +17,13 @@ internal static class PointerActions
         using var input = new GuardedInput(target);
         var point = default(Point);
         input.Check(() => RequireHit(target, point = resolve()));
-        input.Send(() => Mouse.MoveTo(point));
+        input.MoveTo(point);
         if (hoverMs > 0)
         {
             Thread.Sleep(hoverMs);
         }
 
-        return Mouse.Position;
+        return InputDesktop.Current.PointerPosition();
     }
 
     internal static Point Scroll(InputTarget target, Func<Point> resolve, int ticks)
@@ -31,9 +31,9 @@ internal static class PointerActions
         using var input = new GuardedInput(target);
         var point = default(Point);
         input.Check(() => RequireHit(target, point = resolve()));
-        input.Send(() => Mouse.MoveTo(point));
+        input.MoveTo(point);
         input.Send(() => Mouse.Scroll(ticks));
-        return Mouse.Position;
+        return InputDesktop.Current.PointerPosition();
     }
 
     internal static Point Click(InputTarget target, Func<Point> resolve)
@@ -42,7 +42,7 @@ internal static class PointerActions
         input.Check(() =>
             ClickGuarded(target, resolve(), clicked => input.Send(() => Mouse.Click(clicked, MouseButton.Left)))
         );
-        return Mouse.Position;
+        return InputDesktop.Current.PointerPosition();
     }
 
     internal static void ClickGuarded(
@@ -70,13 +70,13 @@ internal static class PointerActions
         input.Check(() => RequireHit(target, from));
         // The release lands at `to`; refuse a drag that would drop onto another window or the desktop.
         input.Check(() => RequireHit(target, to));
-        input.Send(() => Mouse.MoveTo(from));
+        input.MoveTo(from);
         input.Send(() => Mouse.Down(MouseButton.Left));
         try
         {
             foreach (var point in path)
             {
-                input.Send(() => Mouse.MoveTo(point));
+                input.MoveTo(point);
                 Thread.Sleep(StepDelay);
             }
         }
@@ -86,7 +86,7 @@ internal static class PointerActions
             input.Release(() => Mouse.Up(MouseButton.Left));
         }
 
-        return Mouse.Position;
+        return InputDesktop.Current.PointerPosition();
     }
 
     internal static void RequireHit(InputTarget target, Point point, Func<Point, nint>? windowAt = null)

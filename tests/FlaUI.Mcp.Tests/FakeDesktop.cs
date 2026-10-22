@@ -361,6 +361,39 @@ internal sealed class FakeDesktop : InputDesktop
     public override Rectangle BoundsOf(AutomationElement element) =>
         ElementBounds.TryGetValue(element, out var bounds) ? bounds : Rectangle.Empty;
 
+    /// <summary>The viewports of each element's scrolling ancestors; none unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, IReadOnlyList<Rectangle>> Viewports { get; } =
+        new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>What a geometry read returns instead of the tables, when set; read again at every read.</summary>
+    public Func<AutomationElement, ClickGeometry>? OnGeometry { get; set; }
+
+    /// <summary>Geometry from the tables: no clickable point, so the centre of the bounds is the default press point.</summary>
+    public override ClickGeometry Geometry(AutomationElement element) =>
+        OnGeometry?.Invoke(element)
+        ?? new(
+            Offscreen.Contains(element),
+            null,
+            BoundsOf(element),
+            Viewports.TryGetValue(element, out var viewports) ? viewports : []
+        );
+
+    /// <summary>What a scroll into view reports ("the view was scrolled"), or null: nothing here scrolls.</summary>
+    public string? ScrollNote { get; set; }
+
+    public int ScrollRequests { get; private set; }
+
+    public override string? ScrollIntoView(
+        AutomationElement element,
+        int processId,
+        PendingInvokeTracker pending,
+        Action validate
+    )
+    {
+        ScrollRequests++;
+        return ScrollNote;
+    }
+
     /// <summary>Elements that support the Value pattern.</summary>
     public HashSet<AutomationElement> ValueBearing { get; } = new(ReferenceEqualityComparer.Instance);
 

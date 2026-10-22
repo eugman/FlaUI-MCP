@@ -44,28 +44,19 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         OperationContext.Check();
         var target = sessions.GetInputTarget(handle);
         var origin = WindowOrigin(handle, target.Hwnd);
+        // Set when resolving a ref scrolled its view, so the reply (or a refusal) can say so.
+        string? scrolled = null;
         Point landed;
         try
         {
-            landed = Act(action, arguments, target, reference, origin);
+            landed = Act(action, arguments, target, reference, origin, ref scrolled);
         }
         catch (Exception error) when (GuardedInput.IsRefusal(error))
         {
             return Task.FromResult(Refused(action, error));
         }
 
-        return Task.FromResult(
-            TextResult(
-                JsonSerializer.Serialize(
-                    new
-                    {
-                        action,
-                        screen = new { x = landed.X, y = landed.Y },
-                        window = new { x = landed.X - origin.X, y = landed.Y - origin.Y },
-                    }
-                )
-            )
-        );
+        return Task.FromResult(TextResult(MouseReplies.Landed(action, landed, origin, scrolled)));
     }
 
     /// <summary>
@@ -76,10 +67,15 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         ErrorResult($"Failed to {action}: {error.Message}");
 
     /// <summary>Run one pointer action; a refusal after a scroll into view says so.</summary>
-    private Point Act(string action, JsonElement? arguments, InputTarget target, string? reference, Rectangle origin)
+    private Point Act(
+        string action,
+        JsonElement? arguments,
+        InputTarget target,
+        string? reference,
+        Rectangle origin,
+        ref string? scrolled
+    )
     {
-        // Set when resolving a ref scrolled its view, so a later refusal can say so.
-        string? scrolled = null;
         try
         {
             return action switch
@@ -121,15 +117,16 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
     /// </summary>
     private (AutomationElement Element, Func<ClickGeometry> Read) Located(string reference, ref string? scrolled)
     {
+        var desktop = InputDesktop.Current;
         var element = refs.ResolveRef(reference);
         scrolled =
-            ClickGeometry.ScrollIntoView(
+            desktop.ScrollIntoView(
                 element,
                 refs.GetProcessIdForRef(reference),
                 pending,
                 () => refs.ValidateReference(reference)
             ) ?? scrolled;
-        return (element, () => ClickGeometry.Read(element));
+        return (element, () => desktop.Geometry(element));
     }
 
     /// <summary>A point on a ref chosen under the lease, then hit-tested: it must land on the ref itself.</summary>
@@ -244,11 +241,13 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         return Pressable(reference, geometry => ClickPoint.Choose(geometry), ref scrolled);
     }
 
-    // The drop point is hit-tested like a press: releasing over an overlay or a sibling drops on that instead.
+    // The drop point is hit-tested like a press: releasing over an overlay or a sibling drops on that instead. It
+    // sits DropInset pixels inside the edge, off the neighbour's border.
     private Func<Point> EdgeOf(string reference, string edge, ref string? scrolled) =>
         Pressable(
             reference,
-            geometry => ClickPoint.Choose(geometry, PointerPlan.EdgePoint(geometry.Bounds, edge)),
+            geometry =>
+                ClickPoint.Choose(geometry, PointerPlan.EdgePoint(geometry.Bounds, edge, PointerPlan.DropInset)),
             ref scrolled
         );
 
