@@ -56,7 +56,11 @@ public sealed partial class Te3Page
         depthScale = null;
         var request = new WalkRequest(table, objectName, objectType, folder);
         var cursor = new TomCursor(this, ObjectWalk.Interesting(request));
-        var walk = await FindObject(request, cursor, elapsed);
+        // The last arrival counts for this walk only; a walk that fails leaves none behind.
+        var previous = lastRequest;
+        lastRequest = null;
+        lastWalk = null;
+        var walk = await FindObject(request, cursor, elapsed, previous);
         if (!walk.Found)
         {
             var text = await new RowTree(this, () => true).Miss(request, walk.Reason, Inputs.Sent);
@@ -89,13 +93,18 @@ public sealed partial class Te3Page
 
     // The row strategy first: one read of the filtered rows, one select, Properties to confirm. The keyboard walk runs
     // only when the rows cannot be placed or may not all be realized, and the 18 s stop bounds both.
-    private async Task<WalkResult> FindObject(WalkRequest request, TomCursor cursor, Func<TimeSpan> elapsed)
+    private async Task<WalkResult> FindObject(
+        WalkRequest request,
+        TomCursor cursor,
+        Func<TimeSpan> elapsed,
+        WalkRequest? lastArrived
+    )
     {
         SelectResult picked;
         try
         {
             var rows = new RowTree(this, WalkClock.OutOfTime(elapsed));
-            picked = await ObjectSelect.Run(rows, request, WalkClock.OutOfTime(elapsed));
+            picked = await ObjectSelect.Run(rows, request, WalkClock.OutOfTime(elapsed), lastArrived);
             if (picked.FallBack && request.Table != request.ObjectName)
             {
                 picked = await ByTable(rows, request, picked, elapsed);

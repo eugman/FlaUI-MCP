@@ -22,8 +22,8 @@ public interface IRowTree
     Task Select(TreeRow row);
 
     /// <summary>
-    /// The rows as they are, before any key (no Home, no PageDown): null rows when the indent cannot be measured from
-    /// what is in view. The default reads nothing, so nothing is taken as already selected.
+    /// The rows as they are, before any key (no Home, no PageDown): rows of unknown depth when the indent cannot be
+    /// measured from what is in view. The default reads nothing, so nothing is taken as already selected.
     /// </summary>
     Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadInPlace() =>
         Task.FromResult<(IReadOnlyList<TreeRow>?, int?)>((null, null));
@@ -104,11 +104,17 @@ internal static partial class ObjectSelect
     /// <summary>At most this many same-named candidates are selected in turn (a column and a hierarchy level).</summary>
     public const int MaxTries = 3;
 
-    public static async Task<SelectResult> Run(IRowTree tree, WalkRequest request, Func<bool> outOfTime)
+    /// <param name="lastArrived">The request the host's own last walk arrived at, when it has made one since.</param>
+    public static async Task<SelectResult> Run(
+        IRowTree tree,
+        WalkRequest request,
+        Func<bool> outOfTime,
+        WalkRequest? lastArrived = null
+    )
     {
         // The row read starts with Home, which moves the selection: an object an earlier walk left selected is
         // recognised from the first read, before any key, so it costs neither the paging keys nor a select.
-        if (await AlreadySelected(tree, request) is { } there)
+        if (await AlreadySelected(tree, request, lastArrived) is { } there)
         {
             return there;
         }
@@ -176,8 +182,14 @@ internal static partial class ObjectSelect
         );
     }
 
-    // The selected row, when the first read places it as a candidate and TE3 names it with the requested type.
-    private static async Task<SelectResult?> AlreadySelected(IRowTree tree, WalkRequest request)
+    // The selected row, when the first read places it as a candidate (or the host's own last walk confirmed this
+    // very object there and the row still bears its name: after a clear TE3 scrolls the row to the top, so the rows
+    // in view often cannot place it) and TE3 names it with the requested type, and folder when Properties shows one.
+    private static async Task<SelectResult?> AlreadySelected(
+        IRowTree tree,
+        WalkRequest request,
+        WalkRequest? lastArrived
+    )
     {
         var (rows, selected) = await tree.ReadInPlace();
         if (rows?.FirstOrDefault(r => r.Index == selected) is not { } row)
@@ -185,17 +197,28 @@ internal static partial class ObjectSelect
             return null;
         }
 
-        var placed = SearchPick.Candidates(rows, request).Candidates.Any(c => c.Index == row.Index);
+        var placed =
+            SearchPick.Candidates(rows, request).Candidates.Any(c => c.Index == row.Index)
+            || (row.Value == request.ObjectName && SameObject(lastArrived, request));
         var seen = placed ? SelectionView.Read(row, await tree.View()) : null;
-        if (
-            seen == null
-            || (request.ObjectType.Length > 0 && !TomSelection.ObjectTypeMatches(request.ObjectType, seen.Type))
-        )
+        if (seen == null || Mismatch(seen, request) != null)
         {
             return null;
         }
 
         return new(true, row, rows.Count, null, 0, null, false, ConfirmedType: seen.Type);
+    }
+
+    // The last walk arrived at the object asked for now: same table and name, the folder asked for now was asked for
+    // then too (TE3's type and folder for the selection are still compared).
+    private static bool SameObject(WalkRequest? last, WalkRequest now)
+    {
+        if (last == null || last.Table != now.Table || last.ObjectName != now.ObjectName)
+        {
+            return false;
+        }
+
+        return now.Folder.Length == 0 || now.Folder == last.Folder;
     }
 
     // No row to select: the depth is unknown, or nothing in the read is in place (fall back when rows may be missing).

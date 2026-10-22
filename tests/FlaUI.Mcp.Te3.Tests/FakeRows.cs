@@ -45,8 +45,13 @@ internal sealed class FakeRows(params (string? Value, int? Depth, string Type)[]
         return Task.FromResult(new RowRead(Measured ? All : null, Complete, Measured ? 24 : null, Truncated));
     }
 
+    // Unmeasured, the rows are read with no depth, as the live read gives them when the root is out of view.
     public Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadInPlace() =>
-        InPlaceMeasured ? ReadSelected() : Task.FromResult<(IReadOnlyList<TreeRow>?, int?)>((null, selected?.Index));
+        InPlaceMeasured
+            ? ReadSelected()
+            : Task.FromResult<(IReadOnlyList<TreeRow>?, int?)>(
+                ([.. All.Select(r => r with { Depth = null })], selected?.Index)
+            );
 
     public Task Select(TreeRow row)
     {

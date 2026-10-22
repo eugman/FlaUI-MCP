@@ -125,13 +125,7 @@ public sealed partial class Te3Page
         public async Task<RowRead> Read()
         {
             await KeyBudget.Press(outOfTime, () => page.Keys("Home", TomExplorerTarget()), "Home before the row read");
-            // TE3 applies the filter a moment after the search text: wait for the rows to stop changing.
-            await RowSettle.Wait(
-                async () => (await page.ReadTree()).Elements.Count(e => e.ControlType == "TreeItem"),
-                ms => Task.Delay(ms),
-                RenderBudgetMs,
-                RenderPollMs
-            );
+            await Rendered();
             var truncated = false;
             var paged = await RowPager.ReadAll(
                 async () =>
@@ -155,13 +149,22 @@ public sealed partial class Te3Page
             );
         }
 
-        // One read with no key: the indent is measured from what is in view, kept local so a view scrolled away from
-        // the root never sets the walk's scale.
+        // TE3 applies the filter a moment after the search text: wait for the rows to stop changing.
+        private async Task Rendered() =>
+            await RowSettle.Wait(
+                async () => (await page.ReadTree()).Elements.Count(e => e.ControlType == "TreeItem"),
+                ms => Task.Delay(ms),
+                RenderBudgetMs,
+                RenderPollMs
+            );
+
+        // One read with no key, once the filter has rendered: the indent is measured from what is in view (the rows
+        // have no depth when the root is scrolled out), kept local so such a view never sets the walk's scale.
         public async Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadInPlace()
         {
+            await Rendered();
             var found = await page.ReadTree();
-            var scale = TomRows.Calibrate(found.Elements);
-            return (scale == null ? null : TomRows.Rows(found.Elements, scale), SelectedIndex(found));
+            return (TomRows.Rows(found.Elements, TomRows.Calibrate(found.Elements)), SelectedIndex(found));
         }
 
         internal static int? SelectedIndex(QueryResult found)
