@@ -24,8 +24,16 @@ internal sealed record DragRequest(
 internal sealed record DragPlan(
     Func<(Point From, Point To)> Resolve,
     Func<Point, string?> DropMoved,
-    Func<Point, string?> DroppedOn
-);
+    Func<Point, string?> DroppedOn,
+    Func<Proof>? Resized = null
+)
+{
+    /// <summary>What the drag found after its release: the element under the pointer and a resize's proof.</summary>
+    public DragReport Report(Point landed) => new(DroppedOn(landed), Resized?.Invoke());
+}
+
+/// <summary>What a drag found after its release, for its reply.</summary>
+internal sealed record DragReport(string? DroppedOn, Proof? Resized);
 
 /// <summary>Builds a drag's plan from its request: edges, resize targets, drop points and the start's exclusions.</summary>
 internal sealed class DragPlanner(RefPoints points)
@@ -67,6 +75,32 @@ internal sealed class DragPlanner(RefPoints points)
         };
     }
 
+    /// <summary>
+    /// The ref's size after the release, read back through the seam, against the requested one: its width for a
+    /// left or right edge, its height for top or bottom. Unavailable when the read fails.
+    /// </summary>
+    private static Proof Resized(Func<ClickGeometry> read, string edge, int requested)
+    {
+        var tall = edge is "top" or "bottom";
+        string? reached;
+        try
+        {
+            var bounds = read().Bounds;
+            reached = (tall ? bounds.Height : bounds.Width).ToString();
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            reached = null;
+        }
+
+        return Proof.Compare(
+            requested.ToString(),
+            reached,
+            tall ? "element-height" : "element-width",
+            independent: true
+        );
+    }
+
     private DragPlan FromRequest(DragRequest request, ref string? scrolled)
     {
         if (request.FromEdge != null || request.ResizeTo != null)
@@ -76,6 +110,9 @@ internal sealed class DragPlanner(RefPoints points)
                 ref scrolled
             );
             var to = request.ResizeTo == null ? DropPoint(request, ref scrolled) : null;
+            Func<Proof>? resized = request.ResizeTo is { } size
+                ? () => Resized(read, request.FromEdge ?? "right", size)
+                : null;
             return new(
                 () =>
                 {
@@ -91,7 +128,8 @@ internal sealed class DragPlanner(RefPoints points)
                     );
                 },
                 to?.Moved ?? (_ => null),
-                _ => null
+                _ => null,
+                resized
             );
         }
 

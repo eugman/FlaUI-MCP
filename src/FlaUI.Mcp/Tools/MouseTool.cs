@@ -46,19 +46,19 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         var origin = WindowOrigin(handle, target.Hwnd);
         // Set when resolving a ref scrolled its view, so the reply (or a refusal) can say so.
         string? scrolled = null;
-        // What a drag found under the pointer after its release, when it could ask.
-        string? droppedOn = null;
+        // What a drag found after its release: the element under the pointer, a resize's proof.
+        DragReport? drag = null;
         Point landed;
         try
         {
-            landed = Act(action, arguments, target, reference, origin, ref scrolled, out droppedOn);
+            landed = Act(action, arguments, target, reference, origin, ref scrolled, out drag);
         }
         catch (Exception error) when (GuardedInput.IsRefusal(error))
         {
             return Task.FromResult(Refused(action, error));
         }
 
-        return Task.FromResult(TextResult(MouseReplies.Landed(action, landed, origin, scrolled, droppedOn)));
+        return Task.FromResult(MouseReplies.Landed(action, landed, origin, scrolled, drag));
     }
 
     /// <summary>
@@ -76,10 +76,10 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         string? reference,
         Rectangle origin,
         ref string? scrolled,
-        out string? droppedOn
+        out DragReport? drag
     )
     {
-        droppedOn = null;
+        drag = null;
         try
         {
             return action switch
@@ -101,7 +101,7 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
                     Ticks(arguments)
                 ),
                 "click" => PointerActions.Click(target, ResolvePoint(arguments, "to", reference, origin, ref scrolled)),
-                "drag" => Drag(arguments, target, reference, origin, ref scrolled, out droppedOn),
+                "drag" => Drag(arguments, target, reference, origin, ref scrolled, out drag),
                 _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
             };
         }
@@ -117,7 +117,7 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         string? reference,
         Rectangle origin,
         ref string? scrolled,
-        out string? droppedOn
+        out DragReport drag
     )
     {
         var request = new DragRequest(
@@ -133,7 +133,7 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         );
         var plan = new DragPlanner(points).Plan(request, ref scrolled);
         var landed = PointerActions.Drag(target, plan.Resolve, request.Steps, plan.DropMoved);
-        droppedOn = plan.DroppedOn(landed);
+        drag = plan.Report(landed);
         return landed;
     }
 

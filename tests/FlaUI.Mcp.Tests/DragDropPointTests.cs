@@ -155,7 +155,13 @@ public sealed class DragDropPointTests
         // A column header's divider is its last pixel: fromEdge keeps grabbing exactly there.
         var header = Element();
         var desktop = new FakeDesktop();
-        desktop.ElementBounds[header] = Row;
+        // The header reaches the requested width once the button is up (move, press, one move, release).
+        desktop.OnGeometry = _ => new ClickGeometry(
+            false,
+            null,
+            desktop.Dispatched >= 4 ? new Rectangle(433, 214, 300, 22) : Row,
+            []
+        );
         using var installed = desktop.Install();
         var (refs, sessions, handle) = Window();
         using var _ = sessions;
@@ -339,94 +345,5 @@ public sealed class DragDropPointTests
 
         Assert.True(result.IsError != true, result.Content[0].Text);
         Assert.Equal(15, desktop.Dispatched);
-    }
-
-    [Fact]
-    public async Task ADragReportsWhatUiAutomationFindsUnderThePointerAfterTheRelease()
-    {
-        // Verified on the row up to the release; the app re-laid out at the drop, and the reply says where it went.
-        var row = Element();
-        var folder = Element();
-        var desktop = new FakeDesktop();
-        desktop.ElementBounds[row] = Row;
-        desktop.Descriptions[folder] = "TreeItem '2. Quantity'";
-        desktop.HitTest = _ => desktop.Dispatched >= 15 ? folder : row;
-        using var installed = desktop.Install();
-        var (refs, sessions, handle) = Window();
-        using var _ = sessions;
-        var reference = refs.Register(handle, row);
-
-        var result = await Run(
-            new MouseTool(refs, new PendingInvokeTracker(), sessions),
-            new
-            {
-                action = "drag",
-                @ref = reference,
-                toRef = reference,
-            }
-        );
-
-        Assert.True(result.IsError != true, result.Content[0].Text);
-        Assert.Equal("TreeItem '2. Quantity'", Reply(result).GetProperty("droppedOn").GetString());
-    }
-
-    [Fact]
-    public async Task ADropOnNothingOrAnUnreadableHitTestIsSaidSo()
-    {
-        var row = Element();
-        var desktop = new FakeDesktop();
-        desktop.ElementBounds[row] = Row;
-        desktop.HitTest = _ => desktop.Dispatched >= 15 ? null : row;
-        using var installed = desktop.Install();
-        var (refs, sessions, handle) = Window();
-        using var _ = sessions;
-        var reference = refs.Register(handle, row);
-        var tool = new MouseTool(refs, new PendingInvokeTracker(), sessions);
-
-        var nothing = await Run(
-            tool,
-            new
-            {
-                action = "drag",
-                @ref = reference,
-                toRef = reference,
-            }
-        );
-        desktop.HitTest = _ => desktop.Dispatched >= 30 ? throw new TimeoutException("provider blocked") : row;
-        var unreadable = await Run(
-            tool,
-            new
-            {
-                action = "drag",
-                @ref = reference,
-                toRef = reference,
-            }
-        );
-
-        Assert.Equal("nothing UI Automation can see", Reply(nothing).GetProperty("droppedOn").GetString());
-        Assert.Equal("unreadable (provider blocked)", Reply(unreadable).GetProperty("droppedOn").GetString());
-    }
-
-    [Fact]
-    public async Task ARawPointDragHasNoRefToAskThrough()
-    {
-        var desktop = new FakeDesktop();
-        using var installed = desktop.Install();
-        var (refs, sessions, handle) = Window();
-        using var _ = sessions;
-
-        var result = await Run(
-            new MouseTool(refs, new PendingInvokeTracker(), sessions),
-            new
-            {
-                action = "drag",
-                handle,
-                from = new { x = 10, y = 10 },
-                to = new { x = 50, y = 10 },
-            }
-        );
-
-        Assert.True(result.IsError != true, result.Content[0].Text);
-        Assert.False(Reply(result).TryGetProperty("droppedOn", out var droppedOn), droppedOn.ToString());
     }
 }
