@@ -59,26 +59,80 @@ public sealed class ToolDocAttribute(string description) : Attribute
     public string Description { get; } = description;
 }
 
+/// <summary>The values a string argument may take, written as the schema's enum.</summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class ToolEnumAttribute(params string[] values) : Attribute
+{
+    public string[] Values { get; } = values;
+}
+
+/// <summary>An integer argument's minimum, and optionally its maximum and default.</summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class ToolRangeAttribute(long minimum) : Attribute
+{
+    public long Minimum { get; } = minimum;
+
+    /// <summary>The maximum; <see cref="long.MaxValue"/> leaves it out.</summary>
+    public long Maximum { get; set; } = long.MaxValue;
+
+    /// <summary>The default; <see cref="long.MinValue"/> leaves it out.</summary>
+    public long Default { get; set; } = long.MinValue;
+}
+
+/// <summary>
+/// A property whose schema the record cannot express (a shared selector, a type union, a key order of its own):
+/// the static member named here, on the record or the type that declares it, supplies it as written.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class ToolSchemaFromAttribute(string member) : Attribute
+{
+    public string Member { get; } = member;
+}
+
+/// <summary>Write "required": [] even when every argument is optional, as a schema published that way did.</summary>
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class ToolSchemaRequiredListAttribute : Attribute;
+
 /// <summary>Builds a closed JSON schema from an argument record whose properties carry <see cref="ToolDocAttribute"/>.</summary>
 public static class ToolSchema
 {
     /// <summary>
-    /// The schema for <typeparamref name="T"/>: one camelCase property per public property, with its type and
-    /// description; required when its constructor parameter has no default; additionalProperties false.
+    /// The schema for <typeparamref name="T"/>: one camelCase property per public property, in declaration order;
+    /// required when its constructor parameter has no default (the list is left out when empty, unless the record
+    /// carries <see cref="ToolSchemaRequiredListAttribute"/>); additionalProperties false.
     /// </summary>
     public static object For<T>()
     {
-        var optional = typeof(T)
-            .GetConstructors()
-            .OrderByDescending(c => c.GetParameters().Length)
-            .First()
-            .GetParameters()
-            .Where(p => p.HasDefaultValue)
-            .Select(p => p.Name!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var (properties, required) = Members(typeof(T));
+        var schema = new Dictionary<string, object>
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["properties"] = properties,
+        };
+        if (required.Count > 0 || typeof(T).GetCustomAttribute<ToolSchemaRequiredListAttribute>() != null)
+        {
+            schema["required"] = required;
+        }
+
+        return schema;
+    }
+
+    private static (Dictionary<string, object> Properties, List<string> Required) Members(Type record)
+    {
+        var optional =
+            record
+                .GetConstructors()
+                .OrderByDescending(c => c.GetParameters().Length)
+                .FirstOrDefault()
+                ?.GetParameters()
+                .Where(p => p.HasDefaultValue)
+                .Select(p => p.Name!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            ?? [];
         var properties = new Dictionary<string, object>();
         var required = new List<string>();
-        foreach (var property in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        foreach (var property in record.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (property.Name == "EqualityContract")
             {
@@ -86,25 +140,95 @@ public static class ToolSchema
             }
 
             var name = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
-            properties[name] = new Dictionary<string, string>
-            {
-                ["type"] = JsonType(property.PropertyType),
-                ["description"] = property.GetCustomAttribute<ToolDocAttribute>()?.Description ?? "",
-            };
+            properties[name] = PropertySchema(property, record);
             if (!optional.Contains(property.Name))
             {
                 required.Add(name);
             }
         }
 
-        return new Dictionary<string, object>
-        {
-            ["type"] = "object",
-            ["additionalProperties"] = false,
-            ["properties"] = properties,
-            ["required"] = required,
-        };
+        return (properties, required);
     }
+
+    /// <summary>type, then enum, minimum, maximum, default, items, then description, then a nested object's members.</summary>
+    private static object PropertySchema(PropertyInfo property, Type record)
+    {
+        if (property.GetCustomAttribute<ToolSchemaFromAttribute>() is { } from)
+        {
+            return Supplied(from.Member, record);
+        }
+
+        var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+        var schema = new Dictionary<string, object> { ["type"] = JsonType(type) };
+        if (property.GetCustomAttribute<ToolEnumAttribute>() is { } values)
+        {
+            schema["enum"] = values.Values;
+        }
+
+        if (property.GetCustomAttribute<ToolRangeAttribute>() is { } range)
+        {
+            AddRange(schema, range);
+        }
+
+        if (type.IsArray)
+        {
+            schema["items"] = new Dictionary<string, object> { ["type"] = JsonType(type.GetElementType()!) };
+        }
+
+        if (property.GetCustomAttribute<ToolDocAttribute>() is { } doc)
+        {
+            schema["description"] = doc.Description;
+        }
+
+        if (IsRecord(type))
+        {
+            var (members, required) = Members(type);
+            schema["properties"] = members;
+            if (required.Count > 0)
+            {
+                schema["required"] = required;
+            }
+        }
+
+        return schema;
+    }
+
+    private static void AddRange(Dictionary<string, object> schema, ToolRangeAttribute range)
+    {
+        schema["minimum"] = range.Minimum;
+        if (range.Maximum != long.MaxValue)
+        {
+            schema["maximum"] = range.Maximum;
+        }
+
+        if (range.Default != long.MinValue)
+        {
+            schema["default"] = range.Default;
+        }
+    }
+
+    private static object Supplied(string member, Type record)
+    {
+        const BindingFlags Static = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+        for (var type = record; type != null; type = type.DeclaringType)
+        {
+            if (type.GetProperty(member, Static) is { } property)
+            {
+                return property.GetValue(null)!;
+            }
+
+            if (type.GetField(member, Static) is { } field)
+            {
+                return field.GetValue(null)!;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"No static schema member {member} on {record.Name} or its declaring types."
+        );
+    }
+
+    private static bool IsRecord(Type type) => type.IsClass && type != typeof(string) && !type.IsArray;
 
     private static string JsonType(Type type)
     {
@@ -117,6 +241,11 @@ public static class ToolSchema
         if (bare == typeof(int) || bare == typeof(long))
         {
             return "integer";
+        }
+
+        if (bare.IsArray)
+        {
+            return "array";
         }
 
         return bare == typeof(string) ? "string" : "object";

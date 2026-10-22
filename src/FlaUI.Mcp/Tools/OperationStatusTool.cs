@@ -19,7 +19,8 @@ public sealed class OperationStatusTool(OperationCoordinator operations, Pending
         + "provider is pending while a click it started still blocks UI Automation on that app (usually an open menu or dialog). No UI Automation calls.";
     public override object InputSchema => ToolSchema.For<Arguments>();
 
-    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    /// <summary>The tool's arguments; its schema is generated from them (published with an empty required list).</summary>
+    [ToolSchemaRequiredList]
     private sealed record Arguments(
         [property: ToolDoc("An operationId from a tool's structuredContent; omit it for every retained operation.")]
             string? OperationId = null
