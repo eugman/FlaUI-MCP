@@ -189,6 +189,7 @@ public sealed class RawDragGuardTests
         var result = await Run(desktop, new() { DropOffscreen = true });
         Assert.Equal("drop-target-moved", result.Outcome!.Failure!.Code);
         Assert.Equal("unverified", result.Outcome.Status);
+        Assert.DoesNotContain("no input sent", result.Content[0].Text, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(16, desktop.Dispatched);
     }
 
