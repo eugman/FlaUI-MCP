@@ -97,6 +97,8 @@ public sealed partial class Te3Page
     public async Task UndoModelChange()
     {
         await Keys("CTRL+Z", TomExplorerTarget());
+        // What the undo restored is the recipe's next assertion; the key itself has no read-back.
+        Unverified("Undo model change (Ctrl+Z)");
     }
 
     public async Task ShowPreviewDescription(string measure, string before, string after)
@@ -128,6 +130,8 @@ public sealed partial class Te3Page
     public async Task ShowBpaBottom()
     {
         await Keys("Ctrl+End", BpaTreeTarget());
+        // The tree's scroll position is not read; the rule assertion that follows is the read-back.
+        Unverified("Show BPA bottom (Ctrl+End)");
     }
 
     public async Task AssertBpaViolation(string rule)
@@ -218,6 +222,8 @@ public sealed partial class Te3Page
     public async Task ExpandSelected()
     {
         await Keys("Right", TomExplorerTarget());
+        // Whether the row opened is not read here; the next step's object read is the read-back.
+        Unverified("Expand selected row (Right)");
     }
 
     public async Task SetExpression(string expression)

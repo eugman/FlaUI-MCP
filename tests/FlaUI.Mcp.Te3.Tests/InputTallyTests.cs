@@ -256,34 +256,51 @@ public sealed class InputTallyTests
         Assert.Equal("Save (Ctrl+S)", written.GetProperty("unverifiedSteps")[0].GetProperty("step").GetString());
     }
 
-    // The page's key sends that have no read-back of their own (Save, F5 evaluations) must say so in the same
-    // method, or the manifest's unverifiedSteps under-reports; Te3Page cannot run offline, so the source is checked.
+    // Every key send of the page (any key, multi-line calls included) must be followed, in the same method, by a
+    // read-back (Expect, Absent, Count, RequireSelectedTab) or by Unverified(...), or the manifest's unverifiedSteps
+    // under-reports; Te3Page cannot run offline, so the source is the guard, with no count of sends assumed.
     [Fact]
-    public void EveryUnreadKeySendInTheScriptsPageIsRecordedAsUnverified()
+    public void EveryKeySendInTheScriptsPageIsReadBackOrRecordedAsUnverified()
     {
         var lines = File.ReadAllLines(Path.Combine(DirectInputJournalTests.Sources(), "Te3Page.Scripts.cs"));
-        var sends = Enumerable
-            .Range(0, lines.Length)
-            .Where(i => lines[i].Contains("Keys(\"F5\"") || lines[i].Contains("Keys(\"Ctrl+S\")"))
-            .ToList();
-        var recorded = sends
-            .Select(i => lines.Skip(i + 1).TakeWhile(line => line != "    }").FirstOrDefault(IsRecord))
+        var sends = Enumerable.Range(0, lines.Length).Where(i => IsKeySend(lines[i])).ToList();
+        var unread = sends
+            .Where(i =>
+                !lines.Skip(i + 1).TakeWhile(line => line != "    }").Any(line => IsRead(line) || IsRecord(line))
+            )
+            .Select(i => $"line {i + 1}: {lines[i].Trim()}")
             .ToList();
 
-        Assert.Equal(3, sends.Count);
-        Assert.All(recorded, Assert.NotNull);
+        Assert.NotEmpty(sends);
+        Assert.Empty(unread);
+
+        // The ones recorded as unverified reach the manifest under their step names.
+        var recorded = sends
+            .Select(i => lines.Skip(i + 1).TakeWhile(line => line != "    }").FirstOrDefault(IsRecord))
+            .OfType<string>()
+            .Select(StepName)
+            .ToList();
         var manifest = new RunManifest();
         var inputs = new InputTally();
-        foreach (var step in recorded.Select(StepName))
+        foreach (var step in recorded)
         {
             inputs.RecordUnverified("te3_page", step, "w1");
         }
 
         RunExecutor.RecordUnverified(manifest, inputs);
-        Assert.Equal(
-            ["Evaluate expression (F5)", "Save (Ctrl+S)", "Run query (F5)"],
-            manifest.UnverifiedSteps.Select(step => step.Step)
-        );
+        Assert.NotEmpty(recorded);
+        Assert.Equal(recorded, manifest.UnverifiedSteps.Select(step => step.Step));
+    }
+
+    private static bool IsKeySend(string line) => line.TrimStart().StartsWith("await Keys(", StringComparison.Ordinal);
+
+    private static bool IsRead(string line)
+    {
+        var call = line.TrimStart();
+        return call.StartsWith("await Expect(", StringComparison.Ordinal)
+            || call.StartsWith("await Absent(", StringComparison.Ordinal)
+            || call.StartsWith("await Count(", StringComparison.Ordinal)
+            || call.StartsWith("await RequireSelectedTab(", StringComparison.Ordinal);
     }
 
     private static bool IsRecord(string line) => line.TrimStart().StartsWith("Unverified(\"", StringComparison.Ordinal);
