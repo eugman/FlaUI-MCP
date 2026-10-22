@@ -163,13 +163,19 @@ public sealed class PointerMutationTests
     [Fact]
     public void ObservingASelectionWaitsForTheProvider()
     {
-        var started = Environment.TickCount64;
+        // The fake desktop's pauses move its clock, so the 500 ms observation window passes without waiting.
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop { Clock = clock, OnPause = clock.Advance }.Install();
+        var started = clock.GetTimestamp();
 
-        var selected = ClickTool.ObserveSelection(() => Environment.TickCount64 - started > 200);
+        var selected = ClickTool.ObserveSelection(() => clock.GetElapsedTime(started) > TimeSpan.FromMilliseconds(200));
+        var selectedAt = clock.GetElapsedTime(started);
         var never = ClickTool.ObserveSelection(() => false);
 
         Assert.True(selected);
+        Assert.Equal(TimeSpan.FromMilliseconds(250), selectedAt);
         Assert.False(never);
+        Assert.Equal(TimeSpan.FromMilliseconds(500), clock.GetElapsedTime(started) - selectedAt);
     }
 
     [Theory]

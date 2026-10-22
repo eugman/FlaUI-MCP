@@ -55,7 +55,7 @@ public sealed class ProtocolMutationTests
     public async Task ACapacityRefusalSaysNothingWasDispatched()
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(new Gated(gate.Task));
         var server = new McpServer(registry, concurrentRequests: true);
         var calls = Enumerable.Range(1, McpLineTransport.MaxRequestsInFlight + 1).Select(id => Call(id, "gated"));
@@ -71,7 +71,7 @@ public sealed class ProtocolMutationTests
             "the response"
         );
         gate.SetResult();
-        await run.WaitAsync(TimeSpan.FromSeconds(10));
+        await run.WaitAsync(Eventually.Bound);
 
         var refusal = Lines(output).Single(line => line.TryGetProperty("error", out _));
         Assert.Equal(

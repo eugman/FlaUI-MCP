@@ -112,7 +112,7 @@ public sealed class ToolOutcomeTests
                 {
                     if (polls++ > 0)
                     {
-                        counted.Wait(TimeSpan.FromSeconds(10));
+                        counted.Wait(Eventually.Bound);
                     }
 
                     return Array.Empty<Win32WindowInfo>();

@@ -317,12 +317,15 @@ public partial class ClickTool : ToolBase
     }
 
     /// <summary>Polls a condition until it holds or the time runs out; providers update state asynchronously.</summary>
+    /// <summary>Poll <paramref name="condition"/> every 50 ms until it holds or the time passes, on the desktop's clock.</summary>
     private static bool Settled(Func<bool> condition, int timeoutMs)
     {
+        var desktop = InputDesktop.Current;
+        var started = desktop.Time.GetTimestamp();
         var held = condition();
-        for (var waited = 0; !held && waited < timeoutMs; waited += 50)
+        while (!held && desktop.Time.GetElapsedTime(started) < TimeSpan.FromMilliseconds(timeoutMs))
         {
-            Thread.Sleep(50);
+            desktop.Pause(TimeSpan.FromMilliseconds(50));
             held = condition();
         }
 

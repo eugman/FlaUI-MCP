@@ -11,7 +11,7 @@ public sealed class AgentObservationTests
     [Fact]
     public void ExplicitNodeLimitCannotBeBypassedBySuppliedBudget()
     {
-        var budget = new SearchBudget(1000, TimeSpan.FromSeconds(10));
+        var budget = new SearchBudget(1000, TimeSpan.FromSeconds(10), () => TimeSpan.Zero);
         budget.Visit();
         budget.LimitRemaining(2);
         Assert.Equal(2, budget.Remaining);

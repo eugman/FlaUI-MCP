@@ -82,7 +82,7 @@ public class ToolRegistryTimeoutTests
     [Fact]
     public async Task ExecuteToolAsync_ReturnsSuccessfulToolResult()
     {
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(1));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(1), time: new ManualTimeProvider());
         registry.RegisterTool(new SuccessfulTool());
 
         var result = await registry.ExecuteToolAsync("successful", arguments: null);

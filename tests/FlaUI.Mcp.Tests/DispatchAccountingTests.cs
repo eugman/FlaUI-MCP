@@ -169,7 +169,7 @@ public sealed class DispatchAccountingTests
                 {
                     if (polls++ > 0)
                     {
-                        sent.Wait(TimeSpan.FromSeconds(10));
+                        sent.Wait(Eventually.Bound);
                     }
 
                     return [];

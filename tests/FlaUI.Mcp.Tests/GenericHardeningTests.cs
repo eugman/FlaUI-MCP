@@ -98,7 +98,7 @@ public sealed class GenericHardeningTests
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var tracker = new PendingInvokeTracker(_ => 456);
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10))
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider())
         {
             ResolveTarget = _ => new ProcessIdentity(123, 456),
             Pending = tracker,
@@ -109,9 +109,9 @@ public sealed class GenericHardeningTests
         try
         {
             var call = registry.ExecuteToolAsync("awaiting", null, cancel.Token);
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(Eventually.Bound);
             await cancel.CancelAsync();
-            await call.WaitAsync(TimeSpan.FromSeconds(5));
+            await call.WaitAsync(Eventually.Bound);
             Assert.True(tracker.TryGetPending(123, out var stranded));
             Assert.Equal("cancelled awaiting", stranded.Description);
         }

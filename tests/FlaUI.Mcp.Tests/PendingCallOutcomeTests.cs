@@ -138,6 +138,7 @@ public sealed class PendingCallOutcomeTests
     public void AFailedWindowReadWhileWaitingDoesNotAbandonTheCall()
     {
         // The call returns only once the wait has seen a failed window read, so the wait must go on past it.
+        using var installed = new FakeDesktop { Clock = new ManualTimeProvider() }.Install();
         using var readFailed = new ManualResetEventSlim();
         var reads = 0;
         var result = ModalAwareInvoker.Execute(

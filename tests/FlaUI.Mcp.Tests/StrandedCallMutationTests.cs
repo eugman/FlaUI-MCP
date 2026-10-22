@@ -48,7 +48,7 @@ public sealed class StrandedCallMutationTests
     public async Task ACancelledCallSaysCancellationWasRequested()
     {
         var gate = new TaskCompletionSource();
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(new Gated(gate.Task));
         using var cancel = new CancellationTokenSource();
         try

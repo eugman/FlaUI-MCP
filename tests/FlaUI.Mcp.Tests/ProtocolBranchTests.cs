@@ -54,16 +54,16 @@ public sealed class ProtocolBranchTests
     public async Task ADuplicateInFlightRequestIdIsRefusedWithoutDispatch()
     {
         var tool = new BlockingTool();
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(tool);
         var server = new McpServer(registry, concurrentRequests: true);
         const string call = "{\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"blocking\"}}";
 
         var first = server.HandleRequestAsync(Request(call));
-        await tool.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await tool.Entered.Task.WaitAsync(Eventually.Bound);
         var duplicate = await server.HandleRequestAsync(Request(call));
         tool.Release.SetResult();
-        await first.WaitAsync(TimeSpan.FromSeconds(5));
+        await first.WaitAsync(Eventually.Bound);
 
         var refused = Assert.IsType<McpToolResult>(duplicate!.Result);
         Assert.True(refused.IsError);
@@ -208,13 +208,13 @@ public sealed class ProtocolBranchTests
     public async Task ARefusedLineDoesNotMarkAnInFlightRequestAsNotDispatched()
     {
         var tool = new BlockingTool();
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(tool);
         var server = new McpServer(registry, concurrentRequests: true);
         var first = server.HandleRequestAsync(
             Request("{\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"blocking\"}}")
         );
-        await tool.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await tool.Entered.Task.WaitAsync(Eventually.Bound);
 
         // A damaged line that reuses the in-flight id is refused, but that id was dispatched.
         await new McpLineTransport(server).RunAsync(
@@ -224,7 +224,7 @@ public sealed class ProtocolBranchTests
         );
         var notDispatched = await NotDispatched(server, "7");
         tool.Release.SetResult();
-        await first.WaitAsync(TimeSpan.FromSeconds(5));
+        await first.WaitAsync(Eventually.Bound);
 
         Assert.False(notDispatched);
     }
@@ -233,28 +233,28 @@ public sealed class ProtocolBranchTests
     public async Task OperationStatusIsAnsweredWhileASerializedCallHoldsTheSlot()
     {
         var tool = new BlockingTool();
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(tool);
         registry.RegisterTool(new OperationStatusTool(registry.Operations, new PendingInvokeTracker()));
         var server = new McpServer(registry);
         var first = server.HandleRequestAsync(
             Request("{\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"blocking\"}}")
         );
-        await tool.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await tool.Entered.Task.WaitAsync(Eventually.Bound);
         try
         {
             var status = await server
                 .HandleRequestAsync(
                     Request("{\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"windows_operation_status\"}}")
                 )
-                .WaitAsync(TimeSpan.FromSeconds(3));
+                .WaitAsync(Eventually.Bound);
 
             Assert.Null(status!.Error);
         }
         finally
         {
             tool.Release.SetResult();
-            await first.WaitAsync(TimeSpan.FromSeconds(5));
+            await first.WaitAsync(Eventually.Bound);
         }
     }
 

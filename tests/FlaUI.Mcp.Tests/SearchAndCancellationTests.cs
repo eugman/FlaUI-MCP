@@ -18,7 +18,7 @@ public sealed class SearchAndCancellationTests
             _ => hasChildren ? new[] { 2 } : [],
             _ => true,
             _ => null,
-            new SearchBudget(10, TimeSpan.FromSeconds(1)),
+            new SearchBudget(10, TimeSpan.FromSeconds(1), () => TimeSpan.Zero),
             0,
             10
         );
@@ -133,7 +133,7 @@ public sealed class SearchAndCancellationTests
             n => n == 1 ? new[] { 2 } : [],
             n => n == 2,
             n => ElementQuery.RuntimeIdentity([42, n]),
-            new SearchBudget(10, TimeSpan.FromSeconds(1)),
+            new SearchBudget(10, TimeSpan.FromSeconds(1), () => TimeSpan.Zero),
             4,
             3
         );
@@ -151,7 +151,7 @@ public sealed class SearchAndCancellationTests
             _ => Array.Empty<int>(),
             _ => throw new InvalidOperationException("provider failed"),
             _ => null,
-            new SearchBudget(10, TimeSpan.FromSeconds(1)),
+            new SearchBudget(10, TimeSpan.FromSeconds(1), () => TimeSpan.Zero),
             4,
             3
         );

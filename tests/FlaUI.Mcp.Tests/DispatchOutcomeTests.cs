@@ -83,7 +83,12 @@ public sealed class DispatchOutcomeTests
     {
         // ClickTool's order: Select through the modal-aware invoker, then a physical fallback click
         // that Windows refuses to activate.
-        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd, ActivationAllowed = false };
+        var desktop = new FakeDesktop
+        {
+            ForegroundWindow = FakeDesktop.OtherHwnd,
+            ActivationAllowed = false,
+            Clock = new ManualTimeProvider(),
+        };
         using var installed = desktop.Install();
         var registry = new ToolRegistry();
         registry.RegisterTool(

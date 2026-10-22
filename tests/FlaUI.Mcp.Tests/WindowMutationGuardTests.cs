@@ -73,7 +73,7 @@ public sealed class WindowMutationGuardTests
         using (GuardedInput.AcquireLease())
         {
             var focus = Task.Run(() => sessions.FocusWindow(handle));
-            await Assert.ThrowsAsync<TimeoutException>(() => focus.WaitAsync(TimeSpan.FromSeconds(10)));
+            await Assert.ThrowsAsync<TimeoutException>(() => focus.WaitAsync(Eventually.Bound));
         }
 
         Assert.Equal(0, desktop.FocusAttempts);

@@ -120,6 +120,11 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override TimeProvider Time => Clock;
 
+    /// <summary>What a pause does instead of sleeping, such as moving a manual clock; null sleeps for real.</summary>
+    public Action<TimeSpan>? OnPause { get; set; }
+
+    public override void Pause(TimeSpan delay) => (OnPause ?? Thread.Sleep)(delay);
+
     /// <summary>The process that owns the other window.</summary>
     public int OtherProcessId { get; set; } = OtherPid;
 
