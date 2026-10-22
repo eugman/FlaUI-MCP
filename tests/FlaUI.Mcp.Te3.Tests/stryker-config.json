@@ -24,6 +24,7 @@
       "**/SearchPick.cs",
       "**/RowPager.cs",
       "**/RowSettle.cs",
+      "**/WalkMiss.cs",
       "**/KeyBudget.cs",
       "**/WindowShape.cs",
       "**/Te3Page.Rows.cs",

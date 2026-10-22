@@ -442,4 +442,33 @@ public sealed class ObjectSelectTests
         Assert.False(result.FallBack);
         Assert.Contains("no rows", result.Reason);
     }
+
+    [Fact]
+    public void AMissSaysWhatWasAskedForAndWhereTheSelectionEnded()
+    {
+        // Live: "No  'Brand'" (empty type), "nothing was selected" while the selection had moved to Table "Products",
+        // and keys misses "under table none" though a table row sat above the selection.
+        TreeRow[] rows =
+        [
+            new(0, "Tables", 1),
+            new(1, "Brands", 2),
+            new(2, "Brand", 3),
+            new(3, "Products", 2),
+            new(4, "5. Keys", 3),
+            new(5, "Sub Brand Name", 4),
+        ];
+
+        var text = WalkMiss.Text(
+            new WalkRequest("Brands", "Brand", "", "2. Something"),
+            "No row named 'Brand' in place.",
+            rows[5],
+            SearchPick.TableOf(rows, 5),
+            8
+        );
+
+        Assert.Contains("No object 'Brand' under table 'Brands' in folder '2. Something'", text);
+        Assert.Contains("ended on row 5 'Sub Brand Name' under table 'Products'", text);
+        Assert.Equal("Brands", SearchPick.TableOf(rows, 2));
+        Assert.Null(SearchPick.TableOf(rows, 0));
+    }
 }

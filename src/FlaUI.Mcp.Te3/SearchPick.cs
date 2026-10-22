@@ -17,6 +17,28 @@ internal static class SearchPick
     private const int TableDepth = 2;
 
     /// <summary>
+    /// The table <paramref name="index"/>'s row sits under: the nearest row above it at table depth under Tables, as
+    /// the rows read place it; null when none was read.
+    /// </summary>
+    public static string? TableOf(IReadOnlyList<TreeRow> rows, int index)
+    {
+        string? group = null;
+        string? table = null;
+        foreach (var row in rows.Where(r => r.Index <= index))
+        {
+            group = row.Depth == TablesDepth ? row.Value : group;
+            table = row.Depth switch
+            {
+                <= TablesDepth => null,
+                TableDepth => group == WalkPlace.TablesGroup ? row.Value : null,
+                _ => table,
+            };
+        }
+
+        return table;
+    }
+
+    /// <summary>
     /// The rows that can be the object, in tree order (a row named like the object at the exact depth the folder path
     /// gives, or any depth under the table when there is no folder): the caller selects each and lets Properties'
     /// Name and ObjectType decide. Empty when none; a row of unknown depth is never a candidate.

@@ -127,6 +127,26 @@ public sealed partial class Te3Page
 
         public Task Select(TreeRow row) => page.SelectRow(row, outOfTime);
 
+        // A miss's text, with one read of where the selection ended and its table from the rows above it (the paged
+        // rows are not kept here, so a table row above the screen is not known and the text says so).
+        public async Task<string> Miss(WalkRequest request, string? reason, int inputs)
+        {
+            TreeRow? row = null;
+            string? table = null;
+            try
+            {
+                var (rows, selected) = await ReadSelected();
+                row = rows?.FirstOrDefault(r => r.Index == selected);
+                table = row == null || rows == null ? null : SearchPick.TableOf(rows, row.Index);
+            }
+            catch (Exception error) when (error is InvalidOperationException or TimeoutException)
+            {
+                reason += " (reading where the selection ended failed: " + error.Message + ")";
+            }
+
+            return WalkMiss.Text(request, reason, row, table, inputs);
+        }
+
         public Task<SelectionView> View() => Task.Run(page.ViewSelection);
 
         public Task Wait(int ms) => Task.Delay(ms);

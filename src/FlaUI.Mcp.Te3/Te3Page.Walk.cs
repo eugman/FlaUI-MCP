@@ -59,11 +59,9 @@ public sealed partial class Te3Page
         var walk = await FindObject(request, cursor, elapsed);
         if (!walk.Found)
         {
+            var text = await new RowTree(this, () => true).Miss(request, walk.Reason, Inputs.Sent);
             await ClearTomSearchTyped();
-            throw new InvalidOperationException(
-                $"No {objectType} '{objectName}' under table '{table}'{(folder.Length > 0 ? $" in folder '{folder}'" : "")} "
-                    + $"in TOM Explorer ({DescribeWalk()}; {Inputs.Sent} inputs). {walk.Reason}"
-            );
+            throw new InvalidOperationException(text);
         }
 
         reportStep?.Invoke($"Found {objectType} '{objectName}' under '{walk.Table}' after {walk.RowsVisited} rows");
@@ -140,8 +138,6 @@ public sealed partial class Te3Page
         };
         return walk;
     }
-
-    private string DescribeWalk() => System.Text.Json.JsonSerializer.Serialize(WalkReport);
 
     /// <summary>te3_navigate object's arrival check: the last walk's object, in its folder, is still selected.</summary>
     private async Task VerifyObjectArrival()
