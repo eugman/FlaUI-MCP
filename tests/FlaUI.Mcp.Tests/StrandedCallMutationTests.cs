@@ -49,11 +49,13 @@ public sealed class StrandedCallMutationTests
     {
         var gate = new TaskCompletionSource();
         var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
-        registry.RegisterTool(new Gated(gate.Task));
+        var gated = new Gated(gate.Task);
+        registry.RegisterTool(gated);
         using var cancel = new CancellationTokenSource();
         try
         {
             var call = registry.ExecuteToolAsync("gated", null, cancel.Token);
+            await gated.Entered.Task.WaitAsync(Eventually.Bound);
             await cancel.CancelAsync();
             var result = await call.WaitAsync(Eventually.Bound);
 
@@ -71,12 +73,16 @@ public sealed class StrandedCallMutationTests
         var gate = new TaskCompletionSource();
         var clock = new ManualTimeProvider();
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(600), time: clock);
-        registry.RegisterTool(new Gated(gate.Task));
+        var gated = new Gated(gate.Task);
+        registry.RegisterTool(gated);
         Task? settled = null;
         using var cancel = new CancellationTokenSource();
         try
         {
             var call = registry.ExecuteToolAsync("gated", null, cancel.Token, whenStranded: task => settled = task);
+            // The tool must be running before the cancel: started after it, it would see the stop and end at once,
+            // freeing the slot early for a reason this test is not about.
+            await gated.Entered.Task.WaitAsync(Eventually.Bound);
             clock.Advance(TimeSpan.FromMilliseconds(400));
             await cancel.CancelAsync();
             await call.WaitAsync(Eventually.Bound);
