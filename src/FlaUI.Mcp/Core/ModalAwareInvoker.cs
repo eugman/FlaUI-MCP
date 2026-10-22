@@ -71,9 +71,8 @@ public static class ModalAwareInvoker
     /// </summary>
     public static readonly TimeSpan LateModalGrace = TimeSpan.FromMilliseconds(300);
 
-    // The calls that can open a dialog, by the verb their description starts with ("Invoke on 'Save'"). A SetValue,
-    // ScrollIntoView, focus or close does not, so it is not held under the lease for the watch.
-    private static readonly string[] OpensDialogs = ["Invoke", "Toggle", "Select", "Expand"];
+    // Only known non-modal calls skip the watch. Unknown descriptions from hosts are watched by default.
+    private static readonly string[] NoLateModalWatch = ["SetValue", "ScrollIntoView", "Focus"];
 
     /// <summary>
     /// Execute a pattern call with modal detection.
@@ -159,7 +158,7 @@ public static class ModalAwareInvoker
     /// <summary>
     /// A modal dialog the completed call opened a moment later, or null: polled for <see cref="LateModalGrace"/> on
     /// the desktop's clock (a fake moves it), so the caller can say the state it read back may not stand. Only for
-    /// a call that can open one (<see cref="OpensDialogs"/>) in a known process. A cancellation requested
+    /// a call other than a known non-modal pattern in a known process. A cancellation requested
     /// meanwhile ends the watch without turning the completed, counted call into a cancelled reply.
     /// </summary>
     private static string? LateModal(
@@ -170,7 +169,7 @@ public static class ModalAwareInvoker
         InputDesktop desktop
     )
     {
-        if (processId == 0 || !OpensDialogs.Contains(description.Split(' ')[0], StringComparer.Ordinal))
+        if (processId == 0 || NoLateModalWatch.Contains(description.Split(' ')[0], StringComparer.Ordinal))
         {
             return null;
         }

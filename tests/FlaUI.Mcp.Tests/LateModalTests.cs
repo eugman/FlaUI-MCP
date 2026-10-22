@@ -107,7 +107,6 @@ public sealed class LateModalTests
     [InlineData("SetValue")]
     [InlineData("ScrollIntoView")]
     [InlineData("Focus on 'Name'")]
-    [InlineData("Close on 'Main'")]
     public void ACallThatCannotOpenADialogIsNotWatched(string description)
     {
         var (desktop, clock) = StillDesktop();
@@ -129,7 +128,7 @@ public sealed class LateModalTests
 
         Assert.Equal(PatternCallOutcome.Completed, result.Outcome);
         Assert.Null(result.ModalTitle);
-        // The baseline only: the lease is not held for a watch.
+        // The baseline only: these known non-modal calls skip the watch.
         Assert.Equal(1, reads);
         Assert.Equal(TimeSpan.Zero, clock.GetElapsedTime(started));
     }
@@ -138,6 +137,8 @@ public sealed class LateModalTests
     [InlineData("Invoke on 'Save'")]
     [InlineData("Select on 'Row'")]
     [InlineData("Expand on 'Node'")]
+    [InlineData("Close on 'Main'")]
+    [InlineData("CustomPattern on 'Action'")]
     public void EveryCallThatCanOpenADialogIsWatched(string description)
     {
         var (desktop, clock) = StillDesktop();
