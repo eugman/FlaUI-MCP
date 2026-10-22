@@ -14,7 +14,8 @@
           "scroll",
           "drag",
           "click"
-        ]
+        ],
+        "description": "park, move, hover, scroll, drag or click; see the tool description for what each needs."
       },
       "handle": {
         "type": "string",

@@ -39,21 +39,21 @@ public sealed class ProtocolCancellationTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var tool = new FakeTool(entered, release, ended);
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(tool);
         var server = new McpServer(registry);
         var call = server.HandleRequestAsync(
             Request("{\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"fake\"}}")
         );
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(Eventually.Bound);
         Assert.Null(
             await server.HandleRequestAsync(
                 Request("{\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":7}}")
             )
         );
-        Assert.Null(await call.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Null(await call.WaitAsync(Eventually.Bound));
         release.SetResult();
-        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await ended.Task.WaitAsync(Eventually.Bound);
         Assert.False(tool.Mutated);
     }
 
@@ -63,7 +63,7 @@ public sealed class ProtocolCancellationTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(new FakeTool(entered, release, ended));
         var firstEndedWhenSecondRan = new TaskCompletionSource<bool>(
             TaskCreationOptions.RunContinuationsAsynchronously
@@ -73,11 +73,11 @@ public sealed class ProtocolCancellationTests
         var first = server.HandleRequestAsync(
             Request("{\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"fake\"}}")
         );
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(Eventually.Bound);
         await server.HandleRequestAsync(
             Request("{\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":7}}")
         );
-        Assert.Null(await first.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Null(await first.WaitAsync(Eventually.Bound));
 
         // The cancelled tool has not returned yet, so it still holds the serial slot and the next
         // call can only run once it ends.
@@ -86,8 +86,8 @@ public sealed class ProtocolCancellationTests
             Request("{\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"immediate\"}}")
         );
         release.SetResult();
-        Assert.NotNull(await second.WaitAsync(TimeSpan.FromSeconds(5)));
-        Assert.True(await firstEndedWhenSecondRan.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.NotNull(await second.WaitAsync(Eventually.Bound));
+        Assert.True(await firstEndedWhenSecondRan.Task.WaitAsync(Eventually.Bound));
     }
 
     [Fact]

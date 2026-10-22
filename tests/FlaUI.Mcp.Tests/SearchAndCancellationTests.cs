@@ -18,7 +18,7 @@ public sealed class SearchAndCancellationTests
             _ => hasChildren ? new[] { 2 } : [],
             _ => true,
             _ => null,
-            new SearchBudget(10, TimeSpan.FromSeconds(1)),
+            new SearchBudget(10, TimeSpan.FromSeconds(1), () => TimeSpan.Zero),
             0,
             10
         );
@@ -48,15 +48,20 @@ public sealed class SearchAndCancellationTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var mutated = false;
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100));
-        registry.RegisterTool(new DelayedMutation(release.Task, finished, () => mutated = true));
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock);
+        var delayed = new DelayedMutation(release.Task, finished, () => mutated = true);
+        registry.RegisterTool(delayed);
         try
         {
-            var result = await registry.ExecuteToolAsync("delayed", null);
+            var call = registry.ExecuteToolAsync("delayed", null);
+            await delayed.Entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            var result = await call.WaitAsync(Eventually.Bound);
             Assert.True(result.IsError);
             Assert.Contains("timed out", result.Content[0].Text);
             release.SetResult();
-            await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await finished.Task.WaitAsync(Eventually.Bound);
             Assert.False(mutated);
         }
         finally
@@ -67,6 +72,8 @@ public sealed class SearchAndCancellationTests
 
     private sealed class DelayedMutation(Task release, TaskCompletionSource finished, Action mutate) : ToolBase
     {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public override string Name => "delayed";
         public override string Description => "Fake delayed provider, no desktop access";
         public override object InputSchema => new { };
@@ -75,6 +82,7 @@ public sealed class SearchAndCancellationTests
         {
             try
             {
+                Entered.TrySetResult();
                 await release;
                 MutationGuard.Execute(() => { }, mutate);
                 return TextResult("done");
@@ -125,7 +133,7 @@ public sealed class SearchAndCancellationTests
             n => n == 1 ? new[] { 2 } : [],
             n => n == 2,
             n => ElementQuery.RuntimeIdentity([42, n]),
-            new SearchBudget(10, TimeSpan.FromSeconds(1)),
+            new SearchBudget(10, TimeSpan.FromSeconds(1), () => TimeSpan.Zero),
             4,
             3
         );
@@ -143,7 +151,7 @@ public sealed class SearchAndCancellationTests
             _ => Array.Empty<int>(),
             _ => throw new InvalidOperationException("provider failed"),
             _ => null,
-            new SearchBudget(10, TimeSpan.FromSeconds(1)),
+            new SearchBudget(10, TimeSpan.FromSeconds(1), () => TimeSpan.Zero),
             4,
             3
         );

@@ -117,14 +117,22 @@ public sealed class DispatchAccountingTests
     public void APatternCallStillValidatingIsTimedOutPendingNotCompleted()
     {
         using var hold = new ManualResetEventSlim();
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop { Clock = clock }.Install();
+        var grace = TimeSpan.FromMilliseconds(100);
         PatternCallResult result = null!;
         var counted = Counted(() =>
-            result = ModalAwareInvoker.Execute(
-                0,
-                "Invoke on 'OK'",
-                () => MutationGuard.Execute(() => hold.Wait(), () => { }),
-                new PendingInvokeTracker(),
-                TimeSpan.FromMilliseconds(100)
+            result = Eventually.PastDeadline(
+                clock,
+                grace,
+                () =>
+                    ModalAwareInvoker.Execute(
+                        0,
+                        "Invoke on 'OK'",
+                        () => MutationGuard.Execute(() => hold.Wait(), () => { }),
+                        new PendingInvokeTracker(),
+                        grace
+                    )
             )
         );
         hold.Set();
@@ -161,7 +169,7 @@ public sealed class DispatchAccountingTests
                 {
                     if (polls++ > 0)
                     {
-                        sent.Wait(TimeSpan.FromSeconds(10));
+                        sent.Wait(Eventually.Bound);
                     }
 
                     return [];
@@ -231,7 +239,7 @@ public sealed class DispatchAccountingTests
         var result = await registry.ExecuteToolAsync("windows_paste", Args(new { handle, text = "abc" }));
 
         Assert.True(result.IsError);
-        Assert.Equal("abc", desktop.ClipboardText);
+        Assert.Equal("abc", desktop.ClipboardWritten);
         Assert.Contains("The clipboard now holds that text", result.Content[0].Text);
         Assert.Equal(0, desktop.Dispatched);
         Assert.Equal(1, result.Outcome!.InputsSent);

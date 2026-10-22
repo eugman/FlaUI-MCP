@@ -1,6 +1,7 @@
 using FlaUI.Mcp.Core;
 using FlaUI.Mcp.Tools;
 using Xunit.Abstractions;
+using static FlaUI.Mcp.IntegrationTests.PointerTestSupport;
 
 namespace FlaUI.Mcp.IntegrationTests;
 
@@ -74,7 +75,7 @@ public class SnapshotTests
         {
             var clickTool = new ClickTool(_fixture.Elements);
             await _fixture.CallTool(clickTool, new { @ref = tabRef });
-            await Task.Delay(100);
+            WaitFor(() => _fixture.TakeSnapshot(_fixture.WinFormsHandle).Contains("Click Me"));
         }
 
         var snapshot2 = _fixture.TakeSnapshot(_fixture.WinFormsHandle);
@@ -95,17 +96,12 @@ public class SnapshotTests
         await _fixture.CallTool(clickTool, new { @ref = gridTabRef });
 
         // Poll for grid content to appear after tab switch
-        var sw = System.Diagnostics.Stopwatch.StartNew();
         string snapshot2 = "";
-        while (sw.ElapsedMilliseconds < 5000)
+        WaitFor(() =>
         {
-            await Task.Delay(100);
             snapshot2 = _fixture.TakeSnapshot(_fixture.WinFormsHandle);
-            if (snapshot2.Contains("Test Data"))
-            {
-                break;
-            }
-        }
+            return snapshot2.Contains("Test Data");
+        });
 
         _output.WriteLine(snapshot2[..Math.Min(2000, snapshot2.Length)]);
         Assert.Contains("Test Data", snapshot2);

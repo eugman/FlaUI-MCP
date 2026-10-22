@@ -53,7 +53,7 @@ public sealed class ToolOutcomeTests
             // must not quarantine completed dispatch and deadlock explicit dialog recovery.
             Assert.NotEqual(true, (await registry.ExecuteToolAsync("recovery-probe", null)).IsError);
             release.Set();
-            Assert.True(SpinWait.SpinUntil(() => !tracker.TryGetPending(123, out _), TimeSpan.FromSeconds(3)));
+            Eventually.WaitUntil(() => !tracker.TryGetPending(123, out _), "the stranded call to clear");
             status = JsonSerializer.SerializeToElement(registry.Operations.Status(parent, tracker))[0];
             Assert.Equal("idle", status.GetProperty("provider").GetString());
             Assert.Equal("ok", status.GetProperty("status").GetString());
@@ -112,7 +112,7 @@ public sealed class ToolOutcomeTests
                 {
                     if (polls++ > 0)
                     {
-                        counted.Wait(TimeSpan.FromSeconds(10));
+                        counted.Wait(Eventually.Bound);
                     }
 
                     return Array.Empty<Win32WindowInfo>();

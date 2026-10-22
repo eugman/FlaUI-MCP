@@ -128,6 +128,12 @@ internal class InputDesktop
 
     public virtual AutomationElement? ParentOf(AutomationElement element) => element.Parent;
 
+    /// <summary>The clock that pattern-call waits read their deadlines from; a fake desktop can hold it still.</summary>
+    public virtual TimeProvider Time => TimeProvider.System;
+
+    /// <summary>Wait between polls of a settling read; a fake desktop can move its clock instead.</summary>
+    public virtual void Pause(TimeSpan delay) => Thread.Sleep(delay);
+
     /// <summary>A process's name for a refusal, or null when it cannot be read (exited, protected, no such PID).</summary>
     public virtual string? ProcessNameOf(int processId) => ProcessPolicy.TryGetProcessName(processId);
 

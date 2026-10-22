@@ -20,17 +20,17 @@ public sealed class StatusToolExemptionTests
     {
         var (server, blocking) = Server(new Immediate("host_status", McpToolAnnotations.Status));
         var first = server.HandleRequestAsync(Call(1, "blocking"));
-        await blocking.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await blocking.Entered.Task.WaitAsync(Eventually.Bound);
         try
         {
-            var status = await server.HandleRequestAsync(Call(2, "host_status")).WaitAsync(TimeSpan.FromSeconds(3));
+            var status = await server.HandleRequestAsync(Call(2, "host_status")).WaitAsync(Eventually.Bound);
 
             Assert.Null(status!.Error);
         }
         finally
         {
             blocking.Release.SetResult();
-            await first.WaitAsync(TimeSpan.FromSeconds(5));
+            await first.WaitAsync(Eventually.Bound);
         }
     }
 
@@ -39,17 +39,19 @@ public sealed class StatusToolExemptionTests
     {
         var (server, blocking) = Server(new Immediate("host_find", McpToolAnnotations.ReadOnly));
         var first = server.HandleRequestAsync(Call(1, "blocking"));
-        await blocking.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await blocking.Entered.Task.WaitAsync(Eventually.Bound);
         var find = server.HandleRequestAsync(Call(2, "host_find"));
         try
         {
-            Assert.False(find.Wait(TimeSpan.FromMilliseconds(500)));
+            // Queued at the serial slot, which the blocking call holds: not run, and not exempt.
+            await Eventually.WaitUntilAsync(() => server.SerialWaiters == 1, "the read-only call to queue");
+            Assert.False(find.IsCompleted);
         }
         finally
         {
             blocking.Release.SetResult();
-            await first.WaitAsync(TimeSpan.FromSeconds(5));
-            await find.WaitAsync(TimeSpan.FromSeconds(5));
+            await first.WaitAsync(Eventually.Bound);
+            await find.WaitAsync(Eventually.Bound);
         }
     }
 
@@ -71,7 +73,7 @@ public sealed class StatusToolExemptionTests
     public async Task AtCapacityOnlyAStatusToolCallIsAnswered(string method, bool refused)
     {
         var blocking = new Blocking();
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(blocking);
         registry.RegisterTool(new Immediate("host_status", McpToolAnnotations.Status));
         var server = new McpServer(registry, concurrentRequests: true);
@@ -79,16 +81,19 @@ public sealed class StatusToolExemptionTests
             .Range(1, McpLineTransport.MaxRequestsInFlight)
             .Select(id => Line(id, "tools/call", "blocking"))
             .Append(Line(99, method, "host_status"));
-        var output = new StringWriter();
+        var output = new LockedOutput();
 
         var run = new McpLineTransport(server).RunAsync(
             new StringReader(string.Join("\n", lines) + "\n"),
             output,
             CancellationToken.None
         );
-        await WaitFor(() => output.ToString().Contains("\"id\":99", StringComparison.Ordinal));
+        await Eventually.WaitUntilAsync(
+            () => output.ToString().Contains("\"id\":99", StringComparison.Ordinal),
+            "the response"
+        );
         blocking.Release.SetResult();
-        await run.WaitAsync(TimeSpan.FromSeconds(10));
+        await run.WaitAsync(Eventually.Bound);
 
         var answer = output
             .ToString()
@@ -109,19 +114,10 @@ public sealed class StatusToolExemptionTests
             }
         );
 
-    private static async Task WaitFor(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!condition() && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(20);
-        }
-    }
-
     private static (McpServer Server, Blocking Blocking) Server(ITool status)
     {
         var blocking = new Blocking();
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(blocking);
         registry.RegisterTool(status);
         return (new McpServer(registry), blocking);

@@ -17,12 +17,19 @@ public sealed class KeepAwake : IDisposable
     private readonly Action _acquire;
     private readonly Action _release;
     private readonly IDisposable? _ownedResource;
-    private readonly System.Threading.Timer _timer;
-    private long _deadlineTicks;
+    private readonly TimeProvider _time;
+    private readonly ITimer _timer;
+    private long _pokedAt;
     private bool _active;
     private bool _disposed;
 
-    public KeepAwake(TimeSpan holdDuration, Action acquire, Action release, IDisposable? ownedResource = null)
+    public KeepAwake(
+        TimeSpan holdDuration,
+        Action acquire,
+        Action release,
+        IDisposable? ownedResource = null,
+        TimeProvider? time = null
+    )
     {
         if (holdDuration <= TimeSpan.Zero)
         {
@@ -33,12 +40,8 @@ public sealed class KeepAwake : IDisposable
         _acquire = acquire;
         _release = release;
         _ownedResource = ownedResource;
-        _timer = new System.Threading.Timer(
-            _ => OnTimerFired(),
-            null,
-            Timeout.InfiniteTimeSpan,
-            Timeout.InfiniteTimeSpan
-        );
+        _time = time ?? TimeProvider.System;
+        _timer = _time.CreateTimer(_ => OnTimerFired(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>
@@ -88,7 +91,7 @@ public sealed class KeepAwake : IDisposable
                 _active = true;
             }
 
-            _deadlineTicks = Environment.TickCount64 + (long)_holdDuration.TotalMilliseconds;
+            _pokedAt = _time.GetTimestamp();
             _timer.Change(_holdDuration, Timeout.InfiniteTimeSpan);
         }
     }
@@ -104,10 +107,10 @@ public sealed class KeepAwake : IDisposable
 
             // A Poke may have raced with this callback; only release once the
             // most recently extended deadline has actually passed.
-            var remainingMs = _deadlineTicks - Environment.TickCount64;
-            if (remainingMs > 0)
+            var remaining = _holdDuration - _time.GetElapsedTime(_pokedAt);
+            if (remaining > TimeSpan.Zero)
             {
-                _timer.Change(TimeSpan.FromMilliseconds(remainingMs), Timeout.InfiniteTimeSpan);
+                _timer.Change(remaining, Timeout.InfiniteTimeSpan);
                 return;
             }
 

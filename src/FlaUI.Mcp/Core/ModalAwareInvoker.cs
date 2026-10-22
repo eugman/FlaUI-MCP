@@ -111,7 +111,15 @@ public static class ModalAwareInvoker
             TaskScheduler.Default
         );
 
-        var waited = AwaitResult(task, processId, baseline, windowEnumerator, DateTime.UtcNow + grace);
+        var waited = AwaitResult(
+            task,
+            processId,
+            baseline,
+            windowEnumerator,
+            desktop.Time,
+            desktop.Time.GetUtcNow() + grace,
+            (int)Math.Ceiling(grace / PollInterval)
+        );
         if (waited is WaitOutcome<PatternCallResult>.Done done)
         {
             return done.Value;
@@ -225,18 +233,22 @@ public static class ModalAwareInvoker
 
     /// <summary>
     /// Wait for the call until it returns (Done), a modal appears (Changed, with its title), or the deadline
-    /// passes (TimedOut, with the last window-read error). A call that failed within the wait is rethrown.
+    /// passes (TimedOut, with the last window-read error). A call that failed within the wait is rethrown. The
+    /// polls are capped at the grace period over the poll interval as well, so a clock that never moves (a fake
+    /// held still) cannot keep a hung call's wait going.
     /// </summary>
     private static WaitOutcome<PatternCallResult> AwaitResult(
         Task task,
         int processId,
         WindowBaseline baseline,
         Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
-        DateTime deadline
+        TimeProvider time,
+        DateTimeOffset deadline,
+        int maxPolls
     )
     {
         Exception? lastError = null;
-        while (true)
+        for (var polls = 1; ; polls++)
         {
             // WaitAny (unlike Task.Wait) does not throw for faulted tasks,
             // letting us rethrow the original exception un-wrapped below
@@ -267,7 +279,7 @@ public static class ModalAwareInvoker
                 }
             }
 
-            if (DateTime.UtcNow >= deadline)
+            if (time.GetUtcNow() >= deadline || polls >= maxPolls)
             {
                 return new WaitOutcome<PatternCallResult>.TimedOut(null, lastError);
             }

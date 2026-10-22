@@ -24,24 +24,38 @@ public class KeepAwakeTests
     [Fact]
     public void Poke_AfterIdlePeriod_Releases()
     {
-        var released = new ManualResetEventSlim();
-        using var keepAwake = new KeepAwake(TimeSpan.FromMilliseconds(50), () => { }, released.Set);
+        var clock = new ManualTimeProvider();
+        var released = 0;
+        using var keepAwake = new KeepAwake(TimeSpan.FromMilliseconds(50), () => { }, () => released++, time: clock);
 
         keepAwake.Poke();
+        clock.Advance(TimeSpan.FromMilliseconds(49));
+        clock.WaitForCallbacks();
+        Assert.Equal(0, released);
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        clock.WaitForCallbacks();
 
-        Assert.True(released.Wait(TimeSpan.FromSeconds(5)), "Release was not called after the hold duration elapsed.");
+        Assert.Equal(1, released);
         Assert.False(keepAwake.IsActive);
     }
 
     [Fact]
     public void Poke_AfterRelease_AcquiresAgain()
     {
+        var clock = new ManualTimeProvider();
         var acquired = 0;
-        var released = new ManualResetEventSlim();
-        using var keepAwake = new KeepAwake(TimeSpan.FromMilliseconds(50), () => acquired++, released.Set);
+        var released = 0;
+        using var keepAwake = new KeepAwake(
+            TimeSpan.FromMilliseconds(50),
+            () => acquired++,
+            () => released++,
+            time: clock
+        );
 
         keepAwake.Poke();
-        Assert.True(released.Wait(TimeSpan.FromSeconds(5)));
+        clock.Advance(TimeSpan.FromMilliseconds(50));
+        clock.WaitForCallbacks();
+        Assert.Equal(1, released);
 
         keepAwake.Poke();
 
@@ -52,19 +66,23 @@ public class KeepAwakeTests
     [Fact]
     public void Poke_ExtendsHold_NoReleaseWhileActivityContinues()
     {
-        var released = new ManualResetEventSlim();
-        using var keepAwake = new KeepAwake(TimeSpan.FromMilliseconds(200), () => { }, released.Set);
+        var clock = new ManualTimeProvider();
+        var released = 0;
+        using var keepAwake = new KeepAwake(TimeSpan.FromMilliseconds(200), () => { }, () => released++, time: clock);
 
-        // Keep poking at intervals well within the hold duration.
+        // Poke at intervals inside the hold; together they run well past one hold.
         for (var i = 0; i < 5; i++)
         {
             keepAwake.Poke();
-            Thread.Sleep(50);
-            Assert.False(released.IsSet, $"Released too early on iteration {i}.");
+            clock.Advance(TimeSpan.FromMilliseconds(150));
+            clock.WaitForCallbacks();
+            Assert.True(released == 0, $"Released too early on iteration {i}.");
         }
 
         Assert.True(keepAwake.IsActive);
-        Assert.True(released.Wait(TimeSpan.FromSeconds(5)), "Release was not called after activity stopped.");
+        clock.Advance(TimeSpan.FromMilliseconds(50));
+        clock.WaitForCallbacks();
+        Assert.Equal(1, released);
     }
 
     [Fact]

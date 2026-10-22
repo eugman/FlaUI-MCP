@@ -3,6 +3,7 @@ using System.Text.Json;
 using FlaUI.Mcp.Core;
 using FlaUI.Mcp.Tools;
 using Xunit.Abstractions;
+using static FlaUI.Mcp.IntegrationTests.PointerTestSupport;
 
 namespace FlaUI.Mcp.IntegrationTests;
 
@@ -40,7 +41,10 @@ public class ModalDialogTests
         var dialogsTabRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Dialogs");
         Assert.NotNull(dialogsTabRef);
         await _fixture.CallTool(clickTool, new { @ref = dialogsTabRef });
-        await Task.Delay(250);
+        Assert.True(
+            WaitFor(() => _fixture.FindRefByName(_fixture.WinFormsHandle, "Open Modal Dialog") != null),
+            "The Dialogs tab did not show its buttons."
+        );
 
         var modalButtonRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Open Modal Dialog");
         Assert.NotNull(modalButtonRef);
@@ -110,14 +114,8 @@ public class ModalDialogTests
         }
 
         // 4. Once the dialog closes, the pending invoke completes and tools recover
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (tracker.TryGetPending(processId, out _) && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(100);
-        }
-
-        Assert.False(
-            tracker.TryGetPending(processId, out _),
+        Assert.True(
+            WaitFor(() => !tracker.TryGetPending(processId, out _)),
             "Pending invoke did not clear after the dialog was dismissed."
         );
 
@@ -138,7 +136,10 @@ public class ModalDialogTests
         var dialogsTabRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Dialogs");
         Assert.NotNull(dialogsTabRef);
         await _fixture.CallTool(clickTool, new { @ref = dialogsTabRef });
-        await Task.Delay(250);
+        Assert.True(
+            WaitFor(() => _fixture.FindRefByName(_fixture.WinFormsHandle, "Choose Options...") != null),
+            "The Dialogs tab did not show its buttons."
+        );
         var buttonRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Choose Options...");
         Assert.NotNull(buttonRef);
 
@@ -149,25 +150,15 @@ public class ModalDialogTests
             _output.WriteLine($"Click result: {clickResult}");
             Assert.Contains("Clicked Choose Options...", clickResult);
 
-            Win32WindowInfo? modal = null;
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (
-                (
-                    modal = Win32Desktop
-                        .GetTopLevelWindows(processId)
-                        .SingleOrDefault(w => w.Title == "Test Modal Dialog")
-                ) == null
-                && DateTime.UtcNow < deadline
-            )
-            {
-                await Task.Delay(100);
-            }
-
+            Win32WindowInfo? Modal() =>
+                Win32Desktop.GetTopLevelWindows(processId).SingleOrDefault(w => w.Title == "Test Modal Dialog");
+            WaitFor(() => Modal() != null);
+            var modal = Modal();
             Assert.NotNull(modal);
             Assert.False(tracker.TryGetPending(processId, out _));
 
             // The provider stays free, so the dialog itself can be inspected.
-            var modalHandle = _fixture.Session.RegisterNativeWindow(modal!.Hwnd, processId);
+            var modalHandle = _fixture.Session.RegisterNativeWindow(modal.Hwnd, processId);
             var snapshot = await _fixture.CallTool(snapshotTool, new { handle = modalHandle });
             _output.WriteLine($"Dialog snapshot: {snapshot}");
             Assert.Contains("This is a test modal dialog.", snapshot);
@@ -181,7 +172,10 @@ public class ModalDialogTests
             {
                 var handle = _fixture.Session.RegisterNativeWindow(dialog.Hwnd, processId);
                 Assert.Contains("Sent keys", await _fixture.CallTool(sendKeysTool, new { handle, chord = "Enter" }));
-                await Task.Delay(250);
+                Assert.True(
+                    WaitFor(() => Win32Desktop.GetTopLevelWindows(processId).All(w => w.Title != "Test Modal Dialog")),
+                    "The modal dialog did not close."
+                );
             }
         }
     }
@@ -200,7 +194,10 @@ public class ModalDialogTests
         var dialogsTabRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Dialogs");
         Assert.NotNull(dialogsTabRef);
         await _fixture.CallTool(clickTool, new { @ref = dialogsTabRef });
-        await Task.Delay(250);
+        Assert.True(
+            WaitFor(() => _fixture.FindRefByName(_fixture.WinFormsHandle, "Open Modeless Dialog") != null),
+            "The Dialogs tab did not show its buttons."
+        );
 
         var modelessButtonRef = _fixture.FindRefByName(_fixture.WinFormsHandle, "Open Modeless Dialog");
         Assert.NotNull(modelessButtonRef);
@@ -215,13 +212,7 @@ public class ModalDialogTests
             Assert.Contains("Invoked", clickResult);
 
             // Provider is not blocked: no pending invoke remains after a moment
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (tracker.TryGetPending(processId, out _) && DateTime.UtcNow < deadline)
-            {
-                await Task.Delay(50);
-            }
-
-            Assert.False(tracker.TryGetPending(processId, out _));
+            Assert.True(WaitFor(() => !tracker.TryGetPending(processId, out _)));
         }
         finally
         {
@@ -230,7 +221,10 @@ public class ModalDialogTests
             var handle = _fixture.Session.RegisterNativeWindow(dialog.Hwnd, processId);
             var dismissed = await _fixture.CallTool(sendKeysTool, new { handle, chord = "Alt+F4" });
             Assert.Contains("Sent keys", dismissed);
-            await Task.Delay(250);
+            Assert.True(
+                WaitFor(() => Win32Desktop.GetTopLevelWindows(processId).All(w => w.Title != "Test Modeless Dialog")),
+                "The modeless dialog did not close."
+            );
         }
     }
 

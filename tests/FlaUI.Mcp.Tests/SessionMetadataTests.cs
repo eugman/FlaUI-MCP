@@ -70,7 +70,7 @@ public sealed class SessionMetadataTests
             _ =>
             {
                 // Recovery on another thread must not wait for the UIA call's metadata lock.
-                Assert.True(Task.Run(() => sessions.ForgetWindow(handle)).Wait(TimeSpan.FromSeconds(3)));
+                Assert.True(Task.Run(() => sessions.ForgetWindow(handle)).Wait(Eventually.Bound));
                 return Window();
             },
             _ => { }
@@ -124,7 +124,7 @@ public sealed class SessionMetadataTests
             _ => throw new Exception("Window is cached"),
             _ =>
             {
-                Assert.True(Task.Run(() => sessions.ForgetWindow(handle)).Wait(TimeSpan.FromSeconds(3)));
+                Assert.True(Task.Run(() => sessions.ForgetWindow(handle)).Wait(Eventually.Bound));
             }
         );
         Assert.Null(result);

@@ -10,12 +10,14 @@
 # stopped before its first test when its log shows a solution context, another test project, or more
 # tests than the offline project has.
 #
-# The one deliberate exception is -Part pointer-integration. The pointer code's mutants need real UI
-# Automation, so that part mutates the pointer files against tests/FlaUI.Mcp.IntegrationTests, which
-# launches the WinForms and WPF test apps and takes the desktop. Run it only with the desktop free and the
-# person at the machine agreeing. It is never part of -Part all, uses stryker-config.pointer-integration.json
-# (one test session, 180 s extra per-mutant timeout), defaults to a 3-hour cap, runs with the real desktop
-# (FLAUI_OFFLINE_TESTS unset), and closes any test app left behind when it ends.
+# The one deliberate exception is the pointer-integration work, in two parts: -Part clicks and -Part input
+# (-Part pointer-integration runs both, one after the other). The pointer code's mutants need real UI
+# Automation, so these parts mutate the pointer files against tests/FlaUI.Mcp.IntegrationTests, which
+# launches the WinForms and WPF test apps and takes the desktop. Run them only with the desktop free and the
+# person at the machine agreeing. They are never part of -Part all, use stryker-config.pointer-integration.json
+# (one test session, 180 s extra per-mutant timeout), default to a 3-hour cap each, run with the real desktop
+# (FLAUI_OFFLINE_TESTS unset), and close any test app left behind when each ends. The whole set would take
+# about six hours of desktop, past one part's cap; Stryker writes no report for a run it does not finish.
 param([string]$Part = 'all', [int]$Minutes = 0, [int]$Concurrency = 0)
 $ErrorActionPreference = 'Stop'
 $root = git rev-parse --show-toplevel
@@ -30,6 +32,11 @@ $parts = [ordered]@{
     protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolRegistrySchemas', 'ToolRegistryStrand', 'ToolBase', 'ToolFacts', 'Proof'
     pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'PointerActions'
     keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
+}
+# The pointer files against the integration tests, split so each part finishes inside its own cap.
+$integrationParts = [ordered]@{
+    clicks = 'ClickTool', 'ClickToolReplies', 'ClickPoint', 'ClickHitTest'
+    input = 'GuardedInput', 'MouseTool', 'PointerActions'
 }
 
 function RemoveWorktree($path) {
@@ -169,14 +176,16 @@ $failed = 0
 try {
     $env:UseSharedCompilation = 'false'
     $env:MSBUILDDISABLENODEREUSE = '1'
-    if ($Part -eq 'pointer-integration') {
+    if ($integrationParts.Contains($Part) -or $Part -eq 'pointer-integration') {
         # The deliberate exception: real UI Automation and the real desktop, so the switch is unset.
         $env:FLAUI_OFFLINE_TESTS = $null
         $expected = TestCount 'tests/FlaUI.Mcp.IntegrationTests' @()
-        Write-Host "Integration project: $expected tests. This part takes the desktop."
-        $files = $parts.pointer + 'ClickPoint', 'GuardedInput'
-        $code = RunPart 'pointer-integration' $files $expected 'tests/FlaUI.Mcp.IntegrationTests' $integrationProject 'stryker-config.pointer-integration.json' 180
-        if ($code -ne 0) { $failed = 1 }
+        Write-Host "Integration project: $expected tests. These parts take the desktop."
+        foreach ($name in $integrationParts.Keys) {
+            if ($Part -ne 'pointer-integration' -and $Part -ne $name) { continue }
+            $code = RunPart $name $integrationParts[$name] $expected 'tests/FlaUI.Mcp.IntegrationTests' $integrationProject 'stryker-config.pointer-integration.json' 180
+            if ($code -ne 0) { $failed = 1 }
+        }
     }
     else {
         $env:FLAUI_OFFLINE_TESTS = '1'

@@ -12,6 +12,10 @@ public class McpServer
     private readonly string _serverName;
     private readonly bool _concurrentRequests;
     private readonly SemaphoreSlim serialRequests = new(1, 1);
+    private int serialWaiters;
+
+    /// <summary>Calls waiting for the serial slot right now; a test reads it to see a call queued, not run.</summary>
+    internal int SerialWaiters => Volatile.Read(ref serialWaiters);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> cancellations = new();
     private readonly ConcurrentDictionary<string, byte> notDispatched = new();
     private readonly ConcurrentQueue<string> cancelledBeforeDispatch = new();
@@ -119,7 +123,15 @@ public class McpServer
         {
             if (serialized)
             {
-                await serialRequests.WaitAsync(stop.Token);
+                Interlocked.Increment(ref serialWaiters);
+                try
+                {
+                    await serialRequests.WaitAsync(stop.Token);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref serialWaiters);
+                }
             }
 
             Task? stranded = null;

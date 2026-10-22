@@ -35,13 +35,13 @@ public sealed class RequestRecoveryTests
     public async Task QueuedCancellationIsQueryableAndDoesNotInvokeAnotherTool()
     {
         var tool = new FakeTool { Block = true };
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider());
         registry.RegisterTool(tool);
         var server = new McpServer(registry);
         var first = server.HandleRequestAsync(
             Request("{\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"fake\"}}")
         );
-        await tool.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await tool.Entered.Task.WaitAsync(Eventually.Bound);
         try
         {
             var second = server.HandleRequestAsync(
@@ -50,7 +50,7 @@ public sealed class RequestRecoveryTests
             await server.HandleRequestAsync(
                 Request("{\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":2}}")
             );
-            Assert.Null(await second.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.Null(await second.WaitAsync(Eventually.Bound));
             var response = await server.HandleRequestAsync(
                 Request("{\"id\":3,\"method\":\"flaui/operations/status\",\"params\":{\"requestKey\":\"2\"}}")
             );

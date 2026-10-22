@@ -90,6 +90,11 @@ public sealed class MutationConfigTests
         "Tools/KeyNames.cs",
         "Tools/LaunchTool.cs",
         "Tools/OperationStatusTool.cs",
+        "Tools/MouseToolArguments.cs",
+        "Tools/ScreenshotCapture.cs",
+        "Tools/ScreenshotChecks.cs",
+        "Tools/ScreenshotFinish.cs",
+        "Tools/ScreenshotRequest.cs",
         "Tools/ScreenshotTool.cs",
         "Tools/SnapshotTool.cs",
         "Tools/WaitTool.cs",
@@ -102,17 +107,58 @@ public sealed class MutationConfigTests
     public void EverySourceFileIsMutatedOrListedAsNotMutated()
     {
         var src = Path.GetDirectoryName(RepoFile(Path.Combine("src", "FlaUI.Mcp", "FlaUI.Mcp.csproj")))!;
-        var files = Directory
-            .EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
-            .Select(file => Path.GetRelativePath(src, file).Replace('\\', '/'))
-            .Where(file =>
-                !file.StartsWith("obj/", StringComparison.Ordinal) && !file.StartsWith("bin/", StringComparison.Ordinal)
-            )
-            .Order(StringComparer.Ordinal);
+        var files = SourceFiles(src);
 
         Assert.Empty(files.Where(file => !GuardFiles.Contains(file) && !NotMutated.Contains(file)));
         Assert.Empty(GuardFiles.Intersect(NotMutated));
     }
+
+    [Fact]
+    public void BuildOutputIsNotSourceAtAnyDepth()
+    {
+        // A stale artifacts/ folder (a .NET artifacts-output build) under src/FlaUI.Mcp failed the coverage test above.
+        var src = Directory.CreateTempSubdirectory("flaui-src-").FullName;
+        try
+        {
+            string[] made =
+            [
+                "Core/A.cs",
+                "artifacts/bin/X.cs",
+                "artifacts/obj/Y.cs",
+                "bin/B.cs",
+                "obj/C.cs",
+                "Tools/obj/D.cs",
+            ];
+            foreach (var file in made)
+            {
+                var path = Path.Combine(src, file);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, "");
+            }
+
+            Assert.Equal(["Core/A.cs"], SourceFiles(src));
+        }
+        finally
+        {
+            Directory.Delete(src, recursive: true);
+        }
+    }
+
+    // Build output, never source: bin and obj, and the artifacts folder of a .NET artifacts-output build, at any depth.
+    private static readonly string[] BuildFolders = ["bin", "obj", "artifacts"];
+
+    /// <summary>The C# files under <paramref name="src"/>, relative and with forward slashes, build output left out.</summary>
+    private static string[] SourceFiles(string src) =>
+        Directory
+            .EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(src, file).Replace('\\', '/'))
+            .Where(file =>
+                !file.Split('/')
+                    .SkipLast(1)
+                    .Any(folder => BuildFolders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+            )
+            .Order(StringComparer.Ordinal)
+            .ToArray();
 
     private static string RepoFile(string relative)
     {
@@ -274,8 +320,38 @@ public sealed class MutationConfigTests
         );
         Assert.Equal(1, config.GetProperty("concurrency").GetInt32());
         Assert.Equal(180000, config.GetProperty("additional-timeout").GetInt32());
-        Assert.Contains("if ($Part -eq 'pointer-integration')", script);
+        Assert.Contains("if ($integrationParts.Contains($Part) -or $Part -eq 'pointer-integration')", script);
         Assert.Contains("'stryker-config.pointer-integration.json' 180", script);
         Assert.Contains("if ($project -ne $offlineProject) { CloseTestApps }", script);
+    }
+
+    [Fact]
+    public void ThePointerIntegrationPartsSplitTheConfigsFilesBetweenThem()
+    {
+        // Each part is its own Stryker run under the 3-hour cap; together they cover the config's files once.
+        var config = JsonDocument
+            .Parse(File.ReadAllText(RepoFile("stryker-config.pointer-integration.json")))
+            .RootElement.GetProperty("stryker-config");
+        var mutated = config
+            .GetProperty("mutate")
+            .EnumerateArray()
+            .Select(p => Path.GetFileNameWithoutExtension(p.GetString()!))
+            .Order(StringComparer.Ordinal);
+        var script = File.ReadAllText(RepoFile(Path.Combine("scripts", "mutation.ps1")));
+        string[] Part(string name) =>
+            System
+                .Text.RegularExpressions.Regex.Match(script, $@"(?m)^\s+{name} = (.+)$")
+                .Groups[1]
+                .Value.Split(',')
+                .Select(f => f.Trim().Trim('\''))
+                .ToArray();
+
+        var clicks = Part("clicks");
+        var input = Part("input");
+
+        Assert.Equal(["ClickTool", "ClickToolReplies", "ClickPoint", "ClickHitTest"], clicks);
+        Assert.Equal(["GuardedInput", "MouseTool", "PointerActions"], input);
+        Assert.Empty(clicks.Intersect(input));
+        Assert.Equal(mutated, clicks.Concat(input).Order(StringComparer.Ordinal));
     }
 }

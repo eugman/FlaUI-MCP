@@ -23,32 +23,25 @@ public sealed class PasteTool(
         + "Use it for code and multi-line text, which code editors autocomplete when typed. "
         + "Overwrites the clipboard; the app may still reformat what it receives.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new
-                {
-                    type = "string",
-                    description = "Optional explicit window handle; otherwise uses the focused element.",
-                },
-                @ref = new
-                {
-                    type = "string",
-                    description = "Element ref from windows_snapshot or windows_find. If omitted, pastes into the focused element.",
-                },
-                verifyFocus = new
-                {
-                    type = "boolean",
-                    description = "Require ref and verified keyboard focus on that exact control before pasting (default false). Worth setting for code editors: an unverified paste inserts text wherever focus happens to be.",
-                },
-                text = new { type = "string", description = "Text to paste" },
-            },
-            required = new[] { "text" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Optional explicit window handle; otherwise uses the focused element.")]
+        public string? Handle { get; init; }
+
+        [ToolDoc("Element ref from windows_snapshot or windows_find. If omitted, pastes into the focused element.")]
+        public string? Ref { get; init; }
+
+        [ToolDoc(
+            "Require ref and verified keyboard focus on that exact control before pasting (default false). Worth setting for code editors: an unverified paste inserts text wherever focus happens to be."
+        )]
+        public bool? VerifyFocus { get; init; }
+
+        [ToolDoc("Text to paste")]
+        public required string Text { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

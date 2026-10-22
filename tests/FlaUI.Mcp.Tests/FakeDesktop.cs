@@ -14,6 +14,12 @@ public sealed class InputLeaseCollection
     public const string Name = "Input lease";
 }
 
+/// <summary>A clock a test moves by hand; FakeDesktop's pauses move it. Declared here so the fake needs nothing else.</summary>
+internal interface IManualClock
+{
+    void Advance(TimeSpan by);
+}
+
 /// <summary>
 /// A desktop with one target window and one other window. Input is counted, never sent. Install it
 /// for the duration of a test; it applies to the installing flow and the tasks it starts.
@@ -115,6 +121,33 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override string? ProcessNameOf(int processId) => ProcessNames.GetValueOrDefault(processId);
 
+    /// <summary>The desktop's clock; set a manual clock to move pattern-call deadlines by hand.</summary>
+    public TimeProvider Clock { get; set; } = TimeProvider.System;
+
+    public override TimeProvider Time => Clock;
+
+    /// <summary>
+    /// What a pause does instead of sleeping. Unset, a pause moves <see cref="Clock"/> when it is a clock a test moves
+    /// by hand (<see cref="IManualClock"/>), so a still clock cannot hold a poll forever; otherwise it sleeps for real.
+    /// </summary>
+    public Action<TimeSpan>? OnPause { get; set; }
+
+    public override void Pause(TimeSpan delay)
+    {
+        if (OnPause != null)
+        {
+            OnPause(delay);
+        }
+        else if (Clock is IManualClock manual)
+        {
+            manual.Advance(delay);
+        }
+        else
+        {
+            Thread.Sleep(delay);
+        }
+    }
+
     /// <summary>The process that owns the other window.</summary>
     public int OtherProcessId { get; set; } = OtherPid;
 
@@ -168,7 +201,16 @@ internal sealed class FakeDesktop : InputDesktop
     public bool PostCloseResult { get; set; } = true;
 
     /// <summary>The text placed on the clipboard, or null when nothing was.</summary>
-    public string? ClipboardText { get; private set; }
+    public string? ClipboardWritten { get; private set; }
+
+    /// <summary>The fake clipboard as a read sees it: what was written, never the machine's own clipboard.</summary>
+    public override Win32Desktop.ClipboardText ClipboardText() => new(ClipboardWritten, false, null);
+
+    /// <summary>The control the fake reports as focused: the target window's, until a test moves or clears it.</summary>
+    public FocusedControl? Focused { get; set; } = new(TargetHwnd, "Edit", TargetHwnd, "Fake target", TargetPid);
+
+    /// <summary>Keyboard focus as the fake reports it, never the machine's own.</summary>
+    public override FocusedControl? FocusedControl() => Focused;
 
     /// <summary>When true, another window takes the foreground as soon as the clipboard is written.</summary>
     public bool FocusLostOnClipboardWrite { get; set; }
@@ -178,7 +220,7 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override Win32Desktop.TextClipboardLease? PreserveAndSetClipboardText(string text)
     {
-        ClipboardText = text;
+        ClipboardWritten = text;
         return null;
     }
 
@@ -189,7 +231,7 @@ internal sealed class FakeDesktop : InputDesktop
             return false;
         }
 
-        ClipboardText = text;
+        ClipboardWritten = text;
         if (FocusLostOnClipboardWrite)
         {
             ForegroundWindow = OtherHwnd;

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using FlaUI.Core.AutomationElements;
@@ -96,26 +95,28 @@ public sealed class KeyboardMutationTests
     [Fact]
     public async Task ABatchWaitReallyWaitsAndStopsWhenCancelled()
     {
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop { Clock = clock }.Install();
         var operation = new OperationContext();
         OperationContext.Current.Value = operation;
         try
         {
-            var watch = Stopwatch.StartNew();
-            await BatchTool.ExecuteRows(
+            var waiting = BatchTool.ExecuteRows(
                 Rows(new { action = "wait", ms = 200 }),
                 (_, _) => throw new InvalidOperationException()
             );
-            Assert.True(watch.ElapsedMilliseconds >= 150);
+            clock.Advance(TimeSpan.FromMilliseconds(199));
+            Assert.False(waiting.IsCompleted, "The wait ended before its 200 ms passed.");
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            await waiting.WaitAsync(Eventually.Bound);
 
-            operation.Stop.CancelAfter(100);
-            watch.Restart();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                BatchTool.ExecuteRows(
-                    Rows(new { action = "wait", ms = 5000 }),
-                    (_, _) => throw new InvalidOperationException()
-                )
+            // A wait the clock would hold for 5 s ends as soon as the operation is stopped.
+            var stopped = BatchTool.ExecuteRows(
+                Rows(new { action = "wait", ms = 5000 }),
+                (_, _) => throw new InvalidOperationException()
             );
-            Assert.True(watch.ElapsedMilliseconds < 3000);
+            await operation.Stop.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stopped.WaitAsync(Eventually.Bound));
         }
         finally
         {

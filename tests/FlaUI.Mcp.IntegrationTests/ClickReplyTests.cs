@@ -62,8 +62,7 @@ public class ClickReplyTests(TestAppFixture fixture, ITestOutputHelper output)
         var before = ClickCount(fixture, fixture.WinFormsHandle);
         var reply = await fixture.CallTool(Click(), new { @ref = button, button = mouseButton });
         Assert.Equal("Clicked Click Me", reply);
-        await Task.Delay(300);
-        Assert.Equal(before, ClickCount(fixture, fixture.WinFormsHandle));
+        Assert.True(StaysTrue(() => ClickCount(fixture, fixture.WinFormsHandle) == before), "The button was pressed.");
     }
 
     [Fact]
@@ -86,8 +85,7 @@ public class ClickReplyTests(TestAppFixture fixture, ITestOutputHelper output)
         var result = await Run(Click(), new { @ref = button, handle = fixture.WpfHandle });
         Assert.True(result.IsError);
         Assert.Contains($"belongs to window {fixture.WinFormsHandle}, not {fixture.WpfHandle}", Text(result));
-        await Task.Delay(300);
-        Assert.Equal(before, ClickCount(fixture, fixture.WinFormsHandle));
+        Assert.True(StaysTrue(() => ClickCount(fixture, fixture.WinFormsHandle) == before), "The button was pressed.");
     }
 
     [Fact]

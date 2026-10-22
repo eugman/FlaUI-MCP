@@ -38,33 +38,26 @@ public class TypeTool : ToolBase
         + "Code editors can autocomplete typed text; use windows_paste for code. "
         + "Use this for typing without clearing existing content. Use windows_fill to replace content.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new
-                {
-                    type = "string",
-                    description = "Optional explicit window handle; otherwise uses the focused element.",
-                },
-                verifyFocus = new
-                {
-                    type = "boolean",
-                    description = "Require ref and verified keyboard focus on that exact control before typing (default false).",
-                },
-                @ref = new
-                {
-                    type = "string",
-                    description = "Element ref from windows_snapshot (e.g., 'w1e5'). If omitted, types to currently focused element.",
-                },
-                text = new { type = "string", description = "Text to type" },
-                submit = new { type = "boolean", description = "Press Enter after typing (default: false)" },
-            },
-            required = new[] { "text" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Optional explicit window handle; otherwise uses the focused element.")]
+        public string? Handle { get; init; }
+
+        [ToolDoc("Require ref and verified keyboard focus on that exact control before typing (default false).")]
+        public bool? VerifyFocus { get; init; }
+
+        [ToolDoc("Element ref from windows_snapshot (e.g., 'w1e5'). If omitted, types to currently focused element.")]
+        public string? Ref { get; init; }
+
+        [ToolDoc("Text to type")]
+        public required string Text { get; init; }
+
+        [ToolDoc("Press Enter after typing (default: false)")]
+        public bool? Submit { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
@@ -90,38 +83,14 @@ public class TypeTool : ToolBase
         {
             OperationContext.Check();
             var handle = GetStringArgument(arguments, "handle");
-            if (handle != null && _sessions == null)
+            if (CheckTarget(refId, handle) is { } refused)
             {
-                return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
-            }
-            // Focus element if ref provided
-            if (!string.IsNullOrEmpty(refId))
-            {
-                _elementRegistry.ResolveRef(refId, handle);
-
-                // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
-                // Tip: calling windows_type without a ref types into the focused element
-                // using pure keyboard input, which works even while the provider is blocked.
-                if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
-                {
-                    return Task.FromResult(BlockedResult(pending));
-                }
-            }
-            else if (handle != null)
-            {
-                // Validate the explicit target, then GuardedInput focuses and
-                // verifies that exact window before sending any input.
-                if (!_processPolicy.IsProcessAllowed(_sessions!.GetInputTarget(handle!).ProcessId))
-                {
-                    return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Target process")));
-                }
+                return Task.FromResult(refused);
             }
 
             // Type the text
             using var input = new GuardedInput(
-                refId != null ? _elementRegistry.InputForRef(refId)
-                    : handle != null ? _sessions!.GetInputTarget(handle)
-                    : GuardedInput.ForegroundTarget(_processPolicy),
+                InputTarget(refId, handle),
                 refId == null ? null : _elementRegistry.GetElement(refId),
                 verifyFocus
             );
@@ -160,6 +129,44 @@ public class TypeTool : ToolBase
                 )
             );
         }
+    }
+
+    private InputTarget InputTarget(string? refId, string? handle) =>
+        refId != null ? _elementRegistry.InputForRef(refId)
+        : handle != null ? _sessions!.GetInputTarget(handle)
+        : GuardedInput.ForegroundTarget(_processPolicy);
+
+    /// <summary>The refusal for a target that cannot take the text, or null; nothing is focused or sent.</summary>
+    private McpToolResult? CheckTarget(string? refId, string? handle)
+    {
+        if (handle != null && _sessions == null)
+        {
+            return ErrorResult("Window-handle input requires a session manager.");
+        }
+        // Focus element if ref provided
+        if (!string.IsNullOrEmpty(refId))
+        {
+            _elementRegistry.ResolveRef(refId, handle);
+
+            // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
+            // Tip: calling windows_type without a ref types into the focused element
+            // using pure keyboard input, which works even while the provider is blocked.
+            if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
+            {
+                return BlockedResult(pending);
+            }
+        }
+        else if (handle != null)
+        {
+            // Validate the explicit target, then GuardedInput focuses and
+            // verifies that exact window before sending any input.
+            if (!_processPolicy.IsProcessAllowed(_sessions!.GetInputTarget(handle!).ProcessId))
+            {
+                return ErrorResult(_processPolicy.DescribeDenied("Target process"));
+            }
+        }
+
+        return null;
     }
 
     internal static string[] Lines(string text) => System.Text.RegularExpressions.Regex.Split(text, "\r\n|\r|\n");
@@ -201,26 +208,28 @@ public partial class FillTool : ToolBase
         + "Without a writable Value pattern it focuses the control and sends Ctrl+A, then Backspace or the new text; "
         + "it refuses before any key when the control does not take keyboard focus. Reports Filled only when the control reads back the value.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new
-                {
-                    type = "string",
-                    description = "Optional window handle to validate against the element ref.",
-                },
-                @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },
-                value = new { type = "string", description = "Value to fill" },
-                verifyFocus = FocusRules.Schema(
-                    "Keyboard fallback only: require verified keyboard focus before Ctrl+A, true for the exact control, \"self-or-descendant\" for it or any descendant. By default the exact control, or its Edit child when the ref is a ComboBox or Spinner, or a focused Edit inside it with no other value control in between; set false only for a control that never reports focus, and the keys then go wherever focus is."
-                ),
-            },
-            required = new[] { "ref", "value" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Optional window handle to validate against the element ref.")]
+        public string? Handle { get; init; }
+
+        [ToolDoc("Element ref from windows_snapshot (e.g., 'w1e5')")]
+        public required string Ref { get; init; }
+
+        [ToolDoc("Value to fill")]
+        public required string Value { get; init; }
+
+        [ToolSchemaFrom(nameof(VerifyFocusSchema))]
+        public object? VerifyFocus { get; init; }
+    }
+
+    public static object VerifyFocusSchema =>
+        FocusRules.Schema(
+            "Keyboard fallback only: require verified keyboard focus before Ctrl+A, true for the exact control, \"self-or-descendant\" for it or any descendant. By default the exact control, or its Edit child when the ref is a ComboBox or Spinner, or a focused Edit inside it with no other value control in between; set false only for a control that never reports focus, and the keys then go wherever focus is."
+        );
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

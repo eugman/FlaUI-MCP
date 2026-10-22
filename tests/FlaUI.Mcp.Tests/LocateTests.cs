@@ -19,7 +19,7 @@ public sealed class LocateTests
     [Fact]
     public void ScreenBoundsAreTranslatedToImagePixels()
     {
-        var located = ScreenshotTool.LocateInCapture(
+        var located = ScreenshotChecks.LocateInCapture(
             "w1e5",
             new Rectangle(1000, 139, 120, 26),
             Source,
@@ -37,7 +37,7 @@ public sealed class LocateTests
     [Fact]
     public void TheCaptureOriginItselfMapsToZeroZero()
     {
-        var located = ScreenshotTool.LocateInCapture("w1e5", new Rectangle(960, 39, 10, 10), Source, 958, 1100, null);
+        var located = ScreenshotChecks.LocateInCapture("w1e5", new Rectangle(960, 39, 10, 10), Source, 958, 1100, null);
         Assert.Equal(0, located.X);
         Assert.Equal(0, located.Y);
     }
@@ -46,7 +46,7 @@ public sealed class LocateTests
     public void ACropShiftsCoordinatesAgain()
     {
         var frame = new CaptureFrame(null, null, 20, 50, 400, 300);
-        var located = ScreenshotTool.LocateInCapture(
+        var located = ScreenshotChecks.LocateInCapture(
             "w1e5",
             new Rectangle(1000, 139, 120, 26),
             Source,
@@ -64,7 +64,7 @@ public sealed class LocateTests
     public void AnElementOutsideTheCropIsReportedNotClamped()
     {
         var frame = new CaptureFrame(null, null, 0, 0, 100, 100);
-        var located = ScreenshotTool.LocateInCapture(
+        var located = ScreenshotChecks.LocateInCapture(
             "w1e5",
             new Rectangle(1500, 800, 50, 20),
             Source,
@@ -81,7 +81,14 @@ public sealed class LocateTests
     [Fact]
     public void AnElementStartingLeftOfTheCaptureGetsNegativeCoordinates()
     {
-        var located = ScreenshotTool.LocateInCapture("w1e5", new Rectangle(900, 20, 100, 40), Source, 958, 1100, null);
+        var located = ScreenshotChecks.LocateInCapture(
+            "w1e5",
+            new Rectangle(900, 20, 100, 40),
+            Source,
+            958,
+            1100,
+            null
+        );
         Assert.Equal(-60, located.X);
         Assert.Equal(-19, located.Y);
         Assert.True(located.Clipped);
@@ -91,14 +98,21 @@ public sealed class LocateTests
     public void PartialOverlapCountsAsClipped()
     {
         // Straddles the right edge of the image: usable, but the caller must know it is cut.
-        var located = ScreenshotTool.LocateInCapture("w1e5", new Rectangle(1900, 100, 50, 20), Source, 958, 1100, null);
+        var located = ScreenshotChecks.LocateInCapture(
+            "w1e5",
+            new Rectangle(1900, 100, 50, 20),
+            Source,
+            958,
+            1100,
+            null
+        );
         Assert.True(located.Clipped);
     }
 
     [Fact]
     public void AnElementFillingTheImageExactlyIsNotClipped()
     {
-        var located = ScreenshotTool.LocateInCapture(
+        var located = ScreenshotChecks.LocateInCapture(
             "w1e5",
             new Rectangle(960, 39, 958, 1100),
             Source,
@@ -113,7 +127,7 @@ public sealed class LocateTests
     [Fact]
     public void TheRefIsCarriedThroughSoResultsCanBeMatchedUp()
     {
-        var located = ScreenshotTool.LocateInCapture(
+        var located = ScreenshotChecks.LocateInCapture(
             "w2e267",
             new Rectangle(1000, 139, 10, 10),
             Source,
@@ -130,7 +144,14 @@ public sealed class LocateTests
         // The observed title-bar offset was 39px in one DPI state and 55px in another on the same
         // window, which is why the offset comes from sourceBounds rather than a constant.
         var other = new Rectangle(960, 55, 958, 1084);
-        var located = ScreenshotTool.LocateInCapture("w1e5", new Rectangle(1000, 155, 10, 10), other, 958, 1084, null);
+        var located = ScreenshotChecks.LocateInCapture(
+            "w1e5",
+            new Rectangle(1000, 155, 10, 10),
+            other,
+            958,
+            1084,
+            null
+        );
         Assert.Equal(40, located.X);
         Assert.Equal(100, located.Y);
     }

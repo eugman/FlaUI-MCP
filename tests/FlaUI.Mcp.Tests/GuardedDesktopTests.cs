@@ -154,7 +154,7 @@ public sealed class GuardedDesktopTests
         });
 
         Assert.Equal(2, counted);
-        Assert.Equal("def", desktop.ClipboardText);
+        Assert.Equal("def", desktop.ClipboardWritten);
     }
 
     private sealed class StartsTool : ToolBase

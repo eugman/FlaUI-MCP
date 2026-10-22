@@ -72,7 +72,7 @@ public sealed class ProcessPolicy
             return true;
         }
 
-        return IsNameAllowed(TryGetProcessName(processId));
+        return IsNameAllowed(NameOf(processId));
     }
 
     /// <summary>
@@ -99,6 +99,9 @@ public sealed class ProcessPolicy
         IsRestricted
             ? $"app allowlist active: {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}"
             : "no app allowlist";
+
+    /// <summary>The process's name through the desktop seam, so tests and fakes see the same name the guards do.</summary>
+    public static string? NameOf(int processId) => InputDesktop.Current.ProcessNameOf(processId);
 
     public static string? TryGetProcessName(int processId)
     {

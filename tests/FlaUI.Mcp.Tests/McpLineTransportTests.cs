@@ -60,7 +60,7 @@ public sealed class McpLineTransportTests
     public async Task RequestBeyondCapacityIsRefusedAndRecordedButPingAndStatusStillAnswer()
     {
         var tool = new GatedTool();
-        var registry = new ToolRegistry(TimeSpan.FromSeconds(30));
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(30), time: new ManualTimeProvider());
         registry.RegisterTool(tool);
         var server = new McpServer(registry);
         var output = new LineSink();
@@ -95,7 +95,7 @@ public sealed class McpLineTransportTests
         finally
         {
             tool.Release.TrySetResult();
-            await run.WaitAsync(TimeSpan.FromSeconds(30));
+            await run.WaitAsync(Eventually.Bound);
         }
 
         Assert.Equal(McpLineTransport.MaxRequestsInFlight, tool.Calls);
@@ -136,7 +136,7 @@ public sealed class McpLineTransportTests
         }
 
         public async Task<JsonElement> NextAsync() =>
-            await lines.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+            await lines.Reader.ReadAsync().AsTask().WaitAsync(Eventually.Bound);
     }
 
     /// <summary>Yields between chunks of a line, so unsynchronized writers would interleave.</summary>

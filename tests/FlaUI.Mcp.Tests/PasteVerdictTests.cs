@@ -45,7 +45,7 @@ public sealed class PasteVerdictTests
         Assert.NotEqual(true, result.IsError);
         Assert.Equal("not-established", result.Outcome!.Verification);
         Assert.Contains("Not verified", result.Content[0].Text);
-        Assert.Equal("text", desktop.ClipboardText);
+        Assert.Equal("text", desktop.ClipboardWritten);
         Assert.Equal(1, desktop.Dispatched);
     }
 }

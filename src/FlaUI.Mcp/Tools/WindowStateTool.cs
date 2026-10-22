@@ -16,23 +16,21 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
     public override string Description =>
         "Maximize, restore (normal) or minimize a top-level window. Use restore before windows_place_window, which only moves normal-state windows. Returns the state and bounds observed afterwards; one attempt, never replayed.";
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new
-                {
-                    type = "string",
-                    description = "Window identifier from windows_list_windows (e.g. w1).",
-                },
-                @ref = new { type = "string", description = "Alternative to handle: a top-level window ref." },
-                state = new { type = "string", @enum = new[] { "maximize", "restore", "normal", "minimize" } },
-            },
-            required = new[] { "state" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Window identifier from windows_list_windows (e.g. w1).")]
+        public string? Handle { get; init; }
+
+        [ToolDoc("Alternative to handle: a top-level window ref.")]
+        public string? Ref { get; init; }
+
+        [ToolEnum("maximize", "restore", "normal", "minimize")]
+        [ToolDoc("maximize, minimize, or restore (normal is the same as restore).")]
+        public required string State { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

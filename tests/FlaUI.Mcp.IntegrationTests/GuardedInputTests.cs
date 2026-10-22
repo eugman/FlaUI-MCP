@@ -26,7 +26,7 @@ public class GuardedInputTests(TestAppFixture fixture)
         {
             input.Click(panel);
             Assert.True(
-                SpinWait.SpinUntil(() => toggle.ToggleState.Value != before, TimeSpan.FromSeconds(2)),
+                PointerTestSupport.WaitFor(() => toggle.ToggleState.Value != before),
                 "The child checkbox should receive the container-center click."
             );
         }

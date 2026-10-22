@@ -20,19 +20,28 @@ public sealed class ModalSignatureTests
     /// <summary>Run a blocked pattern call while the process shows <paramref name="later"/> after the first look.</summary>
     private static PatternCallResult Run(params Win32WindowInfo[] later)
     {
-        var desktop = new FakeDesktop();
+        var clock = new ManualTimeProvider();
+        var desktop = new FakeDesktop { Clock = clock };
         var calls = 0;
         desktop.WindowsOf = _ => Interlocked.Increment(ref calls) == 1 ? [Window(Main, "Main")] : later;
         using var installed = desktop.Install();
         using var hold = new ManualResetEventSlim();
+        var grace = TimeSpan.FromMilliseconds(300);
         try
         {
-            return ModalAwareInvoker.Execute(
-                Pid,
-                "Invoke on 'Save'",
-                hold.Wait,
-                new PendingInvokeTracker(_ => 1),
-                TimeSpan.FromMilliseconds(300)
+            // The window read comes before the deadline check in each turn, so a modal is seen however soon the
+            // clock passes the grace period.
+            return Eventually.PastDeadline(
+                clock,
+                grace,
+                () =>
+                    ModalAwareInvoker.Execute(
+                        Pid,
+                        "Invoke on 'Save'",
+                        hold.Wait,
+                        new PendingInvokeTracker(_ => 1),
+                        grace
+                    )
             );
         }
         finally

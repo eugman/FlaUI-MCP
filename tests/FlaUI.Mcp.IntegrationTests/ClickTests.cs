@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using FlaUI.Mcp.Tools;
 using Xunit.Abstractions;
+using static FlaUI.Mcp.IntegrationTests.PointerTestSupport;
 
 namespace FlaUI.Mcp.IntegrationTests;
 
@@ -77,17 +78,12 @@ public class ClickTests
 
         // Poll for the button to become enabled
         string snapshot2 = "";
-        var sw = Stopwatch.StartNew();
-        while (sw.ElapsedMilliseconds < 5000)
+        WaitFor(() =>
         {
-            await Task.Delay(100);
             snapshot2 = _fixture.TakeSnapshot(_fixture.WinFormsHandle);
             var line = snapshot2.Split('\n').FirstOrDefault(l => l.Contains("Conditional Button"));
-            if (line != null && !line.Contains("disabled"))
-            {
-                break;
-            }
-        }
+            return line != null && !line.Contains("disabled");
+        });
 
         _output.WriteLine("\nAfter checkbox click:");
         foreach (var line in snapshot2.Split('\n'))

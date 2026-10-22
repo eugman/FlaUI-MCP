@@ -455,7 +455,7 @@ public class SessionManager : IDisposable
                 continue;
             }
 
-            var processName = ProcessPolicy.TryGetProcessName(info.ProcessId);
+            var processName = ProcessPolicy.NameOf(info.ProcessId);
 
             // When an allowlist is active, windows of other apps are not listed
             // at all - no handle is registered, so they stay unreachable.
@@ -590,7 +590,7 @@ public class SessionManager : IDisposable
 
         if (!_processPolicy.IsProcessAllowed(processId))
         {
-            var name = ProcessPolicy.TryGetProcessName(processId) ?? $"pid {processId}";
+            var name = ProcessPolicy.NameOf(processId) ?? $"pid {processId}";
             throw new Exception(_processPolicy.DescribeDenied($"Process '{name}'"));
         }
     }

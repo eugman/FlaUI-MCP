@@ -33,13 +33,7 @@ public class ListWindowsTool : ToolBase
         "List all open windows with their handles, titles, and process names. "
         + "Use this to find windows to interact with.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new { },
-        };
+    public override object InputSchema => ToolSchema.For<NoArguments>();
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
@@ -91,21 +85,17 @@ public class FocusWindowTool : ToolBase
 
     public override string Description => "Bring a window to the foreground and give it focus.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new
-                {
-                    type = "string",
-                    description = "Window handle from windows_list_windows or windows_launch",
-                },
-                title = new { type = "string", description = "Exact window title (alternative to handle)." },
-            },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Window handle from windows_list_windows or windows_launch")]
+        public string? Handle { get; init; }
+
+        [ToolDoc("Exact window title (alternative to handle).")]
+        public string? Title { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
@@ -213,14 +203,14 @@ public class CloseWindowTool : ToolBase
 
     public override string Description => "Close a window.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new { handle = new { type = "string", description = "Window handle to close" } },
-            required = new[] { "handle" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Window handle to close")]
+        public required string Handle { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

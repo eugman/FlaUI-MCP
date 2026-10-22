@@ -47,6 +47,8 @@ public sealed class ReviewFollowUpTests
     [Fact]
     public void AModalProvesThePatternCallWentOut()
     {
+        // A clock that never moves: the modal, not the grace period, must end the wait.
+        using var installed = new FakeDesktop { Clock = new ManualTimeProvider() }.Install();
         using var hold = new ManualResetEventSlim();
         var calls = 0;
         var operation = new OperationContext();

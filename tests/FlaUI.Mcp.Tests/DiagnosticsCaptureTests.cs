@@ -81,11 +81,23 @@ public sealed class DiagnosticsCaptureTests
     public void AHungRenderIsBoundedAndReportedAsTimedOut()
     {
         using var release = new ManualResetEventSlim();
-        using var installed = new FakeDesktop { WindowImage = [1], RenderBlock = release }.Install();
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop
+        {
+            WindowImage = [1],
+            RenderBlock = release,
+            Clock = clock,
+        }.Install();
         var path = TempPng();
         try
         {
-            var capture = Diagnostics.Capture(FakeDesktop.TargetHwnd, path, TimeSpan.FromMilliseconds(100));
+            var budget = TimeSpan.FromMilliseconds(100);
+            var call = Task.Run(() => Diagnostics.Capture(FakeDesktop.TargetHwnd, path, budget));
+            // Move the clock once, after the render stage is waiting on its expiry: moved any earlier, the whole
+            // budget would be spent before the render started, and it would be skipped instead of timed out.
+            Eventually.WaitUntil(() => clock.PendingTimers > 0, "the render to wait on the budget");
+            clock.Advance(budget);
+            var capture = Eventually.Result(call);
 
             Assert.False(capture.Saved);
             Assert.Equal(

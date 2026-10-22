@@ -34,7 +34,7 @@ public sealed class FinalMutationTests
 
         Denied(() => Assert.Throws<InvalidOperationException>(() => GuardedDesktop.SetClipboardText("abc")));
 
-        Assert.Null(desktop.ClipboardText);
+        Assert.Null(desktop.ClipboardWritten);
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class FinalMutationTests
             Assert.Throws<InvalidOperationException>(() => input.PreserveAndSetClipboardText("abc"));
         });
 
-        Assert.Null(desktop.ClipboardText);
+        Assert.Null(desktop.ClipboardWritten);
     }
 
     [Fact]

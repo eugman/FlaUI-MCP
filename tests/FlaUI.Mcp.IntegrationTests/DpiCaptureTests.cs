@@ -54,15 +54,18 @@ public class DpiCaptureTests : IDisposable
     {
         var proc = Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true })!;
         _process = proc;
-        var deadline = Environment.TickCount64 + timeoutMs;
-        while (Environment.TickCount64 < deadline)
+        if (
+            PointerTestSupport.WaitFor(
+                () =>
+                {
+                    proc.Refresh();
+                    return proc.MainWindowHandle != IntPtr.Zero;
+                },
+                timeoutMs
+            )
+        )
         {
-            Thread.Sleep(500);
-            proc.Refresh();
-            if (proc.MainWindowHandle != IntPtr.Zero)
-            {
-                return (proc.MainWindowHandle, proc);
-            }
+            return (proc.MainWindowHandle, proc);
         }
 
         throw new TimeoutException($"{exe} did not produce a MainWindowHandle within {timeoutMs}ms");

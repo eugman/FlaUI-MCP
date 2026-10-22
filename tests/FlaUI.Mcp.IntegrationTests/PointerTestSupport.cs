@@ -58,7 +58,16 @@ internal static class PointerTestSupport
             System.Globalization.CultureInfo.InvariantCulture
         );
 
-    public static bool WaitFor(Func<bool> condition, int timeoutMs = 3000)
+    /// <summary>The generous bound every integration wait uses: only reached when something is broken.</summary>
+    public const int WaitBoundMs = 10_000;
+
+    private const int PollMs = 50;
+
+    /// <summary>
+    /// The one wait the integration tests use for the real app: poll <paramref name="condition"/> until it holds or the
+    /// generous bound passes. Real time is fine here; a fixed sleep is not, since it is either too short or wasted.
+    /// </summary>
+    public static bool WaitFor(Func<bool> condition, int timeoutMs = WaitBoundMs)
     {
         var clock = Stopwatch.StartNew();
         while (!condition())
@@ -68,10 +77,47 @@ internal static class PointerTestSupport
                 return false;
             }
 
-            Thread.Sleep(50);
+            Thread.Sleep(PollMs);
         }
 
         return true;
+    }
+
+    /// <inheritdoc cref="WaitFor(Func{bool}, int)"/>
+    public static async Task<bool> WaitForAsync(Func<Task<bool>> condition, int timeoutMs = WaitBoundMs)
+    {
+        var clock = Stopwatch.StartNew();
+        while (!await condition())
+        {
+            if (clock.ElapsedMilliseconds > timeoutMs)
+            {
+                return false;
+            }
+
+            await Task.Delay(PollMs);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="condition"/> held throughout <paramref name="windowMs"/>: the check that something did
+    /// not happen, such as a refused click that must not press. Only a real-time window can show that.
+    /// </summary>
+    public static bool StaysTrue(Func<bool> condition, int windowMs = 500)
+    {
+        var clock = Stopwatch.StartNew();
+        do
+        {
+            if (!condition())
+            {
+                return false;
+            }
+
+            Thread.Sleep(PollMs);
+        } while (clock.ElapsedMilliseconds < windowMs);
+
+        return condition();
     }
 
     /// <summary>Put a window in front without this server's lease, and wait until Windows reports it.</summary>

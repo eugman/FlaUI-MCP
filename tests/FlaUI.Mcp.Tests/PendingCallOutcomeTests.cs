@@ -12,37 +12,35 @@ namespace FlaUI.Mcp.Tests;
 public sealed class PendingCallOutcomeTests
 {
     private const int Pid = 4321;
-
-    private static void WaitUntil(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!condition())
-        {
-            Assert.True(DateTime.UtcNow < deadline, "The condition did not hold within 10 s.");
-            Thread.Sleep(10);
-        }
-    }
+    private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(100);
 
     [Fact]
     public void ALateFailureOfAPendingCallIsRecordedOnItsOperation()
     {
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop { Clock = clock }.Install();
         var operation = new OperationContext();
         OperationContext.Current.Value = operation;
         using var hold = new ManualResetEventSlim();
         var tracker = new PendingInvokeTracker(_ => 1);
         try
         {
-            var result = ModalAwareInvoker.Execute(
-                Pid,
-                "Invoke on 'Save'",
+            var result = Eventually.PastDeadline(
+                clock,
+                Grace,
                 () =>
-                {
-                    hold.Wait();
-                    throw new InvalidOperationException("mutation denied: the user is active");
-                },
-                tracker,
-                TimeSpan.FromMilliseconds(100),
-                _ => []
+                    ModalAwareInvoker.Execute(
+                        Pid,
+                        "Invoke on 'Save'",
+                        () =>
+                        {
+                            hold.Wait();
+                            throw new InvalidOperationException("mutation denied: the user is active");
+                        },
+                        tracker,
+                        Grace,
+                        _ => []
+                    )
             );
             Assert.Equal(PatternCallOutcome.StillPending, result.Outcome);
         }
@@ -52,8 +50,8 @@ public sealed class PendingCallOutcomeTests
             OperationContext.Current.Value = null;
         }
 
-        WaitUntil(() => !tracker.TryGetPending(Pid, out _));
-        WaitUntil(() => operation.LateError != null);
+        Eventually.WaitUntil(() => !tracker.TryGetPending(Pid, out _), "the tracker to clear");
+        Eventually.WaitUntil(() => operation.LateError != null, "the late error");
         Assert.Equal(
             "Invoke on 'Save' failed after it was reported pending: mutation denied: the user is active",
             operation.LateError
@@ -63,7 +61,8 @@ public sealed class PendingCallOutcomeTests
     [Fact]
     public void ACallStillInValidationWhenTheLeaseIsReleasedIsNeverSent()
     {
-        var desktop = new FakeDesktop();
+        var clock = new ManualTimeProvider();
+        var desktop = new FakeDesktop { Clock = clock };
         using var installed = desktop.Install();
         var operation = new OperationContext();
         OperationContext.Current.Value = operation;
@@ -72,13 +71,18 @@ public sealed class PendingCallOutcomeTests
         var sent = false;
         try
         {
-            var result = WindowMutation.Uia(
-                Pid,
-                "Invoke on 'Save'",
-                () => sent = true,
-                tracker,
-                validate: hold.Wait,
-                gracePeriod: TimeSpan.FromMilliseconds(100)
+            var result = Eventually.PastDeadline(
+                clock,
+                Grace,
+                () =>
+                    WindowMutation.Uia(
+                        Pid,
+                        "Invoke on 'Save'",
+                        () => sent = true,
+                        tracker,
+                        validate: hold.Wait,
+                        gracePeriod: Grace
+                    )
             );
             Assert.Equal(PatternCallOutcome.StillPending, result.Outcome);
             Assert.False(result.Dispatched);
@@ -89,7 +93,7 @@ public sealed class PendingCallOutcomeTests
             OperationContext.Current.Value = null;
         }
 
-        WaitUntil(() => !tracker.TryGetPending(Pid, out _));
+        Eventually.WaitUntil(() => !tracker.TryGetPending(Pid, out _), "the tracker to clear");
         Assert.False(sent);
         Assert.Equal(0, desktop.PatternCalls);
         Assert.Equal(0, operation.InputsSent);
@@ -98,7 +102,8 @@ public sealed class PendingCallOutcomeTests
     [Fact]
     public void ACallHeldInThePermissionCheckWhenTheLeaseIsReleasedIsNeverSent()
     {
-        var desktop = new FakeDesktop();
+        var clock = new ManualTimeProvider();
+        var desktop = new FakeDesktop { Clock = clock };
         using var installed = desktop.Install();
         var operation = new OperationContext();
         OperationContext.Current.Value = operation;
@@ -108,12 +113,10 @@ public sealed class PendingCallOutcomeTests
         var sent = false;
         try
         {
-            var result = WindowMutation.Uia(
-                Pid,
-                "Invoke on 'Save'",
-                () => sent = true,
-                tracker,
-                gracePeriod: TimeSpan.FromMilliseconds(100)
+            var result = Eventually.PastDeadline(
+                clock,
+                Grace,
+                () => WindowMutation.Uia(Pid, "Invoke on 'Save'", () => sent = true, tracker, gracePeriod: Grace)
             );
             Assert.Equal(PatternCallOutcome.StillPending, result.Outcome);
             Assert.False(result.Dispatched);
@@ -125,7 +128,7 @@ public sealed class PendingCallOutcomeTests
             OperationContext.Current.Value = null;
         }
 
-        WaitUntil(() => !tracker.TryGetPending(Pid, out _));
+        Eventually.WaitUntil(() => !tracker.TryGetPending(Pid, out _), "the tracker to clear");
         Assert.False(sent);
         Assert.Equal(0, desktop.PatternCalls);
         Assert.Equal(0, operation.InputsSent);
@@ -135,12 +138,13 @@ public sealed class PendingCallOutcomeTests
     public void AFailedWindowReadWhileWaitingDoesNotAbandonTheCall()
     {
         // The call returns only once the wait has seen a failed window read, so the wait must go on past it.
+        using var installed = new FakeDesktop { Clock = new ManualTimeProvider() }.Install();
         using var readFailed = new ManualResetEventSlim();
         var reads = 0;
         var result = ModalAwareInvoker.Execute(
             Pid,
             "Invoke on 'Save'",
-            () => readFailed.Wait(TimeSpan.FromSeconds(5)),
+            () => readFailed.Wait(Eventually.Bound),
             new PendingInvokeTracker(_ => 1),
             TimeSpan.FromSeconds(10),
             _ =>
@@ -161,17 +165,24 @@ public sealed class PendingCallOutcomeTests
     [Fact]
     public void APendingCallWhoseWindowReadsFailedSaysSoInItsReply()
     {
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop { Clock = clock }.Install();
         using var hold = new ManualResetEventSlim();
         var reads = 0;
         try
         {
-            var result = ModalAwareInvoker.Execute(
-                Pid,
-                "Invoke on 'Save'",
-                hold.Wait,
-                new PendingInvokeTracker(_ => 1),
-                TimeSpan.FromMilliseconds(150),
-                _ => ++reads == 1 ? [] : throw new TimeoutException("window list timed out")
+            var result = Eventually.PastDeadline(
+                clock,
+                Grace,
+                () =>
+                    ModalAwareInvoker.Execute(
+                        Pid,
+                        "Invoke on 'Save'",
+                        hold.Wait,
+                        new PendingInvokeTracker(_ => 1),
+                        Grace,
+                        _ => ++reads == 1 ? [] : throw new TimeoutException("window list timed out")
+                    )
             );
 
             Assert.Equal(PatternCallOutcome.StillPending, result.Outcome);
