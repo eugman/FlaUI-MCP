@@ -57,6 +57,11 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         {
             return Task.FromResult(Refused(action, error));
         }
+        catch (ArgumentException error)
+            when (action == "drag" && ((OperationContext.Current.Value?.InputsSent ?? 0) == 0))
+        {
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, $"Failed to {action}: {error.Message}"));
+        }
 
         return Task.FromResult(MouseReplies.Landed(action, landed, origin, scrolled, drag));
     }

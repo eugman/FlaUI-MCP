@@ -90,6 +90,17 @@ internal sealed class DragPlanner(RefPoints points)
             throw new ArgumentException("toMustHit needs a raw to point");
         }
 
+        // Check guard ownership before a ref-based start can scroll a view into place.
+        if (request.FromMustHit is { } fromGuard)
+        {
+            points.Resolve(fromGuard, handle);
+        }
+
+        if (request.ToMustHit is { } toGuard)
+        {
+            points.Resolve(toGuard, handle);
+        }
+
         var plan = FromRequest(request, handle, ref scrolled);
         return plan with
         {
@@ -189,8 +200,20 @@ internal sealed class DragPlanner(RefPoints points)
             () => (start.Choose(), drop.Choose()),
             drop.Moved,
             _ => null,
-            BeforeDown: request.FromMustHit == null ? null : () => start.Choose()
+            BeforeDown: request.FromMustHit == null ? null : () => RecheckStart(start)
         );
+    }
+
+    private static void RecheckStart(Press start)
+    {
+        try
+        {
+            start.Choose();
+        }
+        catch (Exception error) when (GuardedInput.IsRefusal(error))
+        {
+            throw GuardedInput.ChangedFirst(error, "the pointer moved to the start point");
+        }
     }
 
     private Press StartPoint(DragRequest request, string handle, ref string? scrolled)
