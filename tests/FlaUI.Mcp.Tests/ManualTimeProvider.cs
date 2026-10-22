@@ -1,6 +1,6 @@
 namespace FlaUI.Mcp.Tests;
 
-/// <summary>A clock that moves only when a test calls <see cref="Advance"/>; its timers fire then.</summary>
+/// <summary>A clock that moves only when a test calls <see cref="Advance"/>; its timers fire then, on the thread pool.</summary>
 internal sealed class ManualTimeProvider : TimeProvider, IManualClock
 {
     private readonly object sync = new();
@@ -47,7 +47,17 @@ internal sealed class ManualTimeProvider : TimeProvider, IManualClock
         }
     }
 
-    /// <summary>Move the clock and fire every timer that came due.</summary>
+    private int running;
+
+    /// <summary>Wait until every callback queued by an earlier <see cref="Advance"/> has run.</summary>
+    public void WaitForCallbacks() =>
+        Eventually.WaitUntil(() => Volatile.Read(ref running) == 0, "the clock's timer callbacks to run");
+
+    /// <summary>
+    /// Move the clock and queue every timer that came due to the thread pool, as a real timer does. Fired inline, a
+    /// callback (a registry timeout's continuation, say) would run on the test thread that moved the clock, and
+    /// deadlock when it waits on something that thread holds. Call <see cref="WaitForCallbacks"/> to see their effect.
+    /// </summary>
     public void Advance(TimeSpan by)
     {
         List<ManualTimer> due;
@@ -63,7 +73,21 @@ internal sealed class ManualTimeProvider : TimeProvider, IManualClock
 
         foreach (var timer in due)
         {
-            timer.Fire();
+            Interlocked.Increment(ref running);
+            ThreadPool.UnsafeQueueUserWorkItem(
+                _ =>
+                {
+                    try
+                    {
+                        timer.Fire();
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref running);
+                    }
+                },
+                null
+            );
         }
     }
 

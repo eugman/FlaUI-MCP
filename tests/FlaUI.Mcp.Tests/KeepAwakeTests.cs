@@ -30,8 +30,10 @@ public class KeepAwakeTests
 
         keepAwake.Poke();
         clock.Advance(TimeSpan.FromMilliseconds(49));
+        clock.WaitForCallbacks();
         Assert.Equal(0, released);
         clock.Advance(TimeSpan.FromMilliseconds(1));
+        clock.WaitForCallbacks();
 
         Assert.Equal(1, released);
         Assert.False(keepAwake.IsActive);
@@ -52,6 +54,7 @@ public class KeepAwakeTests
 
         keepAwake.Poke();
         clock.Advance(TimeSpan.FromMilliseconds(50));
+        clock.WaitForCallbacks();
         Assert.Equal(1, released);
 
         keepAwake.Poke();
@@ -72,11 +75,13 @@ public class KeepAwakeTests
         {
             keepAwake.Poke();
             clock.Advance(TimeSpan.FromMilliseconds(150));
+            clock.WaitForCallbacks();
             Assert.True(released == 0, $"Released too early on iteration {i}.");
         }
 
         Assert.True(keepAwake.IsActive);
         clock.Advance(TimeSpan.FromMilliseconds(50));
+        clock.WaitForCallbacks();
         Assert.Equal(1, released);
     }
 
