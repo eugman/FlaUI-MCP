@@ -15,6 +15,21 @@ internal static class MouseReplies
     };
 
     /// <summary>
+    /// A drag whose drop target moved: Escape and the release went out, so the call is unverified with the
+    /// refusal as its failure, not failed; the text is the refusal's.
+    /// </summary>
+    public static McpToolResult Unverified(InputRefusal refusal) =>
+        new()
+        {
+            Content = [new() { Type = "text", Text = refusal.Message }],
+            Outcome = new ToolOutcome("completed", "not-tracked")
+            {
+                Verification = "not-established",
+                Failure = refusal,
+            },
+        };
+
+    /// <summary>
     /// The landing point in screen pixels and relative to the window's capture origin; for a drag, what UI
     /// Automation reported under the pointer after the release (droppedOn) and, for a resizeTo drag, the size the
     /// ref reached against the one requested, as the outcome's proof: a size that differs is a failure.

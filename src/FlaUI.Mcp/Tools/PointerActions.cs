@@ -63,8 +63,9 @@ internal static class PointerActions
     /// <summary>
     /// Press at the resolved start, move along the path and release at the resolved end. Before the release the
     /// end is checked again: it must still be on the target window, and <paramref name="dropMoved"/> (the drop
-    /// target's own re-read, when there is one) must find nothing moved; otherwise the drag is cancelled with
-    /// Escape while the button is still down, then released, and refused as drop-target-moved.
+    /// target's own re-check, when there is one) must find nothing moved; otherwise Escape is sent while the button
+    /// is still down (an OLE drag ends without a drop on it; a mouse-capture drag may still drop on the release),
+    /// the button is released, and the call is refused as drop-target-moved with the drop unverified.
     /// </summary>
     internal static Point Drag(
         InputTarget target,
@@ -126,8 +127,8 @@ internal static class PointerActions
         InputRefusedException.Record(
             new InputRefusal(
                 RefusalCodes.DropTargetMoved,
-                $"The drop target moved during the drag: {moved}. The drag was cancelled with Escape before the "
-                    + "button was released, so nothing was dropped; observe the window, then retry."
+                $"The drop target moved during the drag: {moved}. Escape was sent before the button was released; "
+                    + "whether the app dropped is not verified: observe the window, then retry."
             )
             {
                 ActionDispatched = true,

@@ -70,8 +70,8 @@ public sealed class DragReleaseTests
         Assert.Equal("drop-target-moved", error.Refusal.Code);
         Assert.True(error.Refusal.ActionDispatched);
         Assert.Equal(
-            "The drop target moved during the drag: the row is now elsewhere. The drag was cancelled with Escape "
-                + "before the button was released, so nothing was dropped; observe the window, then retry.",
+            "The drop target moved during the drag: the row is now elsewhere. Escape was sent before the button was "
+                + "released; whether the app dropped is not verified: observe the window, then retry.",
             error.Message
         );
     }
@@ -185,9 +185,13 @@ public sealed class DragReleaseTests
         // The live seed through the tool: the row is at Row when the drop point is chosen and six rows down by
         // the release. The fake moves it once the button is down.
         var row = Element();
+        var folder = Element();
         var desktop = new FakeDesktop();
         desktop.Descriptions[row] = "TreeItem 'Net Orders (Quantity)'";
+        desktop.Descriptions[folder] = "TreeItem '2. Quantity'";
         desktop.OnGeometry = _ => Geometry(desktop.Dispatched > 2 ? RowSixRowsDown : Row);
+        // After Escape and the release, the folder that scrolled under the pointer is what a capture drag drops on.
+        desktop.HitTest = _ => desktop.Dispatched >= 16 ? folder : row;
         using var installed = desktop.Install();
         var (refs, sessions, handle) = Window();
         using var _ = sessions;
@@ -204,15 +208,18 @@ public sealed class DragReleaseTests
             }
         );
 
-        Assert.True(result.IsError);
+        // Not failed: every input went out, and only an OLE drag ends without a drop on Escape.
+        Assert.True(result.IsError != true);
         Assert.Equal(
-            "Failed to drag: The drop target moved during the drag: TreeItem 'Net Orders (Quantity)' is now at "
-                + "(433,346 435x22), which no longer holds the drop point (435,225). The drag was cancelled with Escape "
-                + "before the button was released, so nothing was dropped; observe the window, then retry.",
+            "The drop target moved during the drag: TreeItem 'Net Orders (Quantity)' is now at (433,346 435x22), "
+                + "which no longer holds the drop point (435,225). Escape was sent before the button was released; "
+                + "whether the app dropped is not verified: observe the window, then retry. Under the pointer now: "
+                + "TreeItem '2. Quantity'.",
             result.Content[0].Text
         );
-        Assert.Equal("failed", result.Outcome!.Status);
-        Assert.Equal("partial", result.Outcome.Dispatch);
+        Assert.Equal("unverified", result.Outcome!.Status);
+        Assert.Equal("not-established", result.Outcome.Verification);
+        Assert.Equal("completed", result.Outcome.Dispatch);
         Assert.Equal("drop-target-moved", result.Outcome.Failure!.Code);
         Assert.True(result.Outcome.Failure.ActionDispatched);
         // Move to the start, press, twelve moves, Escape, release.
@@ -246,7 +253,7 @@ public sealed class DragReleaseTests
 
         Assert.Equal("drop-target-moved", result.Outcome!.Failure!.Code);
         Assert.Contains(
-            "The point (650,225) is covered by Pane 'Insert mark'. The drag was cancelled",
+            "The point (650,225) is covered by Pane 'Insert mark'. Escape was sent",
             result.Content[0].Text
         );
         Assert.Equal(16, result.Outcome.InputsSent);
@@ -275,10 +282,8 @@ public sealed class DragReleaseTests
         );
 
         Assert.Equal("drop-target-moved", result.Outcome!.Failure!.Code);
-        Assert.Contains(
-            "its geometry could not be re-read (provider gone). The drag was cancelled",
-            result.Content[0].Text
-        );
+        Assert.Contains("its geometry could not be re-read (provider gone). Escape was sent", result.Content[0].Text);
+        Assert.Equal("unverified", result.Outcome.Status);
     }
 
     [Fact]

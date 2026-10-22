@@ -64,9 +64,13 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
     /// <summary>
     /// A refusal as windows_click reports one: a failed result, not an exception, so a direct caller sees the
     /// reply the registry sends. The refusal itself stays noted on the operation for the outcome's failure field.
+    /// A drag whose drop target moved is not failed but unverified: every input went out, and whether the app
+    /// dropped on the release is unknown.
     /// </summary>
     private static McpToolResult Refused(string action, Exception error) =>
-        ErrorResult($"Failed to {action}: {error.Message}");
+        error is InputRefusedException { Refusal.Code: RefusalCodes.DropTargetMoved } moved
+            ? MouseReplies.Unverified(moved.Refusal)
+            : ErrorResult($"Failed to {action}: {error.Message}");
 
     /// <summary>Run one pointer action; a refusal after a scroll into view says so.</summary>
     private Point Act(
@@ -132,9 +136,17 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
             GetArgument<int?>(arguments, "steps") ?? PointerPlan.DefaultDragSteps
         );
         var plan = new DragPlanner(points).Plan(request, ref scrolled);
-        var landed = PointerActions.Drag(target, plan.Resolve, request.Steps, plan.DropMoved);
-        drag = plan.Report(landed);
-        return landed;
+        try
+        {
+            var landed = PointerActions.Drag(target, plan.Resolve, request.Steps, plan.DropMoved);
+            drag = plan.Report(landed);
+            return landed;
+        }
+        catch (InputRefusedException refused) when (refused.Refusal.Code == RefusalCodes.DropTargetMoved)
+        {
+            // The release may have dropped anyway: say what is under the pointer now, as a completed drag does.
+            throw plan.AfterCancel(refused, InputDesktop.Current.PointerPosition());
+        }
     }
 
     private Rectangle WindowOrigin(string handle, nint hwnd)

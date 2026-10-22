@@ -30,6 +30,20 @@ internal sealed record DragPlan(
 {
     /// <summary>What the drag found after its release: the element under the pointer and a resize's proof.</summary>
     public DragReport Report(Point landed) => new(DroppedOn(landed), Resized?.Invoke());
+
+    /// <summary>
+    /// The drop-target-moved refusal with what UI Automation reports under the pointer after the cancel, when a
+    /// ref can ask: a mouse-capture drag may have dropped there on the release.
+    /// </summary>
+    public InputRefusedException AfterCancel(InputRefusedException refused, Point at) =>
+        DroppedOn(at) is { } under
+            ? InputRefusedException.Record(
+                refused.Refusal with
+                {
+                    Message = $"{refused.Refusal.Message} Under the pointer now: {under}.",
+                }
+            )
+            : refused;
 }
 
 /// <summary>What a drag found after its release, for its reply.</summary>
