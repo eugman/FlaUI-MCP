@@ -123,17 +123,24 @@ public sealed class ObjectSelectTests
         var result = await ObjectSelect.Run(tree, NoFolder, () => false);
 
         Assert.True(result.FallBack);
+        Assert.True(ObjectSelect.NeedsKeys(result));
         Assert.Empty(tree.Selects);
     }
 
     [Fact]
-    public async Task WithoutAnIndentNoRowIsPickedAndTheWalkFallsBack()
+    public async Task WithoutAnIndentNoRowIsPickedTheTableIsTriedAndTheKeyboardWalkIsNot()
     {
+        // Live (te3-eb2ed6a walk f): the name and table searches both placed no row, and the keyboard walk that
+        // followed read 0 rows, spent 25 inputs and 23 s and stopped on Group "Tables". A read that placed no row is
+        // the second try's reason, never the keyboard walk's: it would start from nothing.
         var tree = new FakeRows(("Brand", 4, "Column")) { Measured = false };
 
         var result = await ObjectSelect.Run(tree, NoFolder, () => false);
 
         Assert.True(result.FallBack);
+        Assert.False(ObjectSelect.NeedsKeys(result));
+        Assert.Contains("The search for 'Brand' placed no row", result.Reason);
+        Assert.Contains("no row was placed, so the keyboard walk was not tried", ObjectSelect.EmptyReadMiss(result));
         Assert.Empty(tree.Selects);
     }
 

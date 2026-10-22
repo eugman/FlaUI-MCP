@@ -232,7 +232,8 @@ internal static partial class ObjectSelect
                 0,
                 read.IndentPx,
                 0,
-                "The tree's indent could not be measured, so no row's depth is known.",
+                $"The search for '{request.ObjectName}' placed no row: the tree's indent could not be measured, so "
+                    + "no row's depth is known.",
                 true,
                 read.Truncated
             );
@@ -361,6 +362,17 @@ internal static partial class ObjectSelect
             ? $"Properties shows it in folder '{folder}'"
             : null;
     }
+
+    /// <summary>
+    /// Whether the keyboard walk follows a row strategy that did not settle it: only after a read that placed rows
+    /// which may be incomplete or unplaced. A read that placed no row (its indent unmeasured, or nothing shown) is a
+    /// miss: the walk would start from nothing, as it did live (0 rows read, 25 inputs, 23 s, the wrong row).
+    /// </summary>
+    public static bool NeedsKeys(SelectResult picked) => picked.FallBack && picked.RowsRead > 0;
+
+    /// <summary>The reason of a miss after reads that placed no row, pinned so no keyboard walk follows.</summary>
+    public static string EmptyReadMiss(SelectResult picked) =>
+        $"{picked.Reason} In all, no row was placed, so the keyboard walk was not tried.";
 
     private static string Missing(WalkRequest request, IReadOnlyList<TreeRow> rows) =>
         $"No row named '{request.ObjectName}' under table '{request.Table}'"

@@ -92,7 +92,8 @@ public sealed partial class Te3Page
     }
 
     // The row strategy first: one read of the filtered rows, one select, Properties to confirm. The keyboard walk runs
-    // only when the rows cannot be placed or may not all be realized, and the 18 s stop bounds both.
+    // only after rows were read that may not all be realized or placed (never after a read that placed none), and
+    // the 18 s stop bounds both.
     private async Task<WalkResult> FindObject(
         WalkRequest request,
         TomCursor cursor,
@@ -122,6 +123,11 @@ public sealed partial class Te3Page
             return new(picked.Found, picked.Found ? request.Table : null, picked.RowsRead, picked.Reason);
         }
 
+        if (!ObjectSelect.NeedsKeys(picked))
+        {
+            return new(false, null, 0, ObjectSelect.EmptyReadMiss(picked));
+        }
+
         reportStep?.Invoke($"Row read could not place the object ({picked.Reason}); walking the tree with keys");
         await Keys("Home", TomExplorerTarget());
         var walk = await ObjectWalk.Find(
@@ -135,8 +141,8 @@ public sealed partial class Te3Page
         return walk;
     }
 
-    // The second row try, filtered by the table's name; when it misses too, the object's name is searched again so
-    // the keyboard walk sees the tree it always walked.
+    // The second row try, filtered by the table's name; when it misses too and a keyboard walk follows, the object's
+    // name is searched again so the walk sees the tree it always walked.
     private async Task<SelectResult> ByTable(
         RowTree rows,
         WalkRequest request,
@@ -151,8 +157,15 @@ public sealed partial class Te3Page
             return byTable;
         }
 
-        await rows.Search(request.ObjectName);
-        return first with { Reason = $"{first.Reason} {byTable.Reason}" };
+        if (ObjectSelect.NeedsKeys(first))
+        {
+            await rows.Search(request.ObjectName);
+        }
+
+        return first with
+        {
+            Reason = $"{first.Reason} {byTable.Reason}",
+        };
     }
 
     /// <summary>te3_navigate object's arrival check: the last walk's object, in its folder, is still selected.</summary>
