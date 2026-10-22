@@ -1,4 +1,8 @@
+using System.Collections.ObjectModel;
+using System.Reflection;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace FlaUI.Mcp.Core;
 
@@ -39,6 +43,51 @@ public sealed record ToolOutcome(
     /// <summary>How the tool checked its effect, when it did; status follows its verdict.</summary>
     [JsonPropertyName("proof"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Proof? Proof { get; init; }
+
+    private readonly IReadOnlyDictionary<string, JsonElement>? details;
+
+    /// <summary>
+    /// A host's own structured fields, such as TE3's <c>walk</c>, written at the top level of structuredContent beside
+    /// the fixed fields. Keys are camelCase names and never one of the fixed fields; the dictionary is copied.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, JsonElement>? Details
+    {
+        get => details;
+        init => details = value is null ? null : CheckDetails(value);
+    }
+
+    // Serialised flat, as the extension data of the outcome; the copy is never handed out, so it cannot be changed.
+    [JsonExtensionData, JsonInclude]
+    private Dictionary<string, JsonElement>? DetailFields
+    {
+        get => details is null ? null : new Dictionary<string, JsonElement>(details);
+        init => details = value is null || value.Count == 0 ? null : CheckDetails(value);
+    }
+
+    private static readonly HashSet<string> FixedFields = typeof(ToolOutcome)
+        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+        .Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name)
+        .OfType<string>()
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private static ReadOnlyDictionary<string, JsonElement> CheckDetails(IReadOnlyDictionary<string, JsonElement> value)
+    {
+        foreach (var key in value.Keys)
+        {
+            if (FixedFields.Contains(key))
+            {
+                throw new ArgumentException($"Outcome detail '{key}' would replace the fixed field of that name.");
+            }
+
+            if (!Regex.IsMatch(key, "^[a-z][A-Za-z0-9]*$", RegexOptions.None, TimeSpan.FromSeconds(1)))
+            {
+                throw new ArgumentException($"Outcome detail '{key}' is not a camelCase name.");
+            }
+        }
+
+        return new Dictionary<string, JsonElement>(value).AsReadOnly();
+    }
 
     /// <summary>This outcome with <paramref name="proof"/>, its verdict also given as the verification.</summary>
     public ToolOutcome WithProof(Proof proof) => this with { Proof = proof, Verification = proof.Verdict };
