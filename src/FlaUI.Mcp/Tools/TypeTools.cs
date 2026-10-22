@@ -212,9 +212,11 @@ public partial class FillTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 
     public override string Description =>
-        "Clear and fill a text field with new value. Prefers Value pattern for reliability. "
-        + "Without a writable Value pattern it focuses the control and sends Ctrl+A, then Backspace or the new text; "
-        + "it refuses before any key when the control does not take keyboard focus. Reports Filled only when the control reads back the value.";
+        "Clear and fill a text field with new value. Prefers Value pattern for reliability; a value set that way reads back "
+        + "through the same pattern, so the call is unverified (not Filled) until you observe the control. A field in a common "
+        + "file dialog is filled by keyboard instead. Without a writable Value pattern it focuses the control and sends Ctrl+A, "
+        + "then Backspace or the new text; it refuses before any key when the control does not take keyboard focus. Reports "
+        + "Filled only when the control reads the value back independently.";
 
     public override object InputSchema => ToolSchema.For<Arguments>();
 

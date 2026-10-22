@@ -75,11 +75,10 @@ public sealed class FillVerdictTests
         Assert.Equal("unverified", result.Outcome.Status);
     }
 
-    [Theory]
-    [InlineData("#32770", true)]
-    [InlineData("FileNameControlHost", true)]
-    [InlineData("Chrome_WidgetWin_1", false)]
-    public void AControlInsideACommonFileDialogIsRecognisedByAnAncestorsClass(string ancestorClass, bool expected)
+    private static (FakeDesktop Desktop, AutomationElement Field, AutomationElement Dialog) Dialog(
+        string dialogClass,
+        string hostClass = "Pane"
+    )
     {
         var field = Element();
         var host = Element();
@@ -88,11 +87,83 @@ public sealed class FillVerdictTests
         desktop.Parents[field] = host;
         desktop.Parents[host] = dialog;
         desktop.ControlTypes[dialog] = ControlType.Window;
-        desktop.ClassNames[host] = ancestorClass;
-        desktop.ClassNames[dialog] = ancestorClass == "FileNameControlHost" ? "#32770" : ancestorClass;
+        desktop.ClassNames[host] = hostClass;
+        desktop.ClassNames[dialog] = dialogClass;
+        return (desktop, field, dialog);
+    }
+
+    [Fact]
+    public void AFieldUnderAFileNameControlHostIsInAFileDialog()
+    {
+        var (desktop, field, _) = Dialog("#32770", "FileNameControlHost");
         using var installed = desktop.Install();
 
-        Assert.Equal(expected, FillTool.InFileDialog(field, desktop));
+        Assert.True(FillTool.InFileDialog(field, desktop));
+    }
+
+    [Theory]
+    [InlineData("DirectUIHWND")]
+    [InlineData("ShellView")]
+    [InlineData("FileNameControlHost")]
+    public void AFieldInADialogThatHostsTheShellViewIsInAFileDialog(string hosted)
+    {
+        var (desktop, field, dialog) = Dialog("#32770");
+        var view = Element();
+        desktop.Parents[view] = dialog;
+        desktop.ClassNames[view] = hosted;
+        using var installed = desktop.Install();
+
+        Assert.True(FillTool.InFileDialog(field, desktop));
+    }
+
+    [Theory]
+    [InlineData("1148")]
+    [InlineData("1152")]
+    public void TheFileNameFieldItselfIsKnownByItsAutomationId(string automationId)
+    {
+        var (desktop, field, _) = Dialog("#32770");
+        desktop.AutomationIds[field] = automationId;
+        using var installed = desktop.Install();
+
+        Assert.True(FillTool.InFileDialog(field, desktop));
+    }
+
+    [Theory]
+    [InlineData("#32770")]
+    [InlineData("Chrome_WidgetWin_1")]
+    public void AnyOtherDialogKeepsTheValuePattern(string dialogClass)
+    {
+        // A MessageBox, Find or Font dialog is "#32770" too: a Static and a Button, no shell view, no file name.
+        var (desktop, field, dialog) = Dialog(dialogClass);
+        var button = Element();
+        desktop.Parents[button] = dialog;
+        desktop.ClassNames[button] = "Button";
+        using var installed = desktop.Install();
+
+        Assert.False(FillTool.InFileDialog(field, desktop));
+    }
+
+    [Fact]
+    public void ADialogHostedInsideTheWindowCountsWhenItHostsTheShellView()
+    {
+        var (desktop, field, dialog) = Dialog("Afx:0000", "#32770");
+        var view = Element();
+        desktop.Parents[view] = desktop.Parents[field];
+        desktop.ClassNames[view] = "DirectUIHWND";
+        using var installed = desktop.Install();
+
+        Assert.True(FillTool.InFileDialog(field, desktop));
+        Assert.False(FillTool.InFileDialog(dialog, desktop));
+    }
+
+    [Fact]
+    public void AChildrenReadThatFailsKeepsTheValuePattern()
+    {
+        var (desktop, field, dialog) = Dialog("#32770");
+        desktop.ChildrenUnreadable.Add(dialog);
+        using var installed = desktop.Install();
+
+        Assert.False(FillTool.InFileDialog(field, desktop));
     }
 
     [Fact]
@@ -107,6 +178,9 @@ public sealed class FillVerdictTests
         desktop.Parents[window] = owner;
         desktop.ControlTypes[window] = ControlType.Window;
         desktop.ClassNames[owner] = "#32770";
+        var view = Element();
+        desktop.Parents[view] = owner;
+        desktop.ClassNames[view] = "DirectUIHWND";
         using var installed = desktop.Install();
 
         Assert.False(FillTool.InFileDialog(field, desktop));
