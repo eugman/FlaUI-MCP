@@ -40,6 +40,42 @@ public sealed class UnverifiedStatusTests
         Assert.Equal("unverified", status[0].GetProperty("status").GetString());
     }
 
+    private static McpToolResult Text(ToolOutcome? outcome = null) =>
+        new() { Content = [new() { Type = "text", Text = "Done" }], Outcome = outcome };
+
+    [Fact]
+    public void InputSentWithoutAProofIsUnverified()
+    {
+        // The input went out, but nothing checked its effect: not-established, so not ok.
+        var registryMade = ToolRegistry.WithDispatch(Text(), 1).Outcome!;
+        var toolMade = ToolRegistry.WithDispatch(Text(new ToolOutcome("completed", "returned")), 2).Outcome!;
+
+        Assert.Equal("unverified", registryMade.Status);
+        Assert.Equal("not-established", registryMade.Verification);
+        Assert.Equal("unverified", toolMade.Status);
+    }
+
+    [Fact]
+    public void ACallThatSentNothingIsOkWithoutAProof()
+    {
+        // A read, or a mutating tool that found nothing to do: there is no effect to check.
+        Assert.Equal("ok", ToolRegistry.WithDispatch(Text(), 0).Outcome!.Status);
+        Assert.Equal(
+            "ok",
+            ToolRegistry.WithDispatch(Text(new ToolOutcome("completed", "returned")), 0).Outcome!.Status
+        );
+    }
+
+    [Fact]
+    public void AProofStillDecidesWhenThereIsOne()
+    {
+        var verified = Text(
+            new ToolOutcome("completed", "returned").WithProof(new Proof(Proof.Verified, "x", "x", "Value", true))
+        );
+
+        Assert.Equal("ok", ToolRegistry.WithDispatch(verified, 1).Outcome!.Status);
+    }
+
     [Fact]
     public async Task ABatchWithAnUnverifiedStepIsUnverified()
     {
