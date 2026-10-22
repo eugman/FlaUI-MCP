@@ -151,6 +151,37 @@ public sealed class ByTableTests
         Assert.True(result.ByTable);
     }
 
+    // A column named like its table ("Date" in Date): the name search and the table search type the same text; the
+    // fake tells them apart by the first one's casing, and gives the name search no measurable indent.
+    private static IReadOnlyList<(string, int?, string)> DateInDate(string search, IReadOnlySet<string> opened)
+    {
+        List<(string, int?, string)> rows = [("SpaceParts", 0, "Model"), ("Tables", 1, "Group"), ("Date", 2, "Table")];
+        if (opened.Contains("Date"))
+        {
+            rows.Add(("Date", 3, "Column"));
+        }
+
+        return search == "Date" ? rows : [("Date", null, "Table"), ("Date", null, "Column")];
+    }
+
+    [Fact]
+    public async Task AnObjectNamedLikeItsTableIsStillTriedUnderTheTableWhenTheNameReadPlacedNoRow()
+    {
+        // Review (L3): with name == table the second try was skipped, and a name read that placed no row (0 rows)
+        // then ran nothing at all. The table try opens the table row and finds the column under it.
+        var tree = new SearchedTree(DateInDate, "date");
+        var request = new WalkRequest("Date", "Date", "Column");
+
+        var byName = await ObjectSelect.Run(tree, request, () => false);
+        var result = await ObjectSelect.ByTable(tree, request, () => false);
+
+        Assert.True(byName.FallBack);
+        Assert.False(ObjectSelect.NeedsKeys(byName));
+        Assert.True(result.Found, result.Reason);
+        Assert.Equal(["Date"], tree.Opened);
+        Assert.Equal([2, 3], tree.Selects);
+    }
+
     [Fact]
     public async Task WithAFolderPathOnlyItsFoldersAreOpened()
     {

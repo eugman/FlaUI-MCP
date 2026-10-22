@@ -107,7 +107,9 @@ public sealed partial class Te3Page
         {
             var rows = new RowTree(this, WalkClock.OutOfTime(elapsed));
             picked = await ObjectSelect.Run(rows, request, WalkClock.OutOfTime(elapsed), lastArrived);
-            if (picked.FallBack && request.Table != request.ObjectName)
+            // Also for an object named like its table: the same search, but with the table row opened and the object
+            // looked for under it, which a name read that placed no row never did.
+            if (picked.FallBack)
             {
                 picked = await ByTable(rows, request, picked, elapsed);
             }
