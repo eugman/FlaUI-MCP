@@ -20,3 +20,5 @@ A separate observation occurred while Camtasia Recorder (PID 11112) was actively
 Foreground authorization and pixel occlusion are separate conditions. The current activation-denied message means Windows retained another foreground window; an obscured clickable point means the intended target was not the native hit window.
 
 This workflow excludes synthetic Alt presses, shell clicks, thread-input attachment, foreground-lock changes, and privilege elevation. They change desktop state without establishing that the intended target owns the next input.
+
+Cold launches can take longer than the default 20-second window detection period. For `windows_launch`, use `waitSeconds` (1–90) only when the app is known to start slowly, and set the caller timeout above the requested wait plus startup overhead. A launch failure after process creation is a partial outcome: inspect `windows_list_windows` and the app state before considering another launch. The longer wait does not relax same-process ownership or foreground checks.

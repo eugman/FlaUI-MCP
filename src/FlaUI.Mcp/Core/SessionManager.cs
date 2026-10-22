@@ -85,12 +85,14 @@ public class SessionManager : IDisposable
     public UIA3Automation Automation =>
         _automation ?? throw new InvalidOperationException("No UI Automation provider configured.");
 
-    public (string handle, Window window) LaunchApp(string appPath, string[]? args = null)
+    public (string handle, Window window) LaunchApp(string appPath, string[]? args = null, int? waitSeconds = null)
     {
         if (!_processPolicy.IsExecutableAllowed(appPath))
         {
             throw ProcessPolicy.NotAllowed(_processPolicy.DescribeDenied($"'{appPath}'"));
         }
+
+        var maxPolls = LaunchPollCount(waitSeconds);
 
         // Use Process.Start for more reliable launching
         var psi = LaunchStartInfo(appPath, args);
@@ -113,7 +115,7 @@ public class SessionManager : IDisposable
         Thread.Sleep(1000); // Extra wait for window to appear
         IReadOnlyList<Win32WindowInfo> Candidates() =>
             Win32Desktop.GetTopLevelWindows(process.Id).Where(w => !w.IsToolWindow && !w.IsCloaked).ToArray();
-        var (window, timeouts) = WaitForLaunchWindow(process, Candidates);
+        var (window, timeouts) = WaitForLaunchWindow(process, Candidates, maxPolls);
 
         if (window == null)
         {
@@ -134,20 +136,26 @@ public class SessionManager : IDisposable
 
     internal const int LaunchPolls = 40;
 
+    internal static int LaunchPollCount(int? waitSeconds) =>
+        waitSeconds is null ? LaunchPolls
+        : waitSeconds is >= 1 and <= 90 ? waitSeconds.Value * 2
+        : throw new ArgumentException("waitSeconds must be between 1 and 90", nameof(waitSeconds));
+
     // A title or an unregistered window is not proof of launch ownership.
     // Brokered/single-instance launches must be attached explicitly by the caller.
-    // Some apps show no window, or two, for several seconds while they start; wait up to ~20s. Requiring
+    // Some apps show no window, or two, for several seconds while they start; wait up to the requested bound. Requiring
     // the same single window on two polls (500ms apart) only filters a window that is briefly alone; a
     // splash screen that stays alone longer is still taken, so attach explicitly when that matters.
     private (Window? window, int timeouts) WaitForLaunchWindow(
         System.Diagnostics.Process process,
-        Func<IReadOnlyList<Win32WindowInfo>> candidatesOf
+        Func<IReadOnlyList<Win32WindowInfo>> candidatesOf,
+        int maxPolls
     )
     {
         Window? window = null;
         var timeouts = 0;
         nint previous = 0;
-        for (var attempt = 0; attempt < LaunchPolls && window == null && timeouts < 2; attempt++)
+        for (var attempt = 0; attempt < maxPolls && window == null && timeouts < 2; attempt++)
         {
             OperationContext.Check();
             if (process.HasExited)

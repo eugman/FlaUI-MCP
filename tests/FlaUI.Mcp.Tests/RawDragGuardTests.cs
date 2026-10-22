@@ -105,6 +105,7 @@ public sealed class RawDragGuardTests
 
         ConfigureGeometry(desktop, scenario, drop);
 
+        desktop.Descriptions[drop] = "Pane 'Drop'";
         desktop.Descriptions[covering] = "Pane 'Covering'";
         desktop.HitTest = point =>
         {
@@ -282,6 +283,7 @@ public sealed class RawDragGuardTests
         Assert.False(result.IsError == true, result.Content[0].Text);
         Assert.Equal(15, desktop.Dispatched);
         using var reply = JsonDocument.Parse(result.Content[0].Text!);
+        Assert.Equal("Pane 'Drop'", reply.RootElement.GetProperty("droppedOn").GetString());
         var from = reply.RootElement.GetProperty("fromPoint");
         Assert.Equal(110, from.GetProperty("screen").GetProperty("x").GetInt32());
         Assert.Equal(110, from.GetProperty("screen").GetProperty("y").GetInt32());
