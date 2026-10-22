@@ -195,7 +195,14 @@ internal sealed class FakeDesktop : InputDesktop
     public override bool HasKeyboardFocus(AutomationElement element) =>
         KeyboardFocus && !ignoresFocus.Contains(element) && Dispatched < ElementFocusLostAfter;
 
-    public override void Dispatch(Action input) => Interlocked.Increment(ref dispatched);
+    /// <summary>Runs with the count of each input as it is sent; throw from it for an input that fails to go out.</summary>
+    public Action<int>? OnDispatch { get; set; }
+
+    public override void Dispatch(Action input)
+    {
+        var count = Interlocked.Increment(ref dispatched);
+        OnDispatch?.Invoke(count);
+    }
 
     /// <summary>What PostMessage(WM_CLOSE) returns.</summary>
     public bool PostCloseResult { get; set; } = true;
@@ -311,8 +318,9 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override void MovePointer(Point point)
     {
-        Interlocked.Increment(ref dispatched);
+        var count = Interlocked.Increment(ref dispatched);
         Pointer = point;
+        OnDispatch?.Invoke(count);
     }
 
     /// <summary>The visible top-level windows of a process; none unless a test says otherwise.</summary>

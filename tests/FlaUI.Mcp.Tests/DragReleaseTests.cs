@@ -70,7 +70,7 @@ public sealed class DragReleaseTests
         Assert.Equal("drop-target-moved", error.Refusal.Code);
         Assert.True(error.Refusal.ActionDispatched);
         Assert.Equal(
-            "The drop target moved during the drag: the row is now elsewhere. Escape was sent before the button was "
+            "The drop target moved during the drag: the row is now elsewhere. Escape was sent and the button was "
                 + "released; whether the app dropped is not verified: observe the window, then retry.",
             error.Message
         );
@@ -107,9 +107,10 @@ public sealed class DragReleaseTests
     }
 
     [Fact]
-    public void AFailedStepStillReleasesTheButtonWithoutAnEscape()
+    public void AFailedStepTakesTheSameWayOutWithoutAnEscapeToAnUnknownWindow()
     {
-        // Focus lost mid-path: the existing refusal (target-changed) and release, no Escape to an unknown window.
+        // Focus lost mid-path: the step's refusal (target-changed) stands, Escape is not sent to whatever took the
+        // foreground, the button is released, and the refusal says what went out.
         var desktop = new FakeDesktop { FocusLostAfter = 3 };
         using var installed = desktop.Install();
 
@@ -118,7 +119,110 @@ public sealed class DragReleaseTests
         );
 
         Assert.Equal("target-changed", error.Refusal.Code);
+        Assert.True(error.Refusal.ActionDispatched);
+        Assert.EndsWith(
+            "no further input sent. Escape was not sent (target-changed) and the button was released; whether the "
+                + "app dropped is not verified: observe the window, then retry.",
+            error.Message
+        );
         Assert.Equal(3 + 1, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void AnEscapeThatFailsStillReleasesTheButtonAndIsReported()
+    {
+        var desktop = new FakeDesktop();
+        // Move to the start, press, four moves; the seventh input is the Escape.
+        desktop.OnDispatch = count =>
+        {
+            if (count == 7)
+            {
+                throw new InvalidOperationException("keyboard hook");
+            }
+        };
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            PointerActions.Drag(FakeDesktop.Target, () => (From, To), 4, _ => "the row is now elsewhere")
+        );
+
+        Assert.Equal("drop-target-moved", error.Refusal.Code);
+        Assert.Contains("Escape was not sent (keyboard hook) and the button was released;", error.Message);
+        Assert.Equal(8, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void AReleaseThatFailsAfterTheEscapeIsReportedUnderTheMovedRefusal()
+    {
+        var desktop = new FakeDesktop();
+        desktop.OnDispatch = count =>
+        {
+            if (count == 8)
+            {
+                throw new InvalidOperationException("input blocked");
+            }
+        };
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            PointerActions.Drag(FakeDesktop.Target, () => (From, To), 4, _ => "the row is now elsewhere")
+        );
+
+        Assert.Equal("drop-target-moved", error.Refusal.Code);
+        Assert.Contains("Escape was sent and the release failed (input blocked);", error.Message);
+        Assert.Equal(8, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void AProviderErrorWithTheButtonDownIsADragInterruptedRefusal()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            PointerActions.Drag(FakeDesktop.Target, () => (From, To), 4, _ => throw new TimeoutException("provider"))
+        );
+
+        Assert.Equal("drag-interrupted", error.Refusal.Code);
+        Assert.True(error.Refusal.ActionDispatched);
+        Assert.Equal(
+            "The drag failed while the button was down (provider). Escape was sent and the button was released; "
+                + "whether the app dropped is not verified: observe the window, then retry.",
+            error.Message
+        );
+        Assert.Equal(2 + 4 + 2, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void ACancellationWithTheButtonDownLetsGoThenRethrowsWithTheRefusalNoted()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        try
+        {
+            Assert.Throws<OperationCanceledException>(() =>
+                PointerActions.Drag(
+                    FakeDesktop.Target,
+                    () => (From, To),
+                    4,
+                    _ => throw new OperationCanceledException()
+                )
+            );
+
+            Assert.Equal(2 + 4 + 2, desktop.Dispatched);
+            Assert.Equal("drag-interrupted", operation.Refusal!.Code);
+            Assert.True(operation.Refusal.ActionDispatched);
+            Assert.StartsWith(
+                "The drag was cancelled while the button was down. Escape was sent",
+                operation.Refusal.Message
+            );
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
     }
 
     [Fact]
@@ -212,7 +316,7 @@ public sealed class DragReleaseTests
         Assert.True(result.IsError != true);
         Assert.Equal(
             "The drop target moved during the drag: TreeItem 'Net Orders (Quantity)' is now at (433,346 435x22), "
-                + "which no longer holds the drop point (435,225). Escape was sent before the button was released; "
+                + "which no longer holds the drop point (435,225). Escape was sent and the button was released; "
                 + "whether the app dropped is not verified: observe the window, then retry. Under the pointer now: "
                 + "TreeItem '2. Quantity'.",
             result.Content[0].Text
