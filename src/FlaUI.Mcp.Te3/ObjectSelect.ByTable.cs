@@ -199,6 +199,12 @@ internal static partial class ObjectSelect
             selected.Add(row.Value ?? "");
             if (!await OpenIfFolder(tree, row, request))
             {
+                // An explicit folder path cannot continue below a segment TE3 did not identify as a folder.
+                if (request.Folder.Length > 0)
+                {
+                    break;
+                }
+
                 continue;
             }
 
@@ -223,30 +229,30 @@ internal static partial class ObjectSelect
     private static bool MayOpen(SelectResult picked, int opened, int selected, Func<bool> outOfTime) =>
         NoCandidate(picked) && opened < MaxFolderOpens && selected < MaxProbes && !outOfTime();
 
-    // Selected, unless it is, then Right.
-    private static async Task Open(IRowTree tree, TreeRow row)
-    {
-        if ((await tree.ReadSelected()).Selected != row.Index)
-        {
-            await tree.Select(row);
-        }
-
-        await tree.Expand();
-    }
-
-    // A folder path's segment is opened as it is; any other row is selected first and opened only when TE3 types it
-    // as a folder or not at all (the status bar does not follow a display folder; Properties says Folder).
+    // A folder path's segment is selected and independently typed by Properties before it is opened. The status bar
+    // can retain a prior selection of the same name. Without a path, a row with no readable type may still be probed.
     private static async Task<bool> OpenIfFolder(IRowTree tree, TreeRow row, WalkRequest request)
     {
-        if (request.Folder.Length > 0)
-        {
-            await Open(tree, row);
-            return true;
-        }
-
         if ((await tree.ReadSelected()).Selected != row.Index)
         {
             await tree.Select(row);
+        }
+
+        if (request.Folder.Length > 0)
+        {
+            for (var attempt = 0; attempt < ProbeReads; attempt++)
+            {
+                var view = await tree.View();
+                if (view.Name == row.Value && view.Type?.Replace(" ", "", StringComparison.Ordinal) == "Folder")
+                {
+                    await tree.Expand();
+                    return true;
+                }
+
+                await tree.Wait(ViewPollMs);
+            }
+
+            return false;
         }
 
         Confirmation? seen = null;

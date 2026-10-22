@@ -219,6 +219,38 @@ public sealed class ByTableTests
         Assert.Equal([2, 5, 6], tree.Selects);
     }
 
+    [Fact]
+    public async Task AFolderPathDoesNotExpandARowTe3TypesAsAColumn()
+    {
+        static IReadOnlyList<(string, int?, string)> Rows(string search, IReadOnlySet<string> open)
+        {
+            List<(string, int?, string)> rows = [SpaceParts, Tables, ("Budget Rate", 2, "Table")];
+            if (search == "" && open.Contains("Budget Rate"))
+            {
+                rows.Add(("1. Facts", 3, "Column"));
+                rows.Add(("Other", 3, "Folder"));
+                rows.Add(("Nested", 4, "Folder"));
+                if (open.Contains("Nested"))
+                {
+                    rows.Add(("Rate", 5, "Column"));
+                }
+            }
+
+            return rows;
+        }
+
+        var tree = new SearchedTree(Rows, "Rate");
+        var result = await ObjectSelect.ByTable(
+            tree,
+            new WalkRequest("Budget Rate", "Rate", "Column", @"1. Facts\Nested"),
+            () => false
+        );
+
+        Assert.False(result.Found);
+        Assert.DoesNotContain("1. Facts", tree.Opened);
+        Assert.DoesNotContain("Nested", tree.Opened);
+    }
+
     // A calc group (te3b-28): TE3's filter shows nothing for the hyphenated name; its first token shows the table.
     private static IReadOnlyList<(string, int?, string)> CalcGroup(string search, IReadOnlySet<string> open)
     {
