@@ -43,6 +43,15 @@ That run predates 4fb89da, which added desktop kill tests for MouseTool and Poin
 9. `ClickTool` line 230, `opensDialog = physical && EndsWithEllipsis(...) && processId != 0` (3).
 10. `ClickTool` line 244, the 2000 ms dialog wait loop (3); line 299 (default action order), 327 (hold wait) and 379 (toggle reply) also have 3 each.
 
+**How long the rerun takes.** With the desktop kill tests added since, about 474 of the 609 mutants are now expected to have a covering test. The first run spent about 48 s on each covered mutant at concurrency 1 (one test session each, with the real desktop), so a full rerun needs about 474 × 48 s ≈ 6.3 hours of desktop time. That is past the part's 3-hour cap, and too long to hold the desktop in one sitting. Run it as two parts of about 3 hours each, split by file so each part's report stands alone:
+
+| Part | Files | Mutants (all) |
+|---|---|---|
+| pointer-integration, part 1: clicks | ClickTool, ClickToolReplies, ClickPoint | 283 |
+| pointer-integration, part 2: input | GuardedInput, MouseTool, PointerActions | 326 |
+
+Each part is about half the covered mutants if coverage is spread evenly; after part 1, rebalance with its measured time per mutant if needed. Until `mutation.ps1` takes the split by name, run each part with its own copy of `stryker-config.pointer-integration.json` whose `mutate` lists only that part's files, and give each run `-Minutes 200`.
+
 Survivors in this part can be killed only by integration tests, so writing and checking those kill tests needs the desktop. Earlier run, 2026-10-21 at b4f538c: partial, stopped at about 12 of 249 mutants when the night's work was wrapped up (each mutant runs in its own test session of about 15 s), so it gave no score.
 
 ## Run log
