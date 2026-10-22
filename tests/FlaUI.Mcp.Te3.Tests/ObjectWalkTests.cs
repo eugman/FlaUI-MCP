@@ -24,6 +24,10 @@ public sealed class ObjectWalkTests
 
     private static readonly WalkRequest InFolder = new("Brands", "Brand", "Column", "1. Brand Hierarchy");
 
+    // What Properties shows for the selection: its Name and, when read, its Display Folder.
+    private static Func<SelectionView> Shows(string? name, string? folder = null) =>
+        () => new SelectionView(null, name, null, folder);
+
     [Fact]
     public async Task ASiblingFolderMissIsNeverTurnedIntoArrival()
     {
@@ -39,7 +43,7 @@ public sealed class ObjectWalkTests
             "Column"
         );
 
-        var walk = await ObjectWalk.Find(tree, InFolder, () => false, () => true, () => "Brand");
+        var walk = await ObjectWalk.Find(tree, InFolder, () => false, () => true, Shows("Brand"));
 
         Assert.False(walk.Found);
         Assert.False(walk.Rescuable);
@@ -57,7 +61,7 @@ public sealed class ObjectWalkTests
             InFolder,
             () => ++downs > 2,
             () => true,
-            () => "Brand"
+            Shows("Brand")
         );
 
         Assert.True(walk.Found, walk.Reason);
@@ -74,7 +78,7 @@ public sealed class ObjectWalkTests
             InFolder,
             () => ++downs > 2,
             () => true,
-            () => "Brand"
+            Shows("Brand")
         );
 
         Assert.False(walk.Found);
@@ -95,7 +99,7 @@ public sealed class ObjectWalkTests
             () =>
             {
                 reads++;
-                return "Brand";
+                return new SelectionView(null, "Brand", null, null);
             }
         );
 
@@ -115,13 +119,13 @@ public sealed class ObjectWalkTests
         var untyped = new FakeTree(At(4, "Brand", null));
 
         Assert.True(
-            await ObjectWalk.Arrived(new TypedTree(untyped, "Column"), found, InFolder, () => "Brand", At("Brands"))
+            await ObjectWalk.Arrived(new TypedTree(untyped, "Column"), found, InFolder, Shows("Brand"), At("Brands"))
         );
         Assert.False(
-            await ObjectWalk.Arrived(new TypedTree(untyped, null), found, InFolder, () => "Brand", At("Brands"))
+            await ObjectWalk.Arrived(new TypedTree(untyped, null), found, InFolder, Shows("Brand"), At("Brands"))
         );
         Assert.False(
-            await ObjectWalk.Arrived(new TypedTree(untyped, "Column"), found, InFolder, () => "Type", At("Brands"))
+            await ObjectWalk.Arrived(new TypedTree(untyped, "Column"), found, InFolder, Shows("Type"), At("Brands"))
         );
     }
 
@@ -133,13 +137,13 @@ public sealed class ObjectWalkTests
         var found = new WalkResult(true, "Brands", 22, null);
         var cleared = new FakeTree(new RowObservation("Brand", "Column", null));
 
-        Assert.True(await ObjectWalk.Arrived(cleared, found, InFolder, () => "Brand", At("Brands")));
+        Assert.True(await ObjectWalk.Arrived(cleared, found, InFolder, Shows("Brand"), At("Brands")));
         Assert.False(
             await ObjectWalk.Arrived(
                 new FakeTree(new RowObservation("Brand", "Hierarchy", null)),
                 found,
                 InFolder,
-                () => "Brand",
+                Shows("Brand"),
                 At("Brands")
             )
         );
@@ -148,7 +152,7 @@ public sealed class ObjectWalkTests
                 new FakeTree(new RowObservation("Sub Brand", "Column", null)),
                 found,
                 InFolder,
-                () => null,
+                Shows(null),
                 At("Brands")
             )
         );
@@ -163,9 +167,52 @@ public sealed class ObjectWalkTests
         var found = new WalkResult(true, "Brands", 22, null);
         var brand = new FakeTree(new RowObservation("Brand", "Column", null));
 
-        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, () => "Brand", At("Sales", placed: false)));
-        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, () => "Brand", At("Brands", placed: false)));
-        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, () => "Brand", At(null, placed: false)));
+        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, Shows("Brand"), At("Sales", placed: false)));
+        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, Shows("Brand"), At("Brands", placed: false)));
+    }
+
+    [Fact]
+    public async Task ASelectionWhoseTableRowIsOutOfViewIsConfirmedFromThePreClearPlaceAndProperties()
+    {
+        // Live (te3-eb2ed6a walks a-d): when the search clears TE3 scrolls the selected row to the top of the
+        // viewport, so the table row is never in view. The status bar and Properties name the object, and the rows
+        // read before the clear placed it under its table and in its folder: that placement stands unless Properties'
+        // Display Folder, when it shows, is another folder, or the walk placed it under another table.
+        var found = new WalkResult(true, "Brands", 22, null);
+        var brand = new FakeTree(new RowObservation("Brand", "Column", null));
+        var outOfView = At(null, placed: false);
+
+        Assert.True(await ObjectWalk.Arrived(brand, found, InFolder, Shows("Brand", "1. Brand Hierarchy"), outOfView));
+        Assert.True(await ObjectWalk.Arrived(brand, found, InFolder, Shows("Brand"), outOfView));
+        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, Shows("Brand", "2. Other"), outOfView));
+        Assert.False(
+            await ObjectWalk.Arrived(brand, found with { Table = "Sales" }, InFolder, Shows("Brand"), outOfView)
+        );
+        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, Shows("Sub Brand"), outOfView));
+        Assert.False(
+            await ObjectWalk.Arrived(
+                new FakeTree(new RowObservation("Brand", "Level", null)),
+                found,
+                InFolder,
+                Shows("Brand"),
+                outOfView
+            )
+        );
+    }
+
+    [Fact]
+    public void AClearMissWithTheTableRowOutOfViewSaysWhatTe3NamesAndWhatWasPlaced()
+    {
+        var text = ObjectWalk.ClearMiss(
+            new("Brand", "Column", null),
+            new SelectionPlace(null, false),
+            InFolder,
+            new SelectionView(null, "Brand", null, "2. Other")
+        );
+
+        Assert.Contains("'Brand' (Column) in display folder '2. Other'", text);
+        Assert.Contains("'Brand' (Column) in folder '1. Brand Hierarchy' under table 'Brands'", text);
+        Assert.Contains("table row is not in view", text);
     }
 
     [Fact]
@@ -175,7 +222,7 @@ public sealed class ObjectWalkTests
                 new TypedTree(new FakeTree(At(4, "Brand", "Column")), "Column"),
                 new WalkResult(false, "Brands", 3, "outside the folder"),
                 InFolder,
-                () => "Brand",
+                Shows("Brand"),
                 At("Brands")
             )
         );

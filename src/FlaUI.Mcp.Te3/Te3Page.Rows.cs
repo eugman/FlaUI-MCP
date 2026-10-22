@@ -15,14 +15,17 @@ public sealed partial class Te3Page
             destination == "object" ? WalkReport : null
         );
 
-    /// <summary>The proof of an object navigation: the selection TE3 names now against the request.</summary>
+    /// <summary>
+    /// The proof of an object navigation: the selection TE3 names now against the request, under the table the rows
+    /// in view place it (else, its table row scrolled above the viewport, the one the walk placed it under).
+    /// </summary>
     internal async Task<FlaUI.Mcp.Core.Proof> ObjectProof(string table, string name, string? type) =>
         NavigationProof.Object(
             table,
             name,
             type,
             await Task.Run(ViewSelection),
-            (await PlaceOf(lastRequest ?? new WalkRequest(table, name, type ?? ""))).Table
+            (await PlaceOf(lastRequest ?? new WalkRequest(table, name, type ?? ""))).Table ?? lastWalk?.Table
         );
 
     /// <summary>
@@ -95,14 +98,19 @@ public sealed partial class Te3Page
         await invoke("windows_click", new { @ref = reference, action = "select" });
     }
 
-    // The raw readings of the selection: the status bar's slot and the Properties rows (Name, ObjectType, Folder).
+    // The raw readings of the selection: the status bar's slot and the Properties rows (Name, ObjectType, the
+    // display folder).
     private SelectionView ViewSelection() =>
         new(
             Te3StatusBar.SelectionSlot(ObserveModelState().Slots),
             PropertiesValue("Name"),
             PropertiesValue("ObjectType"),
-            PropertiesValue("Folder")
+            PropertiesFolder()
         );
+
+    // Properties' Display Folder row. Its DataItem is named after the property, as ObjectType's is (verified live);
+    // the spelling with the space is read second in case the grid names this one as it shows it (not verified).
+    private string? PropertiesFolder() => PropertiesValue("DisplayFolder") ?? PropertiesValue("Display Folder");
 
     private const int RenderBudgetMs = 1500;
     private const int RenderPollMs = 250;

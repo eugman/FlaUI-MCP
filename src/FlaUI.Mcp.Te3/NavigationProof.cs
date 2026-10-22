@@ -7,10 +7,12 @@ using FlaUI.Mcp.Core;
 /// </summary>
 internal static class NavigationProof
 {
-    private const string Selection = "TE3 status bar or Properties, read after the walk";
+    private const string Selection =
+        "TE3 status bar or Properties, read after the walk; the table from the rows in view, else from the rows read "
+        + "before the search cleared";
 
     /// <param name="type">The requested type; null or empty takes whatever type TE3 names.</param>
-    /// <param name="reachedTable">The table the walk reached the object under.</param>
+    /// <param name="reachedTable">The table the rows place the object under (in view, else before the clear).</param>
     public static Proof Object(string table, string name, string? type, SelectionView now, string? reachedTable)
     {
         var observedName = TomSelection.SelectionName(now.Bar) ?? now.Name;

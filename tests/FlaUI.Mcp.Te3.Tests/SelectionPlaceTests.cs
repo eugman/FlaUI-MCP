@@ -37,7 +37,7 @@ public sealed class SelectionPlaceTests
         Assert.False(place.Placed);
         Assert.Contains(
             "table row is not in view",
-            ObjectWalk.ClearMiss(new("Brand", "Column", 4), place, BrandsBrand)
+            ObjectWalk.ClearMiss(new("Brand", "Column", 4), place, BrandsBrand, new(null, null, null, null))
         );
     }
 
@@ -60,7 +60,12 @@ public sealed class SelectionPlaceTests
     [Fact]
     public void AnotherTablesColumnIsNamedAsMovedThere()
     {
-        var text = ObjectWalk.ClearMiss(new("Brand", "Column", 4), new SelectionPlace("Sales", false), BrandsBrand);
+        var text = ObjectWalk.ClearMiss(
+            new("Brand", "Column", 4),
+            new SelectionPlace("Sales", false),
+            BrandsBrand,
+            new(null, null, null, null)
+        );
 
         Assert.Contains("Selection moved when the search was cleared", text);
         Assert.Contains("under table 'Sales'", text);

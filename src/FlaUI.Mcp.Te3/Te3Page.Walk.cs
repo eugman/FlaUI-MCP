@@ -66,19 +66,21 @@ public sealed partial class Te3Page
 
         reportStep?.Invoke($"Found {objectType} '{objectName}' under '{walk.Table}' after {walk.RowsVisited} rows");
         await ClearTomSearchTyped();
-        // Clearing the filter keeps the selection; check it really did before reporting arrival.
+        // Clearing the filter keeps the selection but scrolls its row to the top of the viewport: the check takes the
+        // table from the rows in view when its row is there, else from the rows read before the clear.
         var place = new SelectionPlace(null, false);
+        var seen = new SelectionView(null, null, null, null);
         if (
             !await ObjectWalk.Arrived(
                 cursor,
                 walk,
                 request,
-                () => PropertiesValue("Name"),
+                () => seen = ViewSelection(),
                 async () => place = await PlaceOf(request)
             )
         )
         {
-            throw new InvalidOperationException(ObjectWalk.ClearMiss(await cursor.Current(), place, request));
+            throw new InvalidOperationException(ObjectWalk.ClearMiss(await cursor.Current(), place, request, seen));
         }
 
         lastWalk = walk;
@@ -118,7 +120,7 @@ public sealed partial class Te3Page
             request,
             WalkClock.OutOfTime(elapsed),
             WalkClock.CanRead(elapsed),
-            () => PropertiesValue("Name")
+            ViewSelection
         );
         WalkReport = WalkAccount.Keys(picked, request, walk);
         return walk;
@@ -154,7 +156,7 @@ public sealed partial class Te3Page
                 new TomCursor(this),
                 lastWalk,
                 lastRequest,
-                () => PropertiesValue("Name"),
+                ViewSelection,
                 () => PlaceOf(lastRequest)
             )
         )

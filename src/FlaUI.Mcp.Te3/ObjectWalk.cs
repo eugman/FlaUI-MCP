@@ -29,13 +29,13 @@ internal static class ObjectWalk
     /// </summary>
     /// <param name="outOfTime">True once no further key may be pressed.</param>
     /// <param name="canRead">True while one more read of the selection still fits in the tool's time.</param>
-    /// <param name="propertiesName">Properties' Name for the selection, or null when it cannot be read.</param>
+    /// <param name="view">The status bar's slot and Properties' rows for the selection, as they read now.</param>
     public static async Task<WalkResult> Find(
         ITreeCursor cursor,
         WalkRequest request,
         Func<bool> outOfTime,
         Func<bool> canRead,
-        Func<string?> propertiesName
+        Func<SelectionView> view
     )
     {
         var walk = await PathWalker.Find(
@@ -54,20 +54,25 @@ internal static class ObjectWalk
         // A rescue happens before the search clears, on the row the walk itself read its way to: the table and folder
         // are the ones the walk passed through (Rescuable requires the row inside the folder).
         var walked = () => Task.FromResult(new SelectionPlace(walk.Table, true));
-        return await Arrived(cursor, walk, request, propertiesName, walked) ? walk with { Found = true } : walk;
+        return await Arrived(cursor, walk, request, view, walked) ? walk with { Found = true } : walk;
     }
 
     /// <summary>
-    /// Why the selection after the search cleared is not proven to be the object: its table row is out of view (the
-    /// table and folder cannot be confirmed), it is in another table, or it is not the object's row there.
+    /// Why the selection after the search cleared is not proven to be the object: with its table row out of view,
+    /// what TE3 names is not the object as the rows read before the clear placed it; otherwise it is in another
+    /// table, or not the object's row there.
     /// </summary>
-    public static string ClearMiss(RowObservation after, SelectionPlace place, WalkRequest request)
+    public static string ClearMiss(RowObservation after, SelectionPlace place, WalkRequest request, SelectionView seen)
     {
         var now = $"'{after.Value}' ({after.Type ?? "unknown type"})";
         if (place.Table == null)
         {
-            return $"After the search cleared, the selection is {now}, but its table row is not in view, so its table "
-                + $"and folder could not be confirmed as '{request.Table}'. Observe the selection before continuing.";
+            var shown = seen.Folder == null ? "" : $" in display folder '{seen.Folder}'";
+            var type = request.ObjectType.Length > 0 ? request.ObjectType : "any type";
+            var folder = request.Folder.Length > 0 ? $" in folder '{request.Folder}'" : "";
+            return $"After the search cleared, TE3 names the selection {now}{shown}, which is not "
+                + $"'{request.ObjectName}' ({type}){folder} under table '{request.Table}' as the rows read before the "
+                + "clear placed it (its table row is not in view). Observe the selection before continuing.";
         }
 
         return place.Table != request.Table
@@ -78,16 +83,18 @@ internal static class ObjectWalk
 
     /// <summary>
     /// The selection is the object the walk reached: by identity (name and type, the cursor typing the row, and
-    /// Properties' Name when shown) and by where the rows read now place it (<paramref name="place"/>: the table from
-    /// the nearest table row above it under Tables, and whether it is the object's row in that table and folder), not
-    /// by its row index or the walk's own table. A walk that was not found, or rows that cannot place the selection,
-    /// never arrived.
+    /// Properties' Name when shown) and by where it sits. The rows read now place it when its table row is in view
+    /// (<paramref name="place"/>: the table from the nearest table row above it under Tables, and whether it is the
+    /// object's row in that table and folder). When the search clears, TE3 scrolls the selected row to the top of the
+    /// viewport, so the table row is above the realized rows: then the placement the rows read before the clear made
+    /// (the walk's table, the object's row in its folder) stands, unless Properties' Display Folder, when it shows,
+    /// names another folder. A walk that was not found never arrived.
     /// </summary>
     public static async Task<bool> Arrived(
         ITreeCursor cursor,
         WalkResult walk,
         WalkRequest request,
-        Func<string?> propertiesName,
+        Func<SelectionView> view,
         Func<Task<SelectionPlace>> place
     )
     {
@@ -98,17 +105,23 @@ internal static class ObjectWalk
 
         var row = await cursor.Current();
         var at = await place();
-        return at.Placed
+        var seen = view();
+        var placed = at.Table == null ? FolderShown(seen, request) : at.Placed;
+        return placed
             && PathWalker.Arrived(
                 row,
-                propertiesName(),
+                seen.Name,
                 null,
-                at.Table,
+                at.Table ?? walk.Table,
                 request.Table,
                 request.ObjectName,
                 request.ObjectType
             );
     }
+
+    // Properties' Display Folder, when read, is the requested folder; unread, the pre-clear placement decides.
+    private static bool FolderShown(SelectionView seen, WalkRequest request) =>
+        request.Folder.Length == 0 || seen.Folder == null || seen.Folder == request.Folder;
 }
 
 /// <summary>Where the rows read place the selection: its table (null when no table row above it was read), and
