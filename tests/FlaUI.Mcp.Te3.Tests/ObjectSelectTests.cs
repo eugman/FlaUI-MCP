@@ -11,6 +11,15 @@ public sealed class ObjectSelectTests
     {
         private TreeRow? selected;
 
+        /// <summary>The row already selected before the walk (an earlier walk left it there).</summary>
+        public int? InitiallySelected
+        {
+            init => selected = value is { } index ? All[index] : null;
+        }
+
+        /// <summary>When true, Properties' Name also lags behind the select for the stale reads.</summary>
+        public bool PropertiesLate { get; init; }
+
         public bool Complete { get; init; } = true;
 
         public bool Measured { get; init; } = true;
@@ -65,8 +74,9 @@ public sealed class ObjectSelectTests
                 bar = $"{rows[selected.Index].Type} \"{selected.Value}\"";
             }
 
-            var type = selected == null || PropertiesWithoutType ? null : rows[selected.Index].Type;
-            return Task.FromResult(new SelectionView(bar, selected?.Value, type, null));
+            var late = PropertiesLate && sinceSelect <= StaleBarReads;
+            var type = selected == null || PropertiesWithoutType || late ? null : rows[selected.Index].Type;
+            return Task.FromResult(new SelectionView(bar, late ? null : selected?.Value, type, null));
         }
 
         public Task Wait(int ms) => Task.CompletedTask;
@@ -355,24 +365,68 @@ public sealed class ObjectSelectTests
     }
 
     [Fact]
-    public async Task ASelectionTeNeverShowsIsTurnedDownNotTakenFromTheStaleSlot()
+    public async Task ATypeTeNeverShowsIsAMismatchNotAColumn()
     {
+        // The slot never updates and Properties has no ObjectType for a column: nothing proves it is a Column.
         var result = await ObjectSelect.Run(LevelThenColumn(staleBarReads: 100), NoFolder, () => false);
 
         Assert.False(result.Found);
-        Assert.Contains(result.Rejected, r => r.Reason.Contains("did not show the new selection"));
+        Assert.All(result.Rejected, r => Assert.Contains("not Column", r.Reason));
     }
 
     [Theory]
-    [InlineData("Level \"Brand\"", "Level \"Brand\"", false)] // unchanged: stale
-    [InlineData("Level \"Brand\"", "Column \"Brand\"", true)] // changed and names the label
-    [InlineData("Column \"Type\"", "Column \"Type\"", false)] // a folder leaves the slot on the previous object
-    public void TheSlotCountsOnlyWhenItChangedAndNamesTheRow(string beforeBar, string nowBar, bool counts)
+    [InlineData("Column \"Brand\"", null, "Column")] // the slot names the label: its type
+    [InlineData("Column \"Type\"", "Brand", null)] // a folder or stale slot: Properties' Name, no ObjectType
+    [InlineData("Column \"Type\"", "Type", "none")] // neither names the label
+    public void TeNamesTheSelectionBySlotFirstThenPropertiesName(string bar, string? name, string? type)
     {
-        var row = new TreeRow(4, "Brand", 3);
-        var before = new SelectionView(beforeBar, "Brand", null, null);
-        var now = new SelectionView(nowBar, "Brand", null, null);
+        var seen = SelectionView.Read(new TreeRow(4, "Brand", 3), new SelectionView(bar, name, null, null));
 
-        Assert.Equal(counts, SelectionView.Settle(row, before, now) != null);
+        if (type == "none")
+        {
+            Assert.Null(seen);
+        }
+        else
+        {
+            Assert.Equal("Brand", seen?.Name);
+            Assert.Equal(type, seen?.Type);
+        }
+    }
+
+    [Fact]
+    public async Task ARowAlreadySelectedIsConfirmedWithoutSelectingItAgain()
+    {
+        // Live, the column left selected by an earlier walk was turned down ("no new selection") and the level taken.
+        var tree = new FakeRows(
+            ("Tables", 1, "Group"),
+            ("Brands", 2, "Table"),
+            ("Brand", 3, "Column"),
+            ("Brand Hierarchy", 3, "Hierarchy"),
+            ("Brand", 4, "Level")
+        )
+        {
+            InitiallySelected = 2,
+        };
+
+        var result = await ObjectSelect.Run(tree, new WalkRequest("Brands", "Brand", ""), () => false);
+
+        Assert.True(result.Found, string.Join("; ", result.Rejected.Select(r => r.Reason)));
+        Assert.Equal("Column", result.ConfirmedType);
+        Assert.Empty(tree.Selects);
+    }
+
+    [Fact]
+    public async Task ASelectThatTakesAMomentToShowIsWaitedFor()
+    {
+        // Live, Measure "Order Lines" showed in the status bar only after the first reading.
+        var tree = new FakeRows(("Tables", 1, "Group"), ("Orders", 2, "Table"), ("Order Lines", 3, "Measure"))
+        {
+            StaleBarReads = 3,
+            PropertiesLate = true,
+        };
+
+        var result = await ObjectSelect.Run(tree, new WalkRequest("Orders", "Order Lines", "Measure"), () => false);
+
+        Assert.True(result.Found, string.Join("; ", result.Rejected.Select(r => r.Reason)));
     }
 }
