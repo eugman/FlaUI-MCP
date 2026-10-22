@@ -81,6 +81,9 @@ internal sealed class FakeRows(params (string? Value, int? Depth, string Type)[]
     /// <summary>When true, Properties shows no ObjectType (as for a column on 3.27.1).</summary>
     public bool PropertiesWithoutType { get; init; }
 
+    /// <summary>Properties' Display Folder for whatever is selected; null when the row is not read.</summary>
+    public string? Folder { get; init; }
+
     private string? bar;
     private int sinceSelect;
 
@@ -93,7 +96,9 @@ internal sealed class FakeRows(params (string? Value, int? Depth, string Type)[]
 
         var late = PropertiesLate && sinceSelect <= StaleBarReads;
         var type = selected == null || PropertiesWithoutType || late ? null : rows[selected.Index].Type;
-        return Task.FromResult(new SelectionView(bar, late ? null : selected?.Value, type, null));
+        return Task.FromResult(
+            new SelectionView(bar, late ? null : selected?.Value, type, selected == null ? null : Folder)
+        );
     }
 
     public Task Wait(int ms) => Task.CompletedTask;

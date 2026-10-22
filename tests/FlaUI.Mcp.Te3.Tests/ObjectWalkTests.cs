@@ -201,6 +201,26 @@ public sealed class ObjectWalkTests
     }
 
     [Fact]
+    public async Task AWalkThatMeasuredNoTableIsConfirmedOnlyByTheDisplayFolderReadNow()
+    {
+        // Review: the already-selected shortcut measures no table (null, never the request echoed back), so after the
+        // clear only Properties' Display Folder read as the requested one confirms the selection.
+        var unmeasured = new WalkResult(true, null, 3, null);
+        var brand = new FakeTree(new RowObservation("Brand", "Column", null));
+        var outOfView = At(null, placed: false);
+
+        Assert.True(
+            await ObjectWalk.Arrived(brand, unmeasured, InFolder, Shows("Brand", "1. Brand Hierarchy"), outOfView)
+        );
+        Assert.False(await ObjectWalk.Arrived(brand, unmeasured, InFolder, Shows("Brand"), outOfView));
+        Assert.False(await ObjectWalk.Arrived(brand, unmeasured, InFolder, Shows("Brand", "2. Other"), outOfView));
+        Assert.False(
+            await ObjectWalk.Arrived(brand, unmeasured, InFolder with { Folder = "" }, Shows("Brand"), outOfView)
+        );
+        Assert.True(await ObjectWalk.Arrived(brand, unmeasured, InFolder, Shows("Brand"), At("Brands")));
+    }
+
+    [Fact]
     public void AClearMissWithTheTableRowOutOfViewSaysWhatTe3NamesAndWhatWasPlaced()
     {
         var text = ObjectWalk.ClearMiss(

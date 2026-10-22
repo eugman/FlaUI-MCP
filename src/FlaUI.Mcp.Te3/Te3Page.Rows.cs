@@ -17,7 +17,8 @@ public sealed partial class Te3Page
 
     /// <summary>
     /// The proof of an object navigation: the selection TE3 names now against the request, under the table the rows
-    /// in view place it (else, its table row scrolled above the viewport, the one the walk placed it under).
+    /// in view place it (else, its table row scrolled above the viewport, the one the rows read before the clear
+    /// placed it under; with neither, the proof is unavailable).
     /// </summary>
     internal async Task<FlaUI.Mcp.Core.Proof> ObjectProof(string table, string name, string? type) =>
         NavigationProof.Object(

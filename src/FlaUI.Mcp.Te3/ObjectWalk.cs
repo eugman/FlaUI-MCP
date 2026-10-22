@@ -88,7 +88,8 @@ internal static class ObjectWalk
     /// object's row in that table and folder). When the search clears, TE3 scrolls the selected row to the top of the
     /// viewport, so the table row is above the realized rows: then the placement the rows read before the clear made
     /// (the walk's table, the object's row in its folder) stands, unless Properties' Display Folder, when it shows,
-    /// names another folder. A walk that was not found never arrived.
+    /// names another folder. A walk that measured no table either (the already-selected shortcut) is confirmed only
+    /// by Properties' Display Folder read now as the requested one. A walk that was not found never arrived.
     /// </summary>
     public static async Task<bool> Arrived(
         ITreeCursor cursor,
@@ -106,22 +107,32 @@ internal static class ObjectWalk
         var row = await cursor.Current();
         var at = await place();
         var seen = view();
-        var placed = at.Table == null ? FolderShown(seen, request) : at.Placed;
+        var table = at.Table ?? walk.Table;
+        var placed = at.Table != null ? at.Placed : InFolder(seen, request, measured: table != null);
         return placed
+            && (table == null || table == request.Table)
             && PathWalker.Arrived(
                 row,
                 seen.Name,
                 null,
-                at.Table ?? walk.Table,
+                request.Table,
                 request.Table,
                 request.ObjectName,
                 request.ObjectType
             );
     }
 
-    // Properties' Display Folder, when read, is the requested folder; unread, the pre-clear placement decides.
-    private static bool FolderShown(SelectionView seen, WalkRequest request) =>
-        request.Folder.Length == 0 || seen.Folder == null || seen.Folder == request.Folder;
+    // With the table measured before the clear, Properties' Display Folder may contradict the placement but need not
+    // be read; with no table measured at all, only the folder read now as the requested one confirms the selection.
+    private static bool InFolder(SelectionView seen, WalkRequest request, bool measured)
+    {
+        if (!measured)
+        {
+            return request.Folder.Length > 0 && seen.Folder == request.Folder;
+        }
+
+        return request.Folder.Length == 0 || seen.Folder == null || seen.Folder == request.Folder;
+    }
 }
 
 /// <summary>Where the rows read place the selection: its table (null when no table row above it was read), and

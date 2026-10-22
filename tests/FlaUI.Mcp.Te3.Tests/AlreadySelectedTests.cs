@@ -88,23 +88,78 @@ public sealed class AlreadySelectedTests
     }
 
     [Fact]
-    public async Task TheObjectTheLastWalkReachedIsTakenFromTheStatusBarWithNoSelectWhenTheRowsCannotPlaceIt()
+    public async Task TheObjectTheLastWalkReachedIsTakenWithNoSelectWhenItsDisplayFolderTiesItToThatWalk()
     {
         // Live (te3-eb2ed6a walk c): Brands[Brand], left selected by walk b, cost a select again because the in-place
-        // read could not place it (the root was scrolled out of view, so no depth was known). The host's own last
-        // walk confirmed this very request there and TE3 still names the object with its type: no read, no select.
+        // read could not place it (the root was scrolled out of view, so no depth was known). With no measurement of
+        // the table, only Properties' Display Folder, read and the folder the host's last walk arrived in, ties the
+        // selection to that walk; the table is then not measured (null), never the request echoed back.
         var tree = new FakeRows(("Tables", 1, "Group"), ("Brands", 2, "Table"), ("Brand", 3, "Column"))
         {
             InitiallySelected = 2,
             InPlaceMeasured = false,
+            Folder = "1. Brand Hierarchy",
         };
 
-        var result = await ObjectSelect.Run(tree, NoFolder, () => false, lastArrived: NoFolder);
+        var result = await ObjectSelect.Run(tree, WithFolder, () => false, lastArrived: WithFolder);
 
         Assert.True(result.Found, result.Reason);
         Assert.Equal("Column", result.ConfirmedType);
+        Assert.Null(result.Table);
         Assert.Equal(0, result.Tried);
         Assert.Equal(0, tree.Reads);
+        Assert.Empty(tree.Selects);
+    }
+
+    [Fact]
+    public async Task ASameNamedObjectInAnotherTableIsNotTakenForTheLastWalksOne()
+    {
+        // Review: `Rate` sits in both Budget Rate and Exchange Rate (UI-MAP). After a walk to Budget Rate[Rate], a
+        // click on Exchange Rate's Rate reads the same name and type; with the rows unable to place it and no folder
+        // read, nothing ties it to the last walk, so the rows are read and the object selected as usual.
+        var budgetRate = new WalkRequest("Budget Rate", "Rate", "Column");
+        var unread = new FakeRows(("Tables", 1, "Group"), ("Exchange Rate", 2, "Table"), ("Rate", 3, "Column"))
+        {
+            InitiallySelected = 2,
+            InPlaceMeasured = false,
+        };
+        var other = new FakeRows(("Tables", 1, "Group"), ("Exchange Rate", 2, "Table"), ("Rate", 3, "Column"))
+        {
+            InitiallySelected = 2,
+            InPlaceMeasured = false,
+            Folder = "2. Keys",
+        };
+
+        await ObjectSelect.Run(unread, budgetRate, () => false, lastArrived: budgetRate);
+        await ObjectSelect.Run(
+            other,
+            budgetRate with
+            {
+                Folder = "1. Facts",
+            },
+            () => false,
+            lastArrived: budgetRate with
+            {
+                Folder = "1. Facts",
+            }
+        );
+
+        Assert.Equal(1, unread.Reads);
+        Assert.Equal(1, other.Reads);
+    }
+
+    [Fact]
+    public async Task ARowThePlacedRowsConfirmCarriesItsMeasuredTable()
+    {
+        var tree = new FakeRows(("Tables", 1, "Group"), ("Brands", 2, "Table"), ("Brand", 3, "Column"))
+        {
+            InitiallySelected = 2,
+        };
+
+        var result = await ObjectSelect.Run(tree, NoFolder, () => false);
+
+        Assert.True(result.Found);
+        Assert.Equal("Brands", result.Table);
         Assert.Empty(tree.Selects);
     }
 

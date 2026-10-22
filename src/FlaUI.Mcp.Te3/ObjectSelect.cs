@@ -91,6 +91,12 @@ public sealed record SelectResult(
     /// <summary>Found by the second try, with the tree filtered by the table's name.</summary>
     public bool ByTable { get; init; }
 
+    /// <summary>
+    /// The table the rows read placed the found row under (the nearest table row above it under Tables); null when
+    /// no read measured it (an already-selected row tied to the last walk by its display folder alone).
+    /// </summary>
+    public string? Table { get; init; }
+
     public IReadOnlyList<RejectedRow> Rejected => RejectedRows ?? [];
 }
 
@@ -165,7 +171,10 @@ internal static partial class ObjectSelect
                 read.Truncated,
                 rejected,
                 type
-            );
+            )
+            {
+                Table = SearchPick.TableOf(rows, row.Index),
+            };
         }
 
         return new(
@@ -182,9 +191,11 @@ internal static partial class ObjectSelect
         );
     }
 
-    // The selected row, when the first read places it as a candidate (or the host's own last walk confirmed this
-    // very object there and the row still bears its name: after a clear TE3 scrolls the row to the top, so the rows
-    // in view often cannot place it) and TE3 names it with the requested type, and folder when Properties shows one.
+    // The selected row, when the first read places it as a candidate and TE3 names it with the requested type (and
+    // folder, when Properties shows one). After a clear TE3 scrolls the row to the top, so the rows in view often
+    // cannot place it: then only Properties' Display Folder, read and the one the host's own last walk arrived in,
+    // ties the selection to that walk (a same-named object elsewhere reads the same name and type), and the table is
+    // left unmeasured rather than taken from the request.
     private static async Task<SelectResult?> AlreadySelected(
         IRowTree tree,
         WalkRequest request,
@@ -197,17 +208,27 @@ internal static partial class ObjectSelect
             return null;
         }
 
-        var placed =
-            SearchPick.Candidates(rows, request).Candidates.Any(c => c.Index == row.Index)
-            || (row.Value == request.ObjectName && SameObject(lastArrived, request));
-        var seen = placed ? SelectionView.Read(row, await tree.View()) : null;
-        if (seen == null || Mismatch(seen, request) != null)
+        var placed = SearchPick.Candidates(rows, request).Candidates.Any(c => c.Index == row.Index);
+        if (!placed && !(row.Value == request.ObjectName && SameObject(lastArrived, request)))
         {
             return null;
         }
 
-        return new(true, row, rows.Count, null, 0, null, false, ConfirmedType: seen.Type);
+        var seen = SelectionView.Read(row, await tree.View());
+        if (seen == null || Mismatch(seen, request) != null || !(placed || FolderTies(seen, lastArrived)))
+        {
+            return null;
+        }
+
+        return new(true, row, rows.Count, null, 0, null, false, ConfirmedType: seen.Type)
+        {
+            Table = placed ? SearchPick.TableOf(rows, row.Index) : null,
+        };
     }
+
+    // Properties' Display Folder is read and is the folder the last walk arrived in (one it asked for).
+    private static bool FolderTies(Confirmation seen, WalkRequest? lastArrived) =>
+        lastArrived?.Folder is { Length: > 0 } folder && seen.Folder == folder;
 
     // The last walk arrived at the object asked for now: same table and name, the folder asked for now was asked for
     // then too (TE3's type and folder for the selection are still compared).

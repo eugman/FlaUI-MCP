@@ -12,7 +12,10 @@ internal static class NavigationProof
         + "before the search cleared";
 
     /// <param name="type">The requested type; null or empty takes whatever type TE3 names.</param>
-    /// <param name="reachedTable">The table the rows place the object under (in view, else before the clear).</param>
+    /// <param name="reachedTable">
+    /// The table the rows place the object under (in view, else before the clear); null when no read measured one,
+    /// which leaves the proof unavailable rather than echoing the requested table.
+    /// </param>
     public static Proof Object(string table, string name, string? type, SelectionView now, string? reachedTable)
     {
         var observedName = TomSelection.SelectionName(now.Bar) ?? now.Name;
@@ -30,9 +33,15 @@ internal static class NavigationProof
             return new Proof(Proof.Unavailable, null, expected, Selection, true);
         }
 
+        if (reachedTable == null)
+        {
+            var seen = $"{observedName} ({(sameType ? type : observedType)}), table not read";
+            return new Proof(Proof.Unavailable, seen, expected, Selection, true);
+        }
+
         return Proof.Compare(
             expected,
-            $"{observedName} ({(sameType ? type : observedType)}) in {reachedTable ?? "an unknown table"}",
+            $"{observedName} ({(sameType ? type : observedType)}) in {reachedTable}",
             Selection,
             true
         );

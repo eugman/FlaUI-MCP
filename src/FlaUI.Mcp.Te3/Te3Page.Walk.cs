@@ -67,7 +67,9 @@ public sealed partial class Te3Page
             throw new InvalidOperationException(text);
         }
 
-        reportStep?.Invoke($"Found {objectType} '{objectName}' under '{walk.Table}' after {walk.RowsVisited} rows");
+        reportStep?.Invoke(
+            $"Found {objectType} '{objectName}' under '{walk.Table ?? "a table not read"}' after {walk.RowsVisited} rows"
+        );
         await ClearTomSearchTyped();
         // Clearing the filter keeps the selection but scrolls its row to the top of the viewport: the check takes the
         // table from the rows in view when its row is there, else from the rows read before the clear.
@@ -119,7 +121,8 @@ public sealed partial class Te3Page
         WalkReport = WalkAccount.Rows(picked, request);
         if (!picked.FallBack)
         {
-            return new(picked.Found, picked.Found ? request.Table : null, picked.RowsRead, picked.Reason);
+            // The table as the rows measured it, null when none did: never the request echoed back.
+            return new(picked.Found, picked.Found ? picked.Table : null, picked.RowsRead, picked.Reason);
         }
 
         if (!ObjectSelect.NeedsKeys(picked))

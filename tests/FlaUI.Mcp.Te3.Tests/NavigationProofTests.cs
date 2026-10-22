@@ -42,6 +42,22 @@ public sealed class NavigationProofTests
     }
 
     [Fact]
+    public void ATableNoReadGaveLeavesTheProofUnavailableNotEchoedFromTheRequest()
+    {
+        var proof = NavigationProof.Object(
+            "Brands",
+            "Brand",
+            "Column",
+            new("Column \"Brand\"", null, null, null),
+            null
+        );
+
+        Assert.Equal(Proof.Unavailable, proof.Verdict);
+        Assert.Contains("table not read", proof.Observed);
+        Assert.DoesNotContain("in Brands", proof.Observed);
+    }
+
+    [Fact]
     public void AnUntypedRequestTakesTheTypeTe3NamesAndACalculatedColumnIsAColumn()
     {
         Assert.Equal(
