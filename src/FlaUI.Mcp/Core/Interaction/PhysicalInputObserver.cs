@@ -53,7 +53,11 @@ public sealed class PhysicalInputObserver : IInputObserver
             Priority = ThreadPriority.AboveNormal,
         };
         thread.Start();
-        ready.Wait();
+        if (StartFailure(ready, null, StartTimeout) is { } timedOut)
+        {
+            failure = timedOut;
+        }
+
         if (failure != null)
         {
             Dispose();
@@ -62,6 +66,18 @@ public sealed class PhysicalInputObserver : IInputObserver
 
         pulse.Start();
     }
+
+    /// <summary>How long the hook thread may take to install its hooks before the start fails.</summary>
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Why the hook thread did not start: its own failure, or a timeout when it never reported ready (a wedged
+    /// thread would otherwise hold the caller forever). Null when it started.
+    /// </summary>
+    internal static Exception? StartFailure(ManualResetEventSlim ready, Exception? failure, TimeSpan timeout) =>
+        !ready.Wait(timeout)
+            ? new TimeoutException($"The input observer's hook thread did not start within {timeout.TotalSeconds:0} s.")
+            : failure;
 
     public long Sequence
     {
