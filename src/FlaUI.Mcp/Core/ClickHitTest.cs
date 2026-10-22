@@ -216,7 +216,7 @@ public static class ClickHitTest
 
         if (Levels(desktop, hit, target, MaxWalk) > 0)
         {
-            return Inside(desktop, hit!, point);
+            return Inside(desktop, target, hit!, point);
         }
 
         if (hit != null && Listed(desktop, hit) && desktop.BoundsOf(target).Contains(point))
@@ -248,11 +248,12 @@ public static class ClickHitTest
 
     /// <summary>
     /// A descendant answered. A row inside the target (the child row of an expanded tree item, whose bounds include
-    /// its children's) takes the press itself, so it covers; any other descendant proves the point.
+    /// its children's) takes the press itself, so it covers; any other descendant proves the point. The MSAA proxy
+    /// reports a grid's rows and cells both as DataItem, so a DataItem inside a DataItem is a cell inside its row.
     /// </summary>
-    private static string Inside(InputDesktop desktop, AutomationElement hit, Point point)
+    private static string Inside(InputDesktop desktop, AutomationElement target, AutomationElement hit, Point point)
     {
-        if (IsRow(desktop, hit))
+        if (IsRow(desktop, hit) && !(IsDataItem(desktop, hit) && IsDataItem(desktop, target)))
         {
             throw Covered(
                 $"The point ({point.X},{point.Y}) is on {desktop.DescribeElement(hit)}, a row inside the element"
@@ -264,6 +265,9 @@ public static class ClickHitTest
 
     private static bool IsRow(InputDesktop desktop, AutomationElement element) =>
         desktop.ControlTypeOf(element) is ControlType.TreeItem or ControlType.ListItem or ControlType.DataItem;
+
+    private static bool IsDataItem(InputDesktop desktop, AutomationElement element) =>
+        desktop.ControlTypeOf(element) == ControlType.DataItem;
 
     /// <summary>
     /// A container answered. It must be a near one, the target's own bounds must hold the point (outside them the

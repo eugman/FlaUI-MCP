@@ -56,6 +56,37 @@ public sealed class HitTestRowsTests
     }
 
     [Fact]
+    public void ACellInsideAGridRowIsNotARowInsideIt()
+    {
+        // WinForms DataGridView and DevExpress grids through the MSAA proxy: the row and its cells are all DataItem.
+        var row = Element();
+        var cell = Element();
+        var desktop = new FakeDesktop { HitTest = _ => cell };
+        desktop.ControlTypes[row] = ControlType.DataItem;
+        desktop.ControlTypes[cell] = ControlType.DataItem;
+        desktop.Parents[cell] = row;
+        using var installed = desktop.Install();
+
+        Assert.Equal("descendant", ClickPoint.Verify(OnChild, row));
+    }
+
+    [Theory]
+    [InlineData(ControlType.TreeItem)]
+    [InlineData(ControlType.ListItem)]
+    public void ARowInsideAGridRowStillCovers(ControlType rowType)
+    {
+        var row = Element();
+        var inner = Element();
+        var desktop = new FakeDesktop { HitTest = _ => inner };
+        desktop.ControlTypes[row] = ControlType.DataItem;
+        desktop.ControlTypes[inner] = rowType;
+        desktop.Parents[inner] = row;
+        using var installed = desktop.Install();
+
+        Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(OnChild, row));
+    }
+
+    [Fact]
     public void ADescendantThatIsNotARowStillProvesThePoint()
     {
         var (desktop, folder, _) = Tree(ControlType.Text);
