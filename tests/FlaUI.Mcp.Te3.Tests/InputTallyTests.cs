@@ -200,4 +200,20 @@ public sealed class InputTallyTests
         Assert.False(called);
         Assert.Equal(0, inputs.Sent);
     }
+
+    [Fact]
+    public async Task AnUnverifiedCallIsSentNotFailedAndIsRecordedAsUnproven()
+    {
+        // Core reports a mutating call with no proof as unverified: sent, not proven. It does not abort the recipe;
+        // the tally keeps it so the run can say the step was not read back.
+        var inputs = new InputTally();
+
+        await inputs.Invoke(
+            Returns("Clicked", new ToolOutcome("completed", "not-tracked") { InputsSent = 1, Status = "unverified" }),
+            tool: "windows_click"
+        );
+
+        Assert.Equal(1, inputs.Sent);
+        Assert.Equal(["windows_click"], inputs.Unverified);
+    }
 }

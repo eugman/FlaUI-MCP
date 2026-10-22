@@ -10,6 +10,14 @@ public sealed class InputTally
 {
     public int Sent { get; private set; }
 
+    private readonly List<string> unverified = [];
+
+    /// <summary>
+    /// The Core calls that went out without a proof of their effect (status unverified): sent, not proven. They do
+    /// not abort the run; the caller reads its own state back, or reports the step as unverified.
+    /// </summary>
+    public IReadOnlyList<string> Unverified => unverified;
+
     /// <summary>
     /// Runs one Core tool call unless the operation was stopped, and counts it. An error or pending result throws a
     /// <see cref="CoreCallException"/> that carries Core's outcome: completed but pending, partial or not-dispatched.
@@ -34,6 +42,11 @@ public sealed class InputTally
         if (result.IsError == true || result.Outcome?.Status == "failed" || result.Outcome?.IsPending == true)
         {
             throw new CoreCallException(tool, result);
+        }
+
+        if (result.Outcome?.Status == "unverified")
+        {
+            unverified.Add(tool ?? "(unnamed call)");
         }
     }
 
