@@ -50,7 +50,7 @@ public sealed class InputTallyTests
         // Text that proves nothing either way: Core's count decides.
         var inputs = new InputTally();
 
-        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<CoreCallException>(() =>
             inputs.Invoke(
                 Returns("UIA call timed out", Outcome("not-dispatched", 0), error: true),
                 tool: "windows_click"
@@ -65,7 +65,7 @@ public sealed class InputTallyTests
     {
         var inputs = new InputTally();
 
-        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<CoreCallException>(() =>
             inputs.Invoke(
                 Returns("Failed to send keys: Completed 2 chord(s).", Outcome("partial", 2), error: true),
                 tool: "windows_send_keys"
@@ -117,7 +117,7 @@ public sealed class InputTallyTests
         // The refusal's text says no input was sent, but focusing the minimized target restored it first.
         var inputs = new InputTally();
 
-        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<CoreCallException>(() =>
             inputs.Invoke(
                 Returns(
                     "Failed to click w1e3: activation-denied: Windows kept 'WindowsTerminal' (PID 9) in the foreground. No input sent.",
@@ -136,7 +136,7 @@ public sealed class InputTallyTests
     {
         var inputs = new InputTally();
 
-        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<CoreCallException>(() =>
             inputs.Invoke(Returns("Invoke pending", Outcome("completed", 1, provider: "pending")))
         );
 

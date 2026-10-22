@@ -2,16 +2,37 @@ using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 
 /// <summary>
-/// A Core tool call that failed or is still pending, with Core's outcome for it. The message is the tool's text, for
-/// people; code reads <see cref="Outcome"/> (dispatch, inputsSent, failure) instead.
+/// A Core tool call that failed or is still pending, with Core's outcome for it: one of Core's refusals
+/// (<see cref="AutomationRefusal"/>), so a poll that catches InvalidOperationException cannot swallow it. The message
+/// is the tool's text, for people; code reads <see cref="Outcome"/> (dispatch, inputsSent, failure) or the
+/// refusal's Code, InputsSent and Disposition instead.
 /// </summary>
-public sealed class CoreCallException(string? tool, McpToolResult result)
-    : InvalidOperationException(string.Join("; ", result.Content.Select(c => c.Text)))
+public sealed class CoreCallException : AutomationRefusal
 {
-    public string? Tool => tool;
+    /// <summary>The code of a failed call whose outcome names no refusal.</summary>
+    public const string ToolFailed = "tool-failed";
+
+    public CoreCallException(string? tool, McpToolResult result)
+        : this(tool, result, result.Outcome ?? new ToolOutcome("unknown", "unknown")) { }
+
+    private CoreCallException(string? tool, McpToolResult result, ToolOutcome outcome)
+        : base(outcome.Failure?.Code ?? ToolFailed, string.Join("; ", result.Content.Select(c => c.Text)))
+    {
+        Tool = tool;
+        Outcome = outcome;
+        InputsSent = outcome.InputsSent ?? 0;
+        ActionDispatched =
+            InputsSent > 0 || outcome.Failure?.ActionDispatched == true || outcome.Dispatch is "partial" or "completed";
+    }
+
+    public string? Tool { get; }
 
     /// <summary>Core's outcome. Core's registry always sets one; a result without it reads as unknown.</summary>
-    public ToolOutcome Outcome { get; } = result.Outcome ?? new ToolOutcome("unknown", "unknown");
+    public ToolOutcome Outcome { get; }
+
+    /// <summary>Uncertain while the failing call may still reach TE3 (timed out pending, or its provider held).</summary>
+    public override RefusalDisposition Disposition =>
+        CoreFailure.MayStillGoOut(Outcome) ? RefusalDisposition.Uncertain : base.Disposition;
 }
 
 /// <summary>What a failure's structured outcome says about input and the desktop, read instead of its text.</summary>
@@ -26,6 +47,7 @@ internal static class CoreFailure
         Te3Interaction.ApprovalRequired,
         Te3Interaction.FocusRevoked,
         Te3Interaction.PausedAfterFailure,
+        RefusalCodes.FocusUnavailable,
     ];
 
     /// <summary>
@@ -50,6 +72,17 @@ internal static class CoreFailure
                         blocked.Pending.OperationId,
                         blocked.Pending.ModalTitle
                     );
+                case AutomationRefusal other:
+                    return new ToolOutcome(
+                        other.Disposition == RefusalDisposition.NoInput ? "not-dispatched" : "partial",
+                        "not-tracked"
+                    )
+                    {
+                        Failure = new InputRefusal(other.Code, other.Message)
+                        {
+                            ActionDispatched = other.ActionDispatched,
+                        },
+                    };
             }
         }
 
@@ -97,7 +130,12 @@ internal static class CoreFailure
         };
     }
 
-    /// <summary>The desktop condition that refused the input, when retrying cannot help: activation-denied or desktop-unavailable.</summary>
+    /// <summary>
+    /// The desktop condition that refused the input, when retrying cannot help (activation-denied,
+    /// desktop-unavailable, the grant's codes), hyphenated; an underscored spelling (activation_denied) is accepted.
+    /// </summary>
     internal static string? Blocker(Exception error) =>
-        Outcome(error)?.Failure?.Code is { } code && DesktopBlockers.Contains(code) ? code : null;
+        Outcome(error)?.Failure?.Code is { } code && DesktopBlockers.Contains(RefusalCodes.Canonical(code))
+            ? RefusalCodes.Canonical(code)
+            : null;
 }
