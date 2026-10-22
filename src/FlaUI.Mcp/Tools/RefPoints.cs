@@ -19,6 +19,8 @@ internal sealed class RefPoints(ElementRegistry refs, PendingInvokeTracker pendi
 {
     public AutomationElement Resolve(string reference) => refs.ResolveRef(reference);
 
+    public AutomationElement Resolve(string reference, string handle) => refs.ResolveRef(reference, handle);
+
     /// <summary>
     /// Scroll a ref into view through the guards now; the element and a reader for its geometry, which runs
     /// under the input lease.
