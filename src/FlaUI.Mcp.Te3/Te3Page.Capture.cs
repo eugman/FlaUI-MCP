@@ -141,12 +141,20 @@ public sealed partial class Te3Page
     {
         var menuBarItem = await Resolve(modelMenu);
         var ownerIdentity = host.Sessions.GetInputTarget(handle);
-        // Only where the item is visible, as Core's pointer tools choose it.
-        var menuBarPoint = await Task.Run(() => ClickPoint.Choose(ClickGeometry.Read(menuBarItem)))
-            .WaitAsync(TimeSpan.FromSeconds(5));
+        // Refused before activation when the item cannot be pointed at; chosen again, and hit-tested, under the
+        // lease right before the move.
+        await Task.Run(() => ClickPoint.Choose(ClickGeometry.Read(menuBarItem))).WaitAsync(TimeSpan.FromSeconds(5));
         reportStep?.Invoke("Open Model menu");
-        await MovePointer("Model menu", ownerIdentity, menuBarPoint, ownerIdentity.Hwnd);
+        await MovePointer("Model menu", ownerIdentity, () => MenuBarPoint(menuBarItem), ownerIdentity.Hwnd);
         return ownerIdentity;
+    }
+
+    // Only where the item is visible, as Core's pointer tools choose it, and hit-tested as they do.
+    private static System.Drawing.Point MenuBarPoint(AutomationElement item)
+    {
+        var point = ClickPoint.Choose(ClickGeometry.Read(item));
+        ClickPoint.Verify(point, item);
+        return point;
     }
 
     // The observed enabled-item order of the Model menu; every step is asserted instead of a blind key count.

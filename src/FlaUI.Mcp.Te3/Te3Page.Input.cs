@@ -26,31 +26,31 @@ public sealed partial class Te3Page
         );
 
     /// <summary>
-    /// Moves the pointer to <paramref name="point"/> once the target is in front and the point lies on
-    /// <paramref name="over"/>; refuses, sending nothing more, when another window covers it.
+    /// Moves the pointer to the point <paramref name="choose"/> gives, chosen under the input lease once the target
+    /// is in front and right before the move (as PBI's PointUnderLease), and only when it lies on
+    /// <paramref name="over"/>; refuses, sending nothing, when another window covers it.
     /// </summary>
-    private Task MovePointer(string what, InputTarget target, System.Drawing.Point point, nint over) =>
+    private Task MovePointer(string what, InputTarget target, Func<System.Drawing.Point> choose, nint over) =>
         SendInput(
             "te3_pointer_move",
-            new
-            {
-                target = what,
-                point.X,
-                point.Y,
-            },
+            new { target = what },
             target,
             input =>
             {
-                input.Check(() =>
-                {
-                    if (Win32Desktop.WindowAt(point) != over)
-                    {
-                        throw Obscured(target, what + " is obscured");
-                    }
-                });
+                var point = default(System.Drawing.Point);
+                input.Check(() => point = OnWindow(choose(), over, Win32Desktop.WindowAt, target, what));
                 input.Send(() => FlaUI.Core.Input.Mouse.MoveTo(point));
             }
         );
+
+    /// <summary>The point when <paramref name="windowAt"/> puts it on <paramref name="over"/>; else the obscured refusal.</summary>
+    internal static System.Drawing.Point OnWindow(
+        System.Drawing.Point point,
+        nint over,
+        Func<System.Drawing.Point, nint> windowAt,
+        InputTarget target,
+        string what
+    ) => windowAt(point) == over ? point : throw Obscured(target, what + " is obscured");
 
     /// <summary>The refusal for a pointer target another window covers, as Core's structured point-not-on-target.</summary>
     internal static InputRefusedException Obscured(InputTarget target, string what) =>
@@ -158,27 +158,41 @@ public sealed partial class Te3Page
     /// above or left of the primary, where the obscured check then aborted a recipe whose selection
     /// had already succeeded.
     /// </summary>
-    /// <param name="bounds">The window's screen rectangle.</param>
+    /// <param name="bounds">The window's screen rectangle (GetWindowRect).</param>
+    /// <param name="visible">
+    /// Its visible frame, when read: a maximized window's rectangle runs past the monitor by its invisible border
+    /// (-9 on this desktop), so the title bar is measured from the visible frame, as the scalar scene is.
+    /// </param>
     /// <returns>A point inside that rectangle.</returns>
-    internal static System.Drawing.Point ParkPoint(System.Drawing.Rectangle bounds)
+    internal static System.Drawing.Point ParkPoint(
+        System.Drawing.Rectangle bounds,
+        System.Drawing.Rectangle? visible = null
+    )
     {
+        var frame = visible is { } seen ? System.Drawing.Rectangle.Intersect(seen, bounds) : bounds;
+        frame = frame.IsEmpty ? bounds : frame;
         // A degenerate rectangle contains no point at all, so there is nothing honest to return:
         // clamping into it yields a pixel above or left of the window.
-        if (bounds.Width <= 0 || bounds.Height <= 0)
+        if (frame.Width <= 0 || frame.Height <= 0)
         {
             throw new InvalidOperationException($"Window rectangle {bounds} has no interior to park the pointer in.");
         }
 
-        return new(bounds.Left + bounds.Width / 2, Math.Clamp(bounds.Top + 12, bounds.Top, bounds.Bottom - 1));
+        return new(frame.Left + frame.Width / 2, Math.Clamp(frame.Top + 12, frame.Top, frame.Bottom - 1));
     }
 
-    // A pointer left on a tree row raises a hover tooltip that covers later menus and captures; park it on the title bar.
+    // A pointer left on a tree row raises a hover tooltip that covers later menus and captures; park it on the title
+    // bar, at a point read under the lease from the window as it is then.
     private async Task ParkPointer()
     {
         var owner = host.Sessions.GetInputTarget(handle);
-        var bounds =
-            Win32Desktop.GetWindowBounds(owner.Hwnd) ?? throw new InvalidOperationException("TE3 window disappeared");
-        await MovePointer("TE3 title bar", owner, ParkPoint(bounds), owner.Hwnd);
+        await MovePointer("TE3 title bar", owner, () => TitleBarPoint(owner.Hwnd), owner.Hwnd);
         await Task.Delay(200);
     }
+
+    private static System.Drawing.Point TitleBarPoint(nint hwnd) =>
+        ParkPoint(
+            Win32Desktop.GetWindowBounds(hwnd) ?? throw new InvalidOperationException("TE3 window disappeared"),
+            Win32Desktop.GetVisibleBounds(hwnd)
+        );
 }
