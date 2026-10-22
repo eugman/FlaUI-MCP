@@ -76,7 +76,8 @@ public sealed partial class Te3Layout
             width,
             GetArgument<int?>(a, "height"),
             window.BoundingRectangle,
-            documents
+            documents,
+            DpiUtility.WindowDpi(host.Sessions.GetInputTarget(handle).Hwnd) ?? SplitterPlan.BaseDpi
         );
         var origin = window.BoundingRectangle;
         var start = new Point(from.X - origin.X, from.Y - origin.Y);

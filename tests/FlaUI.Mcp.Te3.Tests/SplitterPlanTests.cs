@@ -44,8 +44,8 @@ public sealed class SplitterPlanTests
         // few rows; a drag from 681 undocked Properties.
         var tom = new Rectangle(1160, 91, 760, 590);
         var properties = new Rectangle(1160, 681, 760, 427);
-        var (from, to) = SplitterPlan.Resize(properties, [tom], width: null, height: 320);
-        Assert.Equal(681 - SplitterPlan.TouchingInset, from.Y);
+        var (from, to) = SplitterPlan.Resize(properties, [tom], width: null, height: 320, dpi: 120);
+        Assert.Equal(681 - SplitterPlan.TouchingInset(120), from.Y);
         Assert.Equal(from.Y + 107, to.Y);
     }
 
@@ -55,8 +55,8 @@ public sealed class SplitterPlanTests
         // Seen live on 3.27.1: AI Assistant ends at x 1000 and the Expression Editor document starts there.
         var assistant = new Rectangle(0, 91, 1000, 1017);
         var editor = new Rectangle(1000, 91, 160, 1017);
-        var (from, to) = SplitterPlan.Resize(assistant, [editor], width: 680, height: null);
-        Assert.Equal(1000 - SplitterPlan.TouchingInset, from.X);
+        var (from, to) = SplitterPlan.Resize(assistant, [editor], width: 680, height: null, dpi: 120);
+        Assert.Equal(1000 - SplitterPlan.TouchingInset(120), from.X);
         Assert.Equal(from.X - 320, to.X);
     }
 
@@ -70,8 +70,15 @@ public sealed class SplitterPlanTests
         var editor = new Rectangle(681, 100, 478, 947);
         var tom = new Rectangle(1159, 100, 760, 549);
         var properties = new Rectangle(1159, 649, 760, 398);
-        var (from, to) = SplitterPlan.Resize(tom, [editor, properties], width: 480, height: null, documents: [editor]);
-        Assert.Equal(1159 + SplitterPlan.TouchingInset, from.X);
+        var (from, to) = SplitterPlan.Resize(
+            tom,
+            [editor, properties],
+            width: 480,
+            height: null,
+            documents: [editor],
+            dpi: 120
+        );
+        Assert.Equal(1159 + SplitterPlan.TouchingInset(120), from.X);
         Assert.Equal(from.X + 280, to.X);
         Assert.Equal("left", SplitterPlan.Edge(tom, from, width: true));
     }
@@ -82,8 +89,15 @@ public sealed class SplitterPlanTests
         // The live AI Assistant step that reached its width: the dock pane is the first pane, so nothing changes.
         var assistant = new Rectangle(1, 100, 638, 947);
         var editor = new Rectangle(639, 100, 520, 947);
-        var (from, _) = SplitterPlan.Resize(assistant, [editor], width: 680, height: null, documents: [editor]);
-        Assert.Equal(639 - SplitterPlan.TouchingInset, from.X);
+        var (from, _) = SplitterPlan.Resize(
+            assistant,
+            [editor],
+            width: 680,
+            height: null,
+            documents: [editor],
+            dpi: 120
+        );
+        Assert.Equal(639 - SplitterPlan.TouchingInset(120), from.X);
         Assert.Equal("right", SplitterPlan.Edge(assistant, from, width: true));
     }
 
@@ -93,8 +107,8 @@ public sealed class SplitterPlanTests
         var tom = new Rectangle(1159, 100, 760, 549);
         var properties = new Rectangle(1159, 649, 760, 398);
         var editor = new Rectangle(681, 100, 478, 947);
-        var (from, _) = SplitterPlan.Resize(properties, [tom, editor], null, 320, documents: [editor]);
-        Assert.Equal(649 - SplitterPlan.TouchingInset, from.Y);
+        var (from, _) = SplitterPlan.Resize(properties, [tom, editor], null, 320, documents: [editor], dpi: 120);
+        Assert.Equal(649 - SplitterPlan.TouchingInset(120), from.Y);
         Assert.Equal("top", SplitterPlan.Edge(properties, from, width: false));
     }
 
@@ -128,8 +142,8 @@ public sealed class SplitterPlanTests
         // The midpoint of a 1-2 px gap is the shared edge itself, where a drag grabs the lower title bar.
         var tom = new Rectangle(1160, 91, 760, 590);
         var properties = new Rectangle(1160, 681 + gap, 760, 427);
-        var (from, _) = SplitterPlan.Resize(properties, [tom], width: null, height: 320);
-        Assert.Equal(681 - SplitterPlan.TouchingInset, from.Y);
+        var (from, _) = SplitterPlan.Resize(properties, [tom], width: null, height: 320, dpi: 120);
+        Assert.Equal(681 - SplitterPlan.TouchingInset(120), from.Y);
     }
 
     [Fact]
@@ -186,9 +200,34 @@ public sealed class SplitterPlanTests
         // Seen live: all document tabs closed, so the right-hand column has no neighbour pane.
         var properties = new Rectangle(857, 558, 1063, 470);
         var window = new Rectangle(0, 43, 1920, 1030);
-        var (from, to) = SplitterPlan.Resize(properties, [], width: 820, height: null, window: window);
-        Assert.Equal(857 - SplitterPlan.SplitterOffset, from.X);
+        var (from, to) = SplitterPlan.Resize(properties, [], width: 820, height: null, window: window, dpi: 168);
+        Assert.Equal(857 - SplitterPlan.SplitterOffset(168), from.X);
         Assert.Equal(from.X + 243, to.X);
+    }
+
+    [Theory]
+    [InlineData(96u, 2, 3)]
+    [InlineData(120u, 3, 4)]
+    [InlineData(144u, 3, 5)]
+    [InlineData(168u, 4, 5)]
+    public void TheInsetsScaleWithTheWindowDpiAndTheGapMidpointDoesNot(uint dpi, int inset, int offset)
+    {
+        // The inset (3 px seen at 125%) and the splitter offset (5 px seen at 175%) are device-independent pixels
+        // scaled by the window's DPI; the midpoint of a real gap needs no scale.
+        Assert.Equal(inset, SplitterPlan.TouchingInset(dpi));
+        Assert.Equal(offset, SplitterPlan.SplitterOffset(dpi));
+
+        var tom = new Rectangle(1160, 91, 760, 590);
+        var properties = new Rectangle(1160, 681, 760, 427);
+        var (touching, _) = SplitterPlan.Resize(properties, [tom], null, 320, dpi: dpi);
+        Assert.Equal(681 - inset, touching.Y);
+
+        var (gap, _) = SplitterPlan.Resize(Explorer, [Documents], 1200, null, dpi: dpi);
+        Assert.Equal(827, gap.X);
+
+        var alone = new Rectangle(857, 558, 1063, 470);
+        var (beside, _) = SplitterPlan.Resize(alone, [], 820, null, new Rectangle(0, 43, 1920, 1030), dpi: dpi);
+        Assert.Equal(857 - offset, beside.X);
     }
 
     [Fact]
