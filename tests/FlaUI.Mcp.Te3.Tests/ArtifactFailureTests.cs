@@ -48,7 +48,7 @@ public sealed class ArtifactFailureTests : IDisposable
         var error = await Assert.ThrowsAsync<TimeoutException>(() =>
             ArtifactFiles.RunGitCheck(
                 Start("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command),
-                TimeSpan.FromSeconds(3)
+                TimeSpan.FromSeconds(8)
             )
         );
 
