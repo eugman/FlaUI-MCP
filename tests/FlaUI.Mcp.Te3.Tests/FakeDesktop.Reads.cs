@@ -10,6 +10,16 @@ namespace FlaUI.Mcp.Te3.Tests;
 /// </summary>
 internal sealed partial class FakeDesktop
 {
+    /// <summary>
+    /// The desktop's clock, Core's manual one: it moves only when a Core wait pauses (or a test advances it), so a
+    /// still clock can never hold a poll, and nothing sleeps for real.
+    /// </summary>
+    public FlaUI.Mcp.Tests.ManualTimeProvider Clock { get; } = new();
+
+    public override TimeProvider Time => Clock;
+
+    public override void Pause(TimeSpan delay) => Clock.Advance(delay);
+
     /// <summary>Where the pointer is; moves are counted as input.</summary>
     public Point Pointer { get; private set; }
 

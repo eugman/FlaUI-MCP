@@ -19,6 +19,9 @@
   <ItemGroup>
     <!-- Core's fake desktop, linked (not copied) so it stays Core's; the contract tests below run on it. -->
     <Compile Include="../FlaUI.Mcp.Tests/FakeDesktop.cs" Link="Core/FakeDesktop.cs" />
+    <!-- Core's manual clock: the TE3 fake desktop's Time, moved by its Pause, so no Core wait sleeps for real. -->
+    <Compile Include="../FlaUI.Mcp.Tests/ManualTimeProvider.cs" Link="Core/ManualTimeProvider.cs" />
+    <Compile Include="../FlaUI.Mcp.Tests/Eventually.cs" Link="Core/Eventually.cs" />
     <!-- Core's contract tests of the shared guard, refusals, proofs and the required hook, run in this host too. -->
     <Compile
       Include="../FlaUI.Mcp.Tests/Contract/*.cs"

@@ -67,4 +67,17 @@ public sealed class OfflineDesktopTests
 
         Assert.Empty(missing);
     }
+
+    [Fact]
+    public void APauseMovesTheFakesClockInsteadOfSleeping()
+    {
+        var desktop = new FakeDesktop();
+        var before = desktop.Time.GetTimestamp();
+        var wall = System.Diagnostics.Stopwatch.StartNew();
+
+        desktop.Pause(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(TimeSpan.FromSeconds(30), desktop.Time.GetElapsedTime(before, desktop.Time.GetTimestamp()));
+        Assert.True(wall.Elapsed < TimeSpan.FromSeconds(5));
+    }
 }
