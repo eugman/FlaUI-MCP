@@ -50,12 +50,18 @@ public abstract class ToolBase : ITool
     // The MCP annotations with the fact hints added; null (no hints) when the tool declares none.
     private McpToolAnnotations? FactAnnotations()
     {
+        bool? Hint(bool value) => value ? true : null;
         if (Annotations is not { } annotations)
         {
-            return null;
+            // No MCP hints declared, but the fact hints still reach the client and the broker.
+            if (!Observation && !Recovery && MutatingWhenArgument.Count == 0)
+            {
+                return null;
+            }
+
+            annotations = new McpToolAnnotations();
         }
 
-        bool? Hint(bool value) => value ? true : null;
         return annotations with
         {
             ObservationHint = Hint(Observation),

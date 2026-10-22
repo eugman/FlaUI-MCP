@@ -143,8 +143,17 @@ public sealed class GuardedInput : IDisposable
         var message = NoteFocusChange(error.Message, note);
         return error switch
         {
-            InputRefusedException refused => InputRefusedException.Record(refused.Refusal with { Message = message }),
-            AutomationRefusal other => InputRefusedException.Record(new InputRefusal(other.Code, message)),
+            // The change before it went out, so the refusal says input was dispatched.
+            InputRefusedException refused => InputRefusedException.Record(
+                refused.Refusal with
+                {
+                    Message = message,
+                    ActionDispatched = true,
+                }
+            ),
+            AutomationRefusal other => InputRefusedException.Record(
+                new InputRefusal(other.Code, message) { ActionDispatched = true }
+            ),
             _ => new InvalidOperationException(message, error),
         };
     }
