@@ -116,6 +116,35 @@ public sealed class ObjectWalkTests
     }
 
     [Fact]
+    public async Task ASelectionThatStillNamesTheObjectAfterTheClearHasArrivedWhateverItsRowNow()
+    {
+        // Live (vte3g walk 1'): the filter cleared, the rows re-indexed and the depth could not be read from the
+        // unfiltered view, while the status bar still said Column "Brand". The folder was checked during the walk;
+        // after the clear the selection's identity (name, type, the table the walk confirmed) decides.
+        var found = new WalkResult(true, "Brands", 22, null);
+        var cleared = new FakeTree(new RowObservation("Brand", "Column", null));
+
+        Assert.True(await ObjectWalk.Arrived(cleared, found, InFolder, () => "Brand"));
+        Assert.False(
+            await ObjectWalk.Arrived(
+                new FakeTree(new RowObservation("Brand", "Hierarchy", null)),
+                found,
+                InFolder,
+                () => "Brand"
+            )
+        );
+        Assert.False(
+            await ObjectWalk.Arrived(
+                new FakeTree(new RowObservation("Sub Brand", "Column", null)),
+                found,
+                InFolder,
+                () => null
+            )
+        );
+        Assert.False(await ObjectWalk.Arrived(cleared, found with { Table = "Products" }, InFolder, () => "Brand"));
+    }
+
+    [Fact]
     public async Task AWalkThatWasNotFoundNeverArrives() =>
         Assert.False(
             await ObjectWalk.Arrived(

@@ -55,8 +55,10 @@ internal static class ObjectWalk
     }
 
     /// <summary>
-    /// The selection is the object the walk reached: name and type (the cursor types the row), the table the walk
-    /// passed and, when shown, Properties' Name. A walk that was not found, or not inside the folder, never arrived.
+    /// The selection is the object the walk reached, by identity: name and type (the cursor types the row), the table
+    /// the walk confirmed and, when shown, Properties' Name. Not by its row or depth: clearing the search re-indexes
+    /// the rows and the unfiltered view may give no depth, while the folder was already checked during the walk. A
+    /// walk that was not found, or not inside the folder, never arrived.
     /// </summary>
     public static async Task<bool> Arrived(
         ITreeCursor cursor,
@@ -71,16 +73,14 @@ internal static class ObjectWalk
         }
 
         var row = await cursor.Current();
-        return row.Depth != null || request.Folder.Length == 0
-            ? PathWalker.Arrived(
-                row,
-                propertiesName(),
-                null,
-                walk.Table,
-                request.Table,
-                request.ObjectName,
-                request.ObjectType
-            )
-            : false;
+        return PathWalker.Arrived(
+            row,
+            propertiesName(),
+            null,
+            walk.Table,
+            request.Table,
+            request.ObjectName,
+            request.ObjectType
+        );
     }
 }
