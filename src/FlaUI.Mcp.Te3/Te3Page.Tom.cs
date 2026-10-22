@@ -36,22 +36,27 @@ public sealed partial class Te3Page
             .WaitAsync(TimeSpan.FromSeconds(5));
     }
 
-    // verifyFocus: Core's keyboard fallback (Ctrl+A, Backspace, text) first checks that focus reached the field and
-    // refuses otherwise: true for the field itself, FocusRules.SelfOrDescendantName for it or a child (Scintilla).
-    private async Task Fill(Target target, string value, object verifyFocus)
+    // The fill goes through Core's windows_fill with the focus rule FillFocus gives for the field.
+    private async Task Fill(Target target, string value)
     {
         var reference = await Reference(target);
         reportStep?.Invoke($"Fill {target.Selector}");
-        await invoke(
-            "windows_fill",
-            new
-            {
-                @ref = reference,
-                value,
-                verifyFocus,
-            }
-        );
+        await invoke("windows_fill", FillArguments(reference, value, target));
     }
+
+    /// <summary>
+    /// The windows_fill arguments for a field: Core's keyboard fallback (Ctrl+A, Backspace, text) first checks that
+    /// focus reached it and refuses otherwise. A Scintilla editor (daxscilla, the expression and query editors) may
+    /// report focus on a child, so focus on it or inside it counts ("self-or-descendant"); every other field TE3
+    /// fills is a single edit that must hold focus itself.
+    /// </summary>
+    internal static object FillArguments(string reference, string value, Target target) =>
+        new
+        {
+            @ref = reference,
+            value,
+            verifyFocus = target.Selector.AutomationId == "daxscilla" ? FocusRules.SelfOrDescendantName : (object)true,
+        };
 
     // A placement Core reports as not exact, after the window moved, is read back and reported (PlacementReadBack).
     private Task<System.Drawing.Rectangle> PlaceWindow(

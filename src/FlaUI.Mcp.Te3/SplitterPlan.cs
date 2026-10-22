@@ -205,4 +205,22 @@ public static class SplitterPlan
     private static bool Near(int edge, int other) => other - edge is >= 0 and <= MaxGap;
 
     private static bool Spans(int start, int end, int at) => at > start && at < end;
+
+    /// <summary>
+    /// The captions a resize drag must not start on: every pane caption and document tab in view, the resized pane's
+    /// own included, since a drag that starts on a caption floats or re-docks that pane.
+    /// </summary>
+    public static List<T> Avoided<T>(IEnumerable<(string Title, T? Caption)> parts)
+        where T : class => [.. parts.Select(p => p.Caption).OfType<T>()];
+
+    /// <summary>Core's windows_mouse drag in window pixels, refused before the button goes down on an avoided ref.</summary>
+    public static object DragArguments(string handle, Point from, Point to, string[] avoid) =>
+        new
+        {
+            action = "drag",
+            handle,
+            from = new { x = from.X, y = from.Y },
+            to = new { x = to.X, y = to.Y },
+            fromMustNotHit = avoid,
+        };
 }

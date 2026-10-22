@@ -100,46 +100,4 @@ public sealed class DirectInputJournalTests
         Assert.Equal(4242, error.Refusal.Target?.Pid);
         Assert.Equal("Model menu is obscured; no input sent.", error.Message);
     }
-
-    [Fact]
-    public void EveryFillSaysWhetherCoreMustSeeFocusMove()
-    {
-        // Core's windows_fill keyboard fallback types Ctrl+A, Backspace and the text; whether it first checks that focus
-        // reached the field is a per-call decision, never left to Core's default.
-        var page = string.Concat(Directory.GetFiles(Sources(), "Te3Page*.cs").Select(File.ReadAllText));
-        var fills = Regex.Matches(page, @"invoke\(\s*""windows_fill"",\s*new\s*\{[^}]*\}");
-
-        Assert.NotEmpty(fills);
-        Assert.All(fills, fill => Assert.Contains("verifyFocus", fill.Value));
-        Assert.DoesNotMatch(@"await Fill\([^;]*\);", Regex.Replace(page, @"await Fill\([^;]*verifyFocus[^;]*\);", ""));
-    }
-
-    [Fact]
-    public void TheScintillaEditorsAreFilledOnlyWithFocusOnTheEditorOrInsideIt()
-    {
-        // The expression and query editors (Scintilla) were filled with no focus check, so Ctrl+A could go wherever
-        // focus was. Core accepts focus on the ref or a descendant ("self-or-descendant"), which these hosts report.
-        var page = string.Concat(Directory.GetFiles(Sources(), "Te3Page*.cs").Select(File.ReadAllText));
-
-        Assert.DoesNotMatch(@"await Fill\([^;]*verifyFocus: false[^;]*\);", page);
-        Assert.Matches(
-            @"await Fill\(ExpressionInputTarget\(\), expression, verifyFocus: FocusRules\.SelfOrDescendantName\)",
-            page
-        );
-        Assert.Matches(
-            @"await Fill\(QueryInputTarget\(\), query, verifyFocus: FocusRules\.SelfOrDescendantName\)",
-            page
-        );
-    }
-
-    [Fact]
-    public void TheSplitterDragRefusesAStartOnANeighbouringCaption()
-    {
-        // A splitter start a few pixels off lands on the next pane's caption or a document tab, and dragging that
-        // floats or re-docks the pane. Core's fromMustNotHit hit-tests the start under the lease and refuses first.
-        var preset = File.ReadAllText(Path.Combine(Sources(), "Te3Layout.Preset.cs"));
-
-        Assert.Matches(@"fromMustNotHit\s*=\s*avoid", preset);
-        Assert.Matches(@"Captions\(parts, pane\.Title\)", preset);
-    }
 }

@@ -13,7 +13,7 @@ public sealed partial class Te3Page
         await Click(ExpressionTabTarget());
         await Keys("Ctrl+O");
         await Expect(OpenFileDialogTarget());
-        await Fill(OpenFileNameTarget(), file, verifyFocus: true);
+        await Fill(OpenFileNameTarget(), file);
         await Keys("Enter", OpenFileNameTarget());
         await Absent(OpenFileDialogTarget());
         await Expect(CsharpTextTarget(), script);
@@ -159,7 +159,7 @@ public sealed partial class Te3Page
     public async Task SetProperty(string property, string value)
     {
         await Click(PropertyTarget(property));
-        await Fill(PropertyInputTarget(), value, verifyFocus: true);
+        await Fill(PropertyInputTarget(), value);
         await Keys("Enter", PropertyInputTarget());
         await Expect(PropertyTarget(property), value);
     }
@@ -199,7 +199,7 @@ public sealed partial class Te3Page
 
     public async Task ResetSearch()
     {
-        await Fill(SearchTarget(), "", verifyFocus: true);
+        await Fill(SearchTarget(), "");
     }
 
     public async Task SelectObject(string objectName)
@@ -221,7 +221,7 @@ public sealed partial class Te3Page
     {
         await Click(ExpressionTabTarget());
         // Scintilla: UIA may report focus on a child of the daxscilla control, so focus on it or inside it counts.
-        await Fill(ExpressionInputTarget(), expression, verifyFocus: FocusRules.SelfOrDescendantName);
+        await Fill(ExpressionInputTarget(), expression);
         await Expect(ExpressionTarget(), expression);
         await Keys("F5");
     }
@@ -249,7 +249,7 @@ public sealed partial class Te3Page
     public async Task RunQuery(string query)
     {
         // Scintilla, as for the expression editor.
-        await Fill(QueryInputTarget(), query, verifyFocus: FocusRules.SelfOrDescendantName);
+        await Fill(QueryInputTarget(), query);
         await Expect(QueryTextTarget(), query);
         await Keys("F5", QueryInputTarget());
     }

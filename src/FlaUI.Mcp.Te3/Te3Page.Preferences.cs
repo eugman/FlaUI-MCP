@@ -62,8 +62,7 @@ public sealed partial class Te3Page
     public async Task SearchPreferences(string text) =>
         await Fill(
             new(new(AutomationId: "searchPreferences", ControlType: "Edit"), PreferencesTarget().Selector, true),
-            text,
-            verifyFocus: true
+            text
         );
 
     public async Task SizePreferences(int width, int height)
