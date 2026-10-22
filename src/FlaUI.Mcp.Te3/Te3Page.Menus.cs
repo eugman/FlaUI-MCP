@@ -96,15 +96,16 @@ public sealed partial class Te3Page
     )
     {
         Win32WindowInfo? window = null;
+        var main = host.Sessions.GetInputTarget(handle).Hwnd;
         bool Opened()
         {
-            window = TitledWindows().FirstOrDefault(w => !before.Contains(w.Hwnd));
+            window = DialogWindows.NewDialog(ProcessWindows(), before, main);
             return window != null;
         }
 
         if (!await Poll.Until(Opened, timeout))
         {
-            throw new TimeoutException("No new TE3 window opened");
+            throw new TimeoutException("No new TE3 dialog owned by its main window opened");
         }
 
         return (host.Sessions.RegisterNativeWindow(window!.Hwnd, window.ProcessId), window);
@@ -112,11 +113,18 @@ public sealed partial class Te3Page
 
     public async Task WaitForWindowClosed(nint hwnd, TimeSpan timeout)
     {
-        if (!await Poll.Until(() => TitledWindows().All(w => w.Hwnd != hwnd), timeout))
+        if (!await Poll.Until(() => DialogWindows.State(ProcessWindows(), hwnd) == "closed", timeout))
         {
-            throw new TimeoutException("Window did not close");
+            throw new TimeoutException(
+                DialogWindows.State(ProcessWindows(), hwnd) == "cloaked"
+                    ? "Window was cloaked, not closed: it is still there, hidden"
+                    : "Window did not close"
+            );
         }
     }
+
+    private IReadOnlyList<Win32WindowInfo> ProcessWindows() =>
+        Win32Desktop.GetTopLevelWindows(host.Sessions.GetWindowProcessId(handle));
 
     public async Task MapWindow(string windowHandle, string path)
     {
