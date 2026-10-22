@@ -21,6 +21,7 @@ public sealed class MutationConfigTests
         "Core/FocusRule.cs",
         "Core/Interaction/InteractionGrant.cs",
         "Core/Interaction/InteractionGrantObserve.cs",
+        "Core/Interaction/InteractionGrantActivation.cs",
         "Core/Interaction/Heartbeat.cs",
         "Core/MutationGuard.cs",
         "Core/DesktopLease.cs",
@@ -50,6 +51,68 @@ public sealed class MutationConfigTests
         "Core/WaitOutcome.cs",
         "Core/Diagnostics.cs",
     ];
+
+    // Source files deliberately not mutated: native Win32 or UI Automation code the offline tests cannot reach,
+    // composition and startup, plain data and wording. A new file must go in GuardFiles or here.
+    private static readonly string[] NotMutated =
+    [
+        "Core/AutomationHost.cs",
+        "Core/BoundedSearch.cs",
+        "Core/CaptureFrame.cs",
+        "Core/ClipboardRestore.cs",
+        "Core/ControlText.cs",
+        "Core/DpiUtility.cs",
+        "Core/ElementQuery.cs",
+        "Core/InputDesktop.cs",
+        "Core/Interaction/IInputObserver.cs",
+        "Core/Interaction/PhysicalInputObserver.cs",
+        "Core/KeepAwake.cs",
+        "Core/ModalAwareInvoker.cs",
+        "Core/NativeWindowCapture.cs",
+        "Core/PointerPlan.cs",
+        "Core/ProcessPolicy.cs",
+        "Core/SessionManager.cs",
+        "Core/SnapshotBudget.cs",
+        "Core/SnapshotBuilder.cs",
+        "Core/TextClipboard.cs",
+        "Core/ToolComposition.cs",
+        "Core/ToolOutcome.cs",
+        "Core/Win32Desktop.cs",
+        "Core/Win32WindowReads.cs",
+        "Core/Win32WindowState.cs",
+        "Core/WindowPlacement.cs",
+        "Mcp/Protocol.cs",
+        "Program.cs",
+        "Properties/AssemblyInfo.cs",
+        "Tools/FindTool.cs",
+        "Tools/GetClipboardTool.cs",
+        "Tools/GetTextTool.cs",
+        "Tools/KeyNames.cs",
+        "Tools/LaunchTool.cs",
+        "Tools/OperationStatusTool.cs",
+        "Tools/ScreenshotTool.cs",
+        "Tools/SnapshotTool.cs",
+        "Tools/WaitTool.cs",
+        "Tools/WindowPlacementTool.cs",
+        "Tools/WindowStateTool.cs",
+        "Tools/WindowTools.cs",
+    ];
+
+    [Fact]
+    public void EverySourceFileIsMutatedOrListedAsNotMutated()
+    {
+        var src = Path.GetDirectoryName(RepoFile(Path.Combine("src", "FlaUI.Mcp", "FlaUI.Mcp.csproj")))!;
+        var files = Directory
+            .EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(src, file).Replace('\\', '/'))
+            .Where(file =>
+                !file.StartsWith("obj/", StringComparison.Ordinal) && !file.StartsWith("bin/", StringComparison.Ordinal)
+            )
+            .Order(StringComparer.Ordinal);
+
+        Assert.Empty(files.Where(file => !GuardFiles.Contains(file) && !NotMutated.Contains(file)));
+        Assert.Empty(GuardFiles.Intersect(NotMutated));
+    }
 
     private static string RepoFile(string relative)
     {

@@ -14,6 +14,7 @@
       "**/Core/FocusRule.cs",
       "**/Core/Interaction/InteractionGrant.cs",
       "**/Core/Interaction/InteractionGrantObserve.cs",
+      "**/Core/Interaction/InteractionGrantActivation.cs",
       "**/Core/Interaction/Heartbeat.cs",
       "**/Core/MutationGuard.cs",
       "**/Core/DesktopLease.cs",
