@@ -208,16 +208,7 @@ public static class ClickHitTest
     private static string Prove(Point point, AutomationElement target)
     {
         var desktop = InputDesktop.Current;
-        AutomationElement? hit;
-        try
-        {
-            hit = desktop.ElementAt(target, point);
-        }
-        catch (Exception error) when (error is not OperationCanceledException)
-        {
-            throw Covered($"The point ({point.X},{point.Y}) could not be hit-tested ({error.Message})");
-        }
-
+        var hit = HitAt(desktop, target, point);
         if (hit != null && desktop.SameElement(hit, target))
         {
             return "target";
@@ -225,7 +216,7 @@ public static class ClickHitTest
 
         if (Levels(desktop, hit, target, MaxWalk) > 0)
         {
-            return "descendant";
+            return Inside(desktop, hit!, point);
         }
 
         if (hit != null && Listed(desktop, hit) && desktop.BoundsOf(target).Contains(point))
@@ -240,10 +231,60 @@ public static class ClickHitTest
             return "pass-through";
         }
 
+        return ThroughContainer(desktop, target, hit, point);
+    }
+
+    private static AutomationElement? HitAt(InputDesktop desktop, AutomationElement target, Point point)
+    {
+        try
+        {
+            return desktop.ElementAt(target, point);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            throw Covered($"The point ({point.X},{point.Y}) could not be hit-tested ({error.Message})");
+        }
+    }
+
+    /// <summary>
+    /// A descendant answered. A row inside the target (the child row of an expanded tree item, whose bounds include
+    /// its children's) takes the press itself, so it covers; any other descendant proves the point.
+    /// </summary>
+    private static string Inside(InputDesktop desktop, AutomationElement hit, Point point)
+    {
+        if (IsRow(desktop, hit))
+        {
+            throw Covered(
+                $"The point ({point.X},{point.Y}) is on {desktop.DescribeElement(hit)}, a row inside the element"
+            );
+        }
+
+        return "descendant";
+    }
+
+    private static bool IsRow(InputDesktop desktop, AutomationElement element) =>
+        desktop.ControlTypeOf(element) is ControlType.TreeItem or ControlType.ListItem or ControlType.DataItem;
+
+    /// <summary>
+    /// A container answered. It must be a near one, the target's own bounds must hold the point (outside them the
+    /// press goes to the container or another child of it), and nothing beside the path down may cover the point.
+    /// </summary>
+    private static string ThroughContainer(
+        InputDesktop desktop,
+        AutomationElement target,
+        AutomationElement? hit,
+        Point point
+    )
+    {
         var covering = hit == null ? "nothing UI Automation can see" : desktop.DescribeElement(hit);
         if (hit == null || !IsNearContainer(desktop, target, hit))
         {
             throw Covered($"The point ({point.X},{point.Y}) is covered by {covering}");
+        }
+
+        if (!desktop.BoundsOf(target).Contains(point))
+        {
+            throw Covered($"The point ({point.X},{point.Y}) is outside the element's bounds, on {covering}");
         }
 
         // The container answered for the point, so check what lies beside the path down to the target: a sibling of

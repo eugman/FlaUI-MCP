@@ -51,6 +51,7 @@ public sealed class DroppedReadTests
         desktop.Parents[target] = list;
         desktop.Parents[unreadable] = list;
         desktop.ControlTypes[list] = ControlType.List;
+        desktop.ElementBounds[target] = new Rectangle(0, 0, 20, 20);
         desktop.Descriptions[unreadable] = "Custom 'overlay'";
         desktop.HitTest = _ => list;
         using var installed = desktop.Install();
