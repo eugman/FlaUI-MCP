@@ -204,7 +204,7 @@ internal static class ScreenshotChecks
     {
         if (!policy.IsProcessAllowed(processId))
         {
-            var name = ProcessPolicy.TryGetProcessName(processId) ?? "unknown";
+            var name = InputDesktop.Current.ProcessNameOf(processId) ?? "unknown";
             throw new UnauthorizedAccessException(policy.DescribeDenied($"The foreground window's process '{name}'"));
         }
 
