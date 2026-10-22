@@ -214,6 +214,45 @@ public sealed class InputTallyTests
         );
 
         Assert.Equal(1, inputs.Sent);
-        Assert.Equal(["windows_click"], inputs.Unverified);
+        Assert.Equal([new UnverifiedStep("windows_click", null, null)], inputs.Unverified);
+    }
+
+    [Fact]
+    public async Task AnUnverifiedCallIsRecordedWithTheRunsStepAndItsTarget()
+    {
+        var inputs = new InputTally { Step = "Run C# script" };
+
+        await inputs.Invoke(
+            Returns("Clicked", new ToolOutcome("completed", "not-tracked") { InputsSent = 1, Status = "unverified" }),
+            tool: "windows_click",
+            target: "w1e9"
+        );
+        await inputs.Invoke(
+            Returns("Read", new ToolOutcome("completed", "not-tracked") { InputsSent = 0, Status = "ok" }),
+            tool: "windows_find"
+        );
+        inputs.RecordUnverified("te3_page", "Save (Ctrl+S)", "w1");
+
+        Assert.Equal(
+            [
+                new UnverifiedStep("windows_click", "Run C# script", "w1e9"),
+                new UnverifiedStep("te3_page", "Save (Ctrl+S)", "w1"),
+            ],
+            inputs.Unverified
+        );
+    }
+
+    [Fact]
+    public void TheRunsManifestListsTheStepsThatWentOutWithoutAReadBack()
+    {
+        var inputs = new InputTally();
+        inputs.RecordUnverified("windows_send_keys", "Save (Ctrl+S)", "w1");
+        var manifest = new RunManifest();
+
+        RunExecutor.RecordUnverified(manifest, inputs);
+        var written = System.Text.Json.JsonSerializer.SerializeToElement(manifest, RunConfig.Json);
+
+        Assert.Equal([new UnverifiedStep("windows_send_keys", "Save (Ctrl+S)", "w1")], manifest.UnverifiedSteps);
+        Assert.Equal("Save (Ctrl+S)", written.GetProperty("unverifiedSteps")[0].GetProperty("step").GetString());
     }
 }

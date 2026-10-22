@@ -10,19 +10,26 @@ public sealed class InputTally
 {
     public int Sent { get; private set; }
 
-    private readonly List<string> unverified = [];
+    private readonly List<UnverifiedStep> unverified = [];
+
+    /// <summary>The step the run is on, recorded with each unverified call; null outside a run.</summary>
+    public string? Step { get; set; }
 
     /// <summary>
-    /// The Core calls that went out without a proof of their effect (status unverified): sent, not proven. They do
-    /// not abort the run; the caller reads its own state back, or reports the step as unverified.
+    /// What went out without a proof of its effect, in order: Core calls whose status was unverified (sent, not
+    /// proven), and the page's steps that have no read-back. They do not abort the run; the run's manifest lists them.
     /// </summary>
-    public IReadOnlyList<string> Unverified => unverified;
+    public IReadOnlyList<UnverifiedStep> Unverified => unverified;
+
+    /// <summary>Notes a step that went out with no read-back of its effect.</summary>
+    public void RecordUnverified(string tool, string? step, string? target) => unverified.Add(new(tool, step, target));
 
     /// <summary>
     /// Runs one Core tool call unless the operation was stopped, and counts it. An error or pending result throws a
     /// <see cref="CoreCallException"/> that carries Core's outcome: completed but pending, partial or not-dispatched.
     /// </summary>
-    public async Task Invoke(Func<Task<McpToolResult>> call, string? tool = null)
+    /// <param name="target">The ref or handle the call acted on, for the unverified list.</param>
+    public async Task Invoke(Func<Task<McpToolResult>> call, string? tool = null, string? target = null)
     {
         OperationContext.Check();
         // Inside a running operation (a te3_* tool call), Core counts the step against it; otherwise the call is
@@ -46,7 +53,7 @@ public sealed class InputTally
 
         if (result.Outcome?.Status == "unverified")
         {
-            unverified.Add(tool ?? "(unnamed call)");
+            RecordUnverified(tool ?? "(unnamed call)", Step, target);
         }
     }
 
@@ -71,3 +78,6 @@ public sealed class InputTally
         }
     }
 }
+
+/// <summary>A step that went out without a read-back of its effect: the tool, the run's step, and its ref or handle.</summary>
+public sealed record UnverifiedStep(string Tool, string? Step, string? Target);

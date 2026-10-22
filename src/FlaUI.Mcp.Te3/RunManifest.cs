@@ -35,6 +35,9 @@ public class RunManifest
 
     /// <summary>Why a failure capture (failure.png, windows_find, failure-windows.json) is missing, one line each.</summary>
     public List<string> DiagnosticNotes { get; set; } = [];
+
+    /// <summary>The steps that went out without a read-back of their effect (InputTally.Unverified).</summary>
+    public List<UnverifiedStep> UnverifiedSteps { get; set; } = [];
     public List<TestResult> Tests { get; set; } = [];
     public Dictionary<string, string> Screenshots { get; set; } = [];
     public Dictionary<string, string> ScreenshotHashes { get; set; } = [];

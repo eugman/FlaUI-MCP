@@ -140,14 +140,15 @@ public sealed partial class Te3Page
         return arguments;
     }
 
-    private readonly List<string> unverified = [];
-
-    /// <summary>Steps this page sent without a read-back of their effect, in order: none is claimed as verified.</summary>
-    public IReadOnlyList<string> UnverifiedSteps => unverified;
+    /// <summary>
+    /// What this page sent without a read-back of its effect, in order, in the same list as the Core calls Core
+    /// reported unverified (the page's tally): none is claimed as verified.
+    /// </summary>
+    public IReadOnlyList<UnverifiedStep> UnverifiedSteps => Inputs.Unverified;
 
     private void Unverified(string step)
     {
-        unverified.Add(step);
+        Inputs.RecordUnverified("te3_page", step, handle);
         reportStep?.Invoke($"{step}: sent, not read back (unverified)");
     }
 

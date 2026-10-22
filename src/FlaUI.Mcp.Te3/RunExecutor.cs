@@ -182,7 +182,14 @@ public static partial class RunExecutor
             );
 
             cancellationToken.ThrowIfCancellationRequested();
-            var page = new Te3Page(host, handle, Invoke, ReportStep(manifest, cancellationToken), journal, inputs);
+            var page = new Te3Page(
+                host,
+                handle,
+                Invoke,
+                ReportStep(manifest, cancellationToken, inputs),
+                journal,
+                inputs
+            );
             await page.DefaultLayout();
             cancellationToken.ThrowIfCancellationRequested();
             await recipe.Execute(new RecipeContext(page, config, manifest, model, Save));
@@ -210,6 +217,7 @@ public static partial class RunExecutor
         }
         finally
         {
+            RecordUnverified(manifest, inputs);
             var cleanupErrors = new List<string>();
             var closed = false;
             try
@@ -297,7 +305,8 @@ public static partial class RunExecutor
                         arguments,
                         () => host!.Tools.ExecuteToolAsync(tool, JsonSerializer.SerializeToElement(arguments))
                     ),
-                tool
+                tool,
+                TargetOf(arguments)
             );
         }
     }
@@ -329,12 +338,40 @@ public static partial class RunExecutor
             )
         );
 
-    internal static Action<string> ReportStep(RunManifest manifest, CancellationToken cancellationToken) =>
+    internal static Action<string> ReportStep(
+        RunManifest manifest,
+        CancellationToken cancellationToken,
+        InputTally? inputs = null
+    ) =>
         step =>
         {
             manifest.CurrentStep = step;
+            if (inputs != null)
+            {
+                inputs.Step = step;
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
         };
+
+    // The ref a call acted on, else its window handle.
+    private static string? TargetOf(object arguments)
+    {
+        var element = JsonSerializer.SerializeToElement(arguments);
+        foreach (var name in new[] { "ref", "handle" })
+        {
+            if (element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Copies what went out without a read-back into the manifest, so the run's output says so.</summary>
+    internal static void RecordUnverified(RunManifest manifest, InputTally inputs) =>
+        manifest.UnverifiedSteps = [.. inputs.Unverified];
 
     internal static SettingsLease AcquireSettings(RunManifest manifest, Action save, Func<SettingsLease>? create = null)
     {
