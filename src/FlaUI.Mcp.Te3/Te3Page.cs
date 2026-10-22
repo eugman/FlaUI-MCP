@@ -15,24 +15,28 @@ public sealed partial class Te3Page(
 )
 {
     internal static bool IsPreferencesLookup(Target target) =>
-        target.Selector == PreferencesTarget().Selector
-        || target.Within == PreferencesTarget().Selector
-        || target.Selector.AutomationId == "treePreferences"
-        || target.Within?.AutomationId == "treePreferences"
-        || target.Selector.AutomationId?.StartsWith("DAX Editor.", StringComparison.Ordinal) == true
-        || target.Within?.AutomationId?.StartsWith("DAX Editor.", StringComparison.Ordinal) == true
-        || target.Selector.AutomationId?.StartsWith("AI Features.", StringComparison.Ordinal) == true
-        || target.Within?.AutomationId?.StartsWith("AI Features.", StringComparison.Ordinal) == true
-        || target.Selector.AutomationId?.StartsWith("AI Assistant.", StringComparison.Ordinal) == true
-        || target.Within?.AutomationId?.StartsWith("AI Assistant.", StringComparison.Ordinal) == true;
+        InPreferences(target.Selector) || (target.Within is { } within && InPreferences(within));
 
-    public async Task CaptureLanguageChoices(string path)
-    {
-        var language = new Target(
+    // Preferences' own controls: the dialog, its section tree, and the panes whose AutomationIds carry a section prefix.
+    private static readonly string[] PreferencesPanePrefixes = ["DAX Editor.", "AI Features.", "AI Assistant."];
+
+    private static bool InPreferences(ElementSelector selector) =>
+        selector == PreferencesTarget().Selector
+        || selector.AutomationId == "treePreferences"
+        || PreferencesPanePrefixes.Any(prefix =>
+            selector.AutomationId?.StartsWith(prefix, StringComparison.Ordinal) == true
+        );
+
+    private static Target LanguageTarget() =>
+        new(
             new(Name: "User interface language", ControlType: "ComboBox", Visible: true),
             new(AutomationId: "Tabular Editor.User Interface"),
             true
         );
+
+    public async Task CaptureLanguageChoices(string path)
+    {
+        var language = LanguageTarget();
         await Expect(language, "English");
         Exception? failure = null;
         nint popupHwnd = 0;
@@ -45,40 +49,12 @@ public sealed partial class Te3Page(
             var preferences = host.Elements.InputForRef(await Reference(PreferencesTarget()));
             var popups = await ObservePopups(main.ProcessId, maxWindows: 5);
             File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(popups, Indented));
-            if (popups.Any(p => !p.Tree.Complete))
-            {
-                throw new InvalidOperationException("Language popup observation incomplete");
-            }
-
-            var matches = popups.Where(p => p.Tree.Elements.Any(e => e.ControlType == "ListItem")).ToArray();
-            if (matches.Length != 1)
-            {
-                throw new InvalidOperationException("Expected one language list popup");
-            }
-
-            var popup = matches[0];
+            var popup = LanguagePopup(popups);
             popupHwnd = new nint(popup.Hwnd);
-            var lists = popup.Tree.Elements.Where(e => e.ControlType == "List").ToArray();
-            if (
-                lists.Length != 1
-                || popup.Tree.Elements.Where(e => e.ControlType == "ListItem").Any(e => e.Depth <= lists[0].Depth)
-            )
-            {
-                throw new InvalidOperationException("Expected one language list with descendant items");
-            }
-
-            VerifyLanguageChoices(popup.Tree.Elements.Where(e => e.ControlType == "ListItem").ToArray());
             var bounds = popup.Bounds ?? throw new InvalidOperationException("Language popup bounds unavailable");
             var combo = await Resolve(language);
             var comboBounds = await Task.Run(() => combo.BoundingRectangle).WaitAsync(TimeSpan.FromSeconds(5));
-            if (
-                Math.Abs(bounds.Left - comboBounds.Left) > 3
-                || Math.Abs(bounds.Width - comboBounds.Width) > 6
-                || Math.Min(Math.Abs(bounds.Top - comboBounds.Bottom), Math.Abs(bounds.Bottom - comboBounds.Top)) > 3
-            )
-            {
-                throw new InvalidOperationException("Language popup is not adjacent to its combo box");
-            }
+            RequireAdjacent(bounds, comboBounds);
 
             var preferencesBounds =
                 Win32Desktop.GetWindowBounds(preferences.Hwnd)
@@ -101,25 +77,72 @@ public sealed partial class Te3Page(
         }
         finally
         {
-            try
-            {
-                await Keys("Escape", language);
-                if (popupHwnd != 0)
-                {
-                    await WaitForAbsence(() => Win32Desktop.GetTopLevelWindows().Any(w => w.Hwnd == popupHwnd));
-                }
+            await CloseLanguagePopup(language, popupHwnd, failure);
+        }
+    }
 
-                await Expect(language, "English");
-            }
-            catch (Exception cleanup)
-            {
-                if (failure != null)
-                {
-                    throw new AggregateException("Language capture and popup cleanup failed", failure, cleanup);
-                }
+    // The one popup holding the language list, its items below the list, and the expected choices.
+    private static PopupObservation LanguagePopup(PopupObservation[] popups)
+    {
+        if (popups.Any(p => !p.Tree.Complete))
+        {
+            throw new InvalidOperationException("Language popup observation incomplete");
+        }
 
-                throw;
+        var matches = popups.Where(p => p.Tree.Elements.Any(e => e.ControlType == "ListItem")).ToArray();
+        if (matches.Length != 1)
+        {
+            throw new InvalidOperationException("Expected one language list popup");
+        }
+
+        var popup = matches[0];
+        var lists = popup.Tree.Elements.Where(e => e.ControlType == "List").ToArray();
+        if (
+            lists.Length != 1
+            || popup.Tree.Elements.Where(e => e.ControlType == "ListItem").Any(e => e.Depth <= lists[0].Depth)
+        )
+        {
+            throw new InvalidOperationException("Expected one language list with descendant items");
+        }
+
+        VerifyLanguageChoices(popup.Tree.Elements.Where(e => e.ControlType == "ListItem").ToArray());
+        return popup;
+    }
+
+    private static void RequireAdjacent(System.Drawing.Rectangle bounds, System.Drawing.Rectangle comboBounds)
+    {
+        if (
+            Math.Abs(bounds.Left - comboBounds.Left) > 3
+            || Math.Abs(bounds.Width - comboBounds.Width) > 6
+            || Math.Min(Math.Abs(bounds.Top - comboBounds.Bottom), Math.Abs(bounds.Bottom - comboBounds.Top)) > 3
+        )
+        {
+            throw new InvalidOperationException("Language popup is not adjacent to its combo box");
+        }
+    }
+
+    // Escape closes the popup, which must then be gone and leave English chosen; a cleanup failure after a capture
+    // failure reports both.
+    private async Task CloseLanguagePopup(Target language, nint popupHwnd, Exception? failure)
+    {
+        try
+        {
+            await Keys("Escape", language);
+            if (popupHwnd != 0)
+            {
+                await WaitForAbsence(() => Win32Desktop.GetTopLevelWindows().Any(w => w.Hwnd == popupHwnd));
             }
+
+            await Expect(language, "English");
+        }
+        catch (Exception cleanup)
+        {
+            if (failure != null)
+            {
+                throw new AggregateException("Language capture and popup cleanup failed", failure, cleanup);
+            }
+
+            throw;
         }
     }
 
@@ -138,16 +161,7 @@ public sealed partial class Te3Page(
             .WaitAsync(TimeSpan.FromSeconds(5));
         var rows = result.Elements;
         var parent = rows.FindIndex(row => row.Value == "File Formats");
-        if (
-            result.Truncated
-            || result.Unreadable != 0
-            || parent < 0
-            || parent + 2 >= rows.Count
-            || rows.Count(row => row.Value == "File Formats") != 1
-            || rows[parent].Selected != true
-            || rows[parent + 1].Value != "General"
-            || rows[parent + 2].Value != "Save-to-folder"
-        )
+        if (!AnnotationRowsInOrder(result, parent))
         {
             throw new InvalidOperationException("File Formats annotation rows are not visible in the expected order");
         }
@@ -180,6 +194,21 @@ public sealed partial class Te3Page(
             .WaitAsync(TimeSpan.FromSeconds(5));
     }
 
+    // File Formats, selected and unique, with General and Save-to-folder right below it, in a complete read.
+    private static bool AnnotationRowsInOrder(QueryResult result, int parent)
+    {
+        var rows = result.Elements;
+        if (!result.Complete || parent < 0 || parent + 2 >= rows.Count)
+        {
+            return false;
+        }
+
+        return rows.Count(row => row.Value == "File Formats") == 1
+            && rows[parent].Selected == true
+            && rows[parent + 1].Value == "General"
+            && rows[parent + 2].Value == "Save-to-folder";
+    }
+
     private async Task<AutomationElement> Resolve(Target target, string? expected = null)
     {
         reportStep?.Invoke($"Find {target.Selector}; expected value: {expected ?? "(any)"}");
@@ -190,50 +219,9 @@ public sealed partial class Te3Page(
             OperationContext.Check();
             try
             {
-                return await Task.Run(() =>
-                    {
-                        // Avoid reattaching the disabled owner and every popup for a
-                        // known dialog. Keep the lookup and uniqueness check local.
-                        var preferences = IsPreferencesLookup(target);
-                        var queryHandle = preferences ? PreferencesHandle() : handle;
-                        var within =
-                            preferences && target.Within == PreferencesTarget().Selector ? null : target.Within;
-                        var element = query.Resolve(
-                            queryHandle,
-                            target.Selector,
-                            within,
-                            !preferences && target.IncludeOwned,
-                            budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
-                        );
-                        var actual = element.Patterns.Value.IsSupported
-                            ? element.Patterns.Value.Pattern.Value.ValueOrDefault
-                            : element.Properties.Name.ValueOrDefault;
-                        if (expected != null && actual != expected)
-                        {
-                            throw new InvalidOperationException($"Expected '{expected}', observed '{actual}'");
-                        }
-
-                        return element;
-                    })
-                    .WaitAsync(TimeSpan.FromSeconds(5));
+                return await Task.Run(() => ResolveOnce(target, expected)).WaitAsync(TimeSpan.FromSeconds(5));
             }
-            catch (System.Reflection.AmbiguousMatchException)
-            {
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (TimeoutException)
-            {
-                throw;
-            } // A hung provider must not spawn retry workers.
-            catch (AutomationRefusal refusal) when (refusal is not ElementNotFoundException)
-            {
-                throw;
-            } // Only "not there yet" is polled; a refusal is never relabelled as a timeout.
-            catch (Exception ex)
+            catch (Exception ex) when (Polled(ex))
             {
                 last = ex;
             }
@@ -241,6 +229,75 @@ public sealed partial class Te3Page(
             await Task.Delay(100);
         } while (clock.Elapsed < TimeSpan.FromSeconds(15));
         throw new TimeoutException($"TE3 target {target.Selector}: {last?.Message}", last);
+    }
+
+    // What the poll waits out: not there yet, or not the expected value yet. An ambiguous match, cancellation, a hung
+    // provider (no retry workers), and a refusal other than not-found are never relabelled as a timeout.
+    private static bool Polled(Exception ex) =>
+        ex is not (System.Reflection.AmbiguousMatchException or OperationCanceledException or TimeoutException)
+        && (ex is not AutomationRefusal || ex is ElementNotFoundException);
+
+    private AutomationElement ResolveOnce(Target target, string? expected)
+    {
+        // Avoid reattaching the disabled owner and every popup for a
+        // known dialog. Keep the lookup and uniqueness check local.
+        var preferences = IsPreferencesLookup(target);
+        var queryHandle = preferences ? PreferencesHandle() : handle;
+        var within = preferences && target.Within == PreferencesTarget().Selector ? null : target.Within;
+        var element = query.Resolve(
+            queryHandle,
+            target.Selector,
+            within,
+            !preferences && target.IncludeOwned,
+            budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
+        );
+        var actual = element.Patterns.Value.IsSupported
+            ? element.Patterns.Value.Pattern.Value.ValueOrDefault
+            : element.Properties.Name.ValueOrDefault;
+        if (expected != null && actual != expected)
+        {
+            throw new InvalidOperationException($"Expected '{expected}', observed '{actual}'");
+        }
+
+        return element;
+    }
+
+    // Preferences open on the section: the search box empty, the section's row selected, and its pane's marker
+    // inside the visible dialog.
+    private async Task VerifyPreferencesArrival(Te3Destination destination, string section, string marker)
+    {
+        await Expect(
+            new(new(AutomationId: "searchPreferences", ControlType: "Edit"), PreferencesTarget().Selector, true),
+            ""
+        );
+        var row = await Resolve(
+            new(new(ControlType: "TreeItem", Value: section, Visible: true), new(AutomationId: "treePreferences"), true)
+        );
+        if (!row.Patterns.SelectionItem.Pattern.IsSelected.Value)
+        {
+            throw new InvalidOperationException("Expected Preferences row is not selected.");
+        }
+
+        var paneId =
+            destination.PaneAutomationId
+            ?? throw new InvalidOperationException("Preferences pane locator is not configured.");
+        var control = await Resolve(
+            new(
+                new(Name: marker, ControlType: destination.PaneMarkerControlType, Visible: true),
+                new(AutomationId: paneId),
+                true
+            )
+        );
+        var dialog = host.Sessions.GetInputTarget(PreferencesHandle());
+        var dialogBounds =
+            Win32Desktop.GetWindowBounds(dialog.Hwnd)
+            ?? throw new InvalidOperationException("Preferences window disappeared.");
+        var rect = control.BoundingRectangle;
+        var controlBounds = System.Drawing.Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
+        if (rect.IsEmpty || !dialogBounds.Contains(controlBounds))
+        {
+            throw new InvalidOperationException("Expected pane content is not inside the visible Preferences dialog.");
+        }
     }
 
     /// <summary>Read-only arrival checks shared by companion navigation and capture.</summary>
@@ -255,49 +312,7 @@ public sealed partial class Te3Page(
         switch (destination)
         {
             case { Section: { } section, PaneMarker: { } marker }:
-                await Expect(
-                    new(
-                        new(AutomationId: "searchPreferences", ControlType: "Edit"),
-                        PreferencesTarget().Selector,
-                        true
-                    ),
-                    ""
-                );
-                var row = await Resolve(
-                    new(
-                        new(ControlType: "TreeItem", Value: section, Visible: true),
-                        new(AutomationId: "treePreferences"),
-                        true
-                    )
-                );
-                if (!row.Patterns.SelectionItem.Pattern.IsSelected.Value)
-                {
-                    throw new InvalidOperationException("Expected Preferences row is not selected.");
-                }
-
-                var paneId =
-                    destination.PaneAutomationId
-                    ?? throw new InvalidOperationException("Preferences pane locator is not configured.");
-                var control = await Resolve(
-                    new(
-                        new(Name: marker, ControlType: destination.PaneMarkerControlType, Visible: true),
-                        new(AutomationId: paneId),
-                        true
-                    )
-                );
-                var dialog = host.Sessions.GetInputTarget(PreferencesHandle());
-                var dialogBounds =
-                    Win32Desktop.GetWindowBounds(dialog.Hwnd)
-                    ?? throw new InvalidOperationException("Preferences window disappeared.");
-                var rect = control.BoundingRectangle;
-                var controlBounds = System.Drawing.Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
-                if (rect.IsEmpty || !dialogBounds.Contains(controlBounds))
-                {
-                    throw new InvalidOperationException(
-                        "Expected pane content is not inside the visible Preferences dialog."
-                    );
-                }
-
+                await VerifyPreferencesArrival(destination, section, marker);
                 break;
             case { Id: "object" }:
                 // Proof from the tree and the status bar; Properties' ObjectType only when the bar names another row
