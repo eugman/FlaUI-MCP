@@ -429,4 +429,17 @@ public sealed class ObjectSelectTests
 
         Assert.True(result.Found, string.Join("; ", result.Rejected.Select(r => r.Reason)));
     }
+
+    [Fact]
+    public async Task AnEmptyReadIsAMissNeverAFallBackToKeys()
+    {
+        // Live, a read before the filter rendered had 0 rows, and the key walk that followed went wrong.
+        var tree = new FakeRows { Complete = false };
+
+        var result = await ObjectSelect.Run(tree, NoFolder, () => false);
+
+        Assert.False(result.Found);
+        Assert.False(result.FallBack);
+        Assert.Contains("no rows", result.Reason);
+    }
 }

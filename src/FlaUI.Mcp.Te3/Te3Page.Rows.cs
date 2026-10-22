@@ -69,6 +69,9 @@ public sealed partial class Te3Page
             PropertiesValue("Folder")
         );
 
+    private const int RenderBudgetMs = 1500;
+    private const int RenderPollMs = 250;
+
     // PageDown presses at most, to realize a filtered tree longer than the viewport (about 23 rows at 1080 px).
     private const int MaxPages = 6;
 
@@ -79,6 +82,13 @@ public sealed partial class Te3Page
         public async Task<RowRead> Read()
         {
             await KeyBudget.Press(outOfTime, () => page.Keys("Home", TomExplorerTarget()), "Home before the row read");
+            // TE3 applies the filter a moment after the search text: wait for the rows to stop changing.
+            await RowSettle.Wait(
+                async () => (await page.ReadTree()).Elements.Count(e => e.ControlType == "TreeItem"),
+                ms => Task.Delay(ms),
+                RenderBudgetMs,
+                RenderPollMs
+            );
             var truncated = false;
             var paged = await RowPager.ReadAll(
                 async () =>

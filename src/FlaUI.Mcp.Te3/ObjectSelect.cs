@@ -170,6 +170,12 @@ internal static class ObjectSelect
             );
         }
 
+        if (rows.Count == 0)
+        {
+            // An empty read is never a reason to walk with keys: the filter showed nothing to walk.
+            return new(false, null, 0, read.IndentPx, 0, "The search showed no rows; nothing was selected.", false);
+        }
+
         var (candidates, unplaced) = SearchPick.Candidates(rows, request);
         return candidates.Count > 0
             ? null

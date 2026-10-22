@@ -23,6 +23,8 @@
       "**/ObjectSelect.cs",
       "**/SearchPick.cs",
       "**/RowPager.cs",
+      "**/RowSettle.cs",
+      "**/KeyBudget.cs",
       "**/WindowShape.cs",
       "**/Te3Page.Rows.cs",
       "**/RunGrant.cs",
