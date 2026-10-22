@@ -17,10 +17,15 @@ internal sealed record DragRequest(
 );
 
 /// <summary>
-/// What a drag runs: its points, resolved under the lease, and the drop target's own re-check before the release
-/// (why it moved, or null).
+/// What a drag runs: its points, resolved under the lease, the drop target's own re-check before the release
+/// (why it moved, or null), and what UI Automation reports under the pointer after it (null without a ref to
+/// ask through).
 /// </summary>
-internal sealed record DragPlan(Func<(Point From, Point To)> Resolve, Func<Point, string?> DropMoved);
+internal sealed record DragPlan(
+    Func<(Point From, Point To)> Resolve,
+    Func<Point, string?> DropMoved,
+    Func<Point, string?> DroppedOn
+);
 
 /// <summary>Builds a drag's plan from its request: edges, resize targets, drop points and the start's exclusions.</summary>
 internal sealed class DragPlanner(RefPoints points)
@@ -28,7 +33,38 @@ internal sealed class DragPlanner(RefPoints points)
     public DragPlan Plan(DragRequest request, ref string? scrolled)
     {
         var plan = FromRequest(request, ref scrolled);
-        return plan with { Resolve = AvoidingStart(request.FromMustNotHit, plan.Resolve) };
+        return plan with
+        {
+            Resolve = AvoidingStart(request.FromMustNotHit, plan.Resolve),
+            DroppedOn = DroppedOn(request.Reference ?? request.ToRef),
+        };
+    }
+
+    /// <summary>
+    /// What UI Automation reports under a point, as a refusal would name it, read through the drag's ref (the
+    /// element under the release is where the drop went). A failed read says so instead of guessing.
+    /// </summary>
+    private Func<Point, string?> DroppedOn(string? reference)
+    {
+        if (reference == null)
+        {
+            return _ => null;
+        }
+
+        var anchor = points.Resolve(reference);
+        return point =>
+        {
+            var desktop = InputDesktop.Current;
+            try
+            {
+                var under = desktop.ElementAt(anchor, point);
+                return under == null ? "nothing UI Automation can see" : desktop.DescribeElement(under);
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                return $"unreadable ({error.Message})";
+            }
+        };
     }
 
     private DragPlan FromRequest(DragRequest request, ref string? scrolled)
@@ -54,13 +90,14 @@ internal sealed class DragPlanner(RefPoints points)
                             ?? PointerPlan.ResizeTarget(bounds, request.FromEdge ?? "right", request.ResizeTo!.Value)
                     );
                 },
-                to?.Moved ?? (_ => null)
+                to?.Moved ?? (_ => null),
+                _ => null
             );
         }
 
         var start = StartPoint(request, ref scrolled);
         var drop = DropPoint(request, ref scrolled);
-        return new(() => (start.Choose(), drop.Choose()), drop.Moved);
+        return new(() => (start.Choose(), drop.Choose()), drop.Moved, _ => null);
     }
 
     private Press StartPoint(DragRequest request, ref string? scrolled) =>

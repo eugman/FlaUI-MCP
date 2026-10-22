@@ -13,8 +13,11 @@ internal static class MouseReplies
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    /// <summary>The landing point in screen pixels and relative to the window's capture origin.</summary>
-    public static string Landed(string action, Point landed, Rectangle origin, string? changed) =>
+    /// <summary>
+    /// The landing point in screen pixels and relative to the window's capture origin; for a drag, what UI
+    /// Automation reported under the pointer after the release (<paramref name="droppedOn"/>).
+    /// </summary>
+    public static string Landed(string action, Point landed, Rectangle origin, string? changed, string? droppedOn) =>
         JsonSerializer.Serialize(
             new
             {
@@ -22,6 +25,7 @@ internal static class MouseReplies
                 screen = new { x = landed.X, y = landed.Y },
                 window = new { x = landed.X - origin.X, y = landed.Y - origin.Y },
                 changed,
+                droppedOn,
             },
             Options
         );
