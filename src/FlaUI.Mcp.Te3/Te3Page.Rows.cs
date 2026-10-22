@@ -122,17 +122,33 @@ public sealed partial class Te3Page
             );
         }
 
-        public async Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected()
+        // One read with no key: the indent is measured from what is in view, kept local so a view scrolled away from
+        // the root never sets the walk's scale.
+        public async Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadInPlace()
         {
             var found = await page.ReadTree();
+            var scale = TomRows.Calibrate(found.Elements);
+            return (scale == null ? null : TomRows.Rows(found.Elements, scale), SelectedIndex(found));
+        }
+
+        private static int? SelectedIndex(QueryResult found)
+        {
             var selected = found.Elements.FirstOrDefault(e => e.ControlType == "TreeItem" && e.Selected == true);
-            var index =
+            return
                 selected?.Name is { } name
                 && name.StartsWith("Node", StringComparison.Ordinal)
                 && int.TryParse(name[4..], out var n)
-                    ? n
-                    : (int?)null;
-            return (page.depthScale == null ? null : TomRows.Rows(found.Elements, page.depthScale), index);
+                ? n
+                : null;
+        }
+
+        public async Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected()
+        {
+            var found = await page.ReadTree();
+            return (
+                page.depthScale == null ? null : TomRows.Rows(found.Elements, page.depthScale),
+                SelectedIndex(found)
+            );
         }
 
         public Task Select(TreeRow row) => page.SelectRow(row, outOfTime);

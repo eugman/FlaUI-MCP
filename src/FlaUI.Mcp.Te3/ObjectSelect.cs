@@ -21,6 +21,13 @@ public interface IRowTree
     /// <summary>Selects the row with one guarded SelectionItem.Select (Core falls back to a click when it is ignored).</summary>
     Task Select(TreeRow row);
 
+    /// <summary>
+    /// The rows as they are, before any key (no Home, no PageDown): null rows when the indent cannot be measured from
+    /// what is in view. The default reads nothing, so nothing is taken as already selected.
+    /// </summary>
+    Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadInPlace() =>
+        Task.FromResult<(IReadOnlyList<TreeRow>?, int?)>((null, null));
+
     /// <summary>A fresh read after a select: the rows, and the index of the TreeItem that is selected now.</summary>
     Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected();
 
@@ -90,6 +97,13 @@ internal static class ObjectSelect
 
     public static async Task<SelectResult> Run(IRowTree tree, WalkRequest request, Func<bool> outOfTime)
     {
+        // The row read starts with Home, which moves the selection: an object an earlier walk left selected is
+        // recognised from the first read, before any key, so it costs neither the paging keys nor a select.
+        if (await AlreadySelected(tree, request) is { } there)
+        {
+            return there;
+        }
+
         var read = await tree.Read();
         var result = await Pick(tree, read, request, outOfTime);
         return result with { Pages = read.Pages, TruncatedByViewport = read.TruncatedByViewport };
@@ -151,6 +165,28 @@ internal static class ObjectSelect
             read.Truncated,
             rejected
         );
+    }
+
+    // The selected row, when the first read places it as a candidate and TE3 names it with the requested type.
+    private static async Task<SelectResult?> AlreadySelected(IRowTree tree, WalkRequest request)
+    {
+        var (rows, selected) = await tree.ReadInPlace();
+        if (rows?.FirstOrDefault(r => r.Index == selected) is not { } row)
+        {
+            return null;
+        }
+
+        var placed = SearchPick.Candidates(rows, request).Candidates.Any(c => c.Index == row.Index);
+        var seen = placed ? SelectionView.Read(row, await tree.View()) : null;
+        if (
+            seen == null
+            || (request.ObjectType.Length > 0 && !TomSelection.ObjectTypeMatches(request.ObjectType, seen.Type))
+        )
+        {
+            return null;
+        }
+
+        return new(true, row, rows.Count, null, 0, null, false, ConfirmedType: seen.Type);
     }
 
     // No row to select: the depth is unknown, or nothing in the read is in place (fall back when rows may be missing).
