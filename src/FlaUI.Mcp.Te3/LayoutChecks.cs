@@ -24,6 +24,20 @@ internal static class LayoutChecks
         int InputsSent
     );
 
+    /// <summary>
+    /// The window's origin read before and after its pane bounds must agree: a drag is planned in raw window pixels
+    /// from one snapshot, and a window that moved between the reads would shift it.
+    /// </summary>
+    public static void RequireStill(Rectangle before, Rectangle after)
+    {
+        if (before != after)
+        {
+            throw new InvalidOperationException(
+                $"The TE3 window moved from {before} to {after} while its panes were measured; no drag sent. Retry."
+            );
+        }
+    }
+
     /// <summary>Whether a pane is already within the tolerance of its requested size, so no drag is needed.</summary>
     public static bool AlreadyThere(int requested, int current) => Math.Abs(current - requested) <= SizeTolerance;
 

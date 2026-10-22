@@ -21,6 +21,22 @@ public sealed class LayoutChecksTests
             15
         );
 
+    [Fact]
+    public void AWindowThatMovedWhileItsPanesWereMeasuredRefusesTheDrag()
+    {
+        // The pane bounds and the window origin are read in one pass; a window that moved between the two origin
+        // reads would shift the raw-point drag, so nothing is sent.
+        var at = new Rectangle(0, 0, 1920, 1080);
+
+        LayoutChecks.RequireStill(at, at);
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            LayoutChecks.RequireStill(at, new Rectangle(10, 0, 1920, 1080))
+        );
+
+        Assert.Contains("moved", error.Message);
+        Assert.Contains("no drag sent", error.Message);
+    }
+
     [Theory]
     [InlineData(480, 480)]
     [InlineData(480, 484)]

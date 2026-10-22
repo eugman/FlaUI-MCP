@@ -57,13 +57,15 @@ public sealed partial class Te3Layout
     // A drag that leaves the pane outside the tolerance fails the call, for resize as for each preset step.
     private async Task<object> Resize(InputTally inputs, string handle, Window window, string title, JsonElement a)
     {
-        var target = SplitterPlan.RequireOne(GetArgument<int?>(a, "width"), GetArgument<int?>(a, "height"));
-        var parts = Parts(window);
-        var pane = FindPane(window, title);
-        var before = pane.Container.BoundingRectangle;
-        var others = parts.Where(p => p.Title != pane.Title).Select(p => p.Container.BoundingRectangle).Distinct();
-        var documents = parts.Where(p => p.Kind == "document").Select(p => p.Container.BoundingRectangle);
         var width = GetArgument<int?>(a, "width");
+        var height = GetArgument<int?>(a, "height");
+        var target = SplitterPlan.RequireOne(width, height);
+        var parts = Parts(window);
+        var pane =
+            parts.FirstOrDefault(p => p.Kind == "pane" && TitleMatches(p.Title, title))
+            ?? throw new ArgumentException($"No docked pane titled '{title}'; use action list.");
+        var seen = Snapshot(window, parts, pane);
+        var before = seen.Pane;
         var current = width is null ? before.Height : before.Width;
         if (LayoutChecks.AlreadyThere(target, current))
         {
@@ -72,20 +74,19 @@ public sealed partial class Te3Layout
 
         var (from, to) = SplitterPlan.Resize(
             before,
-            others,
+            seen.Others,
             width,
-            GetArgument<int?>(a, "height"),
-            window.BoundingRectangle,
-            documents,
+            height,
+            seen.Origin,
+            seen.Documents,
             DpiUtility.WindowDpi(host.Sessions.GetInputTarget(handle).Hwnd) ?? SplitterPlan.BaseDpi
         );
-        var origin = window.BoundingRectangle;
+        var origin = seen.Origin;
         var start = new Point(from.X - origin.X, from.Y - origin.Y);
         var end = new Point(to.X - origin.X, to.Y - origin.Y);
         var sentBefore = inputs.Sent;
         await Drag(inputs, handle, title, start, end, Captions(parts));
         var after = FindPane(window, title).Container.BoundingRectangle;
-        var requested = width ?? GetArgument<int?>(a, "height")!.Value;
         var reached = width is null ? after.Height : after.Width;
         return LayoutChecks.Measured(
             new(
@@ -95,10 +96,34 @@ public sealed partial class Te3Layout
                 end,
                 Relative(before, origin),
                 Relative(after, origin),
-                requested,
+                target,
                 reached,
                 inputs.Sent - sentBefore
             )
+        );
+    }
+
+    /// <summary>Every rectangle a resize drag is planned from, read in one pass (see <see cref="Snapshot"/>).</summary>
+    private sealed record PaneSnapshot(
+        Rectangle Origin,
+        Rectangle Pane,
+        List<Rectangle> Others,
+        List<Rectangle> Documents
+    );
+
+    // The window's origin and the parts' bounds in one pass, the origin read again after them: a window that moved
+    // in between would shift the raw-point drag, so the snapshot is refused (LayoutChecks.RequireStill).
+    private static PaneSnapshot Snapshot(Window window, List<Part> parts, Part pane)
+    {
+        var origin = window.BoundingRectangle;
+        var bounds = parts.Select(p => (p.Title, p.Kind, Rect: p.Container.BoundingRectangle)).ToList();
+        var own = pane.Container.BoundingRectangle;
+        LayoutChecks.RequireStill(origin, window.BoundingRectangle);
+        return new(
+            origin,
+            own,
+            [.. bounds.Where(b => b.Title != pane.Title).Select(b => b.Rect).Distinct()],
+            [.. bounds.Where(b => b.Kind == "document").Select(b => b.Rect)]
         );
     }
 
