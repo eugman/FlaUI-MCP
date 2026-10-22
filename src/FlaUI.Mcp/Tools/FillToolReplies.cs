@@ -28,6 +28,23 @@ public partial class FillTool
     }
 
     /// <summary>
+    /// The refusal when the target lost the foreground after every key went out, while the fill was being read back:
+    /// the text was sent (dispatched), only its check stopped.
+    /// </summary>
+    internal static InputRefusedException ReadBackInterrupted(string elementName, string value) =>
+        InputRefusedException.Record(
+            new InputRefusal(
+                RefusalCodes.TargetChanged,
+                $"Sent \"{value}\" to {elementName}, then the target lost the foreground while the fill was being read "
+                    + "back, so it is not verified; no further input sent. Observe it before relying on it; do not "
+                    + "repeat the fill."
+            )
+            {
+                ActionDispatched = true,
+            }
+        );
+
+    /// <summary>
     /// "Filled" only when the control reads back the requested value. A different value is a failure (the input
     /// went out, so dispatch stays completed); a control that cannot be read back is reported as not verified.
     /// </summary>
