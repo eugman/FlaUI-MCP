@@ -316,7 +316,8 @@ public partial class FillTool : ToolBase
         string elementName
     )
     {
-        if (!element.Patterns.Value.IsSupported)
+        // A file dialog's name field takes SetValue without applying it: the keyboard route lets the dialog see it.
+        if (!element.Patterns.Value.IsSupported || InFileDialog(element, InputDesktop.Current))
         {
             return null;
         }

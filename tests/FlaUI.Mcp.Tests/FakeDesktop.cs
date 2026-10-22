@@ -352,6 +352,12 @@ internal sealed class FakeDesktop : InputDesktop
     public override FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         ControlTypes.TryGetValue(element, out var type) ? type : FlaUI.Core.Definitions.ControlType.Custom;
 
+    /// <summary>Each element's window class; empty unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, string> ClassNames { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override string ClassNameOf(AutomationElement element) =>
+        ClassNames.TryGetValue(element, out var name) ? name : "";
+
     /// <summary>Each element's AutomationId; empty unless a test says otherwise.</summary>
     public Dictionary<AutomationElement, string> AutomationIds { get; } = new(ReferenceEqualityComparer.Instance);
 

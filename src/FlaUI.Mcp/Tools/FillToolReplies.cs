@@ -44,9 +44,38 @@ public partial class FillTool
             }
         );
 
+    private const int MaxAncestors = 50;
+
+    /// <summary>
+    /// Whether the control sits in a common file dialog (a "#32770" window, or under its FileNameControlHost):
+    /// such a dialog's file-name field accepts SetValue without applying it, so it is filled by keyboard instead.
+    /// </summary>
+    internal static bool InFileDialog(AutomationElement element, InputDesktop desktop)
+    {
+        AutomationElement? current = element;
+        for (var depth = 0; current != null && depth < MaxAncestors; depth++)
+        {
+            if (desktop.ClassNameOf(current) is "#32770" or "FileNameControlHost")
+            {
+                return true;
+            }
+
+            if (desktop.ControlTypeOf(current) == FlaUI.Core.Definitions.ControlType.Window)
+            {
+                return false;
+            }
+
+            current = desktop.ParentOf(current);
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// "Filled" only when the control reads back the requested value. A different value is a failure (the input
-    /// went out, so dispatch stays completed); a control that cannot be read back is reported as not verified.
+    /// went out, so dispatch stays completed); a control that cannot be read back is reported as not verified. A
+    /// read back through the same pattern that set it (SetValue, then Value) is self-reported, never verified: a
+    /// provider can accept the value without the app taking it.
     /// </summary>
     internal static McpToolResult FillReply(
         string elementName,
@@ -60,16 +89,20 @@ public partial class FillTool
         var verification = observed.Verify(value);
         var reply = verification switch
         {
+            "verified" when !independent => TextResult(
+                $"Set {elementName} to \"{value}\" through its Value pattern, which reads the same back; the app "
+                    + "taking it is not independently verified. Observe the control before relying on it."
+            ),
             "verified" => TextResult($"Filled {elementName} with \"{value}\""),
             "mismatch" => ErrorResult($"Sent \"{value}\" to {elementName}" + FillMismatch(value, observed.Text, type)),
             _ => TextResult(
                 $"Sent \"{value}\" to {elementName}; it could not be read back, so the fill is not verified."
             ),
         };
-        // Independent unless read back through the same pattern that set it (SetValue then Value).
+        var verdict = verification == "verified" && !independent ? Proof.SelfReported : verification;
         return reply with
         {
-            Outcome = outcome.WithProof(new Proof(verification, observed.Text, value, observed.Pattern, independent)),
+            Outcome = outcome.WithProof(new Proof(verdict, observed.Text, value, observed.Pattern, independent)),
         };
     }
 

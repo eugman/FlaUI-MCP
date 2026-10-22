@@ -151,6 +151,9 @@ internal class InputDesktop
 
     public virtual Rectangle BoundsOf(AutomationElement element) => element.BoundingRectangle;
 
+    /// <summary>The element's window class as UI Automation reports it ("#32770" for a common dialog), or "".</summary>
+    public virtual string ClassNameOf(AutomationElement element) => element.Properties.ClassName.ValueOrDefault ?? "";
+
     /// <summary>What a pointer action needs to know about an element, read now; the fake answers from its tables.</summary>
     public virtual ClickGeometry Geometry(AutomationElement element) => ClickGeometry.Read(element);
 
