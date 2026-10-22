@@ -30,7 +30,7 @@ $parts = [ordered]@{
     guards = 'GuardedInput', 'GuardedInput.Foreground', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'ClickHitTest', 'FocusRule', 'InteractionGrant', 'InteractionGrantObserve', 'InteractionGrantActivation', 'Heartbeat', 'MutationGuard', 'ProcessPolicy', 'HostPath', 'DesktopLease', 'AutomationRefusal', 'InputRefusal', 'WindowBaseline', 'Diagnostics'
     state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext', 'WaitOutcome'
     protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolRegistrySchemas', 'ToolRegistryStrand', 'ToolBase', 'ToolFacts', 'Proof'
-    pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'MouseToolReplies', 'PointerActions'
+    pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'MouseToolReplies', 'MouseDrag', 'RefPoints', 'PointerActions'
     keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
 }
 # The pointer files against the integration tests, split so each part finishes inside its own cap.

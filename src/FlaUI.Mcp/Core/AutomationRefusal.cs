@@ -52,6 +52,9 @@ public static class RefusalCodes
     public const string PointNotOnTarget = "point-not-on-target";
     public const string ClickPointUnavailable = "click-point-unavailable";
     public const string ClickPointCovered = "click-point-covered";
+
+    /// <summary>A drag's drop target moved while the button was down; the drag was cancelled with Escape.</summary>
+    public const string DropTargetMoved = "drop-target-moved";
     public const string ElementNotFound = "element-not-found";
     public const string ProviderBlocked = "provider-blocked";
     public const string PlacementMismatch = "placement-mismatch";

@@ -26,6 +26,25 @@ public static class ClickHitTest
     public static string Verify(Point point, AutomationElement target) => Note(Prove(point, target));
 
     /// <summary>
+    /// Why the hit test refuses <paramref name="point"/> on <paramref name="target"/> now, or null when it passes.
+    /// For a check after input (a drag's drop point before the release): the reason alone, without the
+    /// "no input sent" advice, and the refusal is not left noted on the operation.
+    /// </summary>
+    public static string? Covering(Point point, AutomationElement target)
+    {
+        try
+        {
+            Verify(point, target);
+            return null;
+        }
+        catch (InputRefusedException refused)
+        {
+            InputRefusedException.Handled(refused);
+            return refused.Refusal.Message[..^NoInput.Length];
+        }
+    }
+
+    /// <summary>
     /// A host's own check on a pass-through press: why the press at <c>point</c> on <c>target</c> through
     /// <c>overlay</c> must be refused (Camtasia: an acting part such as a trim handle lies under the point), or null.
     /// </summary>
@@ -318,11 +337,8 @@ public static class ClickHitTest
         return 0;
     }
 
+    private const string NoInput = "; no input sent. Scroll the element into view, then observe again.";
+
     private static InputRefusedException Covered(string reason) =>
-        InputRefusedException.Record(
-            new InputRefusal(
-                "click-point-covered",
-                $"{reason}; no input sent. Scroll the element into view, then observe again."
-            )
-        );
+        InputRefusedException.Record(new InputRefusal("click-point-covered", reason + NoInput));
 }

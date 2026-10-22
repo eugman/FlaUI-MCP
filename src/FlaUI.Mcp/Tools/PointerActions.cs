@@ -1,5 +1,6 @@
 using System.Drawing;
 using FlaUI.Core.Input;
+using FlaUI.Core.WindowsAPI;
 using FlaUI.Mcp.Core;
 
 namespace FlaUI.Mcp.Tools;
@@ -59,7 +60,18 @@ internal static class PointerActions
     internal static Point Drag(InputTarget target, Point from, Point to, int steps) =>
         Drag(target, () => (from, to), steps);
 
-    internal static Point Drag(InputTarget target, Func<(Point From, Point To)> resolve, int steps)
+    /// <summary>
+    /// Press at the resolved start, move along the path and release at the resolved end. Before the release the
+    /// end is checked again: it must still be on the target window, and <paramref name="dropMoved"/> (the drop
+    /// target's own re-read, when there is one) must find nothing moved; otherwise the drag is cancelled with
+    /// Escape while the button is still down, then released, and refused as drop-target-moved.
+    /// </summary>
+    internal static Point Drag(
+        InputTarget target,
+        Func<(Point From, Point To)> resolve,
+        int steps,
+        Func<Point, string?>? dropMoved = null
+    )
     {
         // Validate the step count before any focus change.
         PointerPlan.DragPath(Point.Empty, Point.Empty, steps);
@@ -72,12 +84,21 @@ internal static class PointerActions
         input.Check(() => RequireHit(target, to));
         input.MoveTo(from);
         input.Send(() => Mouse.Down(MouseButton.Left));
+        string? moved = null;
         try
         {
             foreach (var point in path)
             {
                 input.MoveTo(point);
                 Thread.Sleep(StepDelay);
+            }
+
+            // Whatever is under `to` now takes the drop, and the app may have scrolled or re-laid out meanwhile
+            // (a tree auto-scrolls while a drag hovers its first row).
+            moved = DropMoved(target, to, dropMoved);
+            if (moved != null)
+            {
+                input.Release(() => Keyboard.Type(VirtualKeyShort.ESCAPE));
             }
         }
         finally
@@ -86,8 +107,32 @@ internal static class PointerActions
             input.Release(() => Mouse.Up(MouseButton.Left));
         }
 
-        return InputDesktop.Current.PointerPosition();
+        return moved == null ? InputDesktop.Current.PointerPosition() : throw Cancelled(moved);
     }
+
+    /// <summary>Why the drop point no longer lands on what it was proved on, or null.</summary>
+    private static string? DropMoved(InputTarget target, Point to, Func<Point, string?>? dropMoved)
+    {
+        var root = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
+        if (InputDesktop.Current.WindowAt(to) != root)
+        {
+            return $"the drop point ({to.X},{to.Y}) is no longer on the target window";
+        }
+
+        return dropMoved?.Invoke(to);
+    }
+
+    private static InputRefusedException Cancelled(string moved) =>
+        InputRefusedException.Record(
+            new InputRefusal(
+                RefusalCodes.DropTargetMoved,
+                $"The drop target moved during the drag: {moved}. The drag was cancelled with Escape before the "
+                    + "button was released, so nothing was dropped; observe the window, then retry."
+            )
+            {
+                ActionDispatched = true,
+            }
+        );
 
     internal static void RequireHit(InputTarget target, Point point, Func<Point, nint>? windowAt = null)
     {

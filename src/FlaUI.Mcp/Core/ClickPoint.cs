@@ -231,6 +231,23 @@ public static class ClickPoint
     /// </summary>
     public static string Verify(Point point, AutomationElement target) => ClickHitTest.Verify(point, target);
 
+    /// <summary>
+    /// Why <paramref name="point"/>, chosen on <paramref name="target"/> earlier, is no longer on it, or null: the
+    /// bounds read <paramref name="now"/> must still hold the point and the hit test must still pass. For a check
+    /// after input, so the reason never claims nothing was sent.
+    /// </summary>
+    public static string? Moved(Point point, ClickGeometry now, AutomationElement target)
+    {
+        var bounds = now.Bounds;
+        if (!bounds.Contains(point))
+        {
+            return $"{InputDesktop.Current.DescribeElement(target)} is now at ({bounds.X},{bounds.Y} "
+                + $"{bounds.Width}x{bounds.Height}), which no longer holds the drop point ({point.X},{point.Y})";
+        }
+
+        return ClickHitTest.Covering(point, target);
+    }
+
     private static InputRefusedException Refuse(string reason) =>
         InputRefusedException.Record(
             new InputRefusal(
