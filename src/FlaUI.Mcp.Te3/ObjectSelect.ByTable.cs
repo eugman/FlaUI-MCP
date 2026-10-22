@@ -1,14 +1,27 @@
 /// <summary>
 /// The row strategy's second try: when the object's own name shows no placed candidate (live, "Rate" and "Measure"
 /// match calculation items in many tables and the filtered view gave no measurable indent), the tree is filtered by
-/// the table's name instead, the table row is selected and opened, and the object is looked for under it. The
-/// table-name filter shows the table's display folders collapsed (te3-eb2ed6a), so they are opened in turn, each
-/// with one select and one Right, until the object is placed or <see cref="MaxFolderOpens"/> is reached.
+/// the table's name, the table row is selected and confirmed, and the filter is cleared. TE3's filter shows under the
+/// table only rows whose names contain the search text (te3b-24/26: Rate under Budget Rate never showed, Exchange
+/// Rate Composite Key did), while the cleared tree shows the whole subtree with the selected table scrolled to the
+/// top of the viewport: the object is looked for in the rows below it, its display folders opened in turn.
 /// </summary>
 internal static partial class ObjectSelect
 {
-    /// <summary>Rows opened under the table at most, after the table itself; the 18 s clock bounds them too.</summary>
+    /// <summary>Rows opened under the table at most; the 18 s clock bounds them too.</summary>
     public const int MaxFolderOpens = 4;
+
+    /// <summary>Rows selected under the table at most, to tell its folders from its objects (each costs a select).</summary>
+    public const int MaxProbes = 8;
+
+    private const int TableDepth = 2;
+
+    private const string PartitionsGroup = "Partitions";
+
+    private const int ProbeReads = 3;
+
+    /// <summary>The selected table row the rows below are placed under, and its name as TE3 confirmed it.</summary>
+    private sealed record Anchor(int Index, string Table);
 
     /// <summary>
     /// The row strategy as te3_navigate object runs it: the name search's rows first and, whenever they did not
@@ -48,41 +61,102 @@ internal static partial class ObjectSelect
         };
     }
 
-    private const int TableDepth = 2;
-
     public static async Task<SelectResult> ByTable(IRowTree tree, WalkRequest request, Func<bool> outOfTime)
     {
-        await tree.Search(request.Table);
-        var read = await tree.Read();
-        var rows = read.Rows;
-        var table = rows?.FirstOrDefault(r =>
-            r.Value == request.Table && SearchPick.TableOf(rows, r.Index) == request.Table
-        );
+        var (read, table, searches) = await FindTable(tree, request.Table);
         if (table == null)
         {
+            var tried = string.Join(" then ", searches.Select(s => $"'{s}'"));
             return new(
                 false,
                 null,
-                rows?.Count ?? 0,
+                read.Rows?.Count ?? 0,
                 read.IndentPx,
                 0,
-                $"Searching for the table's own name '{request.Table}' showed no row placed as that table.",
+                $"Searching for the table's own name ({tried}) showed no row placed as that table.",
                 true,
                 read.Truncated
             );
         }
 
-        await Open(tree, table);
-        read = await tree.Read();
-        var picked = await Pick(tree, read, request, outOfTime);
+        if ((await tree.ReadSelected()).Selected != table.Index)
+        {
+            await tree.Select(table);
+        }
+
+        var seen = await Settled(tree, table, new WalkRequest(request.Table, request.Table, "Table"));
+        if (seen == null || !TomSelection.ObjectTypeMatches("Table", seen.Type))
+        {
+            var named = seen == null ? "nothing" : $"{seen.Type ?? "no type"} '{seen.Name}'";
+            var why =
+                $"The row selected for table '{request.Table}' was not named as that table by TE3 (it reads {named}).";
+            return new(false, table, read.Rows!.Count, read.IndentPx, 1, why, false, read.Truncated);
+        }
+
+        await tree.ClearSearch();
+        var (below, selected) = await tree.ReadBelow();
+        if (selected is not { } index)
+        {
+            var why = $"Clearing the search lost the selection on table '{request.Table}'.";
+            return new(false, table, below.Rows?.Count ?? 0, below.IndentPx, 1, why, false, below.Truncated);
+        }
+
+        if (!ChildBelow(below.Rows, index))
+        {
+            await tree.Expand();
+            (below, _) = await tree.ReadBelow();
+        }
+
+        return await UnderTable(tree, request, outOfTime, below, new Anchor(index, request.Table));
+    }
+
+    // The table's row in the tree filtered by its name. TE3's filter may not match a whole hyphenated name (te3b-28,
+    // "Z01CG1 - Quantity"): its first token is searched next, and the row is still confirmed by its full text.
+    private static async Task<(RowRead Read, TreeRow? Table, List<string> Searches)> FindTable(
+        IRowTree tree,
+        string name
+    )
+    {
+        var searches = new List<string> { name };
+        await tree.Search(name);
+        var read = await tree.Read();
+        var table = TableRow(read.Rows, name);
+        var token = name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (table == null && token is { } first && first != name)
+        {
+            searches.Add(first);
+            await tree.Search(first);
+            read = await tree.Read();
+            table = TableRow(read.Rows, name);
+        }
+
+        return (read, table, searches);
+    }
+
+    private static TreeRow? TableRow(IReadOnlyList<TreeRow>? rows, string name) =>
+        rows == null ? null : rows.FirstOrDefault(r => r.Value == name && SearchPick.TableOf(rows, r.Index) == name);
+
+    // The row right below the anchor is deeper: the table is open.
+    private static bool ChildBelow(IReadOnlyList<TreeRow>? rows, int index) =>
+        rows?.FirstOrDefault(r => r.Index == index + 1)?.Depth > TableDepth;
+
+    // The pick in the rows below the table, then, with no candidate, its display folders opened in turn: the folder
+    // path's segments when one was asked for, else each row directly under the table, selected first and opened only
+    // when TE3 does not type it as an object (Partitions never holds one and is skipped by name).
+    private static async Task<SelectResult> UnderTable(
+        IRowTree tree,
+        WalkRequest request,
+        Func<bool> outOfTime,
+        RowRead read,
+        Anchor anchor
+    )
+    {
+        var picked = await Pick(tree, read, request, outOfTime, anchor);
         var opened = new List<string>();
         var selected = new List<string>();
-        // With a folder path its folders are opened segment by segment; without one each row directly under the
-        // table in turn, selected first and opened only when TE3 does not type it as an object (a column or measure
-        // takes the select and nothing more); Partitions never holds either and is skipped by name.
         while (
             MayOpen(picked, opened.Count, selected.Count, outOfTime)
-            && NextToOpen(read.Rows, request, selected) is { } row
+            && NextToOpen(read.Rows, request, anchor.Index, selected) is { } row
         )
         {
             selected.Add(row.Value ?? "");
@@ -92,8 +166,8 @@ internal static partial class ObjectSelect
             }
 
             opened.Add(row.Value ?? "");
-            read = await tree.Read();
-            picked = await Pick(tree, read, request, outOfTime);
+            (read, _) = await tree.ReadBelow();
+            picked = await Pick(tree, read, request, outOfTime, anchor);
         }
 
         return picked with
@@ -102,15 +176,15 @@ internal static partial class ObjectSelect
             ByTable = true,
             Pages = read.Pages,
             TruncatedByViewport = read.TruncatedByViewport,
-            Reason =
-                NoCandidate(picked) && selected.Count > 0 ? Unopened(request, read, opened, selected) : picked.Reason,
+            Reason = NoCandidate(picked) ? Unopened(request, read, opened, selected) : picked.Reason,
         };
     }
 
-    /// <summary>Rows selected under the table at most, to tell its folders from its objects (each costs a select).</summary>
-    public const int MaxProbes = 8;
+    private static bool NoCandidate(SelectResult picked) => !picked.Found && picked.Tried == 0;
 
-    private const string PartitionsGroup = "Partitions";
+    // Another row may be opened: nothing placed yet, both bounds unspent, and the clock still running.
+    private static bool MayOpen(SelectResult picked, int opened, int selected, Func<bool> outOfTime) =>
+        NoCandidate(picked) && opened < MaxFolderOpens && selected < MaxProbes && !outOfTime();
 
     // Selected, unless it is, then Right.
     private static async Task Open(IRowTree tree, TreeRow row)
@@ -157,31 +231,28 @@ internal static partial class ObjectSelect
         return true;
     }
 
-    private const int ProbeReads = 3;
-
-    private static bool NoCandidate(SelectResult picked) => !picked.Found && picked.Tried == 0;
-
-    // Another row may be opened: nothing placed yet, both bounds unspent, and the clock still running.
-    private static bool MayOpen(SelectResult picked, int opened, int selected, Func<bool> outOfTime) =>
-        NoCandidate(picked) && opened < MaxFolderOpens && selected < MaxProbes && !outOfTime();
-
     // The next row to open under the table: the folder path's next segment at its exact depth, or the first row
     // directly under the table not selected yet that is neither the object itself nor the Partitions group.
-    private static TreeRow? NextToOpen(IReadOnlyList<TreeRow>? rows, WalkRequest request, List<string> opened)
+    private static TreeRow? NextToOpen(
+        IReadOnlyList<TreeRow>? rows,
+        WalkRequest request,
+        int anchor,
+        List<string> selected
+    )
     {
         if (rows == null)
         {
             return null;
         }
 
-        var under = RowsUnder(rows, request.Table);
+        var under = RowsUnder(rows, anchor);
         var segments = request.Folder.Split(
             '\\',
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
         );
         if (segments.Length > 0)
         {
-            var next = opened.Count;
+            var next = selected.Count;
             return next < segments.Length
                 ? under.FirstOrDefault(r => r.Depth == TableDepth + 1 + next && r.Value == segments[next])
                 : null;
@@ -191,30 +262,19 @@ internal static partial class ObjectSelect
             r.Depth == TableDepth + 1
             && r.Value != request.ObjectName
             && r.Value != PartitionsGroup
-            && !opened.Contains(r.Value ?? "")
+            && !selected.Contains(r.Value ?? "")
         );
     }
 
-    // The rows under the requested table (under Tables): after its row, until the next row at its depth or above.
-    private static IEnumerable<TreeRow> RowsUnder(IReadOnlyList<TreeRow> rows, string table)
-    {
-        var inside = false;
-        foreach (var row in rows)
-        {
-            if (row.Depth is null or <= TableDepth)
-            {
-                inside = row.Depth == TableDepth && row.Value == table && SearchPick.TableOf(rows, row.Index) == table;
-            }
-            else if (inside)
-            {
-                yield return row;
-            }
-        }
-    }
+    // The rows below the table's row that belong to it: until the next row at its depth or above, or of unknown depth.
+    private static IEnumerable<TreeRow> RowsUnder(IReadOnlyList<TreeRow> rows, int anchor) =>
+        rows.Where(r => r.Index > anchor).OrderBy(r => r.Index).TakeWhile(r => r.Depth > TableDepth);
 
     private static string Unopened(WalkRequest request, RowRead read, List<string> opened, List<string> selected) =>
         $"No row named '{request.ObjectName}' under table '{request.Table}'"
         + (request.Folder.Length > 0 ? $" in folder '{request.Folder}'" : "")
-        + $" among the {read.Rows?.Count ?? 0} rows the table's name showed with {opened.Count} folder(s) under it "
-        + $"opened ({string.Join(", ", opened)}); {selected.Count} row(s) were selected under it and nothing else.";
+        + $" among the {read.Rows?.Count ?? 0} rows on screen below the table's row once the search cleared, with "
+        + $"{opened.Count} folder(s) under it opened ({string.Join(", ", opened)}); {selected.Count} row(s) were "
+        + "selected under it and nothing else"
+        + (read.TruncatedByViewport ? "; the table's rows run past the screen, which was not scrolled." : ".");
 }

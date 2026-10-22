@@ -34,6 +34,20 @@ public interface IRowTree
     /// <summary>Types <paramref name="text"/> into the tree's search box in place of what was there.</summary>
     Task Search(string text) => Task.CompletedTask;
 
+    /// <summary>Clears the search box: the whole tree shows again with the selection kept (TE3 scrolls it to the top).</summary>
+    Task ClearSearch() => Task.CompletedTask;
+
+    /// <summary>
+    /// The rows on screen with the selected row as the anchor, no key sent, and the selected index: once the search
+    /// clears the selected table sits at the top of the viewport with its subtree below it. The default is a plain
+    /// read of the selection.
+    /// </summary>
+    async Task<(RowRead Read, int? Selected)> ReadBelow()
+    {
+        var (rows, selected) = await ReadSelected();
+        return (new RowRead(rows, true, null, false), selected);
+    }
+
     /// <summary>Opens the selected row (Right).</summary>
     Task Expand() => Task.CompletedTask;
 
@@ -130,7 +144,14 @@ internal static partial class ObjectSelect
         return result with { Pages = read.Pages, TruncatedByViewport = read.TruncatedByViewport };
     }
 
-    private static async Task<SelectResult> Pick(IRowTree tree, RowRead read, WalkRequest request, Func<bool> outOfTime)
+    // With an anchor (the table try), the rows are placed under the selected table row rather than under Tables.
+    private static async Task<SelectResult> Pick(
+        IRowTree tree,
+        RowRead read,
+        WalkRequest request,
+        Func<bool> outOfTime,
+        Anchor? anchor = null
+    )
     {
         if (Unpicked(read, request) is { } early)
         {
@@ -138,7 +159,7 @@ internal static partial class ObjectSelect
         }
 
         var rows = read.Rows!;
-        var candidates = SearchPick.Candidates(rows, request).Candidates;
+        var candidates = SearchPick.Candidates(rows, request, anchor?.Index).Candidates;
         var rejected = new List<RejectedRow>();
         TreeRow? last = null;
         foreach (var row in candidates.Take(MaxTries).TakeWhile(_ => !outOfTime()))
@@ -153,7 +174,7 @@ internal static partial class ObjectSelect
             }
 
             last = row;
-            var (why, type) = await Confirmed(tree, rows, row, request);
+            var (why, type) = await Confirmed(tree, rows, row, request, anchor?.Index);
             if (why != null)
             {
                 rejected.Add(new(row.Index, row.Value, why));
@@ -173,7 +194,7 @@ internal static partial class ObjectSelect
                 type
             )
             {
-                Table = SearchPick.TableOf(rows, row.Index),
+                Table = anchor?.Table ?? SearchPick.TableOf(rows, row.Index),
             };
         }
 
@@ -289,7 +310,8 @@ internal static partial class ObjectSelect
         IRowTree tree,
         IReadOnlyList<TreeRow> paged,
         TreeRow row,
-        WalkRequest request
+        WalkRequest request,
+        int? anchor = null
     )
     {
         var (fresh, selected) = await SelectedNow(tree, row);
@@ -301,7 +323,7 @@ internal static partial class ObjectSelect
         // The fresh read realizes only the screen around the row; its table and folders may be pages above.
         if (
             fresh == null
-            || SearchPick.Candidates(Merged(paged, fresh), request).Candidates.All(c => c.Index != row.Index)
+            || SearchPick.Candidates(Merged(paged, fresh), request, anchor).Candidates.All(c => c.Index != row.Index)
         )
         {
             return ("a fresh read does not place it in the requested table and folder", null);

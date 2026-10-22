@@ -62,14 +62,20 @@ internal static class SearchPick
     /// <remarks>
     /// A row of unknown depth could be a table, so it ends the requested table: nothing after it is a candidate until
     /// the next row placed at table depth or above, and <see cref="Pick.Unplaced"/> tells the caller to fall back.
+    /// With <paramref name="tableRow"/>, that row is the requested table whatever is above it (TE3 confirmed it
+    /// selected, and the Tables group may be scrolled out of view): the rows after it are placed under it.
     /// </remarks>
-    public static Pick Candidates(IReadOnlyList<TreeRow> rows, WalkRequest request)
+    public static Pick Candidates(IReadOnlyList<TreeRow> rows, WalkRequest request, int? tableRow = null)
     {
         var scan = new Scan(request);
         var unplaced = false;
         foreach (var row in rows)
         {
-            if (row.Depth is not { } depth)
+            if (row.Index == tableRow)
+            {
+                scan.EnterTable(row);
+            }
+            else if (row.Depth is not { } depth)
             {
                 unplaced = true;
                 scan.Break();
@@ -103,6 +109,19 @@ internal static class SearchPick
         {
             inTable = false;
             matched = 0;
+        }
+
+        // The requested table's row, known as such: the rows after it are inside it; it is the candidate itself for a
+        // table request.
+        public void EnterTable(TreeRow row)
+        {
+            group = WalkPlace.TablesGroup;
+            inTable = true;
+            matched = 0;
+            if (request.ObjectType == "Table")
+            {
+                Found.Add(row);
+            }
         }
 
         public bool IsCandidate(TreeRow row, int depth)

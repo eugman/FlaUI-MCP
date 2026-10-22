@@ -203,6 +203,36 @@ public sealed partial class Te3Page
             await Task.Delay(WalkClock.CollapseSettleMs);
         }
 
+        // The filter cleared: the indent is measured again from the rows the whole tree shows.
+        public async Task ClearSearch()
+        {
+            await KeyBudget.Press(outOfTime, page.ClearTomSearchTyped, "the search's clear");
+            page.depthScale = null;
+        }
+
+        private const int TableDepth = 2;
+
+        // The rows on screen with the selected row as the anchor and no key sent, once the rows have settled. After
+        // the search clears TE3 scrolls the selected table to the top of the viewport, so the rows below it are its
+        // subtree and the root is out of view: the indent is then measured from the selected row (a table, depth 2)
+        // and the row below it, its first child. One screen: a subtree running past it is reported incomplete.
+        public async Task<(RowRead Read, int? Selected)> ReadBelow()
+        {
+            await Rendered();
+            var found = await page.ReadTree();
+            var selected = SelectedIndex(found);
+            page.depthScale ??=
+                TomRows.Calibrate(found.Elements)
+                ?? (selected is { } index ? TomRows.CalibrateFrom(found.Elements, index, TableDepth) : null);
+            var rows = page.depthScale == null ? null : TomRows.Rows(found.Elements, page.depthScale);
+            var cut = TomRows.Scrolls(found.Elements) && !Ended(rows, selected);
+            return (new(rows, !cut, page.depthScale?.Step, found.Truncated, 0, cut), selected);
+        }
+
+        // The anchor's subtree ended on screen: a row below it at table depth or above.
+        private static bool Ended(IReadOnlyList<TreeRow>? rows, int? anchor) =>
+            rows != null && anchor is { } index && rows.Any(r => r.Index > index && r.Depth <= TableDepth);
+
         // A miss's text, read before the search is cleared and finished after it: where the selection is then (the
         // walk's own Home and PageDowns leave it on another row than before the walk), against the row it ended on.
         public async Task<string> MissCleared(WalkRequest request, string? reason, int inputs)
