@@ -35,6 +35,18 @@ internal sealed class ManualTimeProvider : TimeProvider, IManualClock
         return timer;
     }
 
+    /// <summary>How many timers are waiting to come due: a call that is waiting on this clock has made one.</summary>
+    public int PendingTimers
+    {
+        get
+        {
+            lock (sync)
+            {
+                return timers.Count(t => t.DueAt != null);
+            }
+        }
+    }
+
     /// <summary>Move the clock and fire every timer that came due.</summary>
     public void Advance(TimeSpan by)
     {

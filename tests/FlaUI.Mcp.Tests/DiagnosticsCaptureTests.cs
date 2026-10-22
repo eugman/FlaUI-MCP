@@ -92,11 +92,12 @@ public sealed class DiagnosticsCaptureTests
         try
         {
             var budget = TimeSpan.FromMilliseconds(100);
-            var capture = Eventually.PastDeadline(
-                clock,
-                budget,
-                () => Diagnostics.Capture(FakeDesktop.TargetHwnd, path, budget)
-            );
+            var call = Task.Run(() => Diagnostics.Capture(FakeDesktop.TargetHwnd, path, budget));
+            // Move the clock once, after the render stage is waiting on its expiry: moved any earlier, the whole
+            // budget would be spent before the render started, and it would be skipped instead of timed out.
+            Eventually.WaitUntil(() => clock.PendingTimers > 0, "the render to wait on the budget");
+            clock.Advance(budget);
+            var capture = Eventually.Result(call);
 
             Assert.False(capture.Saved);
             Assert.Equal(
