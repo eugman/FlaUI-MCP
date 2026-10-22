@@ -61,4 +61,43 @@ public sealed class RefusalFamilyTests
         Assert.Equal("not-dispatched", outcome?.Dispatch);
         Assert.Equal(RefusalCodes.ElementNotFound, outcome?.Failure?.Code);
     }
+
+    [Theory]
+    [InlineData(RefusalCodes.TargetStale)]
+    [InlineData(RefusalCodes.WindowNotFound)]
+    [InlineData(RefusalCodes.LaunchFailed)]
+    public void AGoneOrUnlaunchableTargetIsABlockerARetryCannotPass(string code) =>
+        Assert.Equal(
+            code,
+            CoreFailure.Blocker(
+                Thrown(new ToolOutcome("not-dispatched", "not-tracked") { Failure = new InputRefusal(code, "x") })
+            )
+        );
+
+    [Theory]
+    [InlineData(RefusalCodes.TargetChanged)]
+    [InlineData(RefusalCodes.FocusLost)]
+    public void ARefusalAfterEarlierInputIsPartialAndNotABlocker(string code)
+    {
+        // Core raises these after input went out (actionDispatched true): observe, never replay.
+        var error = Thrown(
+            new ToolOutcome("partial", "not-tracked")
+            {
+                InputsSent = 0,
+                Failure = new InputRefusal(code, "x") { ActionDispatched = true },
+            }
+        );
+
+        Assert.Null(CoreFailure.Blocker(error));
+        Assert.Equal(RefusalDisposition.Partial, error.Disposition);
+        Assert.False(CoreFailure.NotDispatched(error));
+    }
+
+    [Theory]
+    [InlineData(RefusalCodes.TargetStale, true)]
+    [InlineData(RefusalCodes.WindowOwnershipUnknown, true)]
+    [InlineData(RefusalCodes.WindowNotFound, true)]
+    [InlineData(RefusalCodes.FocusRevoked, false)]
+    public void AWindowThatClosedMeanwhileIsToldApartFromOtherRefusals(string code, bool gone) =>
+        Assert.Equal(gone, CoreFailure.IsGone(InputRefusedException.Record(new InputRefusal(code, "x"))));
 }

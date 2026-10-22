@@ -48,7 +48,22 @@ internal static class CoreFailure
         Te3Interaction.FocusRevoked,
         Te3Interaction.PausedAfterFailure,
         RefusalCodes.FocusUnavailable,
+        // The target's window or process is gone, never was, or could not be started: a retry meets the same.
+        RefusalCodes.TargetStale,
+        RefusalCodes.WindowNotFound,
+        RefusalCodes.LaunchFailed,
     ];
+
+    /// <summary>
+    /// Whether a refusal says the window itself is gone (its process exited or restarted, it closed, or it cannot be
+    /// tied to its process any more): a window that closed meanwhile, as opposed to a guard refusing input.
+    /// </summary>
+    internal static bool IsGone(Exception error) =>
+        error
+            is AutomationRefusal
+            {
+                Code: RefusalCodes.TargetStale or RefusalCodes.WindowOwnershipUnknown or RefusalCodes.WindowNotFound,
+            };
 
     /// <summary>
     /// The outcome of the failing Core call, of a direct send that guarded input refused, or of a call refused because

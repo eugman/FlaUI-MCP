@@ -241,10 +241,13 @@ public sealed partial class Te3Page
             {
                 popup = host.Sessions.RegisterNativeWindow(hwnd, processId);
             }
-            catch (Exception error) when (error is InvalidOperationException or ArgumentException)
+            catch (Exception error)
+                when (error is InvalidOperationException or ArgumentException || CoreFailure.IsGone(error))
             {
+                // Closed meanwhile: Core's identity refusal (target-stale, window-ownership-unknown) is dealt with.
+                InputRefusedException.Handled(error);
                 continue;
-            } // closed meanwhile
+            }
 
             var found = await Task.Run(() =>
                     query.Find(
