@@ -46,6 +46,26 @@ public sealed class RawDragGuardTests
         public bool OmitStart { get; init; }
         public bool OmitDrop { get; init; }
         public bool RefStart { get; init; }
+        public bool InitialDropOffscreen { get; init; }
+        public bool DropGeometryFails { get; init; }
+        public string? Incompatible { get; init; }
+    }
+
+    private static void ConfigureGeometry(FakeDesktop desktop, GuardScenario scenario, AutomationElement drop)
+    {
+        if (scenario.MoveDrop || scenario.DropOffscreen)
+        {
+            desktop.OnGeometry = element =>
+                GuardGeometry(desktop, element, drop, scenario.MoveDrop, scenario.DropOffscreen);
+        }
+
+        if (scenario.DropGeometryFails)
+        {
+            desktop.OnGeometry = element =>
+                element == drop && desktop.Dispatched > 2
+                    ? throw new TimeoutException("provider blocked")
+                    : new ClickGeometry(false, null, desktop.ElementBounds[element], []);
+        }
     }
 
     private static object DragArgs(GuardScenario scenario, string handle, string startRef, string dropRef) =>
@@ -53,11 +73,15 @@ public sealed class RawDragGuardTests
         {
             action = "drag",
             handle,
-            @ref = scenario.RefStart ? startRef : null,
+            @ref = scenario.RefStart || scenario.Incompatible is "fromEdge" or "resizeTo" or "toResize"
+                ? startRef
+                : null,
             from = scenario.OmitStart || scenario.RefStart ? null : new { x = 10, y = 10 },
-            fromEdge = scenario.RefStart ? "right" : null,
+            fromEdge = scenario.RefStart || scenario.Incompatible == "fromEdge" ? "right" : null,
+            resizeTo = scenario.Incompatible is "resizeTo" or "toResize" ? 250 : (int?)null,
             to = scenario.OmitDrop ? null : new { x = 50, y = 10 },
-            fromMustHit = scenario.RefStart ? null : startRef,
+            toRef = scenario.Incompatible == "toRef" ? dropRef : null,
+            fromMustHit = scenario.RefStart || scenario.Incompatible == "toResize" ? null : startRef,
             toMustHit = dropRef,
         };
 
@@ -71,11 +95,12 @@ public sealed class RawDragGuardTests
         var covering = Element();
         desktop.ElementBounds[start] = StartBounds;
         desktop.ElementBounds[drop] = DropBounds;
-        if (scenario.MoveDrop || scenario.DropOffscreen)
+        if (scenario.InitialDropOffscreen)
         {
-            desktop.OnGeometry = element =>
-                GuardGeometry(desktop, element, drop, scenario.MoveDrop, scenario.DropOffscreen);
+            desktop.Offscreen.Add(drop);
         }
+
+        ConfigureGeometry(desktop, scenario, drop);
 
         desktop.Descriptions[covering] = "Pane 'Covering'";
         desktop.HitTest = point =>
@@ -181,6 +206,33 @@ public sealed class RawDragGuardTests
         Assert.Equal(0, desktop.Dispatched);
     }
 
+    [Theory]
+    [InlineData("fromEdge")]
+    [InlineData("resizeTo")]
+    [InlineData("toRef")]
+    [InlineData("toResize")]
+    public async Task IncompatibleGuardTargetingIsTypedBeforeInput(string incompatible)
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var result = await Run(desktop, new() { Incompatible = incompatible });
+        Assert.Equal("invalid-arguments", result.Outcome!.Failure!.Code);
+        Assert.Equal("not-dispatched", result.Outcome.Dispatch);
+        Assert.Equal(0, desktop.ScrollRequests);
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
+    public async Task InitiallyHiddenGuardedDropRefusesBeforeInput()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var result = await Run(desktop, new() { InitialDropOffscreen = true });
+        Assert.Equal("click-point-unavailable", result.Outcome!.Failure!.Code);
+        Assert.Equal("not-dispatched", result.Outcome.Dispatch);
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
     [Fact]
     public async Task OffscreenGuardedDropIsReportedAsMoved()
     {
@@ -189,6 +241,19 @@ public sealed class RawDragGuardTests
         var result = await Run(desktop, new() { DropOffscreen = true });
         Assert.Equal("drop-target-moved", result.Outcome!.Failure!.Code);
         Assert.Equal("unverified", result.Outcome.Status);
+        Assert.Contains("the guarded point is no longer visible", result.Content[0].Text);
+        Assert.DoesNotContain("no input sent", result.Content[0].Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(16, desktop.Dispatched);
+    }
+
+    [Fact]
+    public async Task UnreadableHeldDropReportsItsProviderFailure()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var result = await Run(desktop, new() { DropGeometryFails = true });
+        Assert.Equal("drop-target-moved", result.Outcome!.Failure!.Code);
+        Assert.Contains("provider blocked", result.Content[0].Text);
         Assert.DoesNotContain("no input sent", result.Content[0].Text, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(16, desktop.Dispatched);
     }
@@ -204,7 +269,9 @@ public sealed class RawDragGuardTests
         using var reply = JsonDocument.Parse(result.Content[0].Text!);
         var from = reply.RootElement.GetProperty("fromPoint");
         Assert.Equal(110, from.GetProperty("screen").GetProperty("x").GetInt32());
+        Assert.Equal(110, from.GetProperty("screen").GetProperty("y").GetInt32());
         Assert.Equal(10, from.GetProperty("window").GetProperty("x").GetInt32());
+        Assert.Equal(10, from.GetProperty("window").GetProperty("y").GetInt32());
         Assert.Equal(0, desktop.ScrollRequests);
     }
 }
