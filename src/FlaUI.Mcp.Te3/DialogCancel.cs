@@ -49,6 +49,11 @@ internal static class DialogCancel
             {
                 await steps.Click(reference);
             }
+            catch (Exception error) when (CoreFailure.Blocker(error) != null)
+            {
+                // The grant or the desktop refused: the next button's click would be refused too, so say so now.
+                throw;
+            }
             catch (Exception error) when (CoreFailure.NotDispatched(error))
             {
                 continue;

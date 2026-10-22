@@ -91,6 +91,28 @@ public sealed class DialogCancelTests
     }
 
     [Theory]
+    [InlineData("focus-revoked")]
+    [InlineData("approval-required")]
+    [InlineData("activation-denied")]
+    public async Task ACancelTheGrantRefusedIsReportedAtOnceNotWaitedOut(string code)
+    {
+        // The refusal sent nothing, but neither would the next button's click: report it instead of trying Close and
+        // ending in the 5 s wait for a dialog nothing will close.
+        var error = await Assert.ThrowsAsync<CoreCallException>(() =>
+            DialogCancel.Run(
+                Dialog(click: reference =>
+                {
+                    clicks.Add(reference);
+                    throw Failed("not-dispatched", "Refused.", code: code);
+                })
+            )
+        );
+
+        Assert.Equal(code, error.Code);
+        Assert.Equal(["Cancel"], clicks);
+    }
+
+    [Theory]
     [InlineData("partial")]
     [InlineData("timed_out_pending")]
     public async Task ACancelCoreSaysMayHaveGoneOutIsNotFollowedByClose(string dispatch)
