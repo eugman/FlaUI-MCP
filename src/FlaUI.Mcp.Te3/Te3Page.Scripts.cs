@@ -227,6 +227,8 @@ public sealed partial class Te3Page
         await Fill(ExpressionInputTarget(), expression);
         await Expect(ExpressionTarget(), expression);
         await Keys("F5");
+        // The evaluation's effect is the recipe's next assertion (errors, no errors); F5 itself has no read-back.
+        Unverified("Evaluate expression (F5)");
     }
 
     public async Task AssertMissingMeasureError()
@@ -258,6 +260,8 @@ public sealed partial class Te3Page
         await Fill(QueryInputTarget(), query);
         await Expect(QueryTextTarget(), query);
         await Keys("F5", QueryInputTarget());
+        // The result is the recipe's next assertion (AssertQueryResult); F5 itself has no read-back.
+        Unverified("Run query (F5)");
     }
 
     public async Task AssertQueryResult(string result)

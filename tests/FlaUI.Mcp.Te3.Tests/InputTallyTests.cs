@@ -255,4 +255,38 @@ public sealed class InputTallyTests
         Assert.Equal([new UnverifiedStep("windows_send_keys", "Save (Ctrl+S)", "w1")], manifest.UnverifiedSteps);
         Assert.Equal("Save (Ctrl+S)", written.GetProperty("unverifiedSteps")[0].GetProperty("step").GetString());
     }
+
+    // The page's key sends that have no read-back of their own (Save, F5 evaluations) must say so in the same
+    // method, or the manifest's unverifiedSteps under-reports; Te3Page cannot run offline, so the source is checked.
+    [Fact]
+    public void EveryUnreadKeySendInTheScriptsPageIsRecordedAsUnverified()
+    {
+        var lines = File.ReadAllLines(Path.Combine(DirectInputJournalTests.Sources(), "Te3Page.Scripts.cs"));
+        var sends = Enumerable
+            .Range(0, lines.Length)
+            .Where(i => lines[i].Contains("Keys(\"F5\"") || lines[i].Contains("Keys(\"Ctrl+S\")"))
+            .ToList();
+        var recorded = sends
+            .Select(i => lines.Skip(i + 1).TakeWhile(line => line != "    }").FirstOrDefault(IsRecord))
+            .ToList();
+
+        Assert.Equal(3, sends.Count);
+        Assert.All(recorded, Assert.NotNull);
+        var manifest = new RunManifest();
+        var inputs = new InputTally();
+        foreach (var step in recorded.Select(StepName))
+        {
+            inputs.RecordUnverified("te3_page", step, "w1");
+        }
+
+        RunExecutor.RecordUnverified(manifest, inputs);
+        Assert.Equal(
+            ["Evaluate expression (F5)", "Save (Ctrl+S)", "Run query (F5)"],
+            manifest.UnverifiedSteps.Select(step => step.Step)
+        );
+    }
+
+    private static bool IsRecord(string line) => line.TrimStart().StartsWith("Unverified(\"", StringComparison.Ordinal);
+
+    private static string StepName(string? line) => line!.Split('"')[1];
 }
