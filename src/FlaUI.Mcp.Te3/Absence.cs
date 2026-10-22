@@ -3,7 +3,7 @@ using System.Diagnostics;
 /// <summary>Waits for a UI target to be gone and stay gone; a failed read never counts as absence.</summary>
 internal static class Absence
 {
-    private const int PollMs = 100;
+    internal const int PollMs = 100;
 
     /// <summary>
     /// Returns once <paramref name="present"/> has read false for <paramref name="settleMs"/>; a read that sees it again,
@@ -24,7 +24,10 @@ internal static class Absence
         var start = clock();
         TimeSpan? absentSince = null;
         Exception? lastUnavailable = null;
-        while ((clock() - start).TotalMilliseconds < timeoutMs)
+        // A poll count backstops the clock (as Core's ClickTool.Settled does): a clock that does not move, with a pause
+        // that does not move it, still ends the wait.
+        var polls = timeoutMs / PollMs + 1;
+        while ((clock() - start).TotalMilliseconds < timeoutMs && polls-- > 0)
         {
             try
             {

@@ -13,7 +13,7 @@ internal static class WalkClock
     /// <summary>How long one Down may wait, reads included, for the selection to move.</summary>
     public static readonly TimeSpan MoveTimeout = TimeSpan.FromMilliseconds(1500);
 
-    private const int PollMs = 60;
+    internal const int PollMs = 60;
 
     /// <summary>How long a Left that collapses a group is given before the selection is read back.</summary>
     public const int CollapseSettleMs = 200;
@@ -47,7 +47,9 @@ internal static class WalkClock
         where T : class
     {
         var start = elapsed();
-        while (elapsed() - start < MoveTimeout)
+        // A poll count backstops the clock (as Core's ClickTool.Settled does), so a still clock ends the wait too.
+        var polls = (int)(MoveTimeout.TotalMilliseconds / PollMs) + 1;
+        while (elapsed() - start < MoveTimeout && polls-- > 0)
         {
             await delay(PollMs);
             var now = await observe();
