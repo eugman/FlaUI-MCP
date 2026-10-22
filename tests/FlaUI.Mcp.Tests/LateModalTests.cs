@@ -103,6 +103,98 @@ public sealed class LateModalTests
         Assert.Null(result.ModalTitle);
     }
 
+    [Theory]
+    [InlineData("SetValue")]
+    [InlineData("ScrollIntoView")]
+    [InlineData("Focus on 'Name'")]
+    [InlineData("Close on 'Main'")]
+    public void ACallThatCannotOpenADialogIsNotWatched(string description)
+    {
+        var (desktop, clock) = StillDesktop();
+        using var installed = desktop.Install();
+        var started = clock.GetTimestamp();
+        var reads = 0;
+
+        var result = ModalAwareInvoker.Execute(
+            ProcessId,
+            description,
+            () => { },
+            new PendingInvokeTracker(),
+            windowEnumerator: _ =>
+            {
+                reads++;
+                return [Window(1, "Main")];
+            }
+        );
+
+        Assert.Equal(PatternCallOutcome.Completed, result.Outcome);
+        Assert.Null(result.ModalTitle);
+        // The baseline only: the lease is not held for a watch.
+        Assert.Equal(1, reads);
+        Assert.Equal(TimeSpan.Zero, clock.GetElapsedTime(started));
+    }
+
+    [Theory]
+    [InlineData("Invoke on 'Save'")]
+    [InlineData("Select on 'Row'")]
+    [InlineData("Expand on 'Node'")]
+    public void EveryCallThatCanOpenADialogIsWatched(string description)
+    {
+        var (desktop, clock) = StillDesktop();
+        using var installed = desktop.Install();
+        var started = clock.GetTimestamp();
+
+        ModalAwareInvoker.Execute(
+            ProcessId,
+            description,
+            () => { },
+            new PendingInvokeTracker(),
+            windowEnumerator: _ => [Window(1, "Main")]
+        );
+
+        Assert.Equal(ModalAwareInvoker.LateModalGrace, clock.GetElapsedTime(started));
+    }
+
+    [Fact]
+    public void ACancellationDuringTheWatchEndsItWithoutFailingTheCompletedCall()
+    {
+        var (desktop, clock) = StillDesktop();
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        try
+        {
+            var started = clock.GetTimestamp();
+            var reads = 0;
+
+            var result = ModalAwareInvoker.Execute(
+                ProcessId,
+                "Invoke on 'Save'",
+                () => { },
+                new PendingInvokeTracker(),
+                windowEnumerator: _ =>
+                {
+                    // The second read is the first poll of the watch; the client cancels right after it.
+                    if (++reads == 2)
+                    {
+                        operation.Stop.Cancel();
+                    }
+
+                    return [Window(1, "Main")];
+                }
+            );
+
+            Assert.Equal(PatternCallOutcome.Completed, result.Outcome);
+            Assert.Null(result.ModalTitle);
+            Assert.Equal(2, reads);
+            Assert.Equal(TimeSpan.FromMilliseconds(100), clock.GetElapsedTime(started));
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
     [Fact]
     public void AnUnknownProcessIsNotWatched()
     {
