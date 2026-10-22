@@ -384,14 +384,16 @@ public sealed class ObjectSelectTests
     [Fact]
     public void AMissSaysWhereTe3LeftTheSelectionAfterTheSearchCleared()
     {
-        // Live (te3-eb2ed6a walk g): the folder miss ended on row 19 'Products' in the filtered tree and, after the
-        // clear, the status bar read Table "Products": TE3 moves the selection when the filtered tree is replaced,
-        // with no select from the walk. The reply says so, or that it stayed, or that the bar names nothing.
+        // Live (te3-eb2ed6a walk g): the walk's own Home and PageDowns left the selection on row 19 'Products' (8
+        // inputs, 0 selects) and, after the clear, the status bar read Table "Products", the row it ended on. The
+        // reply says it stayed, or names the other row (no select of the walk put it there), or that where the walk
+        // ended was not read, or that the bar names nothing.
+        Assert.Contains("stayed on Table \"Products\"", WalkMiss.AfterClear("Table \"Products\"", "Products"));
         Assert.Contains(
-            "the selection is Table \"Products\": TE3 moved it when the filtered tree was replaced; the walk did not",
+            "the selection is Table \"Products\", not the row the walk ended on ('Partitions'); the walk sent no select",
             WalkMiss.AfterClear("Table \"Products\"", "Partitions")
         );
-        Assert.Contains("stayed on Table \"Products\"", WalkMiss.AfterClear("Table \"Products\"", "Products"));
+        Assert.Contains("where the walk ended was not read", WalkMiss.AfterClear("Table \"Products\"", null));
         Assert.Contains("names no selection", WalkMiss.AfterClear(null, "Products"));
     }
 }

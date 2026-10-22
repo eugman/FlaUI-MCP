@@ -203,8 +203,8 @@ public sealed partial class Te3Page
             await Task.Delay(WalkClock.CollapseSettleMs);
         }
 
-        // A miss's text, read before the search is cleared and finished after it: where the selection is then (TE3
-        // moves it when the filtered tree is replaced), against the row the walk ended on.
+        // A miss's text, read before the search is cleared and finished after it: where the selection is then (the
+        // walk's own Home and PageDowns leave it on another row than before the walk), against the row it ended on.
         public async Task<string> MissCleared(WalkRequest request, string? reason, int inputs)
         {
             var (text, endedOn) = await Miss(request, reason, inputs);

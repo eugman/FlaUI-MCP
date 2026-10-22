@@ -19,9 +19,10 @@ internal static class WalkMiss
     }
 
     /// <summary>
-    /// Where the selection is once the search has cleared, from the status bar's slot: still on the row the walk
-    /// ended on (<paramref name="endedOn"/>), or moved by TE3, which places the selection when the filtered tree is
-    /// replaced (te3-eb2ed6a: a folder miss that ended on Products' row left Table "Products" selected).
+    /// Where the selection is once the search has cleared, from the status bar's slot, against the row the walk
+    /// ended on (<paramref name="endedOn"/>; null when that read failed). The walk's own Home and PageDowns leave the
+    /// selection on another row than before it (te3-eb2ed6a: a folder miss ended on Products' row, 0 selects, and the
+    /// bar read Table "Products" after the clear), so the reply names where it is and that no select put it there.
     /// </summary>
     public static string AfterClear(string? bar, string? endedOn)
     {
@@ -30,9 +31,15 @@ internal static class WalkMiss
             return " After the search cleared, the status bar names no selection.";
         }
 
-        return TomSelection.SelectionName(bar) is { } name && name == endedOn
+        if (endedOn == null)
+        {
+            return $" After the search cleared, the selection is {bar}; where the walk ended was not read, so whether "
+                + "that is the same row is not known.";
+        }
+
+        return TomSelection.SelectionName(bar) == endedOn
             ? $" After the search cleared, the selection stayed on {bar}."
-            : $" After the search cleared, the selection is {bar}: TE3 moved it when the filtered tree was replaced; "
-                + "the walk did not select it.";
+            : $" After the search cleared, the selection is {bar}, not the row the walk ended on ('{endedOn}'); the "
+                + "walk sent no select for it.";
     }
 }
