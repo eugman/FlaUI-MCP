@@ -99,18 +99,7 @@ public sealed partial class Te3Page
             return new(false, null, 0, stopped.Message);
         }
 
-        WalkReport = new
-        {
-            strategy = picked.ByTable ? "rows-by-table" : "rows",
-            objectType = picked.ConfirmedType,
-            rowsRead = picked.RowsRead,
-            indentPx = picked.IndentPx,
-            selects = picked.Tried,
-            truncated = picked.Truncated,
-            pages = picked.Pages,
-            truncatedByViewport = picked.TruncatedByViewport,
-            rejected = picked.Rejected,
-        };
+        WalkReport = WalkAccount.Rows(picked, request);
         if (!picked.FallBack)
         {
             return new(picked.Found, picked.Found ? request.Table : null, picked.RowsRead, picked.Reason);
@@ -125,18 +114,7 @@ public sealed partial class Te3Page
             WalkClock.CanRead(elapsed),
             () => PropertiesValue("Name")
         );
-        WalkReport = new
-        {
-            strategy = "keys",
-            rowsRead = picked.RowsRead,
-            indentPx = picked.IndentPx,
-            selects = picked.Tried,
-            truncated = picked.Truncated,
-            pages = picked.Pages,
-            truncatedByViewport = picked.TruncatedByViewport,
-            rejected = picked.Rejected,
-            rowsWalked = walk.RowsVisited,
-        };
+        WalkReport = WalkAccount.Keys(picked, request, walk);
         return walk;
     }
 
