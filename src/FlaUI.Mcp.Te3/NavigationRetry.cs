@@ -1,3 +1,5 @@
+using FlaUI.Mcp.Core;
+
 /// <summary>When a failed navigation may be tried again.</summary>
 internal static class NavigationRetry
 {
@@ -16,7 +18,7 @@ internal static class NavigationRetry
         {
             await attempt();
         }
-        catch (Exception first) when (first is InvalidOperationException or TimeoutException)
+        catch (Exception first) when (first is InvalidOperationException or AutomationRefusal or TimeoutException)
         {
             var sent = inputsSent() - before;
             if (sent > 0)

@@ -1,3 +1,5 @@
+using FlaUI.Mcp.Core;
+
 /// <summary>
 /// Reopens a hidden docked pane from TE3's View menu: open the View menu, then click the popup Button named after the
 /// pane. Only entries observed in the View popup (TE3 3.27.1, automation/UI-MAP.md) are clicked; any other title is
@@ -97,7 +99,7 @@ internal static class PaneReopen
         {
             await menu.ClickEntry(title);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or AutomationRefusal)
         {
             // The View click left the menu open, so the next tool's keys would go to it.
             await menu.CloseMenu();

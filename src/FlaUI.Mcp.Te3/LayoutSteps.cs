@@ -121,13 +121,16 @@ internal static class LayoutSteps
             return await run(inputs);
         }
         // A stopped call still says what it sent before it stopped.
-        catch (Exception ex)
-            when (ex is ArgumentException or InvalidOperationException or TimeoutException or OperationCanceledException
-            )
+        catch (Exception ex) when (Answered(ex))
         {
             return Failure(tool, ex, inputs.Sent);
         }
     }
+
+    // The failures a call answers with its reply: bad arguments, refusals, failed steps, timeouts, cancellation.
+    private static bool Answered(Exception ex) =>
+        ex is ArgumentException or InvalidOperationException or AutomationRefusal
+        || ex is TimeoutException or OperationCanceledException;
 
     /// <summary>The failure: its text, and how much input went out as Core's outcome (structuredContent).</summary>
     public static McpToolResult Failure(string tool, Exception ex, int inputsSent) =>

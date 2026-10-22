@@ -53,7 +53,7 @@ internal static class DialogCancel
             {
                 continue;
             }
-            catch (Exception error) when (error is InvalidOperationException or TimeoutException)
+            catch (Exception error) when (error is InvalidOperationException or AutomationRefusal or TimeoutException)
             {
                 await ReportIfStillOpen(steps, button, error);
                 return;
@@ -87,7 +87,12 @@ internal static class DialogCancel
             return await steps.Resolve(button);
         }
         catch (Exception error)
-            when (error is InvalidOperationException or TimeoutException or System.Reflection.AmbiguousMatchException)
+            when (error
+                    is ElementNotFoundException
+                        or InvalidOperationException
+                        or TimeoutException
+                        or System.Reflection.AmbiguousMatchException
+            )
         {
             return null;
         }

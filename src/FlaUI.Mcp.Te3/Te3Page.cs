@@ -1156,6 +1156,10 @@ public sealed partial class Te3Page(
             {
                 throw;
             } // A hung provider must not spawn retry workers.
+            catch (AutomationRefusal refusal) when (refusal is not ElementNotFoundException)
+            {
+                throw;
+            } // Only "not there yet" is polled; a refusal is never relabelled as a timeout.
             catch (Exception ex)
             {
                 last = ex;

@@ -215,6 +215,7 @@ public static class RunnerCommands
             when (ex
                     is ArgumentException
                         or InvalidOperationException
+                        or AutomationRefusal
                         or IOException
                         or UnauthorizedAccessException
                         or JsonException

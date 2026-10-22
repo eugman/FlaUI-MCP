@@ -139,7 +139,7 @@ public sealed partial class Te3Page
                 row = rows?.FirstOrDefault(r => r.Index == selected);
                 table = row == null || rows == null ? null : SearchPick.TableOf(rows, row.Index);
             }
-            catch (Exception error) when (error is InvalidOperationException or TimeoutException)
+            catch (Exception error) when (error is InvalidOperationException or AutomationRefusal or TimeoutException)
             {
                 reason += " (reading where the selection ended failed: " + error.Message + ")";
             }
