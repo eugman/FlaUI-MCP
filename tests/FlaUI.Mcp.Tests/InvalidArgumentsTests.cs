@@ -34,6 +34,27 @@ public sealed class InvalidArgumentsTests
         Assert.False(result.Outcome.Failure.ActionDispatched);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(91)]
+    public async Task LaunchWaitOutsideItsBoundIsRefusedBeforeStartingTheApp(int waitSeconds)
+    {
+        using var installed = new FakeDesktop().Install();
+        using var sessions = new SessionManager(null, ProcessPolicy.AllowAll);
+
+        AssertInvalid(
+            await Run(new LaunchTool(sessions), new { app = "uninstalled-demo-app.exe", waitSeconds }),
+            "waitSeconds must be between 1 and 90"
+        );
+    }
+
+    [Fact]
+    public void AColdLaunchCanRequestMoreWindowPollsWithoutChangingTheDefault()
+    {
+        Assert.Equal(SessionManager.LaunchPolls, SessionManager.LaunchPollCount(null));
+        Assert.Equal(90, SessionManager.LaunchPollCount(45));
+    }
+
     [Fact]
     public async Task AFillWithoutAValueIsAnInvalidArgumentsRefusal()
     {

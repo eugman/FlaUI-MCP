@@ -34,6 +34,11 @@ public class LaunchTool : ToolBase
 
         [ToolDoc("Optional command line arguments")]
         public string[]? Args { get; init; }
+
+        [ToolDoc(
+            "Poll for a unique window from this process for up to this many seconds after startup (1-90; default 20). Cold starts such as TE3 can need 45 or more; allow a longer caller timeout."
+        )]
+        public int? WaitSeconds { get; init; }
     }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
@@ -45,10 +50,15 @@ public class LaunchTool : ToolBase
         }
 
         var args = GetArgument<string[]>(arguments, "args");
+        var waitSeconds = GetArgument<int?>(arguments, "waitSeconds");
+        if (waitSeconds is < 1 or > 90)
+        {
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "waitSeconds must be between 1 and 90"));
+        }
 
         try
         {
-            var (handle, window) = _sessionManager.LaunchApp(app, args);
+            var (handle, window) = _sessionManager.LaunchApp(app, args, waitSeconds);
             return Task.FromResult(TextResult($"Launched {app}\nWindow handle: {handle}\nTitle: {window.Title}"));
         }
         catch (Exception ex)

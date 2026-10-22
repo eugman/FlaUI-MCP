@@ -410,6 +410,10 @@
             "type": "string"
           },
           "description": "Optional command line arguments"
+        },
+        "waitSeconds": {
+          "type": "integer",
+          "description": "Poll for a unique window from this process for up to this many seconds after startup (1-90; default 20). Cold starts such as TE3 can need 45 or more; allow a longer caller timeout."
         }
       },
       "required": [

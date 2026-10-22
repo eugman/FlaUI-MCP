@@ -51,7 +51,7 @@ public sealed class ToolsListSnapshotTests
     }
 
     [Fact]
-    public void ToolsListDiffersFromTheBaselineOnlyByDescriptionsAndRawDragGuards()
+    public void ToolsListDiffersFromTheBaselineOnlyByDescriptionsAndDocumentedAdditions()
     {
         var baseline = JsonNode.Parse(Read("tools-list.baseline.json"))!;
         var live = JsonNode.Parse(ToolsList())!;
@@ -63,6 +63,11 @@ public sealed class ToolsListSnapshotTests
             Assert.Equal("string", properties[guard]!["type"]!.GetValue<string>());
             Assert.True(properties.Remove(guard));
         }
+
+        var launch = live.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_launch")!;
+        var launchProperties = launch["inputSchema"]!["properties"]!.AsObject();
+        Assert.Equal("integer", launchProperties["waitSeconds"]!["type"]!.GetValue<string>());
+        Assert.True(launchProperties.Remove("waitSeconds"));
 
         Assert.Equal(Strip(baseline, "", kept).ToJsonString(), Strip(live, "", []).ToJsonString());
         // Every description the baseline had is still there, word for word.
