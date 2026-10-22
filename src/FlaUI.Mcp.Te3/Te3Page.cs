@@ -2455,14 +2455,4 @@ public sealed partial class Te3Page(
             throw new InvalidOperationException("Expected view tab is not selected.");
         }
     }
-
-    /// <summary>Whether the property grid's Object Type is the kind of object that was asked for.</summary>
-    internal static bool ObjectTypeMatches(string objectType, string? observed)
-    {
-        var actualType = observed?.Replace(" ", "", StringComparison.Ordinal);
-        return objectType == "Column"
-                ? actualType is "Column" or "DataColumn" or "CalculatedColumn" or "CalculatedTableColumn"
-            : objectType == "Table" ? actualType is "Table" or "CalculatedTable"
-            : actualType == "Measure";
-    }
 }

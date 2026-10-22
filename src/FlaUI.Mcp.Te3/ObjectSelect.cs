@@ -252,7 +252,7 @@ internal static class ObjectSelect
             var seen = SelectionView.Read(row, await tree.View());
             if (
                 seen != null
-                && (request.ObjectType.Length == 0 || Te3Page.ObjectTypeMatches(request.ObjectType, seen.Type))
+                && (request.ObjectType.Length == 0 || TomSelection.ObjectTypeMatches(request.ObjectType, seen.Type))
             )
             {
                 return seen;
@@ -284,7 +284,7 @@ internal static class ObjectSelect
             return $"TE3 names the selection '{seen.Name ?? "nothing"}'";
         }
 
-        if (request.ObjectType.Length > 0 && !Te3Page.ObjectTypeMatches(request.ObjectType, seen.Type))
+        if (request.ObjectType.Length > 0 && !TomSelection.ObjectTypeMatches(request.ObjectType, seen.Type))
         {
             return $"TE3 shows it as {seen.Type ?? "no type"}, not {request.ObjectType}";
         }

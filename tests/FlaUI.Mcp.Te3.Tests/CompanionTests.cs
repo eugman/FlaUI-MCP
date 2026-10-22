@@ -332,7 +332,7 @@ public sealed class CompanionTests
     [InlineData("Column", "Data Column", true)]
     [InlineData("Column", "Calculated Column", true)]
     public void SameNamedRowsArePickedByObjectType(string requested, string? observed, bool expected) =>
-        Assert.Equal(expected, Te3Page.ObjectTypeMatches(requested, observed));
+        Assert.Equal(expected, TomSelection.ObjectTypeMatches(requested, observed));
 
     [Theory]
     [InlineData("Calculated Table \"Date\"", "Calculated Table")]

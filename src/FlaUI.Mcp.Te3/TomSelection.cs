@@ -35,4 +35,16 @@ internal static class TomSelection
     /// </summary>
     internal static bool RowShownBelow(IEnumerable<double?> rowTops, double? selectedTop) =>
         selectedTop is { } top && rowTops.Any(other => other > top);
+
+    /// <summary>Whether the property grid's Object Type is the kind of object that was asked for.</summary>
+    internal static bool ObjectTypeMatches(string objectType, string? observed)
+    {
+        var actualType = observed?.Replace(" ", "", StringComparison.Ordinal);
+        return objectType switch
+        {
+            "Column" => actualType is "Column" or "DataColumn" or "CalculatedColumn" or "CalculatedTableColumn",
+            "Table" => actualType is "Table" or "CalculatedTable",
+            _ => actualType == "Measure",
+        };
+    }
 }

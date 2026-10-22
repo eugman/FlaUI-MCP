@@ -20,7 +20,7 @@ internal static class NavigationProof
             typed
             && (
                 string.Equals(type, observedType, StringComparison.Ordinal)
-                || Te3Page.ObjectTypeMatches(type!, observedType)
+                || TomSelection.ObjectTypeMatches(type!, observedType)
             );
         var expected = $"{name} ({(typed ? type : observedType)}) in {table}";
         if (observedName == null)

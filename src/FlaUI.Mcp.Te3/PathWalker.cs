@@ -243,7 +243,7 @@ public static class PathWalker
         + $"{WalkClock.MoveTimeout.TotalSeconds} s after {visited} rows, although a row is shown below it. TOM Explorer "
         + "was slow; this is not proof the object is missing. Observe with te3_model_state, then retry.";
 
-    internal static bool IsTable(string? type) => Te3Page.ObjectTypeMatches("Table", type);
+    internal static bool IsTable(string? type) => TomSelection.ObjectTypeMatches("Table", type);
 
     /// <summary>
     /// The selection is the requested object: its row (or Properties, when the row's type was not read) has the name
@@ -274,6 +274,6 @@ public static class PathWalker
         string objectType
     ) =>
         row.Value == objectName
-        && (objectType.Length == 0 || Te3Page.ObjectTypeMatches(objectType, row.Type))
+        && (objectType.Length == 0 || TomSelection.ObjectTypeMatches(objectType, row.Type))
         && currentTable == table;
 }

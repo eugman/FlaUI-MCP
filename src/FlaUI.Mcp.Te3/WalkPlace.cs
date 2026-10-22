@@ -138,7 +138,7 @@ internal sealed class WalkPlace(string table, string? folder)
         && !NotFolders.Contains(type.Replace(" ", "", StringComparison.Ordinal));
 
     private static bool IsObject(string type) =>
-        Te3Page.ObjectTypeMatches("Column", type)
-        || Te3Page.ObjectTypeMatches("Measure", type)
-        || Te3Page.ObjectTypeMatches("Table", type);
+        TomSelection.ObjectTypeMatches("Column", type)
+        || TomSelection.ObjectTypeMatches("Measure", type)
+        || TomSelection.ObjectTypeMatches("Table", type);
 }
