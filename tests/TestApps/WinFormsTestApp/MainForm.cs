@@ -9,7 +9,7 @@ namespace WinFormsTestApp;
 /// Test application for FlaUI-MCP integration tests.
 /// Each tab exercises a different set of MCP tool capabilities.
 /// </summary>
-public class MainForm : Form
+public partial class MainForm : Form
 {
     private TabControl _tabs = null!;
 
@@ -28,6 +28,7 @@ public class MainForm : Form
         _tabs.TabPages.Add(CreateGridTab());
         _tabs.TabPages.Add(CreateTreeTab());
         _tabs.TabPages.Add(CreateDialogTab());
+        _tabs.TabPages.Add(CreateHazardsTab());
     }
 
     /// <summary>
