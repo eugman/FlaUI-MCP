@@ -58,6 +58,8 @@ Live on 2026-10-21 (te3-cfa803c), `te3_navigate object` Brands/Brand/Column stop
 
 Again on te3-97a4512 (2026-10-21), at about 2.3 s a row: with `folder` it stopped after 8 rows on Partition "Brands" (17 inputs, 20.2 s); without it ran past the column to folder "3. Managers", which it read as "unknown type, table none" (Properties: ObjectType Folder; the status-bar selection slot was stale on Column "Product Brand VP"). Budget Rate[Rate] (14.1 s) and the measure Orders[Order Lines] (10.1 s) passed. A folder miss reached "the end of the filtered tree" on Products[Sub Brand Name] while it read as if Brands had been searched; the reason now names the row it ended on.
 
+On te3-6535504 (2026-10-21) four of six walks were right: Brands[Brand] with folder (rows, 22 rows read, 1 select, 10 inputs, 10.1 s) and the folder miss passed; without a folder or type the already-selected column was turned down as "no new selection" and the level taken; Orders[Order Lines] was turned down because it was read before the status bar caught up; Budget Rate[Rate] and a calc-group measure fell to keys with 0 rows read (the read came before the filter rendered) and ended in the wrong place reporting "table none". Changed since: an already-selected pick is confirmed without a select, the confirmation polls about 1.5 s for TE3 to name the label, the read waits for the filtered tree to render and never falls back on an empty read, and a miss says the type asked for and where the selection ended with its table from the rows. Not yet run live; keep this row open.
+
 On te3-ea21625 the row strategy picked and selected Column Brand in 5.1 s and 8 inputs, then turned it down because a column's Properties grid has no ObjectType row; the other walks fell back to keys from the current selection (the root was off screen, so the indent was not measured) and failed or reported "table none". Changed since: the type comes from the status bar first, the row read starts with Home and pages past the viewport, an untyped row at table depth under Tables is the table, and objectType is optional. Not yet run live; keep this row open.
 
 Changed in the host after that: the keyboard walk is no longer the primary strategy. te3_navigate object reads every realized row of the filtered tree once (TreeItem text, DataItem indent for depth), picks the object by names and depth, selects it with one guarded Select and confirms with Properties' Name and ObjectType; the reply's `walk` gives rowsRead and indentPx. The keyboard walk below is the fallback when the indent cannot be measured, or the tree scrolls and holds no candidate. Not yet run live.
@@ -73,4 +75,12 @@ Changed in the host before that: one read per row (the settled read is reused as
 ## The runner's activation click is checked by position only
 
 When Windows refuses to bring the runner's TE3 forward, the run continues only after a mouse click whose point lies inside TE3's window rectangle (and no typing). The point is not hit-tested: a click on another window that overlaps TE3's rectangle, followed by TE3 coming forward, is accepted as the go-ahead. A hit test (which window was under the click) is deferred to the Core rebase, where Core's ClickHitTest and FromPoint go through the desktop seam.
+
+## Closing a floating pane (closed)
+
+`te3_layout close` once ignored the floating Dependencies window, then only pointed at windows_close. Verified live on te3-6535504 (2026-10-21): `close ["Dependencies"]` closed it in 1 input and 0.7 s through windows_close on the window's own handle, read it back gone, and left AI Assistant, TOM Explorer and Properties; the reply now names that route.
+
+## Closing TE3 needs an active interaction
+
+`windows_close` on the TE3 window is a desktop change like any other, so it is refused (not-dispatched, 0 inputs) after `te3_interaction_end`. The host keeps it that way rather than exempting its own close: end the interaction only after TE3 is closed, or begin a new one for the teardown (te3-6535504 did the latter). `te3_layout restore` needs no interaction, so it can run after the end.
 
