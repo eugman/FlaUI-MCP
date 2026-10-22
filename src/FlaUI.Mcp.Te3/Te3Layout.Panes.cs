@@ -19,7 +19,7 @@ public sealed partial class Te3Layout
         var docked = surface.Parts().Select(p => new ListedPart(p.Title, p.Kind, Relative(p.Bounds, surface.Origin)));
         var floating = surface
             .Windows()
-            .Where(w => w.Hwnd != surface.MainWindow && w.Title.Length > 0 && !w.IsToolWindow)
+            .Where(w => w.Hwnd != surface.MainWindow && w.Title.Length > 0)
             .Select(w => new ListedPart(
                 w.Title,
                 LayoutChecks.IsFloatingPane(w, surface.ShapeOf) ? "floating" : "dialog",

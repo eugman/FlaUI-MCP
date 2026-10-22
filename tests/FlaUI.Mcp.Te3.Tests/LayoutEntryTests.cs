@@ -272,6 +272,9 @@ public sealed class LayoutEntryTests : IDisposable
                 layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
                 layout.Shapes[0x30] = new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0);
                 layout.Extra.Add(new(0x40, "Save changes?", 7, true, false, false));
+                layout.Extra.Add(
+                    new Win32WindowInfo(0x50, "MCP Server", 7, true, false, false) { IsToolWindow = true }
+                );
                 return layout;
             },
             readOnly: true
@@ -289,6 +292,10 @@ public sealed class LayoutEntryTests : IDisposable
         Assert.Contains(
             listed.RootElement.EnumerateArray(),
             p => p.GetProperty("title").GetString() == "Save changes?" && p.GetProperty("kind").GetString() == "dialog"
+        );
+        Assert.Contains(
+            listed.RootElement.EnumerateArray(),
+            p => p.GetProperty("title").GetString() == "MCP Server" && p.GetProperty("kind").GetString() == "dialog"
         );
     }
 
