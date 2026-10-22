@@ -67,7 +67,7 @@ public partial class ClickTool : ToolBase
         var refId = GetStringArgument(arguments, "ref");
         if (string.IsNullOrEmpty(refId))
         {
-            return Task.FromResult(ErrorResult("Missing required argument: ref"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: ref"));
         }
 
         var request = new ClickRequest(

@@ -41,7 +41,7 @@ public class LaunchTool : ToolBase
         var app = GetStringArgument(arguments, "app");
         if (string.IsNullOrEmpty(app))
         {
-            return Task.FromResult(ErrorResult("Missing required argument: app"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: app"));
         }
 
         var args = GetArgument<string[]>(arguments, "args");

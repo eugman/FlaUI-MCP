@@ -58,6 +58,9 @@ public static class RefusalCodes
 
     /// <summary>A drag's drop point lies where a resting drag auto-scrolls its list; refused before input.</summary>
     public const string DropPointInScrollBand = "drop-point-in-scroll-band";
+
+    /// <summary>A required argument is missing or the arguments contradict each other; refused before any input.</summary>
+    public const string InvalidArguments = "invalid-arguments";
     public const string ElementNotFound = "element-not-found";
     public const string ProviderBlocked = "provider-blocked";
     public const string PlacementMismatch = "placement-mismatch";

@@ -33,7 +33,7 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
             GetStringArgument(arguments, "handle") ?? (reference == null ? null : refs.WindowForRef(reference));
         if (handle == null)
         {
-            return Task.FromResult(ErrorResult("handle or ref required"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "handle or ref required"));
         }
 
         if (pending.TryGetPending(sessions.GetWindowProcessId(handle), out var blocked))

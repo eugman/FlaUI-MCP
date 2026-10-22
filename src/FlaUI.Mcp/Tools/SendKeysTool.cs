@@ -119,7 +119,9 @@ public class SendKeysTool : ToolBase
         var verifyFocus = FocusRules.Parse(arguments, refId);
         if (verifyFocus != FocusRule.None && string.IsNullOrWhiteSpace(refId))
         {
-            return Task.FromResult(ErrorResult("verifyFocus requires an element ref; no input sent."));
+            return Task.FromResult(
+                ErrorResult(RefusalCodes.InvalidArguments, "verifyFocus requires an element ref; no input sent.")
+            );
         }
 
         var chord = GetStringArgument(arguments, "chord");

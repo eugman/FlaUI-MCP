@@ -59,19 +59,27 @@ public class TypeTool : ToolBase
         public bool? Submit { get; init; }
     }
 
+    /// <summary>The typed refusal for arguments that cannot be typed, or null when they can.</summary>
+    private static McpToolResult? InvalidArguments(string? text, string? refId, bool verifyFocus)
+    {
+        if (text == null)
+        {
+            return ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: text");
+        }
+
+        return verifyFocus && string.IsNullOrWhiteSpace(refId)
+            ? ErrorResult(RefusalCodes.InvalidArguments, "verifyFocus requires an element ref; no input sent.")
+            : null;
+    }
+
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var text = GetStringArgument(arguments, "text");
-        if (text == null)
-        {
-            return Task.FromResult(ErrorResult("Missing required argument: text"));
-        }
-
         var refId = GetStringArgument(arguments, "ref");
         var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
-        if (verifyFocus && string.IsNullOrWhiteSpace(refId))
+        if (InvalidArguments(text, refId, verifyFocus) is { } invalid)
         {
-            return Task.FromResult(ErrorResult("verifyFocus requires an element ref; no input sent."));
+            return Task.FromResult(invalid);
         }
 
         var submit = GetBoolArgument(arguments, "submit", false);
@@ -238,12 +246,12 @@ public partial class FillTool : ToolBase
 
         if (string.IsNullOrEmpty(refId))
         {
-            return Task.FromResult(ErrorResult("Missing required argument: ref"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: ref"));
         }
 
         if (value == null)
         {
-            return Task.FromResult(ErrorResult("Missing required argument: value"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: value"));
         }
 
         // Fail fast if this app's UIA provider is blocked by a pending pattern call

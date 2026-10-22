@@ -94,6 +94,20 @@ public abstract class ToolBase : ITool
         };
 
     /// <summary>
+    /// A failure the tool found before any input, with a typed refusal (<paramref name="code"/>, such as
+    /// invalid-arguments) so a client reads the code instead of the text; nothing was dispatched.
+    /// </summary>
+    protected static McpToolResult ErrorResult(string code, string message) =>
+        ErrorResult(message) with
+        {
+            Outcome = new ToolOutcome("not-dispatched", "not-tracked")
+            {
+                Status = "failed",
+                Failure = new InputRefusal(code, message) { ActionDispatched = false },
+            },
+        };
+
+    /// <summary>
     /// The reply for a UI Automation focus or close that has not returned, or null when it completed (or ran
     /// natively). Its outcome says whether the request was sent yet.
     /// </summary>

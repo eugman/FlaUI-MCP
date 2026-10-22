@@ -48,7 +48,7 @@ public sealed class PasteTool(
         var text = GetStringArgument(arguments, "text");
         if (text == null)
         {
-            return Task.FromResult(ErrorResult("Missing required argument: text"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: text"));
         }
 
         var refId = GetStringArgument(arguments, "ref");
@@ -77,7 +77,12 @@ public sealed class PasteTool(
             var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
             if (verifyFocus && string.IsNullOrEmpty(refId))
             {
-                return Task.FromResult(ErrorResult("verifyFocus requires an element ref; nothing was pasted."));
+                return Task.FromResult(
+                    ErrorResult(
+                        RefusalCodes.InvalidArguments,
+                        "verifyFocus requires an element ref; nothing was pasted."
+                    )
+                );
             }
 
             var element = refId == null ? null : elements.GetElement(refId);
