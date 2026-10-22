@@ -290,7 +290,7 @@ public class ToolRegistry
         {
             Outcome = outcome with
             {
-                Status = StatusOf(failed, outcome.Proof),
+                Status = StatusOf(failed, outcome),
                 InputsSent = inputsSent,
                 Failure =
                     // A refusal recorded as coming after input (a counted Select, say) keeps that, whatever this call counted.
@@ -305,14 +305,20 @@ public class ToolRegistry
     }
 
     // An error is always failed; otherwise a proof decides between ok, failed and unverified.
-    private static string StatusOf(bool failed, Proof? proof)
+    private static string StatusOf(bool failed, ToolOutcome outcome)
     {
         if (failed)
         {
             return "failed";
         }
 
-        return proof is null ? "ok" : Proof.StatusFor(proof.Verdict);
+        if (outcome.Proof is { } proof)
+        {
+            return Proof.StatusFor(proof.Verdict);
+        }
+
+        // A composite (a batch) that rolled an unverified step up keeps it.
+        return outcome.Status == "unverified" ? "unverified" : "ok";
     }
 
     private static McpToolResult ErrorText(string message) =>

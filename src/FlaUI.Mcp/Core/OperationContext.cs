@@ -114,7 +114,13 @@ public sealed class OperationCoordinator
     {
         if (o.Finished)
         {
-            return o.Error == null && o.LateError == null ? "ok" : "failed";
+            if (o.Error != null || o.LateError != null)
+            {
+                return "failed";
+            }
+
+            // A result that could not check its effect is never reported as ok.
+            return o.ResultOutcome?.Status == "unverified" ? "unverified" : "ok";
         }
 
         return o.Stop.IsCancellationRequested ? "timed_out_pending" : "running";

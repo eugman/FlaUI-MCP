@@ -223,6 +223,17 @@ public sealed class BatchTool : ToolBase
         /// makes the batch partial: earlier input reached the app. IsError mirrors status: failed, so a client
         /// that reads only isError does not take a failed batch for a successful one.
         /// </summary>
+        // Failed wins; a step that could not check its effect makes the batch unverified, never ok.
+        private string? RolledUp(bool failed)
+        {
+            if (failed)
+            {
+                return "failed";
+            }
+
+            return steps.Any(step => step.Outcome?.Status == "unverified") ? "unverified" : null;
+        }
+
         public McpToolResult Result()
         {
             var failed = steps.Any(s => s.IsError);
@@ -233,7 +244,7 @@ public sealed class BatchTool : ToolBase
             return TextResult(string.Join("\n", trace)) with
             {
                 IsError = failed ? true : null,
-                Outcome = outcome with { Steps = steps, InputsSent = sent, Status = failed ? "failed" : null },
+                Outcome = outcome with { Steps = steps, InputsSent = sent, Status = RolledUp(failed) },
             };
         }
     }
