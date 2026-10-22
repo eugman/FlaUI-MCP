@@ -77,6 +77,31 @@ public class HazardControlTests(TestAppFixture fixture, ITestOutputHelper output
     }
 
     [Fact]
+    public async Task ADragThatWouldDropUnderASiblingOverlayIsRefused()
+    {
+        // The drop point is hit-tested like a press: the label over the button would take the release.
+        var (_, start) = Hazard(new(AutomationId: "DecoyBox"));
+        var (_, covered) = Hazard(new(AutomationId: "CoveredButton"));
+        var before = Label("CoveredClicksLabel");
+
+        var result = await Run(
+            new MouseTool(fixture.Elements, new PendingInvokeTracker(), fixture.Session),
+            new
+            {
+                action = "drag",
+                handle = Handle,
+                @ref = start,
+                toRef = covered,
+            }
+        );
+        output.WriteLine(Text(result));
+
+        Assert.True(result.IsError);
+        Assert.Contains("is covered by", Text(result));
+        Assert.True(StaysTrue(() => Label("CoveredClicksLabel") == before), "The covered button was pressed.");
+    }
+
+    [Fact]
     public async Task FillRefusesAControlWithNoValuePatternThatDoesNotTakeFocus()
     {
         // Focus starts in the decoy: a fill that sent Ctrl+A and the text anyway would replace the decoy's text.
