@@ -125,13 +125,6 @@ dotnet_diagnostic.S138.severity = suggestion
 dotnet_diagnostic.S3358.severity = suggestion
 dotnet_diagnostic.S3776.severity = suggestion
 
-[src/FlaUI.Mcp/Tools/ScreenshotTool.cs]
-dotnet_diagnostic.S104.severity = suggestion
-dotnet_diagnostic.S1200.severity = suggestion
-dotnet_diagnostic.S134.severity = suggestion
-dotnet_diagnostic.S138.severity = suggestion
-dotnet_diagnostic.S3776.severity = suggestion
-
 # Long methods still to split: SendKeysTool.ExecuteAsync (~120 lines).
 [src/FlaUI.Mcp/Tools/SendKeysTool.cs]
 dotnet_diagnostic.S138.severity = suggestion

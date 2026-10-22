@@ -266,21 +266,21 @@ public sealed class ShotSetupTests
     {
         var source = new Rectangle(920, 128, 1000, 892);
         var frame = new CaptureFrame(null, null, 10, 20, 300, 200);
-        Assert.Equal(new Rectangle(930, 148, 300, 200), ScreenshotTool.GuardRect(source, frame));
+        Assert.Equal(new Rectangle(930, 148, 300, 200), ScreenshotChecks.GuardRect(source, frame));
     }
 
     [Fact]
     public void GuardWithoutAFrameChecksTheWholeCapture()
     {
         var source = new Rectangle(0, 43, 1920, 1073);
-        Assert.Equal(source, ScreenshotTool.GuardRect(source, null));
+        Assert.Equal(source, ScreenshotChecks.GuardRect(source, null));
     }
 
     [Fact]
     public void AWindowOutsideTheCropNoLongerRefuses()
     {
         var source = new Rectangle(920, 128, 1000, 892);
-        var crop = ScreenshotTool.GuardRect(source, new CaptureFrame(null, null, 0, 0, 400, 300));
+        var crop = ScreenshotChecks.GuardRect(source, new CaptureFrame(null, null, 0, 0, 400, 300));
         Win32Desktop.WindowBounds W(nint h, int pid, Rectangle r) =>
             new(new Win32WindowInfo(h, "w", pid, IsEnabled: true, IsToolWindow: false, IsCloaked: false), r, true);
         // A notification over the pane's bottom-right corner, far from the 400x300 crop at its top-left.

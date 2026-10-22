@@ -16,13 +16,13 @@ public sealed class CaptureVerdictTests
 
     private static Win32Desktop.OcclusionCheck Clean() => new(TargetFound: true, []);
 
-    private static ScreenshotTool.CaptureVerdict Decide(
+    private static ScreenshotChecks.CaptureVerdict Decide(
         string method = "screen-uia-bounds",
         bool exempt = false,
         Win32Desktop.OcclusionCheck? occlusion = null,
         string? dpi = null,
         bool allow = false
-    ) => ScreenshotTool.Decide(method, exempt, occlusion, dpi, allow);
+    ) => ScreenshotChecks.Decide(method, exempt, occlusion, dpi, allow);
 
     [Fact]
     public void ACleanCaptureProceedsSilently()
@@ -103,7 +103,7 @@ public sealed class CaptureVerdictTests
         // Null means the capture could not be checked. It must not refuse, and must not claim clean.
         var verdict = Decide(occlusion: null);
         Assert.Null(verdict.Refusal);
-        Assert.Null(ScreenshotTool.DescribeOcclusion(null));
+        Assert.Null(ScreenshotChecks.DescribeOcclusion(null));
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class CaptureVerdictTests
                 new Win32WindowInfo(2, "", 20, true, false, false),
             ]
         );
-        var finding = ScreenshotTool.DescribeOcclusion(two)!;
+        var finding = ScreenshotChecks.DescribeOcclusion(two)!;
         Assert.Contains("First", finding);
         Assert.Contains("untitled", finding);
     }
@@ -136,14 +136,18 @@ public sealed class CaptureVerdictTests
     [InlineData("native-window", false)]
     [InlineData("screen", false)]
     public void OnlyScreenPixelMethodsCanBeOccluded(string method, bool reads) =>
-        Assert.Equal(reads, ScreenshotTool.ReadsScreenPixels(method));
+        Assert.Equal(reads, ScreenshotChecks.ReadsScreenPixels(method));
 
     [Fact]
     public void AScreenCaptureWithNoKnownTargetIsReportedAsUnchecked()
     {
         // The guard was skipped whenever the target window was unknown, and the reply then looked
         // exactly like a verified clean capture. Unchecked is not clean.
-        var reason = ScreenshotTool.UncheckedReason("screen-uia-bounds", 0, new System.Drawing.Rectangle(0, 0, 10, 10));
+        var reason = ScreenshotChecks.UncheckedReason(
+            "screen-uia-bounds",
+            0,
+            new System.Drawing.Rectangle(0, 0, 10, 10)
+        );
         Assert.NotNull(reason);
         Assert.Contains("not checked", reason);
     }
@@ -152,7 +156,7 @@ public sealed class CaptureVerdictTests
     public void AnUncheckedReasonSurfacesAsAWarningWithoutRefusing()
     {
         // It has to reach the caller on a default call, not only behind includeMetadata.
-        var verdict = ScreenshotTool.Decide(
+        var verdict = ScreenshotChecks.Decide(
             "screen-uia-bounds",
             occlusionExempt: false,
             occlusion: null,
@@ -168,12 +172,12 @@ public sealed class CaptureVerdictTests
     public void NativeCaptureNeedsNoObstructionCheck()
     {
         // It renders the window's own surface, so nothing layered over it is in the image.
-        Assert.Null(ScreenshotTool.UncheckedReason("native-hwnd", 0, null));
+        Assert.Null(ScreenshotChecks.UncheckedReason("native-hwnd", 0, null));
     }
 
     [Fact]
     public void AKnownTargetAndRectangleHaveNothingToExcuse() =>
         Assert.Null(
-            ScreenshotTool.UncheckedReason("screen-uia-bounds", 42, new System.Drawing.Rectangle(0, 0, 10, 10))
+            ScreenshotChecks.UncheckedReason("screen-uia-bounds", 42, new System.Drawing.Rectangle(0, 0, 10, 10))
         );
 }

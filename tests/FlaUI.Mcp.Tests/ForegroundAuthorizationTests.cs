@@ -149,7 +149,11 @@ public sealed class ForegroundAuthorizationTests
         var capturedPixels = false;
 
         var error = Assert.Throws<UnauthorizedAccessException>(() =>
-            ScreenshotTool.CaptureForeground(-1, new ProcessPolicy([process.ProcessName]), () => capturedPixels = true)
+            ScreenshotChecks.CaptureForeground(
+                -1,
+                new ProcessPolicy([process.ProcessName]),
+                () => capturedPixels = true
+            )
         );
 
         Assert.False(capturedPixels);
@@ -165,7 +169,7 @@ public sealed class ForegroundAuthorizationTests
         var policy = restricted ? new ProcessPolicy([process.ProcessName]) : ProcessPolicy.AllowAll;
         var captures = 0;
 
-        var image = ScreenshotTool.CaptureForeground(
+        var image = ScreenshotChecks.CaptureForeground(
             process.Id,
             policy,
             () =>

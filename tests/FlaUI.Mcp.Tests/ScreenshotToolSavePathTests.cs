@@ -8,7 +8,7 @@ public class ScreenshotToolSavePathTests
     [Fact]
     public void TryNormalizeSavePath_RejectsRelativePath()
     {
-        var ok = ScreenshotTool.TryNormalizeSavePath("capture.png", overwrite: false, out _, out var error);
+        var ok = ScreenshotChecks.TryNormalizeSavePath("capture.png", overwrite: false, out _, out var error);
 
         Assert.False(ok);
         Assert.Contains("absolute", error);
@@ -17,7 +17,7 @@ public class ScreenshotToolSavePathTests
     [Fact]
     public void TryNormalizeSavePath_RejectsUncPath()
     {
-        var ok = ScreenshotTool.TryNormalizeSavePath(
+        var ok = ScreenshotChecks.TryNormalizeSavePath(
             @"\\server\share\capture.png",
             overwrite: false,
             out _,
@@ -32,7 +32,7 @@ public class ScreenshotToolSavePathTests
     public void TryNormalizeSavePath_RejectsNonPngPath()
     {
         var path = Path.Combine(Path.GetTempPath(), "capture.txt");
-        var ok = ScreenshotTool.TryNormalizeSavePath(path, overwrite: false, out _, out var error);
+        var ok = ScreenshotChecks.TryNormalizeSavePath(path, overwrite: false, out _, out var error);
 
         Assert.False(ok);
         Assert.Contains(".png", error);
@@ -46,7 +46,7 @@ public class ScreenshotToolSavePathTests
 
         try
         {
-            var ok = ScreenshotTool.TryNormalizeSavePath(path, overwrite: false, out _, out var error);
+            var ok = ScreenshotChecks.TryNormalizeSavePath(path, overwrite: false, out _, out var error);
 
             Assert.False(ok);
             Assert.Contains("overwrite=true", error);
