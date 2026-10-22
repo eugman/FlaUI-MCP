@@ -217,7 +217,7 @@ Verified: yes, unless the row says otherwise.
 | `te3_layout_read list` floating | `Dependencies` listed with kind `floating` and its bounds |
 | `te3_layout resize` (strict) | TOM Explorer 467 -> 480 in 1 attempt, 15 inputs, 5.3 s |
 | `te3_layout apply-preset assistant-model-review` | Second live pass: 45 inputs; TOM Explorer and Properties were already at target (now skipped without input, not re-run) |
-| `paused_after_failure` | A failed reopen-pane paused input; te3_navigate was refused with the code; `te3_layout_read list` lifted it |
+| `paused-after-failure` (then spelled `paused_after_failure`) | A failed reopen-pane paused input; te3_navigate was refused with the code; `te3_layout_read list` lifted it |
 | Known-prompt guard | No false positive with only the main window open |
 | Object walk | Not promoted: see KNOWN-ISSUES "Object walk timing on te3-cfa803c" |
 
