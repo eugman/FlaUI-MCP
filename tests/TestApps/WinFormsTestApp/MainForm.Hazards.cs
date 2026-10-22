@@ -145,13 +145,13 @@ public partial class MainForm
     }
 
     /// <summary>
-    /// Two controls with no Value pattern: a pane that cannot take focus, and a box that takes keys only, next to
+    /// Two controls with no Value pattern: a pane that hands focus straight back, and a box that takes keys only, next to
     /// a text box that holds focus first so a misdirected Ctrl+A and typing would show in it.
     /// </summary>
     private static void AddNoValueControls(Control canvas)
     {
         canvas.Controls.Add(
-            new Panel
+            new FocusRefusingPane
             {
                 Name = "NoValuePane",
                 AccessibleName = "No Value Pane",

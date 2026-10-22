@@ -62,6 +62,34 @@ public sealed class FillKeyboardTests
     }
 
     [Fact]
+    public void AControlWithNoValueThatTakesFocusGetsTheKeysButIsNotReportedFilled()
+    {
+        // What the desktop run showed for a WinForms Panel: Win32 SetFocus focuses it although WinForms calls it
+        // unselectable, so focus is verified on the control itself and the keys go to it. With nothing to read
+        // back, the reply says the text was sent and not verified; it is neither "Filled" nor an error.
+        var desktop = new FakeDesktop { KeyboardFocus = false };
+        using var installed = desktop.Install();
+
+        var result = FillTool.FillByKeyboardFallback(
+            FakeDesktop.Target,
+            Element(),
+            FocusRule.EditInComposite,
+            "typed",
+            "No Value Pane",
+            () => new(null, "unsupported"),
+            () => { }
+        );
+
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal(
+            "Sent \"typed\" to No Value Pane; it could not be read back, so the fill is not verified.",
+            result.Content[0].Text
+        );
+        Assert.Equal(1, desktop.ElementFocusRequests);
+        Assert.True(desktop.Dispatched > 0);
+    }
+
+    [Fact]
     public void KeyboardFillVerifiesFocusUnlessTheCallerTurnsItOff()
     {
         Assert.Equal(FocusRule.EditInComposite, FillTool.KeyboardVerifiesFocus(null));

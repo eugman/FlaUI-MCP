@@ -90,6 +90,29 @@ internal sealed class KeysOnlyBox : Control
 }
 
 /// <summary>
+/// A pane with no Value pattern that will not keep keyboard focus: it hands focus straight back to the window that
+/// had it. A plain Panel is not enough, since Win32 SetFocus (which UI Automation uses) focuses any window.
+/// </summary>
+internal sealed class FocusRefusingPane : Panel
+{
+    private const int WmSetFocus = 0x0007;
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WmSetFocus && m.WParam != IntPtr.Zero)
+        {
+            SetFocus(m.WParam);
+            return;
+        }
+
+        base.WndProc(ref m);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetFocus(IntPtr hwnd);
+}
+
+/// <summary>
 /// A borderless window over the whole virtual screen, every monitor included, so there is no point off it to
 /// park the pointer on. It is created per-monitor aware so its bounds are physical pixels whatever the app's own
 /// DPI mode; Escape closes it.
