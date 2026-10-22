@@ -90,38 +90,14 @@ public class TypeTool : ToolBase
         {
             OperationContext.Check();
             var handle = GetStringArgument(arguments, "handle");
-            if (handle != null && _sessions == null)
+            if (CheckTarget(refId, handle) is { } refused)
             {
-                return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
-            }
-            // Focus element if ref provided
-            if (!string.IsNullOrEmpty(refId))
-            {
-                _elementRegistry.ResolveRef(refId, handle);
-
-                // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
-                // Tip: calling windows_type without a ref types into the focused element
-                // using pure keyboard input, which works even while the provider is blocked.
-                if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
-                {
-                    return Task.FromResult(BlockedResult(pending));
-                }
-            }
-            else if (handle != null)
-            {
-                // Validate the explicit target, then GuardedInput focuses and
-                // verifies that exact window before sending any input.
-                if (!_processPolicy.IsProcessAllowed(_sessions!.GetInputTarget(handle!).ProcessId))
-                {
-                    return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Target process")));
-                }
+                return Task.FromResult(refused);
             }
 
             // Type the text
             using var input = new GuardedInput(
-                refId != null ? _elementRegistry.InputForRef(refId)
-                    : handle != null ? _sessions!.GetInputTarget(handle)
-                    : GuardedInput.ForegroundTarget(_processPolicy),
+                InputTarget(refId, handle),
                 refId == null ? null : _elementRegistry.GetElement(refId),
                 verifyFocus
             );
@@ -160,6 +136,44 @@ public class TypeTool : ToolBase
                 )
             );
         }
+    }
+
+    private InputTarget InputTarget(string? refId, string? handle) =>
+        refId != null ? _elementRegistry.InputForRef(refId)
+        : handle != null ? _sessions!.GetInputTarget(handle)
+        : GuardedInput.ForegroundTarget(_processPolicy);
+
+    /// <summary>The refusal for a target that cannot take the text, or null; nothing is focused or sent.</summary>
+    private McpToolResult? CheckTarget(string? refId, string? handle)
+    {
+        if (handle != null && _sessions == null)
+        {
+            return ErrorResult("Window-handle input requires a session manager.");
+        }
+        // Focus element if ref provided
+        if (!string.IsNullOrEmpty(refId))
+        {
+            _elementRegistry.ResolveRef(refId, handle);
+
+            // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
+            // Tip: calling windows_type without a ref types into the focused element
+            // using pure keyboard input, which works even while the provider is blocked.
+            if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
+            {
+                return BlockedResult(pending);
+            }
+        }
+        else if (handle != null)
+        {
+            // Validate the explicit target, then GuardedInput focuses and
+            // verifies that exact window before sending any input.
+            if (!_processPolicy.IsProcessAllowed(_sessions!.GetInputTarget(handle!).ProcessId))
+            {
+                return ErrorResult(_processPolicy.DescribeDenied("Target process"));
+            }
+        }
+
+        return null;
     }
 
     internal static string[] Lines(string text) => System.Text.RegularExpressions.Regex.Split(text, "\r\n|\r|\n");
