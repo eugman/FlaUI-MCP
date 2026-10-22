@@ -112,15 +112,32 @@ public sealed partial class Te3Page
     {
         var reference = target == null ? null : await Reference(target);
         reportStep?.Invoke($"Keys {chord}; target: {target?.Selector.ToString() ?? handle}");
-        await invoke(
-            "windows_send_keys",
-            new
-            {
-                handle,
-                @ref = reference,
-                chord,
-            }
-        );
+        await invoke("windows_send_keys", KeysArguments(handle, reference, chord, target));
+    }
+
+    /// <summary>
+    /// The windows_send_keys arguments. Keys to a Scintilla editor (daxscilla) ask for focus on it or inside it
+    /// explicitly ("self-or-descendant"), since UIA may report focus on a child; other sends keep Core's default.
+    /// </summary>
+    internal static Dictionary<string, object?> KeysArguments(
+        string window,
+        string? reference,
+        string chord,
+        Target? target
+    )
+    {
+        var arguments = new Dictionary<string, object?>
+        {
+            ["handle"] = window,
+            ["ref"] = reference,
+            ["chord"] = chord,
+        };
+        if (reference != null && target?.Selector.AutomationId == "daxscilla")
+        {
+            arguments["verifyFocus"] = FocusRules.SelfOrDescendantName;
+        }
+
+        return arguments;
     }
 
     /// <summary>

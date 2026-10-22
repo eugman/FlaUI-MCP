@@ -28,4 +28,22 @@ public sealed class FillFocusTests
             Assert.True(Rule(target).GetBoolean());
         }
     }
+
+    [Fact]
+    public void KeysToAScintillaEditorAskForFocusOnItOrInsideItExplicitly()
+    {
+        // Core's send-keys default with a ref is the same rule today; the Scintilla sites say it, so a change of
+        // Core's default cannot change them. Other sends keep Core's default.
+        var query = JsonSerializer.SerializeToElement(
+            Te3Page.KeysArguments("w1", "w1e5", "F5", Te3Page.QueryInputTarget())
+        );
+        var tree = JsonSerializer.SerializeToElement(
+            Te3Page.KeysArguments("w1", "w1e6", "Home", Te3Page.TomExplorerTarget())
+        );
+
+        Assert.Equal(FocusRules.SelfOrDescendantName, query.GetProperty("verifyFocus").GetString());
+        Assert.Equal("F5", query.GetProperty("chord").GetString());
+        Assert.False(tree.TryGetProperty("verifyFocus", out _));
+        Assert.Equal("w1e6", tree.GetProperty("ref").GetString());
+    }
 }
