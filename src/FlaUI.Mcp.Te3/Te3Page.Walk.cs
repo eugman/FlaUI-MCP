@@ -63,8 +63,7 @@ public sealed partial class Te3Page
         var walk = await FindObject(request, cursor, elapsed, previous);
         if (!walk.Found)
         {
-            var text = await new RowTree(this, () => true).Miss(request, walk.Reason, Inputs.Sent);
-            await ClearTomSearchTyped();
+            var text = await new RowTree(this, () => true).MissCleared(request, walk.Reason, Inputs.Sent);
             throw new InvalidOperationException(text);
         }
 

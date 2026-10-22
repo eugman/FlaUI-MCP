@@ -17,4 +17,22 @@ internal static class WalkMiss
         return $"No {what} '{request.ObjectName}' under table '{request.Table}'{where} in TOM Explorer "
             + $"({inputs} inputs). {reason} {ended}";
     }
+
+    /// <summary>
+    /// Where the selection is once the search has cleared, from the status bar's slot: still on the row the walk
+    /// ended on (<paramref name="endedOn"/>), or moved by TE3, which places the selection when the filtered tree is
+    /// replaced (te3-eb2ed6a: a folder miss that ended on Products' row left Table "Products" selected).
+    /// </summary>
+    public static string AfterClear(string? bar, string? endedOn)
+    {
+        if (bar == null)
+        {
+            return " After the search cleared, the status bar names no selection.";
+        }
+
+        return TomSelection.SelectionName(bar) is { } name && name == endedOn
+            ? $" After the search cleared, the selection stayed on {bar}."
+            : $" After the search cleared, the selection is {bar}: TE3 moved it when the filtered tree was replaced; "
+                + "the walk did not select it.";
+    }
 }

@@ -202,9 +202,19 @@ public sealed partial class Te3Page
             await Task.Delay(WalkClock.CollapseSettleMs);
         }
 
-        // A miss's text, with one read of where the selection ended and its table from the rows above it (the paged
-        // rows are not kept here, so a table row above the screen is not known and the text says so).
-        public async Task<string> Miss(WalkRequest request, string? reason, int inputs)
+        // A miss's text, read before the search is cleared and finished after it: where the selection is then (TE3
+        // moves it when the filtered tree is replaced), against the row the walk ended on.
+        public async Task<string> MissCleared(WalkRequest request, string? reason, int inputs)
+        {
+            var (text, endedOn) = await Miss(request, reason, inputs);
+            await page.ClearTomSearchTyped();
+            var bar = await Task.Run(() => Te3StatusBar.SelectionSlot(page.ObserveModelState().Slots));
+            return text + WalkMiss.AfterClear(bar, endedOn);
+        }
+
+        // One read of where the selection ended and its table from the rows above it (the paged rows are not kept
+        // here, so a table row above the screen is not known and the text says so), and the row it ended on.
+        private async Task<(string Text, string? EndedOn)> Miss(WalkRequest request, string? reason, int inputs)
         {
             TreeRow? row = null;
             string? table = null;
@@ -221,7 +231,7 @@ public sealed partial class Te3Page
                 reason += " (reading where the selection ended failed: " + error.Message + ")";
             }
 
-            return WalkMiss.Text(request, reason, row, table, inputs);
+            return (WalkMiss.Text(request, reason, row, table, inputs), row?.Value);
         }
 
         public Task<SelectionView> View() => Task.Run(page.ViewSelection);
