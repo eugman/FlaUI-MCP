@@ -109,9 +109,9 @@ public sealed partial class Te3Page
             PropertiesFolder()
         );
 
-    // Properties' Display Folder row. Its DataItem is named after the property, as ObjectType's is (verified live);
-    // the spelling with the space is read second in case the grid names this one as it shows it (not verified).
-    private string? PropertiesFolder() => PropertiesValue("DisplayFolder") ?? PropertiesValue("Display Folder");
+    // Properties' Display Folder row: a column's grid names its DataItems after the labels, spaces included (Data
+    // Type, Display Folder, Format String, ...; verified live on te3-2ac1444, 2026-10-22).
+    private string? PropertiesFolder() => PropertiesValue("Display Folder");
 
     private const int RenderBudgetMs = 1500;
     private const int RenderPollMs = 250;
