@@ -83,6 +83,7 @@ internal static class LayoutFiles
             snapshot = target,
             files = list.Files,
             missing = list.Missing,
+            readBack = Hashes(settings, list.Files.Keys),
         };
     }
 
@@ -140,8 +141,13 @@ internal static class LayoutFiles
             restored = list.Files,
             removed,
             verified = true,
+            readBack = Hashes(settings, list.Files.Keys),
         };
     }
+
+    // The SHA-256 of each file as it reads now, for the reply's proof.
+    private static Dictionary<string, string> Hashes(string folder, IEnumerable<string> names) =>
+        names.ToDictionary(n => n, n => ArtifactFiles.Sha256(Path.Combine(folder, n)));
 
     private static SnapshotList ReadList(string snapshot)
     {

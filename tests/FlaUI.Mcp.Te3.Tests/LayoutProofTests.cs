@@ -121,4 +121,30 @@ public sealed class LayoutProofTests : IDisposable
                 .Verdict
         );
     }
+
+    [Fact]
+    public void AProofCarriesWhatTheReadBackSawNotAConstant()
+    {
+        // Review of 00898fc: close-document and snapshot/restore proved "verified" from constants.
+        var stillOpen = JsonSerializer.SerializeToElement(
+            new { closedDocument = "DAX Query 1", openDocuments = new[] { "DAX Query 1" } }
+        );
+        var changed = JsonSerializer.SerializeToElement(
+            new
+            {
+                files = new Dictionary<string, string> { ["Layouts.json"] = "AA" },
+                readBack = new Dictionary<string, string> { ["Layouts.json"] = "BB" },
+            }
+        );
+
+        Assert.Equal(Proof.Mismatch, LayoutProof.For("close-document", stillOpen).Verdict);
+        Assert.Equal("open", LayoutProof.For("close-document", stillOpen).Observed);
+        var files = LayoutProof.For("snapshot", changed);
+        Assert.Equal(Proof.Mismatch, files.Verdict);
+        Assert.Contains("BB", files.Observed);
+    }
+
+    [Fact]
+    public void AnArrivalCheckThatOnlyPassedIsNotAnIndependentProof() =>
+        Assert.False(NavigationProof.Arrived("tom-explorer").Independent);
 }

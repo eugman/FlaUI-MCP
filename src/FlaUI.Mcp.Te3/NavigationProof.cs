@@ -60,9 +60,12 @@ internal static class NavigationProof
         return LayoutProof.Attach(reply, proof);
     }
 
-    /// <summary>A destination whose arrival check (a fresh read of TE3) has passed.</summary>
+    /// <summary>
+    /// A destination whose arrival check has passed. The check is a fresh read of TE3 that throws on a miss, so the
+    /// proof carries no value of its own read and is marked not independent.
+    /// </summary>
     public static Proof Arrived(string destination) =>
-        Proof.Compare(destination, destination, "the destination's arrival check, read after navigating", true);
+        Proof.Compare(destination, destination, "the destination's arrival check passed (it throws on a miss)", false);
 
     /// <summary>The grant's state read back after te3_interaction_begin or _end; not an observation of TE3.</summary>
     public static Proof Grant(bool expectedActive, bool active) =>

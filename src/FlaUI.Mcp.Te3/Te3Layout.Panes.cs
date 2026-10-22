@@ -79,14 +79,15 @@ public sealed partial class Te3Layout
             );
         await surface.Press(document.Title, "Close");
         await LayoutSteps.RequireNoDialog(surface, document.Title, baseline);
-        if (surface.Parts().Any(p => p.Kind == "document" && TitleMatches(p.Title, document.Title)))
+        var open = surface.Parts().Where(p => p.Kind == "document").Select(p => p.Title).ToList();
+        if (open.Any(t => TitleMatches(t, document.Title)))
         {
             throw new InvalidOperationException(
                 $"Document '{document.Title}' is still open after its Close; inspect before retrying."
             );
         }
 
-        return new { closedDocument = document.Title };
+        return new { closedDocument = document.Title, openDocuments = open };
     }
 
     private static object ShowPane(ILayoutSurface surface, string title)
@@ -132,7 +133,8 @@ public sealed partial class Te3Layout
 
         await surface.Press(pane.Title, "Close");
         await LayoutSteps.RequireNoDialog(surface, pane.Title, baseline);
-        if (VisiblePane(surface, title) != null)
+        var visible = VisiblePane(surface, title) != null;
+        if (visible)
         {
             throw new InvalidOperationException("Pane remained visible after Close; inspect before retrying.");
         }
@@ -140,7 +142,7 @@ public sealed partial class Te3Layout
         return new
         {
             pane = title,
-            visible = false,
+            visible,
             changed = true,
         };
     }
@@ -226,9 +228,11 @@ public sealed partial class Te3Layout
             () => surface.ButtonShown(pane.Title, other),
             surface.Delay
         );
+        // The button the title bar shows now, read again for the reply and its proof.
+        var shown = surface.ButtonShown(pane.Title, other) ? other : button;
         return button == "Maximize"
-            ? new { maximized = pane.Title, readBack = other }
-            : (object)new { restored = pane.Title, readBack = other };
+            ? new { maximized = pane.Title, readBack = shown }
+            : (object)new { restored = pane.Title, readBack = shown };
     }
 
     // Core's windows_close on the floating window's own handle: the input lease, identity and grant apply.

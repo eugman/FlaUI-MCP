@@ -35,9 +35,9 @@ internal static class LayoutProof
             "restore-pane" => Button(reply, "Maximize"),
             "resize" => Step(reply),
             "apply-preset" => Preset(reply),
-            "close-document" => Proof.Compare("closed", "closed", "TE3 document tabs read back after Close", true),
-            "snapshot" => Files(reply.GetProperty("files"), true),
-            "restore" => Files(reply.GetProperty("restored"), reply.GetProperty("verified").GetBoolean()),
+            "close-document" => ClosedDocument(reply),
+            "snapshot" => Files(reply.GetProperty("files"), reply.GetProperty("readBack")),
+            "restore" => Files(reply.GetProperty("restored"), reply.GetProperty("readBack")),
             _ => new Proof(Proof.Unavailable, null, null, "no read-back for " + action, false),
         };
 
@@ -98,14 +98,26 @@ internal static class LayoutProof
         return new Proof(verdict, summary, summary, Sizes, true);
     }
 
-    private static Proof Files(JsonElement hashes, bool verified)
+    // The document is closed when the tabs read after its Close no longer show it.
+    private static Proof ClosedDocument(JsonElement reply)
     {
-        var expected = $"{hashes.EnumerateObject().Count()} file(s) with the snapshot's SHA-256";
+        var title = reply.GetProperty("closedDocument").GetString();
+        var open = reply.GetProperty("openDocuments").EnumerateArray().Select(e => e.GetString()).ToList();
         return Proof.Compare(
-            expected,
-            verified ? expected : "a file differs",
-            "SHA-256 read-back of each copied file",
+            "closed",
+            open.Contains(title) ? "open" : "closed",
+            "TE3 document tabs read back after Close",
             true
         );
     }
+
+    // Each file's SHA-256 as read back after the copy, against the hash the snapshot recorded.
+    private static Proof Files(JsonElement expected, JsonElement readBack) =>
+        Proof.Compare(Joined(expected), Joined(readBack), "SHA-256 read back from each file after the copy", true);
+
+    private static string Joined(JsonElement hashes) =>
+        string.Join(
+            ", ",
+            hashes.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => $"{p.Name}={p.Value}")
+        );
 }

@@ -59,6 +59,48 @@ public sealed class ServerGrantTests : IDisposable
         Assert.Contains(SendsThenFails.ToolName, paused.Message);
     }
 
+    [Fact]
+    public async Task AChangeWhoseProofIsAMismatchPausesTheGrant()
+    {
+        // A call that sent input and then read back something else is a failed change (Core's status from the
+        // proof), so it pauses the grant like any failure after input.
+        interaction.Begin("Close a pane", userApproved: true);
+        host.Tools.RegisterTool(new SendsThenMismatches());
+        using var installed = new FakeDesktop().Install();
+
+        var result = await host.Tools.ExecuteToolAsync(
+            SendsThenMismatches.ToolName,
+            JsonSerializer.SerializeToElement(new { })
+        );
+
+        Assert.Equal("failed", result.Outcome?.Status);
+        Assert.Equal(
+            Te3Interaction.PausedAfterFailure,
+            Assert.Throws<InputRefusedException>(interaction.Require).Refusal.Code
+        );
+    }
+
+    private sealed class SendsThenMismatches : FlaUI.Mcp.ToolBase
+    {
+        public const string ToolName = "test_sends_then_mismatches";
+
+        public override string Name => ToolName;
+        public override string Description => "Sends one input, then reads back something else.";
+        public override object InputSchema => new { type = "object", additionalProperties = false };
+
+        public override Task<FlaUI.Mcp.McpToolResult> ExecuteAsync(JsonElement? arguments)
+        {
+            using (var input = new GuardedInput(FakeDesktop.Target))
+            {
+                input.Send(() => { });
+            }
+
+            return Task.FromResult(
+                LayoutProof.Attach(TextResult("closed"), Proof.Compare("hidden", "visible", "read-back", true))
+            );
+        }
+    }
+
     private sealed class SendsThenFails : FlaUI.Mcp.ToolBase
     {
         public const string ToolName = "test_sends_then_fails";
