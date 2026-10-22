@@ -106,13 +106,13 @@ public sealed partial class Te3Page
         try
         {
             var rows = new RowTree(this, WalkClock.OutOfTime(elapsed));
-            picked = await ObjectSelect.Run(rows, request, WalkClock.OutOfTime(elapsed), lastArrived);
-            // Also for an object named like its table: the same search, but with the table row opened and the object
-            // looked for under it, which a name read that placed no row never did.
-            if (picked.FallBack)
-            {
-                picked = await ByTable(rows, request, picked, elapsed);
-            }
+            picked = await ObjectSelect.RowsThenTable(
+                rows,
+                request,
+                WalkClock.OutOfTime(elapsed),
+                lastArrived,
+                reportStep
+            );
         }
         catch (TimeoutException stopped)
         {
@@ -143,33 +143,6 @@ public sealed partial class Te3Page
         );
         WalkReport = WalkAccount.Keys(picked, request, walk);
         return walk;
-    }
-
-    // The second row try, filtered by the table's name; when it misses too and a keyboard walk follows, the object's
-    // name is searched again so the walk sees the tree it always walked.
-    private async Task<SelectResult> ByTable(
-        RowTree rows,
-        WalkRequest request,
-        SelectResult first,
-        Func<TimeSpan> elapsed
-    )
-    {
-        reportStep?.Invoke($"Row read could not place the object ({first.Reason}); filtering by the table's name");
-        var byTable = await ObjectSelect.ByTable(rows, request, WalkClock.OutOfTime(elapsed));
-        if (byTable.Found || !byTable.FallBack)
-        {
-            return byTable;
-        }
-
-        if (ObjectSelect.NeedsKeys(first))
-        {
-            await rows.Search(request.ObjectName);
-        }
-
-        return first with
-        {
-            Reason = $"{first.Reason} {byTable.Reason}",
-        };
     }
 
     /// <summary>te3_navigate object's arrival check: the last walk's object, in its folder, is still selected.</summary>

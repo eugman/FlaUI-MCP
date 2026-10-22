@@ -10,6 +10,44 @@ internal static partial class ObjectSelect
     /// <summary>Rows opened under the table at most, after the table itself; the 18 s clock bounds them too.</summary>
     public const int MaxFolderOpens = 4;
 
+    /// <summary>
+    /// The row strategy as te3_navigate object runs it: the name search's rows first and, whenever they did not
+    /// settle it (an object named like its table included: the same search, but with the table row opened), the
+    /// table's name. When that misses too, the object's name is searched again only when a keyboard walk follows
+    /// (<see cref="NeedsKeys"/>), so the walk sees the tree it always walked.
+    /// </summary>
+    public static async Task<SelectResult> RowsThenTable(
+        IRowTree tree,
+        WalkRequest request,
+        Func<bool> outOfTime,
+        WalkRequest? lastArrived,
+        Action<string>? report
+    )
+    {
+        var first = await Run(tree, request, outOfTime, lastArrived);
+        if (!first.FallBack)
+        {
+            return first;
+        }
+
+        report?.Invoke($"Row read could not place the object ({first.Reason}); filtering by the table's name");
+        var byTable = await ByTable(tree, request, outOfTime);
+        if (byTable.Found || !byTable.FallBack)
+        {
+            return byTable;
+        }
+
+        if (NeedsKeys(first))
+        {
+            await tree.Search(request.ObjectName);
+        }
+
+        return first with
+        {
+            Reason = $"{first.Reason} {byTable.Reason}",
+        };
+    }
+
     private const int TableDepth = 2;
 
     public static async Task<SelectResult> ByTable(IRowTree tree, WalkRequest request, Func<bool> outOfTime)

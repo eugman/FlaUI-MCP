@@ -29,8 +29,11 @@ public sealed class ByTableTests
 
         private bool Measured => Now.All(r => r.Depth != null);
 
+        /// <summary>False when the tree scrolls, so rows may be unrealized (the read then falls back).</summary>
+        public bool Complete { get; init; } = true;
+
         public Task<RowRead> Read() =>
-            Task.FromResult(new RowRead(Measured ? All : null, true, Measured ? 24 : null, false));
+            Task.FromResult(new RowRead(Measured ? All : null, Complete, Measured ? 24 : null, false));
 
         public Task Select(TreeRow row)
         {
@@ -168,18 +171,50 @@ public sealed class ByTableTests
     public async Task AnObjectNamedLikeItsTableIsStillTriedUnderTheTableWhenTheNameReadPlacedNoRow()
     {
         // Review (L3): with name == table the second try was skipped, and a name read that placed no row (0 rows)
-        // then ran nothing at all. The table try opens the table row and finds the column under it.
+        // then ran nothing at all. The strategy as the walk runs it tries the table, opens its row and finds the
+        // column under it.
         var tree = new SearchedTree(DateInDate, "date");
-        var request = new WalkRequest("Date", "Date", "Column");
+        var steps = new List<string>();
 
-        var byName = await ObjectSelect.Run(tree, request, () => false);
-        var result = await ObjectSelect.ByTable(tree, request, () => false);
+        var result = await ObjectSelect.RowsThenTable(
+            tree,
+            new WalkRequest("Date", "Date", "Column"),
+            () => false,
+            null,
+            steps.Add
+        );
 
-        Assert.True(byName.FallBack);
-        Assert.False(ObjectSelect.NeedsKeys(byName));
         Assert.True(result.Found, result.Reason);
+        Assert.True(result.ByTable);
+        Assert.Equal(["Date"], tree.Searches);
         Assert.Equal(["Date"], tree.Opened);
         Assert.Equal([2, 3], tree.Selects);
+        Assert.Contains(steps, step => step.Contains("filtering by the table's name"));
+    }
+
+    [Fact]
+    public async Task WhenTheTableTryMissesTooTheNameIsSearchedAgainOnlyForAKeyboardWalkThatFollows()
+    {
+        // A tree that scrolls makes the name read fall back with rows read (a keyboard walk follows, so the tree it
+        // walks is searched again); a name read that placed no row leaves the table's filter as it is.
+        var unplaced = new SearchedTree(
+            (_, _) => [("Tables", 1, "Group"), ("Brands", 2, "Table"), ("Products", 2, "Table")],
+            "Brand"
+        )
+        {
+            Complete = false,
+        };
+        var empty = new SearchedTree((_, _) => [("Brand", null, "Column")], "Brand");
+        var request = new WalkRequest("Brands", "Brand", "Column");
+
+        var walked = await ObjectSelect.RowsThenTable(unplaced, request, () => false, null, null);
+        var missed = await ObjectSelect.RowsThenTable(empty, request, () => false, null, null);
+
+        Assert.True(ObjectSelect.NeedsKeys(walked));
+        Assert.Equal(["Brands", "Brand"], unplaced.Searches);
+        Assert.False(ObjectSelect.NeedsKeys(missed));
+        Assert.Equal(["Brands"], empty.Searches);
+        Assert.Contains("Brands", missed.Reason);
     }
 
     [Fact]
