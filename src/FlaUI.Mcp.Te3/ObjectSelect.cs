@@ -230,8 +230,9 @@ internal static partial class ObjectSelect
     private static bool FolderTies(Confirmation seen, WalkRequest? lastArrived) =>
         lastArrived?.Folder is { Length: > 0 } folder && seen.Folder == folder;
 
-    // The last walk arrived at the object asked for now: same table and name, the folder asked for now was asked for
-    // then too (TE3's type and folder for the selection are still compared).
+    // The last walk arrived at the object asked for now, folder included: same table, name and a folder asked for
+    // both times, since only that folder, read again, can tie the selection to that walk. A folderless request after
+    // a folder walk is read and selected as usual (the arrival check could not confirm an unmeasured table for it).
     private static bool SameObject(WalkRequest? last, WalkRequest now)
     {
         if (last == null || last.Table != now.Table || last.ObjectName != now.ObjectName)
@@ -239,7 +240,7 @@ internal static partial class ObjectSelect
             return false;
         }
 
-        return now.Folder.Length == 0 || now.Folder == last.Folder;
+        return now.Folder.Length > 0 && now.Folder == last.Folder;
     }
 
     // No row to select: the depth is unknown, or nothing in the read is in place (fall back when rows may be missing).

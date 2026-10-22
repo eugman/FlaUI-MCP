@@ -111,6 +111,64 @@ public sealed class AlreadySelectedTests
         Assert.Empty(tree.Selects);
     }
 
+    // What Properties shows after the clear, and rows that cannot place the selection (its table row above the view).
+    private static Func<SelectionView> Shows(string? folder) => () => new SelectionView(null, "Brand", null, folder);
+
+    private static Task<SelectionPlace> OutOfView() => Task.FromResult(new SelectionPlace(null, false));
+
+    [Fact]
+    public async Task AFolderlessRequestAfterAFolderWalkIsReadAndSelectedAndConfirmedWithItsMeasuredTable()
+    {
+        // Review (second round): Brands[Brand] with folder, then the same without. The shortcut took the folderless
+        // request as the same object, returned no measured table, and the arrival check, which needs a requested
+        // folder to confirm an unmeasured table, failed every time. The folderless request is read and selected as
+        // usual now, its table measured from the rows, and the arrival check confirms it from the pre-clear rows.
+        var tree = new FakeRows(
+            ("Tables", 1, "Group"),
+            ("Brands", 2, "Table"),
+            ("1. Brand Hierarchy", 3, "Folder"),
+            ("Brand", 4, "Column")
+        )
+        {
+            InitiallySelected = 3,
+            InPlaceMeasured = false,
+            HomeMovesSelection = true,
+            Folder = "1. Brand Hierarchy",
+        };
+
+        var picked = await ObjectSelect.Run(tree, NoFolder, () => false, lastArrived: WithFolder);
+        var walk = new WalkResult(picked.Found, picked.Table, picked.RowsRead, picked.Reason);
+        var cleared = new FakeTree(new RowObservation("Brand", "Column", null));
+
+        Assert.True(picked.Found, picked.Reason);
+        Assert.Equal(1, tree.Reads);
+        Assert.Equal([3], tree.Selects);
+        Assert.Equal("Brands", picked.Table);
+        Assert.True(await ObjectWalk.Arrived(cleared, walk, NoFolder, Shows("1. Brand Hierarchy"), OutOfView));
+        Assert.True(await ObjectWalk.Arrived(cleared, walk, NoFolder, Shows(null), OutOfView));
+    }
+
+    [Fact]
+    public async Task TheSameFolderRequestAfterAFolderWalkIsTakenWithNoSelectAndConfirmedByTheFolderReadAgain()
+    {
+        var tree = new FakeRows(("Tables", 1, "Group"), ("Brands", 2, "Table"), ("Brand", 3, "Column"))
+        {
+            InitiallySelected = 2,
+            InPlaceMeasured = false,
+            Folder = "1. Brand Hierarchy",
+        };
+
+        var picked = await ObjectSelect.Run(tree, WithFolder, () => false, lastArrived: WithFolder);
+        var walk = new WalkResult(picked.Found, picked.Table, picked.RowsRead, picked.Reason);
+        var cleared = new FakeTree(new RowObservation("Brand", "Column", null));
+
+        Assert.True(picked.Found, picked.Reason);
+        Assert.Empty(tree.Selects);
+        Assert.Null(picked.Table);
+        Assert.True(await ObjectWalk.Arrived(cleared, walk, WithFolder, Shows("1. Brand Hierarchy"), OutOfView));
+        Assert.False(await ObjectWalk.Arrived(cleared, walk, WithFolder, Shows(null), OutOfView));
+    }
+
     [Fact]
     public async Task ASameNamedObjectInAnotherTableIsNotTakenForTheLastWalksOne()
     {
