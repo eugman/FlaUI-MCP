@@ -399,6 +399,7 @@ public sealed partial class DragReleaseTests
         string? scrolled = null;
         var plan = new DragPlanner(new RefPoints(refs, new PendingInvokeTracker())).Plan(
             new DragRequest(reference, From, null, null, null, reference, "center", [], 4),
+            "w1",
             ref scrolled
         );
 
@@ -413,6 +414,7 @@ public sealed partial class DragReleaseTests
         string? scrolled = null;
         var plan = new DragPlanner(new RefPoints(new ElementRegistry(), new PendingInvokeTracker())).Plan(
             new DragRequest(null, From, null, null, To, null, "center", [], 4),
+            "w1",
             ref scrolled
         );
 
@@ -432,6 +434,7 @@ public sealed partial class DragReleaseTests
         string? scrolled = null;
         var plan = new DragPlanner(new RefPoints(refs, new PendingInvokeTracker())).Plan(
             new DragRequest(reference, null, "right", 300, null, null, "center", [], 4),
+            "w1",
             ref scrolled
         );
 

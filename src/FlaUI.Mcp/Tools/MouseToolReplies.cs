@@ -50,6 +50,13 @@ internal static class MouseReplies
                 screen = new { x = landed.X, y = landed.Y },
                 window = new { x = landed.X - origin.X, y = landed.Y - origin.Y },
                 changed,
+                fromPoint = drag == null
+                    ? null
+                    : new
+                    {
+                        screen = new { x = drag.From.X, y = drag.From.Y },
+                        window = new { x = drag.From.X - origin.X, y = drag.From.Y - origin.Y },
+                    },
                 droppedOn = drag?.DroppedOn,
                 resized = resized == null ? null : new { requested = resized.Expected, reached = resized.Observed },
             },

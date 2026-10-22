@@ -30,11 +30,29 @@ internal sealed record DragPlan(
     Func<(Point From, Point To)> Resolve,
     Func<Point, string?> DropMoved,
     Func<Point, string?> DroppedOn,
-    Func<Proof>? Resized = null
+    Func<Proof>? Resized = null,
+    Action? BeforeDown = null
 )
 {
     /// <summary>What the drag found after its release: the element under the pointer and a resize's proof.</summary>
-    public DragReport Report(Point landed) => new(DroppedOn(landed), Resized?.Invoke());
+    public Point Execute(InputTarget target, int steps, out DragReport report)
+    {
+        Point from = default;
+        var landed = PointerActions.Drag(
+            target,
+            () =>
+            {
+                var resolved = Resolve();
+                from = resolved.From;
+                return resolved;
+            },
+            steps,
+            DropMoved,
+            BeforeDown
+        );
+        report = new DragReport(from, DroppedOn(landed), Resized?.Invoke());
+        return landed;
+    }
 
     /// <summary>
     /// The drop-target-moved refusal with what UI Automation reports under the pointer after the cancel, when a
@@ -52,12 +70,12 @@ internal sealed record DragPlan(
 }
 
 /// <summary>What a drag found after its release, for its reply.</summary>
-internal sealed record DragReport(string? DroppedOn, Proof? Resized);
+internal sealed record DragReport(Point From, string? DroppedOn, Proof? Resized);
 
 /// <summary>Builds a drag's plan from its request: edges, resize targets, drop points and the start's exclusions.</summary>
 internal sealed class DragPlanner(RefPoints points)
 {
-    public DragPlan Plan(DragRequest request, ref string? scrolled)
+    public DragPlan Plan(DragRequest request, string handle, ref string? scrolled)
     {
         if (
             request.FromMustHit != null
@@ -72,11 +90,11 @@ internal sealed class DragPlanner(RefPoints points)
             throw new ArgumentException("toMustHit needs a raw to point");
         }
 
-        var plan = FromRequest(request, ref scrolled);
+        var plan = FromRequest(request, handle, ref scrolled);
         return plan with
         {
             Resolve = AvoidingStart(request.FromMustNotHit, plan.Resolve),
-            DroppedOn = DroppedOn(request.Reference ?? request.ToRef ?? request.ToMustHit),
+            DroppedOn = DroppedOn(request.ToMustHit ?? request.ToRef ?? request.Reference),
         };
     }
 
@@ -133,7 +151,7 @@ internal sealed class DragPlanner(RefPoints points)
         );
     }
 
-    private DragPlan FromRequest(DragRequest request, ref string? scrolled)
+    private DragPlan FromRequest(DragRequest request, string handle, ref string? scrolled)
     {
         if (request.FromEdge != null || request.ResizeTo != null)
         {
@@ -141,7 +159,7 @@ internal sealed class DragPlanner(RefPoints points)
                 request.Reference ?? throw new ArgumentException("fromEdge and resizeTo need ref"),
                 ref scrolled
             );
-            var to = request.ResizeTo == null ? DropPoint(request, ref scrolled) : null;
+            var to = request.ResizeTo == null ? DropPoint(request, handle, ref scrolled) : null;
             Func<Proof>? resized = request.ResizeTo is { } size
                 ? () => Resized(read, request.FromEdge ?? "right", size)
                 : null;
@@ -165,16 +183,21 @@ internal sealed class DragPlanner(RefPoints points)
             );
         }
 
-        var start = StartPoint(request, ref scrolled);
-        var drop = DropPoint(request, ref scrolled);
-        return new(() => (start.Choose(), drop.Choose()), drop.Moved, _ => null);
+        var start = StartPoint(request, handle, ref scrolled);
+        var drop = DropPoint(request, handle, ref scrolled);
+        return new(
+            () => (start.Choose(), drop.Choose()),
+            drop.Moved,
+            _ => null,
+            BeforeDown: request.FromMustHit == null ? null : () => start.Choose()
+        );
     }
 
-    private Press StartPoint(DragRequest request, ref string? scrolled)
+    private Press StartPoint(DragRequest request, string handle, ref string? scrolled)
     {
         if (request.From is { } from)
         {
-            return request.FromMustHit is { } guard ? points.AtPoint(guard, from) : Press.Fixed(from);
+            return request.FromMustHit is { } guard ? points.AtPoint(guard, handle, from) : Press.Fixed(from);
         }
 
         return points.Pressable(
@@ -184,7 +207,7 @@ internal sealed class DragPlanner(RefPoints points)
         );
     }
 
-    private Press DropPoint(DragRequest request, ref string? scrolled)
+    private Press DropPoint(DragRequest request, string handle, ref string? scrolled)
     {
         if (request.ToRef != null)
         {
@@ -192,7 +215,7 @@ internal sealed class DragPlanner(RefPoints points)
         }
 
         var to = request.To ?? throw new ArgumentException("to point or ref required");
-        return request.ToMustHit is { } guard ? points.AtPoint(guard, to) : Press.Fixed(to);
+        return request.ToMustHit is { } guard ? points.AtPoint(guard, handle, to) : Press.Fixed(to);
     }
 
     // The drop point is hit-tested like a press: releasing over an overlay or a sibling drops on that instead. It

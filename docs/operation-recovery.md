@@ -54,7 +54,7 @@ Operation status (`flaui/operations/status` and `windows_operation_status`) repo
 
 ### Raw drag point guards
 
-`windows_mouse` `drag` accepts optional `fromMustHit` with a raw `from` point and `toMustHit` with a raw `to` point. Each names an element ref from the same observed window. The tool checks that the fixed screenshot coordinate is visible inside that ref and hit-tests it before pressing the button. It never scrolls the ref or adjusts the coordinate. A guarded `to` is read and hit-tested again while the button is down, just before release; if the element moved or is covered, the drag takes the `drop-target-moved` cancellation path and reports the outcome as unverified. Supplying either guard without its raw point is an invalid argument before input. Existing unguarded raw drags retain their behavior.
+`windows_mouse` `drag` accepts optional `fromMustHit` with a raw `from` point and `toMustHit` with a raw `to` point. Each names an element ref from the same observed window. The tool checks that the fixed screenshot coordinate is visible inside that ref and hit-tests it before pressing the button. It never scrolls the ref or adjusts the coordinate. A guarded `to` is read and hit-tested again while the button is down, just before release; if the element moved or is covered, the drag takes the `drop-target-moved` cancellation path and reports the outcome as unverified. Supplying either guard without its raw point is an invalid argument before input. Successful drag replies include `fromPoint` in screen and window coordinates, alongside the release point and any `droppedOn` result. Existing unguarded raw drags retain their behavior.
 
 ### Refusal text after a change
 

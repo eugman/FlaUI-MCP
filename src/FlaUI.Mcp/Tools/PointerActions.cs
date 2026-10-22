@@ -72,7 +72,8 @@ internal static class PointerActions
         InputTarget target,
         Func<(Point From, Point To)> resolve,
         int steps,
-        Func<Point, string?>? dropMoved = null
+        Func<Point, string?>? dropMoved = null,
+        Action? beforeDown = null
     )
     {
         // Validate the step count before any focus change.
@@ -85,6 +86,11 @@ internal static class PointerActions
         // The release lands at `to`; refuse a drag that would drop onto another window or the desktop.
         input.Check(() => RequireHit(target, to));
         input.MoveTo(from);
+        if (beforeDown != null)
+        {
+            input.Check(beforeDown);
+        }
+
         input.Send(() => Mouse.Down(MouseButton.Left));
         var (moved, failure) = Held(input, target, path, to, dropMoved);
         if (moved == null && failure == null)
