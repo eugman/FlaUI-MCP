@@ -74,6 +74,12 @@ public static class RefusalCodes
     /// <summary>Keyboard focus left the control part-way through a keyboard fill; Ctrl+A had gone out.</summary>
     public const string FocusLost = "focus-lost";
 
+    /// <summary>A launch did not start, or started a process that showed no usable window in time.</summary>
+    public const string LaunchFailed = "launch-failed";
+
+    /// <summary>No top-level window has the title asked for.</summary>
+    public const string WindowNotFound = "window-not-found";
+
     /// <summary>A code in the canonical form: lower case, words joined by hyphens.</summary>
     public static string Canonical(string code) => code.Replace('_', '-').ToLowerInvariant();
 }

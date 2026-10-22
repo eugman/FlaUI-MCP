@@ -89,7 +89,7 @@ public class SessionManager : IDisposable
     {
         if (!_processPolicy.IsExecutableAllowed(appPath))
         {
-            throw new Exception(_processPolicy.DescribeDenied($"'{appPath}'"));
+            throw ProcessPolicy.NotAllowed(_processPolicy.DescribeDenied($"'{appPath}'"));
         }
 
         // Use Process.Start for more reliable launching
@@ -98,7 +98,7 @@ public class SessionManager : IDisposable
         using var process = WindowMutation.Start(psi);
         if (process == null)
         {
-            throw new Exception($"Failed to start process: {appPath}");
+            throw ProcessPolicy.LaunchFailed($"Failed to start process: {appPath}", started: false);
         }
 
         // Wait for the process to be ready
@@ -122,7 +122,10 @@ public class SessionManager : IDisposable
                 exited || !_processPolicy.IsProcessAllowed(process.Id)
                     ? Array.Empty<string>()
                     : Candidates().Select(w => w.Title).Where(t => t.Length > 0).ToArray();
-            throw new Exception(LaunchFailure(appPath, process.Id, exited, titles, timeouts > 0));
+            throw ProcessPolicy.LaunchFailed(
+                LaunchFailure(appPath, process.Id, exited, titles, timeouts > 0),
+                started: true
+            );
         }
 
         var windowHandle = RegisterWindow(window);
@@ -224,7 +227,7 @@ public class SessionManager : IDisposable
 
         if (window == null)
         {
-            throw new Exception($"Window not found: {title}");
+            throw ProcessPolicy.WindowNotFound($"Window not found: {title}");
         }
 
         var handle = RegisterWindow(window);
@@ -582,7 +585,7 @@ public class SessionManager : IDisposable
 
         if (processId == 0)
         {
-            throw new Exception(
+            throw ProcessPolicy.OwnerUnknown(
                 "Cannot verify this window's owning process against the app allowlist "
                     + $"({ProcessPolicy.EnvironmentVariable}), so it is not controllable."
             );
@@ -591,7 +594,7 @@ public class SessionManager : IDisposable
         if (!_processPolicy.IsProcessAllowed(processId))
         {
             var name = ProcessPolicy.NameOf(processId) ?? $"pid {processId}";
-            throw new Exception(_processPolicy.DescribeDenied($"Process '{name}'"));
+            throw ProcessPolicy.NotAllowed(_processPolicy.DescribeDenied($"Process '{name}'"));
         }
     }
 

@@ -100,6 +100,23 @@ public sealed class ProcessPolicy
             ? $"app allowlist active: {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}"
             : "no app allowlist";
 
+    /// <summary>The refusal for a process or window off the allowlist; nothing was sent.</summary>
+    public static Exception NotAllowed(string message) => Refusal(RefusalCodes.ProcessNotAllowed, message, false);
+
+    /// <summary>The refusal for a window whose owning process cannot be read, so it cannot be authorized.</summary>
+    public static Exception OwnerUnknown(string message) =>
+        Refusal(RefusalCodes.WindowOwnershipUnknown, message, false);
+
+    /// <summary>The refusal for a launch that failed; <paramref name="started"/> when a process did start.</summary>
+    public static Exception LaunchFailed(string message, bool started) =>
+        Refusal(RefusalCodes.LaunchFailed, message, started);
+
+    /// <summary>The refusal for a window title that matches no top-level window.</summary>
+    public static Exception WindowNotFound(string message) => Refusal(RefusalCodes.WindowNotFound, message, false);
+
+    private static Exception Refusal(string code, string message, bool dispatched) =>
+        InputRefusedException.Record(new InputRefusal(code, message) { ActionDispatched = dispatched });
+
     /// <summary>The process's name through the desktop seam, so tests and fakes see the same name the guards do.</summary>
     public static string? NameOf(int processId) => InputDesktop.Current.ProcessNameOf(processId);
 
