@@ -6,7 +6,7 @@ What you get:
 
 | Piece | Use it to |
 |---|---|
-| `FlaUI.Mcp.Te3.exe mcp` | One MCP server with the generic `windows_*` tools (snapshot, find, click, type, screenshot and so on) plus `te3_navigate`, `te3_model_state`, `te3_layout` and `te3_layout_read`, which know TE3's layout. Refs and handles are shared across all of them. |
+| `FlaUI.Mcp.Te3.exe mcp` | One MCP server with the generic `windows_*` tools (snapshot, find, click, type, screenshot and so on) plus the eight TE3 tools (`te3_interaction_begin`, `te3_interaction_end`, `te3_navigate`, `te3_model_state`, `te3_layout`, `te3_layout_read`, `te3_native_preflight`, `te3_env_check`; their facts are in the generated table in [automation/README.md](automation/README.md)). Refs and handles are shared across all of them. |
 | `FlaUI.Mcp.exe` | The generic `windows_*` server on its own, for apps other than TE3. |
 | `FlaUI.Mcp.Te3.exe run` | Script repeatable TE3 screenshots with typed C# recipes. |
 | `automation/skills/te3-ui` | Agent guidance for driving TE3. |

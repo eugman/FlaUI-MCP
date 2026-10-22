@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- Keys sent to the Scintilla editors (the query editor's F5) ask Core for `verifyFocus: "self-or-descendant"` explicitly instead of relying on Core's default.
+- The run's click prompt is ended with `activation-denied` whenever the wait for the click fails (timeout, cancellation, TE3 exiting, a second TE3, no window bounds), before the run's capture and cleanup.
+- The waits in `Absence` and the object walk's `AwaitMove` stop on a poll count as well as the clock, so a clock that does not move cannot hold them; the popup captures poll for the popup (`SettlePoll`) instead of one read after a fixed 500 ms.
+- A dialog cancel the grant or the desktop refused is reported at once with its code instead of trying the next button and timing out.
+- The Show changes gate refuses (not-found) when the checkbox vanishes after its click, instead of taking that for "off"; an IsOffscreen that cannot be read is unknown, never "on screen", so the TOM Explorer tab is then required.
+- The dialog an action opened is matched by owner (TE3's main window first) and dialog class, several candidates are refused, and a cloaked window is reported as cloaked, not closed; `OpenPreferences` waits for a Preferences window opened since a window baseline.
+- The BPA tab is read back after `OpenBpa`; the script run, Save and New query are recorded as unverified (`UnverifiedSteps`).
+- `recover` takes its runner lock, settings directory and TE3 process list through seams, so its tests never touch the real lock or live TE3s.
 - `te3_navigate object` returns its `walk` account as a top-level `structuredContent` field (Core's `ToolOutcome.Details`, merged at c9e94b8), on success and failure; the message text no longer carries it.
 - **Breaking (codes):** the grant's refusal codes are Core's hyphenated ones: `approval-required`, `focus-revoked`, `focus-unavailable`, `paused-after-failure`, `activation-denied`, `activation-pending`. Map old underscore spellings with `RefusalCodes.Canonical`.
 - Rebased on FlaUI-MCP-Core 84280c0. `Te3Interaction` is built on Core's `InteractionGrant`; TE3's own input observer, heartbeat and grant are gone. The run's activation prompt uses `BeginPrompt` then `Rebaseline(bounds)`; constructing the grant makes the host fail closed on a path without it (`MutationGuard.HookRequired`). The input lease is Core's machine-wide mutex; the offline tests take a lease of their own process.
