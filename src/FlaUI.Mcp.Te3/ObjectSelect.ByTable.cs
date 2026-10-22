@@ -133,8 +133,20 @@ internal static partial class ObjectSelect
             return false;
         }
 
-        var seen = await Settled(tree, row, new WalkRequest(tableName, tableName, "Table"));
-        return seen != null && TomSelection.ObjectTypeMatches("Table", seen.Type);
+        // A folder can share the table's name while the status bar retains that table.
+        // Require Properties itself to identify the anchor before trusting inferred depth.
+        for (var attempt = 0; attempt < ViewReads; attempt++)
+        {
+            var view = await tree.View();
+            if (view.Name == tableName && TomSelection.ObjectTypeMatches("Table", view.Type))
+            {
+                return true;
+            }
+
+            await tree.Wait(ViewPollMs);
+        }
+
+        return false;
     }
 
     private static async Task<(RowRead Read, TreeRow? Table, List<string> Searches)> FindTable(

@@ -3,13 +3,13 @@ using Xunit;
 /// <summary>Table anchors must survive clearing the filter and the fresh candidate read.</summary>
 public sealed class ByTableAnchorTests
 {
-    private sealed class ChangingTable(bool collapsed) : IRowTree
+    private sealed class ChangingTable(bool collapsed, bool sameNamedFolder = false) : IRowTree
     {
         private bool cleared;
         private int? selected;
         public List<int> Selects { get; } = [];
         public int Expands { get; private set; }
-        private string TableName => cleared ? "Other" : "Wanted";
+        private string TableName => cleared && !sameNamedFolder ? "Other" : "Wanted";
         private IReadOnlyList<TreeRow> Rows =>
             cleared && collapsed
                 ? [new(0, "Model", 0), new(1, "Tables", 1), new(2, "Other", 2)]
@@ -45,6 +45,11 @@ public sealed class ByTableAnchorTests
         public Task<SelectionView> View()
         {
             var row = Rows.FirstOrDefault(r => r.Index == selected);
+            if (cleared && sameNamedFolder && row?.Depth == 2)
+            {
+                return Task.FromResult(new SelectionView("Table \"Wanted\"", "Wanted", "Folder", null));
+            }
+
             var type = row?.Depth == 2 ? "Table" : "Column";
             return Task.FromResult(
                 new SelectionView(row == null ? null : $"{type} \"{row.Value}\"", row?.Value, type, null)
@@ -60,6 +65,18 @@ public sealed class ByTableAnchorTests
     public async Task ClearingSearchMustNotSelectOrExpandAReplacementTable(bool collapsed)
     {
         var tree = new ChangingTable(collapsed);
+
+        var result = await ObjectSelect.ByTable(tree, new WalkRequest("Wanted", "Amount", "Column"), () => false);
+
+        Assert.False(result.Found);
+        Assert.Equal([2], tree.Selects);
+        Assert.Equal(0, tree.Expands);
+    }
+
+    [Fact]
+    public async Task AStaleStatusBarCannotConfirmASameNamedFolderAsTheTable()
+    {
+        var tree = new ChangingTable(false, sameNamedFolder: true);
 
         var result = await ObjectSelect.ByTable(tree, new WalkRequest("Wanted", "Amount", "Column"), () => false);
 
