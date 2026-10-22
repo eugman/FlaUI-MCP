@@ -27,17 +27,14 @@ public class GetTextTool : ToolBase
         "Get the text content of an element. Returns the element's Name property, "
         + "or for text inputs, the current value.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },
-            },
-            required = new[] { "ref" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Element ref from windows_snapshot (e.g., 'w1e5')")]
+        public required string Ref { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

@@ -43,7 +43,8 @@
             "required": [
               "action"
             ]
-          }
+          },
+          "description": "The steps to run in order, at most 100: each an action and its arguments."
         },
         "stopOnError": {
           "type": "boolean",
@@ -193,10 +194,12 @@
       "additionalProperties": false,
       "properties": {
         "handle": {
-          "type": "string"
+          "type": "string",
+          "description": "Window identifier from windows_list_windows or windows_launch (e.g. w1) to search in."
         },
         "selector": {
           "type": "object",
+          "description": "What to match; every field given must match. Omit it for a bounded walk of the raw tree.",
           "properties": {
             "automationId": {
               "type": "string"
@@ -243,6 +246,7 @@
         },
         "within": {
           "type": "object",
+          "description": "An ancestor to search under, such as a pane\u0027s TitleBar to tell identical buttons apart.",
           "properties": {
             "automationId": {
               "type": "string"
@@ -292,17 +296,20 @@
           "description": "Also search other visible native windows of this process, including popup menus (unscoped only)."
         },
         "maxDepth": {
-          "type": "integer"
+          "type": "integer",
+          "description": "How many levels below the search root to descend (default 24)."
         },
         "maxNodes": {
           "type": "integer",
           "description": "Client-side traversal/result budget; cannot interrupt a blocking provider query."
         },
         "maxResults": {
-          "type": "integer"
+          "type": "integer",
+          "description": "The most matches to return (default 30)."
         },
         "ancestry": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Show each match\u0027s parents, to tell identical matches apart."
         },
         "includeBounds": {
           "type": "boolean",
@@ -449,7 +456,8 @@
             "scroll",
             "drag",
             "click"
-          ]
+          ],
+          "description": "park, move, hover, scroll, drag or click; see the tool description for what each needs."
         },
         "handle": {
           "type": "string",
@@ -617,7 +625,8 @@
       "additionalProperties": false,
       "properties": {
         "ref": {
-          "type": "string"
+          "type": "string",
+          "description": "A top-level window ref; alternative to handle."
         },
         "handle": {
           "type": "string",
@@ -625,6 +634,7 @@
         },
         "placement": {
           "type": "object",
+          "description": "The bounds to request, in physical screen pixels.",
           "properties": {
             "x": {
               "type": "integer",
@@ -850,7 +860,8 @@
             "restore",
             "normal",
             "minimize"
-          ]
+          ],
+          "description": "maximize, minimize, or restore (normal is the same as restore)."
         }
       },
       "required": [
@@ -944,10 +955,12 @@
       "additionalProperties": false,
       "properties": {
         "handle": {
-          "type": "string"
+          "type": "string",
+          "description": "Window identifier from windows_list_windows or windows_launch (e.g. w1) to watch."
         },
         "selector": {
           "type": "object",
+          "description": "The control to wait for; every field given must match.",
           "properties": {
             "automationId": {
               "type": "string"
@@ -994,6 +1007,7 @@
         },
         "within": {
           "type": "object",
+          "description": "An ancestor to search under.",
           "properties": {
             "automationId": {
               "type": "string"
@@ -1039,7 +1053,8 @@
           }
         },
         "includeOwned": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Also search other visible native windows of this process, including popup menus."
         },
         "state": {
           "type": "string",
@@ -1049,7 +1064,8 @@
             "value",
             "selected",
             "toggle"
-          ]
+          ],
+          "description": "present or absent (absence must hold for settleMs), or the matched control\u0027s value, selected or toggle state equal to expected."
         },
         "expected": {
           "description": "String for value/toggle (On, Off, Indeterminate), boolean for selected."
@@ -1058,19 +1074,22 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 25000,
-          "default": 5000
+          "default": 5000,
+          "description": "How long to wait before giving up, in milliseconds (default 5000)."
         },
         "settleMs": {
           "type": "integer",
           "minimum": 0,
           "maximum": 25000,
-          "default": 500
+          "default": 500,
+          "description": "How long absence must hold before it counts, in milliseconds (default 500)."
         },
         "maxNodes": {
           "type": "integer",
           "minimum": 1,
           "maximum": 20000,
-          "default": 3000
+          "default": 3000,
+          "description": "Client-side node budget for each search (default 3000); an incomplete search cannot prove absence."
         }
       },
       "required": [

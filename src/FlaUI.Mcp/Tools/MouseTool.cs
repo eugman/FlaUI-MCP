@@ -7,7 +7,8 @@ using FlaUI.Mcp.Core;
 namespace FlaUI.Mcp.Tools;
 
 /// <summary>Guarded pointer actions by window-relative pixel or element reference.</summary>
-public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending, SessionManager sessions) : ToolBase
+public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker pending, SessionManager sessions)
+    : ToolBase
 {
     private const int DefaultHoverMs = 600;
     private const int MaxHoverMs = 5000;
@@ -23,57 +24,6 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         + "or wherever resizeTo makes ref that size (a column header: ref + fromEdge right + resizeTo 250). Use it for "
         + "splitters and other targets UI Automation does not expose. Points are pixels in a windows_screenshot "
         + "of the same window (handle), so read them straight off a capture.";
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                action = new { type = "string", @enum = new[] { "park", "move", "hover", "scroll", "drag", "click" } },
-                handle = new { type = "string", description = "Window handle; points are relative to its capture." },
-                @ref = new { type = "string", description = "Element to move to, hover, scroll over, or drag from." },
-                from = PointSchema("Drag start in window pixels (alternative to ref)."),
-                to = PointSchema("Target in window pixels: move/hover/scroll/click point, or drag end."),
-                ticks = new { type = "integer", description = "scroll: wheel ticks, positive is up." },
-                durationMs = new { type = "integer", description = "hover: how long to rest (default 600)." },
-                steps = new { type = "integer", description = "drag: intermediate moves (default 12)." },
-                fromEdge = new
-                {
-                    type = "string",
-                    @enum = PointerPlan.Edges,
-                    description = "drag: grab this edge of ref instead of its centre (e.g. right for a column header's divider).",
-                },
-                toRef = new { type = "string", description = "drag: release on this element instead of a `to` point." },
-                fromMustNotHit = new
-                {
-                    type = "array",
-                    items = new { type = "string" },
-                    description = "drag: refs the start point must not land on (a neighbouring pane's caption, say); the drag is refused before the button goes down when UI Automation reports one of them, or something inside it, there.",
-                },
-                toEdge = new
-                {
-                    type = "string",
-                    @enum = PointerPlan.Edges,
-                    description = "drag: which part of toRef to release on (default center; left drops a column header before it).",
-                },
-                resizeTo = new
-                {
-                    type = "integer",
-                    description = "drag with ref + fromEdge: release where ref becomes this many pixels wide (left/right) or tall (top/bottom). One call, no screenshot needed.",
-                },
-            },
-            required = new[] { "action" },
-        };
-
-    private static object PointSchema(string description) =>
-        new
-        {
-            type = "object",
-            description,
-            properties = new { x = new { type = "integer" }, y = new { type = "integer" } },
-            required = new[] { "x", "y" },
-        };
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

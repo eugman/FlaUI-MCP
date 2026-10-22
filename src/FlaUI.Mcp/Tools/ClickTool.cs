@@ -32,40 +32,35 @@ public partial class ClickTool : ToolBase
         + "A select fallback click reports whether SelectionItem confirms selection; an unconfirmed click must be inspected before continuing. "
         + "A right-click after selecting a tree or list row can start inline rename; open context menus with windows_send_keys Shift+F10 or Apps.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new
-                {
-                    type = "string",
-                    description = "Optional window handle; when supplied, the ref must belong to this window.",
-                },
-                physical = new
-                {
-                    type = "boolean",
-                    description = "Use a physical mouse click with foreground and native-window hit checks. Defaults to true for menu items and names ending in \"...\", otherwise false. These checks do not prove which UIA child receives the click; a container's clickable point may hit a child control.",
-                },
-                @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },
-                button = new
-                {
-                    type = "string",
-                    @enum = new[] { "left", "right", "middle" },
-                    description = "Mouse button to click (default: left)",
-                },
-                doubleClick = new { type = "boolean", description = "Whether to double-click (default: false)" },
-                action = new
-                {
-                    type = "string",
-                    @enum = new[] { "invoke", "select", "expand", "collapse", "toggle", "click" },
-                    description = "Pattern to use instead of the default choice. Tree and list rows default to select, because Invoke on a tree row toggles its expansion; expand/collapse open or close a tree node without selecting it; click forces a mouse click.",
-                },
-            },
-            required = new[] { "ref" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Optional window handle; when supplied, the ref must belong to this window.")]
+        public string? Handle { get; init; }
+
+        [ToolDoc(
+            "Use a physical mouse click with foreground and native-window hit checks. Defaults to true for menu items and names ending in \"...\", otherwise false. These checks do not prove which UIA child receives the click; a container's clickable point may hit a child control."
+        )]
+        public bool? Physical { get; init; }
+
+        [ToolDoc("Element ref from windows_snapshot (e.g., 'w1e5')")]
+        public required string Ref { get; init; }
+
+        [ToolEnum("left", "right", "middle")]
+        [ToolDoc("Mouse button to click (default: left)")]
+        public string? Button { get; init; }
+
+        [ToolDoc("Whether to double-click (default: false)")]
+        public bool? DoubleClick { get; init; }
+
+        [ToolEnum("invoke", "select", "expand", "collapse", "toggle", "click")]
+        [ToolDoc(
+            "Pattern to use instead of the default choice. Tree and list rows default to select, because Invoke on a tree row toggles its expansion; expand/collapse open or close a tree node without selecting it; click forces a mouse click."
+        )]
+        public string? Action { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

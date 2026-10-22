@@ -15,47 +15,42 @@ public sealed class BatchTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
     public override string Description =>
         "Execute click/type/fill/wait/snapshot actions in order, returning numbered results and structured step outcomes. Stops on errors by default; always stops when an action is still pending. Never replay a pending action.";
-    public override object InputSchema =>
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolSchemaFrom(nameof(ActionsSchema))]
+        public required object Actions { get; init; }
+
+        [ToolDoc("Stop executing if an action fails (default: true)")]
+        public bool? StopOnError { get; init; }
+    }
+
+    public static object ActionsSchema =>
         new
         {
-            type = "object",
-            additionalProperties = false,
-            properties = new
+            type = "array",
+            items = new
             {
-                actions = new
+                type = "object",
+                properties = new
                 {
-                    type = "array",
-                    items = new
+                    action = new { type = "string", @enum = new[] { "click", "type", "fill", "wait", "snapshot" } },
+                    @ref = new { type = "string" },
+                    text = new { type = "string" },
+                    value = new { type = "string" },
+                    ms = new
                     {
-                        type = "object",
-                        properties = new
-                        {
-                            action = new
-                            {
-                                type = "string",
-                                @enum = new[] { "click", "type", "fill", "wait", "snapshot" },
-                            },
-                            @ref = new { type = "string" },
-                            text = new { type = "string" },
-                            value = new { type = "string" },
-                            ms = new
-                            {
-                                type = "integer",
-                                minimum = 0,
-                                description = "Milliseconds to wait (default: 100)",
-                            },
-                            handle = new { type = "string", description = "Window handle for snapshot or input" },
-                        },
-                        required = new[] { "action" },
+                        type = "integer",
+                        minimum = 0,
+                        description = "Milliseconds to wait (default: 100)",
                     },
+                    handle = new { type = "string", description = "Window handle for snapshot or input" },
                 },
-                stopOnError = new
-                {
-                    type = "boolean",
-                    description = "Stop executing if an action fails (default: true)",
-                },
+                required = new[] { "action" },
             },
-            required = new[] { "actions" },
+            description = "The steps to run in order, at most 100: each an action and its arguments.",
         };
 
     public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)

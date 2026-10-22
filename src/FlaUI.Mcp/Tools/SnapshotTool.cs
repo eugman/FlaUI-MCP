@@ -35,34 +35,22 @@ public class SnapshotTool : ToolBase
         + "that can be used with windows_click, windows_type, etc. Prefer windows_find for known "
         + "selectors and compact state; use this to explore unfamiliar structure. A new snapshot invalidates earlier refs for that window.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new
-                {
-                    type = "string",
-                    description = "Window handle from windows_launch or windows_list_windows. If omitted, uses the foreground window.",
-                },
-                maxNodes = new
-                {
-                    type = "integer",
-                    minimum = 1,
-                    maximum = 100000,
-                    description = "Client-side node budget (default 3000); cannot interrupt a blocking provider call.",
-                },
-                maxCharacters = new
-                {
-                    type = "integer",
-                    minimum = 256,
-                    maximum = 1000000,
-                    description = "Output character budget including partial-result notice (default 20000).",
-                },
-            },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Window handle from windows_launch or windows_list_windows. If omitted, uses the foreground window.")]
+        public string? Handle { get; init; }
+
+        [ToolRange(1, Maximum = 100000)]
+        [ToolDoc("Client-side node budget (default 3000); cannot interrupt a blocking provider call.")]
+        public int? MaxNodes { get; init; }
+
+        [ToolRange(256, Maximum = 1000000)]
+        [ToolDoc("Output character budget including partial-result notice (default 20000).")]
+        public int? MaxCharacters { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

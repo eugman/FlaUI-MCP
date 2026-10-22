@@ -16,54 +16,38 @@ public sealed class WindowPlacementTool(
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
     public override string Description =>
         "Move or resize an observed normal-state native window in physical screen pixels without activating it. Returns requested and observed bounds; the operating system may constrain size. Rejects clipping and child controls; never replays the move.";
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                @ref = new { type = "string" },
-                handle = new
-                {
-                    type = "string",
-                    description = "Window identifier from windows_list_windows (for example w1), not a numeric HWND; alternative to ref.",
-                },
-                placement = new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        x = new
-                        {
-                            type = "integer",
-                            minimum = -100000,
-                            maximum = 100000,
-                        },
-                        y = new
-                        {
-                            type = "integer",
-                            minimum = -100000,
-                            maximum = 100000,
-                        },
-                        width = new
-                        {
-                            type = "integer",
-                            minimum = 100,
-                            maximum = 8192,
-                        },
-                        height = new
-                        {
-                            type = "integer",
-                            minimum = 100,
-                            maximum = 8192,
-                        },
-                    },
-                    required = new[] { "x", "y", "width", "height" },
-                },
-            },
-            required = new[] { "placement" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("A top-level window ref; alternative to handle.")]
+        public string? Ref { get; init; }
+
+        [ToolDoc(
+            "Window identifier from windows_list_windows (for example w1), not a numeric HWND; alternative to ref."
+        )]
+        public string? Handle { get; init; }
+
+        [ToolDoc("The bounds to request, in physical screen pixels.")]
+        public required PlacementArgument Placement { get; init; }
+    }
+
+    /// <summary>One argument, an object.</summary>
+    internal sealed record PlacementArgument
+    {
+        [ToolRange(-100000, Maximum = 100000)]
+        public required int X { get; init; }
+
+        [ToolRange(-100000, Maximum = 100000)]
+        public required int Y { get; init; }
+
+        [ToolRange(100, Maximum = 8192)]
+        public required int Width { get; init; }
+
+        [ToolRange(100, Maximum = 8192)]
+        public required int Height { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

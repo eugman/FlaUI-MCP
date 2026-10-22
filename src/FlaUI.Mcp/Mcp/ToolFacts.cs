@@ -81,7 +81,7 @@ public sealed class ToolRangeAttribute(long minimum) : Attribute
 
 /// <summary>
 /// A property whose schema the record cannot express (a shared selector, a type union, a key order of its own):
-/// the static member named here, on the record or the type that declares it, supplies it as written.
+/// the public static member named here, on the record or the type that declares it, supplies it as written.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class ToolSchemaFromAttribute(string member) : Attribute
@@ -93,12 +93,18 @@ public sealed class ToolSchemaFromAttribute(string member) : Attribute
 [AttributeUsage(AttributeTargets.Class)]
 public sealed class ToolSchemaRequiredListAttribute : Attribute;
 
+/// <summary>The argument record of a tool that takes no arguments.</summary>
+public sealed class NoArguments
+{
+    private NoArguments() { }
+}
+
 /// <summary>Builds a closed JSON schema from an argument record whose properties carry <see cref="ToolDocAttribute"/>.</summary>
 public static class ToolSchema
 {
     /// <summary>
     /// The schema for <typeparamref name="T"/>: one camelCase property per public property, in declaration order;
-    /// required when its constructor parameter has no default (the list is left out when empty, unless the record
+    /// required when it is a <c>required</c> member or its constructor parameter has no default (the list is left out when empty, unless the record
     /// carries <see cref="ToolSchemaRequiredListAttribute"/>); additionalProperties false.
     /// </summary>
     public static object For<T>()
@@ -120,16 +126,18 @@ public static class ToolSchema
 
     private static (Dictionary<string, object> Properties, List<string> Required) Members(Type record)
     {
-        var optional =
+        // Required: a `required` member, or a positional parameter with no default. Any other member is optional.
+        var positional =
             record
                 .GetConstructors()
                 .OrderByDescending(c => c.GetParameters().Length)
                 .FirstOrDefault()
                 ?.GetParameters()
-                .Where(p => p.HasDefaultValue)
-                .Select(p => p.Name!)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(p => p.Name!, p => p.HasDefaultValue, StringComparer.OrdinalIgnoreCase)
             ?? [];
+        bool IsRequired(PropertyInfo property) =>
+            property.IsDefined(typeof(System.Runtime.CompilerServices.RequiredMemberAttribute))
+            || (positional.TryGetValue(property.Name, out var hasDefault) && !hasDefault);
         var properties = new Dictionary<string, object>();
         var required = new List<string>();
         foreach (var property in record.GetProperties(BindingFlags.Public | BindingFlags.Instance))
@@ -141,7 +149,7 @@ public static class ToolSchema
 
             var name = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
             properties[name] = PropertySchema(property, record);
-            if (!optional.Contains(property.Name))
+            if (IsRequired(property))
             {
                 required.Add(name);
             }
@@ -209,7 +217,7 @@ public static class ToolSchema
 
     private static object Supplied(string member, Type record)
     {
-        const BindingFlags Static = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+        const BindingFlags Static = BindingFlags.Public | BindingFlags.Static;
         for (var type = record; type != null; type = type.DeclaringType)
         {
             if (type.GetProperty(member, Static) is { } property)

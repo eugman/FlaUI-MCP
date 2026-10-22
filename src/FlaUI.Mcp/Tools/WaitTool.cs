@@ -14,46 +14,47 @@ public sealed class WaitTool(ElementQuery query) : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
     public override string Description =>
         "Wait for scoped UIA presence, settled absence, or one control's value/selected/toggle state. Does not send input. Incomplete searches cannot prove absence; rootOnly excludes descendants.";
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new { type = "string" },
-                selector = FindTool.SelectorSchema,
-                within = FindTool.SelectorSchema,
-                includeOwned = new { type = "boolean" },
-                state = new { type = "string", @enum = new[] { "present", "absent", "value", "selected", "toggle" } },
-                expected = new
-                {
-                    description = "String for value/toggle (On, Off, Indeterminate), boolean for selected.",
-                },
-                timeoutMs = new
-                {
-                    type = "integer",
-                    minimum = 1,
-                    maximum = 25000,
-                    @default = 5000,
-                },
-                settleMs = new
-                {
-                    type = "integer",
-                    minimum = 0,
-                    maximum = 25000,
-                    @default = 500,
-                },
-                maxNodes = new
-                {
-                    type = "integer",
-                    minimum = 1,
-                    maximum = 20000,
-                    @default = 3000,
-                },
-            },
-            required = new[] { "handle", "selector", "state" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Window identifier from windows_list_windows or windows_launch (e.g. w1) to watch.")]
+        public required string Handle { get; init; }
+
+        [ToolDoc("The control to wait for; every field given must match.")]
+        public required FindTool.SelectorArgument Selector { get; init; }
+
+        [ToolDoc("An ancestor to search under.")]
+        public FindTool.SelectorArgument? Within { get; init; }
+
+        [ToolDoc("Also search other visible native windows of this process, including popup menus.")]
+        public bool? IncludeOwned { get; init; }
+
+        [ToolEnum("present", "absent", "value", "selected", "toggle")]
+        [ToolDoc(
+            "present or absent (absence must hold for settleMs), or the matched control's value, selected or toggle state equal to expected."
+        )]
+        public required string State { get; init; }
+
+        [ToolSchemaFrom(nameof(ExpectedSchema))]
+        public object? Expected { get; init; }
+
+        [ToolRange(1, Maximum = 25000, Default = 5000)]
+        [ToolDoc("How long to wait before giving up, in milliseconds (default 5000).")]
+        public int? TimeoutMs { get; init; }
+
+        [ToolRange(0, Maximum = 25000, Default = 500)]
+        [ToolDoc("How long absence must hold before it counts, in milliseconds (default 500).")]
+        public int? SettleMs { get; init; }
+
+        [ToolRange(1, Maximum = 20000, Default = 3000)]
+        [ToolDoc("Client-side node budget for each search (default 3000); an incomplete search cannot prove absence.")]
+        public int? MaxNodes { get; init; }
+    }
+
+    public static object ExpectedSchema =>
+        new { description = "String for value/toggle (On, Off, Indeterminate), boolean for selected." };
 
     public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

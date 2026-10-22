@@ -90,6 +90,7 @@ public sealed class MutationConfigTests
         "Tools/KeyNames.cs",
         "Tools/LaunchTool.cs",
         "Tools/OperationStatusTool.cs",
+        "Tools/MouseToolArguments.cs",
         "Tools/ScreenshotCapture.cs",
         "Tools/ScreenshotChecks.cs",
         "Tools/ScreenshotFinish.cs",

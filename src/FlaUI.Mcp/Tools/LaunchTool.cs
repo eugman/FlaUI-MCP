@@ -22,27 +22,19 @@ public class LaunchTool : ToolBase
     public override string Description =>
         "Launch a Windows application. Returns a window handle for use with other tools.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                app = new
-                {
-                    type = "string",
-                    description = "Path to executable or UWP app ID (e.g., 'calc.exe', 'notepad.exe', 'C:\\\\Program Files\\\\MyApp\\\\app.exe')",
-                },
-                args = new
-                {
-                    type = "array",
-                    items = new { type = "string" },
-                    description = "Optional command line arguments",
-                },
-            },
-            required = new[] { "app" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc(
+            "Path to executable or UWP app ID (e.g., 'calc.exe', 'notepad.exe', 'C:\\\\Program Files\\\\MyApp\\\\app.exe')"
+        )]
+        public required string App { get; init; }
+
+        [ToolDoc("Optional command line arguments")]
+        public string[]? Args { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

@@ -68,46 +68,43 @@ public class SendKeysTool : ToolBase
     /// <summary>
     /// Gets the JSON schema for tool inputs.
     /// </summary>
-    public override object InputSchema =>
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Optional explicit window handle; otherwise uses the focused element.")]
+        public string? Handle { get; init; }
+
+        [ToolSchemaFrom(nameof(VerifyFocusSchema))]
+        public object? VerifyFocus { get; init; }
+
+        [ToolDoc(
+            "Abort without sending unless the focused control's window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. Every reply names the focused class, so run once to discover it."
+        )]
+        public string? ExpectFocusClass { get; init; }
+
+        [ToolDoc("Element ref from windows_snapshot (e.g., 'w1e5'). If omitted, sends to focused element.")]
+        public string? Ref { get; init; }
+
+        [ToolDoc("Single key chord string, e.g. 'Ctrl+Right' or 'Alt+F4'.")]
+        public string? Chord { get; init; }
+
+        [ToolSchemaFrom(nameof(KeysSchema))]
+        public object? Keys { get; init; }
+    }
+
+    public static object VerifyFocusSchema =>
+        FocusRules.Schema(
+            "Require verified keyboard focus before the sequence: true for the ref's exact control, \"self-or-descendant\" for it or a descendant (an editable ComboBox focuses its Edit child), false for no check. Default \"self-or-descendant\" when a ref is given, since keys such as Ctrl+A or Delete go wherever focus is."
+        );
+
+    public static object KeysSchema =>
         new
         {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new
-                {
-                    type = "string",
-                    description = "Optional explicit window handle; otherwise uses the focused element.",
-                },
-                verifyFocus = FocusRules.Schema(
-                    "Require verified keyboard focus before the sequence: true for the ref's exact control, \"self-or-descendant\" for it or a descendant (an editable ComboBox focuses its Edit child), false for no check. Default \"self-or-descendant\" when a ref is given, since keys such as Ctrl+A or Delete go wherever focus is."
-                ),
-                expectFocusClass = new
-                {
-                    type = "string",
-                    description = "Abort without sending unless the focused control's window class matches this exactly, "
-                        + "rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise "
-                        + "unverified: the keys go wherever focus happens to be. Every reply names the focused class, so "
-                        + "run once to discover it.",
-                },
-                @ref = new
-                {
-                    type = "string",
-                    description = "Element ref from windows_snapshot (e.g., 'w1e5'). If omitted, sends to focused element.",
-                },
-                chord = new
-                {
-                    type = "string",
-                    description = "Single key chord string, e.g. 'Ctrl+Right' or 'Alt+F4'.",
-                },
-                keys = new
-                {
-                    type = "array",
-                    description = "Sequence of key presses/chords, e.g. ['Ctrl+C', 'Ctrl+V', 'Enter'].",
-                    items = new { type = "string" },
-                },
-            },
+            type = "array",
+            description = "Sequence of key presses/chords, e.g. ['Ctrl+C', 'Ctrl+V', 'Enter'].",
+            items = new { type = "string" },
         };
 
     /// <summary>

@@ -42,7 +42,8 @@
           "required": [
             "action"
           ]
-        }
+        },
+        "description": "The steps to run in order, at most 100: each an action and its arguments."
       },
       "stopOnError": {
         "type": "boolean",

@@ -27,13 +27,7 @@ public sealed class GetClipboardTool(ProcessPolicy? policy = null, Func<int>? cl
         + "allowlist is active the text must have been put there by an allowed app, since the clipboard "
         + "is shared with every other application.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new { },
-        };
+    public override object InputSchema => ToolSchema.For<NoArguments>();
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {

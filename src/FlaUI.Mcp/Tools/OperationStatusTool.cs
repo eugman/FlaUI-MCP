@@ -21,7 +21,7 @@ public sealed class OperationStatusTool(OperationCoordinator operations, Pending
 
     /// <summary>The tool's arguments; its schema is generated from them (published with an empty required list).</summary>
     [ToolSchemaRequiredList]
-    private sealed record Arguments(
+    internal sealed record Arguments(
         [property: ToolDoc("An operationId from a tool's structuredContent; omit it for every retained operation.")]
             string? OperationId = null
     );

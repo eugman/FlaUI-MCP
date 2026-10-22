@@ -42,105 +42,80 @@ public partial class ScreenshotTool : ToolBase
     public override string Description =>
         "Capture a window, element or the screen as PNG. Normal capture uses UIA bounds and may omit the title bar; strictNative captures the whole native window. With savePath and includeImage=false only the path is returned; view the saved image before claiming a visual result.";
 
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                frame = new
-                {
-                    type = "object",
-                    description = "Optional exact source-size assertion and pixel crop; no rescaling.",
-                    properties = new
-                    {
-                        sourceWidth = new
-                        {
-                            type = "integer",
-                            minimum = 1,
-                            maximum = 8192,
-                        },
-                        sourceHeight = new
-                        {
-                            type = "integer",
-                            minimum = 1,
-                            maximum = 8192,
-                        },
-                        x = new { type = "integer", minimum = 0 },
-                        y = new { type = "integer", minimum = 0 },
-                        width = new { type = "integer", minimum = 1 },
-                        height = new { type = "integer", minimum = 1 },
-                    },
-                    required = new[] { "x", "y", "width", "height" },
-                },
-                handle = new
-                {
-                    type = "string",
-                    description = "Window handle. If omitted, captures the foreground window.",
-                },
-                @ref = new { type = "string", description = "Element ref to capture." },
-                fullScreen = new
-                {
-                    type = "boolean",
-                    description = "Capture the entire screen (default: false). Disabled while an app allowlist is active.",
-                },
-                background = new
-                {
-                    type = "boolean",
-                    description = "Native whole-window capture. A handle falls back to screen pixels; a Window ref does not. Not with fullScreen.",
-                },
-                strictNative = new
-                {
-                    type = "boolean",
-                    description = "Native whole-window capture with no screen-pixel fallback. Needs a handle or Window ref.",
-                },
-                savePath = new
-                {
-                    type = "string",
-                    description = "Absolute local .png file path to save the screenshot. UNC and device paths are rejected.",
-                },
-                overwrite = new
-                {
-                    type = "boolean",
-                    description = "Allow savePath to replace an existing file (default: false)",
-                },
-                includeImage = new
-                {
-                    type = "boolean",
-                    description = "Return image payload (default true). Set false with savePath for compact artifact-only output.",
-                },
-                includeMetadata = new
-                {
-                    type = "boolean",
-                    description = "Append capture method, bounds, crop, size and DPI.",
-                },
-                locate = new
-                {
-                    type = "array",
-                    items = new { type = "string" },
-                    description = "Element refs whose rectangles to measure in the returned image, reported as "
-                        + "{ref, x, y, width, height, clipped} in image pixels. Use this instead of converting "
-                        + "windows_find bounds yourself: those are screen coordinates from an earlier observation, they "
-                        + "go stale when the layout moves, and the offset between the two is not constant across DPI "
-                        + "states. Implies includeMetadata. Refused when the capture cannot be trusted to map 1:1.",
-                },
-                parkPointer = new
-                {
-                    type = "boolean",
-                    description = "Move the pointer off the window first, so no tooltip or hover highlight lands in the "
-                        + "image (default false). Use it for any capture that will be published.",
-                },
-                allowOccludedPixels = new
-                {
-                    type = "boolean",
-                    description = "Capture screen pixels even when another application's window covers part of the "
-                        + "target (default false). Only for deliberately capturing a partly covered window: the image "
-                        + "will contain whatever is on top. strictNative is usually the better answer, since it renders "
-                        + "the window's own surface and is unaffected by what is in front of it.",
-                },
-            },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Optional exact source-size assertion and pixel crop; no rescaling.")]
+        public FrameArgument? Frame { get; init; }
+
+        [ToolDoc("Window handle. If omitted, captures the foreground window.")]
+        public string? Handle { get; init; }
+
+        [ToolDoc("Element ref to capture.")]
+        public string? Ref { get; init; }
+
+        [ToolDoc("Capture the entire screen (default: false). Disabled while an app allowlist is active.")]
+        public bool? FullScreen { get; init; }
+
+        [ToolDoc(
+            "Native whole-window capture. A handle falls back to screen pixels; a Window ref does not. Not with fullScreen."
+        )]
+        public bool? Background { get; init; }
+
+        [ToolDoc("Native whole-window capture with no screen-pixel fallback. Needs a handle or Window ref.")]
+        public bool? StrictNative { get; init; }
+
+        [ToolDoc("Absolute local .png file path to save the screenshot. UNC and device paths are rejected.")]
+        public string? SavePath { get; init; }
+
+        [ToolDoc("Allow savePath to replace an existing file (default: false)")]
+        public bool? Overwrite { get; init; }
+
+        [ToolDoc("Return image payload (default true). Set false with savePath for compact artifact-only output.")]
+        public bool? IncludeImage { get; init; }
+
+        [ToolDoc("Append capture method, bounds, crop, size and DPI.")]
+        public bool? IncludeMetadata { get; init; }
+
+        [ToolDoc(
+            "Element refs whose rectangles to measure in the returned image, reported as {ref, x, y, width, height, clipped} in image pixels. Use this instead of converting windows_find bounds yourself: those are screen coordinates from an earlier observation, they go stale when the layout moves, and the offset between the two is not constant across DPI states. Implies includeMetadata. Refused when the capture cannot be trusted to map 1:1."
+        )]
+        public string[]? Locate { get; init; }
+
+        [ToolDoc(
+            "Move the pointer off the window first, so no tooltip or hover highlight lands in the image (default false). Use it for any capture that will be published."
+        )]
+        public bool? ParkPointer { get; init; }
+
+        [ToolDoc(
+            "Capture screen pixels even when another application's window covers part of the target (default false). Only for deliberately capturing a partly covered window: the image will contain whatever is on top. strictNative is usually the better answer, since it renders the window's own surface and is unaffected by what is in front of it."
+        )]
+        public bool? AllowOccludedPixels { get; init; }
+    }
+
+    /// <summary>One argument, an object.</summary>
+    internal sealed record FrameArgument
+    {
+        [ToolRange(1, Maximum = 8192)]
+        public int? SourceWidth { get; init; }
+
+        [ToolRange(1, Maximum = 8192)]
+        public int? SourceHeight { get; init; }
+
+        [ToolRange(0)]
+        public required int X { get; init; }
+
+        [ToolRange(0)]
+        public required int Y { get; init; }
+
+        [ToolRange(1)]
+        public required int Width { get; init; }
+
+        [ToolRange(1)]
+        public required int Height { get; init; }
+    }
 
     /// <summary>
     /// The call in its steps: read and check the request, park the pointer, capture by the path the target allows,

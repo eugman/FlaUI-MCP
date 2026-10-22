@@ -19,67 +19,69 @@ public sealed class FindTool(ElementQuery query) : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
     public override string Description =>
         "Find controls with exact UIA selectors (nameContains for a partial name) and optional ancestor scope (within, e.g. a pane's TitleBar to tell identical Close buttons apart; ancestry:true shows each match's parents); returns compact properties, patterns and fresh refs. Omit selector for bounded raw-tree inspection. An absent state field means unknown. Does not invalidate snapshot refs.";
-    internal static object SelectorSchema =>
-        new
-        {
-            type = "object",
-            properties = new
-            {
-                automationId = new { type = "string" },
-                name = new { type = "string" },
-                nameContains = new
-                {
-                    type = "string",
-                    description = "Case-insensitive substring of name. Use it when you know only part of a label.",
-                },
-                rootOnly = new { type = "boolean", description = "Match only the search root, not descendants." },
-                controlType = new { type = "string", description = "UIA type, e.g. Button, Edit, Tree, MenuItem" },
-                className = new { type = "string" },
-                value = new { type = "string" },
-                visible = new { type = "boolean" },
-                pattern = new
-                {
-                    type = "string",
-                    @enum = new[] { "Value", "SelectionItem", "Toggle", "Invoke", "ExpandCollapse" },
-                },
-                text = new
-                {
-                    type = "string",
-                    description = "Matches name OR value. Prefer it when you know what a control shows on screen: grid, tree and list rows usually carry a positional name such as 'Node0' or 'Name row 87' with the label in value.",
-                },
-            },
-        };
-    public override object InputSchema =>
-        new
-        {
-            type = "object",
-            additionalProperties = false,
-            properties = new
-            {
-                handle = new { type = "string" },
-                selector = SelectorSchema,
-                within = SelectorSchema,
-                includeOwned = new
-                {
-                    type = "boolean",
-                    description = "Also search other visible native windows of this process, including popup menus (unscoped only).",
-                },
-                maxDepth = new { type = "integer" },
-                maxNodes = new
-                {
-                    type = "integer",
-                    description = "Client-side traversal/result budget; cannot interrupt a blocking provider query.",
-                },
-                maxResults = new { type = "integer" },
-                ancestry = new { type = "boolean" },
-                includeBounds = new
-                {
-                    type = "boolean",
-                    description = "Include physical screen bounds; omitted by default.",
-                },
-            },
-            required = new[] { "handle" },
-        };
+    public override object InputSchema => ToolSchema.For<Arguments>();
+
+    /// <summary>The tool's arguments; its schema is generated from them.</summary>
+    internal sealed record Arguments
+    {
+        [ToolDoc("Window identifier from windows_list_windows or windows_launch (e.g. w1) to search in.")]
+        public required string Handle { get; init; }
+
+        [ToolDoc("What to match; every field given must match. Omit it for a bounded walk of the raw tree.")]
+        public SelectorArgument? Selector { get; init; }
+
+        [ToolDoc("An ancestor to search under, such as a pane's TitleBar to tell identical buttons apart.")]
+        public SelectorArgument? Within { get; init; }
+
+        [ToolDoc("Also search other visible native windows of this process, including popup menus (unscoped only).")]
+        public bool? IncludeOwned { get; init; }
+
+        [ToolDoc("How many levels below the search root to descend (default 24).")]
+        public int? MaxDepth { get; init; }
+
+        [ToolDoc("Client-side traversal/result budget; cannot interrupt a blocking provider query.")]
+        public int? MaxNodes { get; init; }
+
+        [ToolDoc("The most matches to return (default 30).")]
+        public int? MaxResults { get; init; }
+
+        [ToolDoc("Show each match's parents, to tell identical matches apart.")]
+        public bool? Ancestry { get; init; }
+
+        [ToolDoc("Include physical screen bounds; omitted by default.")]
+        public bool? IncludeBounds { get; init; }
+    }
+
+    /// <summary>An element selector, shared by windows_find and windows_wait: every field given must match.</summary>
+    internal sealed record SelectorArgument
+    {
+        public string? AutomationId { get; init; }
+
+        public string? Name { get; init; }
+
+        [ToolDoc("Case-insensitive substring of name. Use it when you know only part of a label.")]
+        public string? NameContains { get; init; }
+
+        [ToolDoc("Match only the search root, not descendants.")]
+        public bool? RootOnly { get; init; }
+
+        [ToolDoc("UIA type, e.g. Button, Edit, Tree, MenuItem")]
+        public string? ControlType { get; init; }
+
+        public string? ClassName { get; init; }
+
+        public string? Value { get; init; }
+
+        public bool? Visible { get; init; }
+
+        [ToolEnum("Value", "SelectionItem", "Toggle", "Invoke", "ExpandCollapse")]
+        public string? Pattern { get; init; }
+
+        [ToolDoc(
+            "Matches name OR value. Prefer it when you know what a control shows on screen: grid, tree and list rows usually carry a positional name such as 'Node0' or 'Name row 87' with the label in value."
+        )]
+        public string? Text { get; init; }
+    }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
