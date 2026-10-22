@@ -18,9 +18,9 @@ public sealed class InteractionRefusalTests
 
         var error = Assert.Throws<InputRefusedException>(interaction.Require);
 
-        Assert.Equal("focus_revoked", error.Refusal.Code);
+        Assert.Equal("focus-revoked", error.Refusal.Code);
         Assert.False(error.Refusal.ActionDispatched);
-        Assert.Contains("input from the user", error.Message);
+        Assert.Contains("keyboard or mouse input", error.Message);
     }
 
     [Fact]
@@ -30,7 +30,7 @@ public sealed class InteractionRefusalTests
 
         var error = Assert.Throws<InputRefusedException>(interaction.Require);
 
-        Assert.Equal("approval_required", error.Refusal.Code);
+        Assert.Equal("approval-required", error.Refusal.Code);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public sealed class InteractionRefusalTests
         input++;
         Assert.Throws<InputRefusedException>(interaction.Require);
 
-        Assert.Equal("focus_revoked", Assert.Throws<InputRefusedException>(interaction.Require).Refusal.Code);
+        Assert.Equal("focus-revoked", Assert.Throws<InputRefusedException>(interaction.Require).Refusal.Code);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class InteractionRefusalTests
 
         var outcome = CoreFailure.Reply(error, inputsSent: 2);
 
-        Assert.Equal("focus_revoked", outcome.Failure?.Code);
+        Assert.Equal("focus-revoked", outcome.Failure?.Code);
         Assert.Equal(2, outcome.InputsSent);
     }
 }

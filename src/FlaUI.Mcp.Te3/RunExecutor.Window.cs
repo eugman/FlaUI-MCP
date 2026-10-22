@@ -44,7 +44,7 @@ public static partial class RunExecutor
     /// </summary>
     internal static Process LaunchTe3(RunManifest manifest, Action save, ProcessStartInfo start)
     {
-        RunGrant.RequireInstalled();
+        MutationGuard.CheckPermission();
         return RunJournal.Launch(manifest, save, start, GuardedDesktop.StartProcess);
     }
 
@@ -64,10 +64,11 @@ public static partial class RunExecutor
         var target = host.Sessions.GetInputTarget(handle);
         var activation = Stopwatch.StartNew();
         var waited = Win32Desktop.GetForegroundWindow() != target.Hwnd;
-        // The user's keys and clicks when asked: only a click may bring TE3 forward (Te3Interaction.Rebaseline).
-        var prompt = waited ? interaction.Mark() : null;
+        // Core's prompt flow: the grant holds input and keeps the user's counts from here; only a click inside TE3,
+        // and no typing, may bring it forward (Te3Interaction.Rebaseline at the first poll that sees it in front).
         if (waited)
         {
+            interaction.BeginPrompt();
             Console.WriteLine(
                 $"Click the TE3 window containing {label}; waiting 120 seconds. Then leave the keyboard and mouse "
                     + "alone: input after that click stops the run."
@@ -88,7 +89,12 @@ public static partial class RunExecutor
 
         if (waited)
         {
-            interaction.Rebaseline(prompt, Win32Desktop.GetWindowBounds(target.Hwnd));
+            interaction.Rebaseline(
+                Win32Desktop.GetWindowBounds(target.Hwnd)
+                    ?? throw new InvalidOperationException(
+                        "The run's TE3 window has no bounds to check the click against."
+                    )
+            );
         }
     }
 
@@ -100,7 +106,7 @@ public static partial class RunExecutor
     /// </summary>
     internal static Task FocusOwnedWindow(AutomationHost host, string handle, string journal, InputTally inputs)
     {
-        RunGrant.RequireInstalled();
+        MutationGuard.CheckPermission();
         if (host.Pending.TryGetPending(host.Sessions.GetInputTarget(handle).ProcessId, out var held))
         {
             throw new ProviderBlockedException(held);

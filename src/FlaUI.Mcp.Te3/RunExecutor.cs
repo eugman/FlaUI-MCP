@@ -288,7 +288,7 @@ public static partial class RunExecutor
         {
             cancellationToken.ThrowIfCancellationRequested();
             RunSafety.RequireExclusiveTe3(manifest.ProcessId);
-            RunGrant.RequireInstalled();
+            MutationGuard.CheckPermission();
             await inputs.Invoke(
                 () =>
                     RunJournal.Tool(

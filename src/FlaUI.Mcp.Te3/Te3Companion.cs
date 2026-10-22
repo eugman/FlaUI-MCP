@@ -11,7 +11,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
     public static readonly string[] Names = [Navigate, ModelState];
 
     // Never approved when none is passed, so a tool built without one refuses input.
-    private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
+    private readonly Te3Interaction grant = interaction ?? Te3Interaction.Refusing();
 
     public override string Name => name;
 

@@ -273,7 +273,7 @@ public sealed class LayoutEntryTests : IDisposable
 
         Assert.Equal(true, failed.IsError);
         Assert.Equal(true, refused.IsError);
-        Assert.Equal("paused_after_failure", refused.Outcome?.Failure?.Code);
+        Assert.Equal("paused-after-failure", refused.Outcome?.Failure?.Code);
         Assert.Empty(surface!.Presses);
 
         Assert.NotEqual(true, (await read.ExecuteAsync(Args(new { action = "list" }))).IsError);

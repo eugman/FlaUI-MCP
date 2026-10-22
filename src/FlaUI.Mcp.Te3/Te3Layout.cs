@@ -33,7 +33,7 @@ public sealed partial class Te3Layout(
     private const int MaxCloses = 30;
 
     // Never approved when none is passed, so a tool built without one refuses input.
-    private readonly Te3Interaction grant = interaction ?? new Te3Interaction(() => 0);
+    private readonly Te3Interaction grant = interaction ?? Te3Interaction.Refusing();
 
     public override string Name => readOnly ? ReadToolName : ToolName;
 

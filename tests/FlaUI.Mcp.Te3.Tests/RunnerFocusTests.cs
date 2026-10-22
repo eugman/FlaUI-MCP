@@ -47,16 +47,18 @@ public sealed class RunnerFocusTests : IDisposable
     [Fact]
     public async Task FocusingTheRunsWindowWithoutTheRunsGrantSendsNothing()
     {
-        // Core's hook allows everything while nothing sets it, so the run checks for its own grant first.
+        // Without its grant on this flow the run refuses before journaling, as Core does for a host that requires a hook.
         using var host = new AutomationHost(ProcessPolicy.AllowAll);
         using var form = new System.Windows.Forms.Form();
         var handle = host.Sessions.RegisterNativeWindow(form.Handle, Environment.ProcessId);
         var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd };
         var inputs = new InputTally();
+        // The run is an interactive host: constructing its grant declares that, here without one installed.
+        using var interactive = MutationGuard.RequireHook();
 
         using (desktop.Install())
         {
-            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            var error = await Assert.ThrowsAsync<InputRefusedException>(() =>
                 RunExecutor.FocusOwnedWindow(host, handle, journal, inputs)
             );
             Assert.Contains("grant", error.Message);
@@ -84,7 +86,7 @@ public sealed class RunnerFocusTests : IDisposable
             var error = await Assert.ThrowsAnyAsync<Exception>(() =>
                 RunExecutor.FocusOwnedWindow(host, handle, journal, inputs)
             );
-            Assert.Contains("input from the user", error.ToString());
+            Assert.Contains("keyboard or mouse input", error.ToString());
         }
 
         Assert.Equal(0, desktop.FocusRequests);
@@ -141,10 +143,11 @@ public sealed class RunnerFocusTests : IDisposable
         var manifest = new RunManifest();
         var desktop = new FakeDesktop();
         var start = new System.Diagnostics.ProcessStartInfo("TabularEditor3.exe");
+        using var interactive = MutationGuard.RequireHook();
 
         using (desktop.Install())
         {
-            Assert.Throws<InvalidOperationException>(() => RunExecutor.LaunchTe3(manifest, () => { }, start));
+            Assert.Throws<InputRefusedException>(() => RunExecutor.LaunchTe3(manifest, () => { }, start));
             Assert.Equal(0, desktop.StartRequests);
 
             using var interaction = Approved();
@@ -192,11 +195,11 @@ public sealed class RunnerFocusTests : IDisposable
         // counts input from it; any input after it still stops the run.
         var (interaction, user) = Observed();
         using var _ = interaction;
-        var prompt = interaction.Mark();
+        interaction.BeginPrompt();
         user.Moves++;
         user.ButtonDowns++;
 
-        interaction.Rebaseline(prompt, Te3Window);
+        interaction.Rebaseline(Te3Window);
         interaction.Require();
 
         user.Moves++;
@@ -213,11 +216,11 @@ public sealed class RunnerFocusTests : IDisposable
         // happened too. Every key went somewhere the run cannot see, so the run must not carry on.
         var (interaction, user) = Observed();
         using var _ = interaction;
-        var prompt = interaction.Mark();
+        interaction.BeginPrompt();
         user.Keys += 40;
         user.ButtonDowns++;
 
-        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt, Te3Window));
+        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(Te3Window));
 
         Assert.Equal(Te3Interaction.ActivationDenied, error.Refusal.Code);
         Assert.Contains("keyboard", error.Message);
@@ -230,14 +233,14 @@ public sealed class RunnerFocusTests : IDisposable
         // The user clicked their own window on a second monitor; TE3 then came forward when that window closed.
         var (interaction, user) = Observed();
         using var _ = interaction;
-        var prompt = interaction.Mark();
+        interaction.BeginPrompt();
         user.ButtonDowns++;
         user.LastButtonDown = new System.Drawing.Point(2500, 300);
 
-        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt, Te3Window));
+        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(Te3Window));
 
         Assert.Equal(Te3Interaction.ActivationDenied, error.Refusal.Code);
-        Assert.Contains("not inside the TE3 window", error.Message);
+        Assert.Contains("not inside the window", error.Message);
     }
 
     [Fact]
@@ -246,10 +249,10 @@ public sealed class RunnerFocusTests : IDisposable
         // A late foreground grant, or the user's own window closing, brought TE3 forward: nobody clicked it.
         var (interaction, user) = Observed();
         using var _ = interaction;
-        var prompt = interaction.Mark();
+        interaction.BeginPrompt();
         user.Moves += 5;
 
-        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt, Te3Window));
+        var error = Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(Te3Window));
 
         Assert.Equal(Te3Interaction.ActivationDenied, error.Refusal.Code);
         Assert.Contains("without a click", error.Message);
@@ -260,7 +263,10 @@ public sealed class RunnerFocusTests : IDisposable
     {
         using var interaction = Approved();
 
-        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(interaction.Mark(), Te3Window));
+        Assert.Equal(
+            Te3Interaction.ActivationDenied,
+            Assert.Throws<InputRefusedException>(interaction.BeginPrompt).Refusal.Code
+        );
     }
 
     [Fact]
@@ -268,22 +274,11 @@ public sealed class RunnerFocusTests : IDisposable
     {
         var (interaction, user) = Observed();
         using var _ = interaction;
-        var prompt = interaction.Mark();
         user.Keys++;
         Assert.Throws<InputRefusedException>(interaction.Require);
         user.ButtonDowns++;
 
-        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(prompt, Te3Window));
+        Assert.Throws<InputRefusedException>(interaction.BeginPrompt);
+        Assert.Throws<InputRefusedException>(() => interaction.Rebaseline(Te3Window));
     }
-
-    [Theory]
-    [InlineData(0x0201, true)] // WM_LBUTTONDOWN
-    [InlineData(0x0204, true)] // WM_RBUTTONDOWN
-    [InlineData(0x0207, true)] // WM_MBUTTONDOWN
-    [InlineData(0x020B, true)] // WM_XBUTTONDOWN
-    [InlineData(0x0200, false)] // WM_MOUSEMOVE
-    [InlineData(0x0202, false)] // WM_LBUTTONUP
-    [InlineData(0x020A, false)] // WM_MOUSEWHEEL
-    public void OnlyAButtonGoingDownCountsAsAClick(int message, bool down) =>
-        Assert.Equal(down, PhysicalInputObserver.IsButtonDown(message));
 }

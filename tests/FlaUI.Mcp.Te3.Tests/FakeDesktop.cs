@@ -8,7 +8,7 @@ namespace FlaUI.Mcp.Te3.Tests;
 /// A desktop with one target window (this process) and one other window. Input is counted, never sent. Install it
 /// for the duration of a test; it applies to the installing flow and the tasks it starts.
 /// </summary>
-internal sealed class FakeDesktop : InputDesktop
+internal sealed partial class FakeDesktop : InputDesktop
 {
     public const nint TargetHwnd = 100;
     public const nint OtherHwnd = 900;

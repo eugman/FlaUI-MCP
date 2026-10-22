@@ -1,219 +1,91 @@
+using System.Drawing;
 using FlaUI.Mcp.Core;
 
 /// <summary>
-/// The user's consent for the TE3 tools that take the desktop: an in-memory grant for one described batch.
-/// The user's own keyboard or mouse input revokes it, so they take the machine back by using it. Never serialized.
+/// The user's consent for the TE3 tools that take the desktop, on Core's <see cref="InteractionGrant"/>: an
+/// in-memory grant for one described batch that the user's own keyboard or mouse input revokes. TE3 adds a grant
+/// that never approves (the tools built without one) and keeps its own names for the grant's refusal codes.
 /// </summary>
 public sealed class Te3Interaction : IDisposable
 {
-    private readonly object sync = new();
-    private readonly Func<long>? physicalInput;
-    private readonly Func<IInputObserver>? createObserver;
-    private IInputObserver? observer;
-    private long inputAtApproval;
-    private string? batch;
-    private string reason = "the user has not approved a batch.";
-    private string code = ApprovalRequired;
-
     /// <summary>The refusal code when no batch was approved, or it ended.</summary>
-    public const string ApprovalRequired = "approval_required";
+    public const string ApprovalRequired = InteractionGrant.ApprovalRequired;
 
     /// <summary>The refusal code once the user's own input revoked the batch.</summary>
-    public const string FocusRevoked = "focus_revoked";
+    public const string FocusRevoked = InteractionGrant.FocusRevoked;
 
     /// <summary>The refusal code while an earlier call's failure after input has not been looked at.</summary>
-    public const string PausedAfterFailure = "paused_after_failure";
-
-    private string? paused;
+    public const string PausedAfterFailure = InteractionGrant.PausedAfterFailure;
 
     /// <summary>The refusal code when the run's TE3 came to the front by anything but the user's click on it.</summary>
-    public const string ActivationDenied = "activation_denied";
+    public const string ActivationDenied = RefusalCodes.ActivationDenied;
 
-    /// <param name="physicalInput">Counts non-injected input; null hooks the real keyboard and mouse once a batch begins.</param>
-    public Te3Interaction(Func<long>? physicalInput = null)
+    // Null for a grant that never approves: the tools built without one refuse input and declare nothing.
+    private readonly InteractionGrant? grant;
+
+    /// <param name="physicalInput">
+    /// Counts non-injected input; null hooks the real keyboard and mouse once a batch begins. An injected count
+    /// scripts the desktop too, so the foreground then always reads as available.
+    /// </param>
+    public Te3Interaction(Func<long>? physicalInput = null) =>
+        grant = physicalInput == null ? new InteractionGrant() : new(Scripted, physicalInput);
+
+    /// <param name="createObserver">Starts an observer once a batch begins (scripted foreground, as above).</param>
+    internal Te3Interaction(Func<IInputObserver> createObserver) =>
+        grant = new InteractionGrant(Scripted, createObserver: createObserver);
+
+    private Te3Interaction(InteractionGrant? grant) => this.grant = grant;
+
+    /// <summary>A grant that never approves, for a tool built without one.</summary>
+    public static Te3Interaction Refusing() => new((InteractionGrant?)null);
+
+    private static (nint Window, int Pid) Scripted() => (1, Environment.ProcessId);
+
+    public bool Active => grant?.Active ?? false;
+
+    public void Begin(string description, bool userApproved) =>
+        (grant ?? throw new InvalidOperationException("This tool was built without a grant.")).Begin(
+            description,
+            userApproved
+        );
+
+    public void End(string why = "Batch finished") => grant?.End(why);
+
+    /// <summary>
+    /// Throws Core's typed refusal unless a batch is approved, unpaused, and the user has not touched the machine
+    /// since; the message adds which TE3 tool lifts it.
+    /// </summary>
+    public void Require()
     {
-        this.physicalInput = physicalInput;
-        createObserver = physicalInput == null ? () => new PhysicalInputObserver() : null;
-    }
-
-    /// <param name="createObserver">Starts an observer once a batch begins.</param>
-    internal Te3Interaction(Func<IInputObserver> createObserver) => this.createObserver = createObserver;
-
-    public bool Active
-    {
-        get
+        if (grant == null)
         {
-            lock (sync)
-            {
-                return batch != null;
-            }
-        }
-    }
-
-    public void Begin(string description, bool userApproved)
-    {
-        if (!userApproved || string.IsNullOrWhiteSpace(description))
-        {
-            throw new ArgumentException(
-                "Ask the user to clear the machine for a described batch, then begin it with userApproved."
+            throw InputRefusedException.Record(
+                new InputRefusal(ApprovalRequired, "This tool was built without a grant; no input sent.")
+                {
+                    ActionDispatched = false,
+                }
             );
         }
 
-        lock (sync)
-        {
-            if (batch != null)
-            {
-                throw new InvalidOperationException("End the current batch before beginning another.");
-            }
-
-            if (createObserver != null)
-            {
-                observer = Live(observer) ?? createObserver();
-            }
-
-            inputAtApproval = InputSequence();
-            batch = description;
-            reason = "approved.";
-            code = ApprovalRequired;
-        }
-    }
-
-    public void End(string why = "the batch ended.")
-    {
-        lock (sync)
-        {
-            batch = null;
-            reason = why;
-            code = ApprovalRequired;
-        }
-    }
-
-    /// <summary>Throws unless a batch is approved and the user has not touched the keyboard or mouse since.</summary>
-    public void Require()
-    {
-        lock (sync)
-        {
-            if (batch != null && UserInputSinceApproval())
-            {
-                batch = null;
-                reason = "keyboard or mouse input from the user was observed; ask them before resuming.";
-                code = FocusRevoked;
-            }
-
-            if (batch == null)
-            {
-                throw Refusal(
-                    code,
-                    $"Desktop input needs the user's approval: {reason} Ask the user, then call {Te3InteractionTool.Begin}."
-                );
-            }
-
-            if (paused != null)
-            {
-                throw Refusal(
-                    PausedAfterFailure,
-                    $"Desktop input is paused: {paused}. Observe TE3 with te3_layout_read list or te3_model_state, "
-                        + "then retry."
-                );
-            }
-        }
-    }
-
-    /// <summary>The user's keys and clicks now, read when the run asks them to click TE3; null without an observer.</summary>
-    internal InputCounts? Mark()
-    {
-        lock (sync)
-        {
-            return observer?.Counts;
-        }
-    }
-
-    /// <summary>
-    /// After the run asked the user to click TE3 (Windows refused to focus it) and TE3 came to the front: counts input
-    /// from now on, keeping the batch, only when that was a click. Any keyboard input since <paramref name="prompt"/>
-    /// went to some other window, and with no button-down, or with the last one outside TE3's window, TE3 came forward
-    /// on its own (a late foreground grant, the user's window closing); each revokes the batch with activation_denied.
-    /// The run checks the foreground every 250 ms, so "since the prompt" ends at the poll that first saw TE3 in front:
-    /// input in that last quarter second, after the click, is taken as part of it. The click is checked by position, not
-    /// hit-tested: a click on a window overlapping TE3's rectangle is accepted (KNOWN-ISSUES; a hit test waits for the
-    /// Core rebase). A revoked grant stays revoked.
-    /// </summary>
-    /// <param name="te3">The TE3 window's screen bounds now; the click must have landed inside them.</param>
-    internal void Rebaseline(InputCounts? prompt, System.Drawing.Rectangle? te3)
-    {
-        lock (sync)
-        {
-            if (batch == null)
-            {
-                throw Refusal(code, $"No batch to continue: {reason}");
-            }
-
-            var why = ActivationProblem(prompt, te3);
-            if (why != null)
-            {
-                batch = null;
-                reason = why;
-                code = ActivationDenied;
-                throw Refusal(code, $"TE3 activation not accepted: {why} Ask the user before resuming.");
-            }
-
-            inputAtApproval = InputSequence();
-        }
-    }
-
-    private string? ActivationProblem(InputCounts? prompt, System.Drawing.Rectangle? te3)
-    {
-        InputCounts now;
         try
         {
-            now = observer?.Counts ?? throw new InvalidOperationException("no observer");
+            grant.Require();
         }
-        catch (InvalidOperationException)
+        catch (InputRefusedException refusal)
         {
-            return "the input observer cannot tell a click from typing.";
-        }
-
-        if (prompt is not { } before)
-        {
-            return "no input count was taken when the user was asked to click TE3.";
-        }
-
-        if (now.Keys != before.Keys)
-        {
-            return "keyboard input from the user was observed while the run waited, so it went to another window.";
-        }
-
-        if (now.ButtonDowns == before.ButtonDowns)
-        {
-            return "TE3 came to the front without a click from the user.";
-        }
-
-        return te3 is { } bounds && now.LastButtonDown is { } point && bounds.Contains(point)
-            ? null
-            : "the last click was not inside the TE3 window, so something else brought it to the front.";
-    }
-
-    /// <summary>Refuses input until <see cref="Observed"/>: a call failed after sending input.</summary>
-    internal void Pause(string why)
-    {
-        lock (sync)
-        {
-            paused = why;
+            throw InputRefusedException.Record(
+                refusal.Refusal with
+                {
+                    Message = refusal.Message.TrimEnd('.') + "." + Hint(refusal.Code),
+                }
+            );
         }
     }
 
-    /// <summary>A read of TE3 succeeded, so its state after the failure has been seen; input may resume.</summary>
-    internal void Observed()
-    {
-        lock (sync)
-        {
-            paused = null;
-        }
-    }
-
-    // A typed refusal, noted on the running operation so Core's outcome carries the code; it sent nothing itself.
-    private static InputRefusedException Refusal(string code, string message) =>
-        InputRefusedException.Record(new InputRefusal(code, message) { ActionDispatched = false });
+    private static string Hint(string code) =>
+        code == PausedAfterFailure
+            ? " Observe TE3 with te3_layout_read list or te3_model_state, then retry."
+            : $" Ask the user, then call {Te3InteractionTool.Begin}.";
 
     /// <summary>Requires the grant now and before every input the core tools send, until disposed.</summary>
     public IDisposable Guard()
@@ -229,44 +101,26 @@ public sealed class Te3Interaction : IDisposable
         public void Dispose() => MutationGuard.BeforeMutation.Value = previous;
     }
 
-    private bool UserInputSinceApproval()
-    {
-        try
-        {
-            return InputSequence() != inputAtApproval;
-        }
-        catch (InvalidOperationException)
-        {
-            // An observer that stopped cannot vouch that the user is away.
-            return true;
-        }
-    }
+    /// <summary>Refuses input until <see cref="Observed"/>: a call failed after sending input.</summary>
+    internal void Pause(string why) => grant?.Pause(why);
 
-    // An observer that can no longer vouch for the user's input is replaced, never reused.
-    private static IInputObserver? Live(IInputObserver? current)
-    {
-        if (current == null)
-        {
-            return null;
-        }
+    /// <summary>A read of TE3 succeeded, so its state after the failure has been seen; input may resume.</summary>
+    internal void Observed() => grant?.Observed();
 
-        try
-        {
-            _ = current.Sequence;
-            return current;
-        }
-        catch (InvalidOperationException)
-        {
-            current.Dispose();
-            return null;
-        }
-    }
+    /// <summary>
+    /// The run asks the user to click its TE3 (Windows refused to focus it): Core's grant holds input and keeps the
+    /// prompt's counts until <see cref="Rebaseline"/> judges the click.
+    /// </summary>
+    internal void BeginPrompt() =>
+        (grant ?? throw new InvalidOperationException("This tool was built without a grant.")).BeginPrompt();
 
-    private long InputSequence() => physicalInput?.Invoke() ?? observer?.Sequence ?? 0;
+    /// <summary>
+    /// At the first foreground poll (every 250 ms) that sees TE3 in front: continues only when, since the prompt, a
+    /// click and no typing came and the last click was inside <paramref name="bounds"/>; otherwise revokes with
+    /// activation-denied. See <see cref="InteractionGrant.Rebaseline"/>.
+    /// </summary>
+    internal void Rebaseline(Rectangle bounds) =>
+        (grant ?? throw new InvalidOperationException("This tool was built without a grant.")).Rebaseline(bounds);
 
-    public void Dispose()
-    {
-        End("the host stopped.");
-        observer?.Dispose();
-    }
+    public void Dispose() => grant?.Dispose();
 }

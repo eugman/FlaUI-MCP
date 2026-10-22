@@ -129,23 +129,4 @@ public sealed class RunGrantTests : IDisposable
         Assert.Equal(Te3Interaction.ApprovalRequired, error.Refusal.Code);
         Assert.Empty(Directory.GetDirectories(root));
     }
-
-    [Theory]
-    // Keyboard: LLKHF_INJECTED 0x10 and LLKHF_LOWER_IL_INJECTED 0x02; 0x01 (extended) and 0x20 (alt) are physical keys.
-    [InlineData(true, 0x00u, true)]
-    [InlineData(true, 0x01u, true)]
-    [InlineData(true, 0x20u, true)]
-    [InlineData(true, 0x80u, true)]
-    [InlineData(true, 0x02u, false)]
-    [InlineData(true, 0x10u, false)]
-    [InlineData(true, 0x12u, false)]
-    [InlineData(true, 0x11u, false)]
-    // Mouse: LLMHF_INJECTED 0x01 and LLMHF_LOWER_IL_INJECTED 0x02; 0x10 means nothing for the mouse.
-    [InlineData(false, 0x00u, true)]
-    [InlineData(false, 0x10u, true)]
-    [InlineData(false, 0x01u, false)]
-    [InlineData(false, 0x02u, false)]
-    [InlineData(false, 0x03u, false)]
-    public void OnlyInputWithoutAnInjectedFlagCountsAsTheUsers(bool keyboard, uint flags, bool physical) =>
-        Assert.Equal(physical, PhysicalInputObserver.IsPhysical(keyboard, flags));
 }

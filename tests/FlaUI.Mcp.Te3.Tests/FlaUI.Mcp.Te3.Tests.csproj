@@ -16,6 +16,16 @@
     <ProjectReference Include="../../src/FlaUI.Mcp.Te3/FlaUI.Mcp.Te3.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Core's fake desktop, linked (not copied) so it stays Core's; the contract tests below run on it. -->
+    <Compile Include="../FlaUI.Mcp.Tests/FakeDesktop.cs" Link="Core/FakeDesktop.cs" />
+    <!-- Core's contract tests of the shared guard, refusals, proofs and the required hook, run in this host too. -->
+    <Compile
+      Include="../FlaUI.Mcp.Tests/Contract/*.cs"
+      Link="Core/Contract/%(Filename)%(Extension)"
+    />
+  </ItemGroup>
+
   <ItemGroup Condition="Exists('$(LocalTests)')">
     <Compile Include="$(LocalTests)**/*.cs" Link="local/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>

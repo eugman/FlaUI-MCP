@@ -45,7 +45,6 @@
       "**/PlacementReadBack.cs",
       "**/NavigationRetry.cs",
       "**/DialogCancel.cs",
-      "**/PhysicalInputObserver.cs",
       "**/Backlog.cs",
       "**/InputTally.cs",
       "**/CoreCallException.cs",

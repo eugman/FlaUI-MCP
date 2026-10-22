@@ -38,11 +38,22 @@ public sealed class OfflineDesktopTests
     }
 
     [Fact]
+    public void TheTestsTakeAnInputLeaseOfTheirOwnProcessNotTheMachinesOne()
+    {
+        // Core's lease is machine-wide (Global\FlaUI-MCP-DesktopInput); the offline tests must neither wait on nor
+        // block a host driving the desktop, so they use a name of their own process (honoured offline only).
+        var name = Environment.GetEnvironmentVariable(DesktopLease.NameVariable);
+
+        Assert.NotNull(name);
+        Assert.StartsWith(@"Local\", name);
+        Assert.EndsWith(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture), name);
+    }
+
+    [Fact]
     public void TheFakeDesktopOverridesEveryDesktopCallCoreCanMake()
     {
-        // A desktop call the fake does not override falls through to the real desktop. Core's next release adds
-        // ElementAt, ParentOf, SameElement, TopLevelWindows, Monitors, MovePointer, FocusedControl, ClipboardText and
-        // CaptureWindow: this fails at that rebase until FakeDesktop overrides each one.
+        // A desktop call the fake does not override falls through to the real desktop, so a Core release that adds
+        // an InputDesktop virtual fails here until FakeDesktop (or FakeDesktop.Reads.cs) overrides it.
         var missing = typeof(InputDesktop)
             .GetMethods(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
             .Where(m => m.IsVirtual && !m.IsFinal && m.DeclaringType == typeof(InputDesktop))

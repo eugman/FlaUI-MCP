@@ -3,19 +3,35 @@ using FlaUI.Mcp.Core;
 using Xunit;
 
 /// <summary>The consent grant the TE3 desktop tools require; physical input is simulated, nothing is hooked.</summary>
-public sealed class InteractionTests
+public sealed class InteractionTests : IDisposable
 {
+    private readonly List<Te3Interaction> grants = [];
     private long input;
 
-    private Te3Interaction Grant() => new(() => input);
+    // Each grant declares the host interactive until disposed (Core's MutationGuard.HookRequired), so every grant a
+    // test hands to a tool is disposed with the test; a leaked one would refuse the next test's hookless input.
+    private Te3Interaction Grant()
+    {
+        var grant = new Te3Interaction(() => input);
+        grants.Add(grant);
+        return grant;
+    }
+
+    public void Dispose()
+    {
+        foreach (var grant in grants)
+        {
+            grant.Dispose();
+        }
+    }
 
     [Fact]
     public void InputIsRefusedUntilTheUserApprovesABatch()
     {
         using var interaction = Grant();
-        var error = Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
+        var error = Assert.Throws<InputRefusedException>(interaction.Require);
         Assert.Contains(Te3InteractionTool.Begin, error.Message);
-        Assert.Contains("has not approved a batch", error.Message);
+        Assert.Contains("has not approved an interactive batch", error.Message);
         var refusal = Assert.Throws<ArgumentException>(() =>
             interaction.Begin("Open Preferences", userApproved: false)
         );
@@ -33,11 +49,11 @@ public sealed class InteractionTests
 
         input++;
 
-        var error = Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
+        var error = Assert.Throws<InputRefusedException>(interaction.Require);
         Assert.Contains("keyboard or mouse", error.Message);
         Assert.False(interaction.Active);
         // Revoked for good: the count settling again does not bring it back.
-        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
+        Assert.Throws<InputRefusedException>(interaction.Require);
     }
 
     [Fact]
@@ -46,7 +62,7 @@ public sealed class InteractionTests
         using var interaction = Grant();
         interaction.Begin("Open Preferences", userApproved: true);
         interaction.End();
-        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
+        Assert.Throws<InputRefusedException>(interaction.Require);
         interaction.Begin("Open TOM Explorer", userApproved: true);
         Assert.True(interaction.Active);
     }
@@ -123,7 +139,7 @@ public sealed class InteractionTests
 
         await new Te3InteractionTool(interaction, Te3InteractionTool.End).ExecuteAsync(null);
         Assert.False(interaction.Active);
-        var error = Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
+        var error = Assert.Throws<InputRefusedException>(interaction.Require);
         Assert.Contains("ended by te3_interaction_end.", error.Message);
     }
 
@@ -161,7 +177,7 @@ public sealed class InteractionTests
 
         stopped = true;
 
-        Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
+        Assert.Throws<InputRefusedException>(interaction.Require);
         Assert.False(interaction.Active);
     }
 
@@ -188,8 +204,8 @@ public sealed class InteractionTests
         interaction.Dispose();
 
         Assert.False(interaction.Active);
-        var error = Assert.ThrowsAny<InvalidOperationException>(interaction.Require);
-        Assert.Contains("the host stopped", error.Message);
+        var error = Assert.Throws<InputRefusedException>(interaction.Require);
+        Assert.Contains("Host stopped", error.Message);
     }
 
     // The test process's own id is never TE3, so each call stops at attach and nothing reaches the desktop.
