@@ -34,12 +34,12 @@ public sealed class ActivationContractTests
     {
         var (grant, input) = Begun();
         using var _ = grant;
-        var prompt = grant.BeginPrompt();
+        grant.BeginPrompt();
         input.Counts = new InputCounts(0, 1, new Point(400, 300));
         grant.Observe();
         Assert.True(grant.Active);
 
-        grant.Rebaseline(prompt, Window);
+        grant.Rebaseline(Window);
 
         grant.Require();
     }
@@ -58,10 +58,10 @@ public sealed class ActivationContractTests
     {
         var (grant, input) = Begun();
         using var _ = grant;
-        var prompt = grant.BeginPrompt();
+        grant.BeginPrompt();
         input.Counts = new InputCounts(keys, clicks, new Point(x, y));
 
-        var error = Assert.Throws<InputRefusedException>(() => grant.Rebaseline(prompt, Window));
+        var error = Assert.Throws<InputRefusedException>(() => grant.Rebaseline(Window));
 
         Assert.Equal(RefusalCodes.ActivationDenied, error.Refusal.Code);
         Assert.Contains(reason, error.Message);
@@ -73,11 +73,11 @@ public sealed class ActivationContractTests
     {
         var (grant, input) = Begun();
         using var _ = grant;
-        var prompt = grant.BeginPrompt();
+        grant.BeginPrompt();
         input.Counts = new InputCounts(1, 0, null);
-        Assert.Throws<InputRefusedException>(() => grant.Rebaseline(prompt, Window));
+        Assert.Throws<InputRefusedException>(() => grant.Rebaseline(Window));
 
-        Assert.Throws<InputRefusedException>(() => grant.Rebaseline(prompt, Window));
+        Assert.Throws<InputRefusedException>(() => grant.Rebaseline(Window));
         Assert.Equal(RefusalCodes.ActivationDenied, Assert.Throws<InputRefusedException>(grant.Require).Refusal.Code);
     }
 
@@ -159,5 +159,56 @@ public sealed class ActivationContractTests
 
         Assert.False(MutationGuard.HookRequired);
         Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void ARebaselineWithNoOpenPromptIsRefused()
+    {
+        var (grant, _) = Begun();
+        using var __ = grant;
+
+        Assert.Throws<InputRefusedException>(() => grant.Rebaseline(Window));
+        Assert.True(grant.Active);
+    }
+
+    [Fact]
+    public void ARebaselineAfterThePromptExpiredRevokes()
+    {
+        long now = 0;
+        var (grant, input) = Begun(() => now);
+        using var _ = grant;
+        grant.BeginPrompt(TimeSpan.FromSeconds(1));
+        input.Counts = new InputCounts(0, 1, new Point(400, 300));
+        now = 1_001;
+
+        var error = Assert.Throws<InputRefusedException>(() => grant.Rebaseline(Window));
+
+        Assert.Equal(RefusalCodes.ActivationDenied, error.Refusal.Code);
+        Assert.False(grant.Active);
+    }
+
+    [Fact]
+    public void ASecondPromptWhileOneIsOpenIsRefused()
+    {
+        var (grant, _) = Begun();
+        using var __ = grant;
+        grant.BeginPrompt();
+
+        Assert.Equal(
+            InteractionGrant.ActivationPending,
+            Assert.Throws<InputRefusedException>(() => grant.BeginPrompt()).Refusal.Code
+        );
+    }
+
+    [Fact]
+    public void ALaunchIsRefusedWhileAPromptIsOpen()
+    {
+        var (grant, _) = Begun();
+        using var __ = grant;
+        grant.BeginPrompt();
+        var launched = false;
+
+        Assert.Throws<InputRefusedException>(() => grant.Launch(() => launched = true, _ => 1));
+        Assert.False(launched);
     }
 }

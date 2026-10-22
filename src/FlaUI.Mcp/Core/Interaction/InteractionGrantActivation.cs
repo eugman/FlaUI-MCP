@@ -5,26 +5,32 @@ namespace FlaUI.Mcp.Core;
 /// <summary>
 /// The prompt flow: Windows refused to bring the host's window forward, so the host asks the user to click it. The
 /// grant holds its decision while the user is asked, then continues only if a click, and nothing else, landed in
-/// the host's window.
+/// the host's window. The grant keeps the prompt's starting counts itself, so a host cannot move the baseline back.
 /// </summary>
 public sealed partial class InteractionGrant
 {
     public static readonly TimeSpan DefaultPromptWindow = TimeSpan.FromSeconds(120);
 
     private long? promptUntil;
+    private InputCounts promptCounts;
 
     /// <summary>
-    /// Start asking the user to click the host's window: input is refused, and the user's input does not revoke the
-    /// grant, until <see cref="Rebaseline"/> judges it or <paramref name="window"/> (120 s by default) runs out,
-    /// which revokes it with activation-denied. Returns the counts to pass to <see cref="Rebaseline"/>.
+    /// Start asking the user to click the host's window: input and launches are refused, and the user's input does
+    /// not revoke the grant, until <see cref="Rebaseline"/> judges it or <paramref name="window"/> (120 s by default)
+    /// runs out, which revokes it with activation-denied. Refused while a prompt is already open.
     /// </summary>
-    public InputCounts BeginPrompt(TimeSpan? window = null)
+    public void BeginPrompt(TimeSpan? window = null)
     {
         lock (sync)
         {
             if (Batch == null)
             {
                 throw Refused(code, "Interaction approval required: " + Reason);
+            }
+
+            if (promptUntil != null)
+            {
+                throw Refused(ActivationPending, "A click prompt is already open; judge it with Rebaseline first.");
             }
 
             if ((counts?.Invoke() ?? inputObserver?.Counts) is not { } mark)
@@ -35,19 +41,19 @@ public sealed partial class InteractionGrant
                 );
             }
 
+            promptCounts = mark;
             promptUntil = clock() + (long)(window ?? DefaultPromptWindow).TotalMilliseconds;
-            return mark;
         }
     }
 
     /// <summary>
-    /// Call at the first foreground poll (every 250 ms or so) that sees the host's window in front after
-    /// <see cref="BeginPrompt"/>. Keeps the batch, counting input from now on, only when since
-    /// <paramref name="prompt"/> there was no keyboard input, at least one button-down, and the last one inside
-    /// <paramref name="bounds"/>; otherwise revokes it with activation-denied. Decided atomically under the grant's
-    /// lock; a revoked grant stays revoked until a new batch.
+    /// Call at the first foreground poll (every 250 ms) that sees the host's window, <paramref name="bounds"/>, in
+    /// front after <see cref="BeginPrompt"/>. Keeps the batch, counting input from now on, only when since the prompt
+    /// began there was no keyboard input, at least one button-down, and the last one inside the window; otherwise,
+    /// or once the prompt has expired, revokes it with activation-denied. Decided atomically under the grant's lock;
+    /// refused when no prompt is open; a revoked grant stays revoked until a new batch.
     /// </summary>
-    public void Rebaseline(InputCounts prompt, Rectangle bounds)
+    public void Rebaseline(Rectangle bounds)
     {
         CancellationTokenSource cancel,
             cancelSafety;
@@ -59,7 +65,15 @@ public sealed partial class InteractionGrant
                 throw Refused(code, "Interaction approval required: " + Reason);
             }
 
-            problem = ActivationProblem(prompt, bounds);
+            if (promptUntil is not { } until)
+            {
+                throw Refused(RefusalCodes.ActivationDenied, "No click prompt is open; call BeginPrompt first.");
+            }
+
+            problem =
+                clock() > until
+                    ? "the user did not click the window before the prompt ended"
+                    : ActivationProblem(promptCounts, bounds);
             promptUntil = null;
             if (problem == null)
             {

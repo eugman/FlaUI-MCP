@@ -214,6 +214,15 @@ public sealed partial class InteractionGrant : IDisposable
                 throw Refused(ApprovalRequired, "Approval revoked.");
             }
 
+            // Checked under the lock: a prompt that opened after Require must still stop the launch.
+            if (promptUntil != null)
+            {
+                throw Refused(
+                    ActivationPending,
+                    "The user is being asked to click the window; no launch until they have."
+                );
+            }
+
             result = launch();
             targets.Add(processId(result));
         }

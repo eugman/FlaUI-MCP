@@ -218,11 +218,6 @@ public sealed class BatchTool : ToolBase
             };
         }
 
-        /// <summary>
-        /// The numbered trace as text, and the structured outcome beside it. A step that fails after completed ones
-        /// makes the batch partial: earlier input reached the app. IsError mirrors status: failed, so a client
-        /// that reads only isError does not take a failed batch for a successful one.
-        /// </summary>
         // Failed wins; a step that could not check its effect makes the batch unverified, never ok.
         private string? RolledUp(bool failed)
         {
@@ -234,6 +229,11 @@ public sealed class BatchTool : ToolBase
             return steps.Any(step => step.Outcome?.Status == "unverified") ? "unverified" : null;
         }
 
+        /// <summary>
+        /// The numbered trace as text, and the structured outcome beside it. A step that fails after completed ones
+        /// makes the batch partial: earlier input reached the app. IsError mirrors status: failed, so a client
+        /// that reads only isError does not take a failed batch for a successful one.
+        /// </summary>
         public McpToolResult Result()
         {
             var failed = steps.Any(s => s.IsError);
