@@ -23,6 +23,8 @@ public sealed partial class Te3Page
 
     public async Task OpenPreferences()
     {
+        // Only a Preferences window opened by this command counts; one already open would pass the wait at once.
+        var before = WindowBaseline.Take(host.Sessions.GetInputTarget(handle).ProcessId);
         await Click(new(new(Name: "Tools", ControlType: "MenuItem"), new(Name: "Main menu", ControlType: "MenuBar")));
         await ClickPopupCommand(
             await Resolve(new(new(Name: "Preferences...", ControlType: "Button"), null, true)),
@@ -34,7 +36,7 @@ public sealed partial class Te3Page
             () =>
             {
                 owner.EnsureAlive();
-                return Win32Desktop.GetTopLevelWindows(owner.ProcessId).Any(w => w.Title == "Preferences");
+                return Te3Dialogs.Opened(before, Win32Desktop.GetTopLevelWindows(owner.ProcessId), "Preferences");
             },
             TimeSpan.FromSeconds(30)
         );

@@ -59,4 +59,15 @@ public sealed class Te3DialogsTests
                 _ => null
             )
         );
+
+    [Fact]
+    public void APreferencesWindowOpenBeforeTheCommandDoesNotCountAsOpened()
+    {
+        // OpenPreferences polled for any window titled Preferences, so one already open (or left over) passed at once.
+        var stale = new Win32WindowInfo(0x40, "Preferences", 7, true, false, false);
+        var baseline = new WindowBaseline([stale]);
+
+        Assert.False(Te3Dialogs.Opened(baseline, [stale], "Preferences"));
+        Assert.True(Te3Dialogs.Opened(baseline, [stale, stale with { Hwnd = 0x41 }], "Preferences"));
+    }
 }
