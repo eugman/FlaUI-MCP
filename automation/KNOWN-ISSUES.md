@@ -110,3 +110,10 @@ On te3-2ac1444 (2026-10-22) `te3_navigate native-mcp-server` opened the MCP Serv
 ## Unknown dialogs: offline review, 2026-10-22
 
 `te3_model_state` now reports other titled windows with their class, ownership and any known advice while retaining its read-only status-bar observation. Every live `te3_layout` mutation checks for an open dialog before choosing an action, including resize, reopen and presets. A tool-window style does not exempt an unknown dialog; the observed floating Dependencies pane remains allowed. Navigation allows only the dialog explicitly associated with its destination. Fake-window/entry-point regressions passed after demonstrating the previous bypasses. The MCP Server dialog case still needs a fresh granted live check.
+
+
+## Table identity: offline review, 2026-10-22
+
+The table-name fallback now rechecks the selected row's name and depth after clearing the filter and after expansion. Properties must identify the anchor as the requested Table; a status-bar label alone is insufficient because it can remain stale when a same-named folder is selected. Fresh candidate rows cannot inherit table identity from an old index whose name or depth changed.
+
+Calibration no longer treats any row named `Tables` as the group. A real table can have that name, shifting inferred depths and causing wrong-table confirmation. Without the visible model root or an independently confirmed anchor, depth remains unknown. This may make root-offscreen searches return a miss until an independent group marker is available. The regression cases pass offline; live search walks e/e2/f and these same-name cases remain pending a fresh grant.

@@ -46,10 +46,10 @@ public sealed class TomRowsTests
         Assert.Null(TomRows.Depth(tree, label, Live125));
 
     [Fact]
-    public void WithTheRootOutOfViewTheIndentIsMeasuredFromTheTablesGroupAndItsFirstTable()
+    public void TablesTextAloneDoesNotEstablishTheGroupsIdentity()
     {
-        // Live (te3b-28): after the "Measure" search the root was off screen and no depth was known. The Tables group
-        // (depth 1, found by its text) and the row below it, its first table, give the same scale.
+        // Even the observed group shape has no independent identity marker when the root is absent.
+        // The same text and relative indentation can belong to a real table and its child.
         ElementInfo[] elements =
         [
             Item("TreeItem", "Node7", "Tables", 1161, 100),
@@ -58,7 +58,23 @@ public sealed class TomRowsTests
             Item("DataItem", "Name row 8", "Brands", 1257, 122),
         ];
 
-        Assert.Equal(Live125, TomRows.Calibrate(elements));
+        Assert.Null(TomRows.Calibrate(elements));
+    }
+
+    [Fact]
+    public void ARealTableNamedTablesCannotEstablishGroupDepth()
+    {
+        ElementInfo[] elements =
+        [
+            Item("TreeItem", "Node7", "Tables", 1161, 100),
+            Item("DataItem", "Name row 7", "Tables", 1257, 100),
+            Item("TreeItem", "Node8", "Wanted", 1161, 122),
+            Item("DataItem", "Name row 8", "Wanted", 1281, 122),
+            Item("TreeItem", "Node9", "Amount", 1161, 144),
+            Item("DataItem", "Name row 9", "Amount", 1305, 144),
+        ];
+
+        Assert.Null(TomRows.Calibrate(elements));
     }
 
     [Fact]

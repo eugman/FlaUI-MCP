@@ -17,12 +17,10 @@ internal static class TomRows
 
     /// <summary>
     /// The scale from the model root (row 0, depth 0) and its first child (row 1, depth 1) when both are realized;
-    /// else, the root scrolled out of view, from the Tables group row (depth 1, found by its text) and the row below
-    /// it, its first table when the group is open (as it is whenever the filter shows a table); null otherwise, and
-    /// then no depth is known.
+    /// null otherwise. A visible row named Tables is not independent evidence of the group: a model table or
+    /// display folder can have that name too. Callers with a confirmed anchor may use CalibrateFrom.
     /// </summary>
-    public static Scale? Calibrate(IReadOnlyList<ElementInfo> elements) =>
-        CalibrateFrom(elements, 0, 0) ?? FromTablesGroup(elements);
+    public static Scale? Calibrate(IReadOnlyList<ElementInfo> elements) => CalibrateFrom(elements, 0, 0);
 
     /// <summary>
     /// The scale from the realized row <paramref name="index"/> of known <paramref name="depth"/> (the model root at
@@ -42,18 +40,6 @@ internal static class TomRows
         var step = child.X - label.X;
         var indent = label.X - tree.X - step * depth;
         return step > Slack && indent > Slack ? new(indent, step) : null;
-    }
-
-    private static Scale? FromTablesGroup(IReadOnlyList<ElementInfo> elements)
-    {
-        var tables = elements.FirstOrDefault(e =>
-            e.ControlType == "TreeItem"
-            && e.Value == WalkPlace.TablesGroup
-            && e.Name.StartsWith("Node", StringComparison.Ordinal)
-        );
-        return tables != null && int.TryParse(tables.Name[4..], out var index)
-            ? CalibrateFrom(elements, index, 1)
-            : null;
     }
 
     /// <summary>The depth of a row whose TreeItem starts at <paramref name="tree"/> and label at <paramref name="label"/>.</summary>
