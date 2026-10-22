@@ -73,7 +73,11 @@ internal sealed class RefPoints(ElementRegistry refs, PendingInvokeTracker pendi
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
-            return $"the guarded point is no longer visible ({error.Message})";
+            // ClickPoint's pre-input refusal text is stale once a held drag reaches this recheck.
+            const string noInput = "; no input sent.";
+            var reason = error.Message;
+            var suffix = reason.IndexOf(noInput, StringComparison.OrdinalIgnoreCase);
+            return $"the guarded point is no longer visible ({(suffix < 0 ? reason : reason[..suffix])})";
         }
     }
 
