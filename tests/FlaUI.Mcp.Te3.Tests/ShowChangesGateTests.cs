@@ -89,4 +89,18 @@ public sealed class ShowChangesGateTests
         Assert.Contains("Next:", error.Message);
         Assert.Equal(1, box.Clicks);
     }
+
+    [Fact]
+    public async Task ACheckboxThatVanishesAfterTheClickIsNotTakenForOff()
+    {
+        // A null read after the click means the checkbox is gone, not that the filter is off.
+        var reads = 0;
+        Task<bool?> isOn() => Task.FromResult<bool?>(reads++ == 0 ? true : null);
+
+        var error = await Assert.ThrowsAsync<FlaUI.Mcp.Core.ElementNotFoundException>(() =>
+            ShowChangesGate.TurnOff(isOn, () => Task.CompletedTask, delay: _ => Task.CompletedTask)
+        );
+
+        Assert.Contains("vanished", error.Message);
+    }
 }
