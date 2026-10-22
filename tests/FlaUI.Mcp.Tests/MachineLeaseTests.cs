@@ -71,3 +71,30 @@ public sealed class MachineLeaseTests
         using var again = DesktopLease.Acquire(TimeSpan.FromMilliseconds(200));
     }
 }
+
+/// <summary>The lease name override is for offline tests only, and a lease that cannot be opened is a refusal.</summary>
+[Collection(InputLeaseCollection.Name)]
+public sealed class MachineLeaseFailureTests
+{
+    [Theory]
+    [InlineData("1", @"Local\x", @"Local\x")]
+    [InlineData(null, @"Local\x", DesktopLease.DefaultName)]
+    [InlineData("0", @"Local\x", DesktopLease.DefaultName)]
+    [InlineData("1", null, DesktopLease.DefaultName)]
+    public void TheOverrideCountsOnlyInOfflineTests(string? offline, string? name, string expected) =>
+        Assert.Equal(expected, DesktopLease.NameFor(offline, name));
+
+    [Fact]
+    public void AMutexThatCannotBeOpenedIsALeaseRefusalNotACrash()
+    {
+        var owner = new DesktopLease.MutexOwner(() =>
+            throw new UnauthorizedAccessException("Access to the path is denied.")
+        );
+
+        var error = Assert.Throws<InputRefusedException>(() => owner.Acquire(TimeSpan.FromMilliseconds(100), default));
+
+        Assert.Equal("lease-unavailable", error.Refusal.Code);
+        Assert.Contains("Access to the path is denied", error.Message);
+        Assert.Contains("no input sent", error.Message);
+    }
+}

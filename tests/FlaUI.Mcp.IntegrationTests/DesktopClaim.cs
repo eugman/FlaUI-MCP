@@ -50,7 +50,7 @@ internal static class DesktopClaim
     /// <summary>Whether another process holds the machine-wide input lease (the hosts' named mutex) right now.</summary>
     internal static bool LeaseHeldElsewhere()
     {
-        using var mutex = new Mutex(false, DesktopLease.Name);
+        using var mutex = new Mutex(false, DesktopLease.DefaultName);
         try
         {
             if (!mutex.WaitOne(0))
@@ -76,7 +76,7 @@ internal static class DesktopClaim
         if (LeaseHeldElsewhere())
         {
             throw new InvalidOperationException(
-                $"The desktop tests did not start: another process holds the desktop lease ({DesktopLease.Name})."
+                $"The desktop tests did not start: another process holds the desktop lease ({DesktopLease.DefaultName})."
             );
         }
 
