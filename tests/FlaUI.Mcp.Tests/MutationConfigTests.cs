@@ -319,8 +319,38 @@ public sealed class MutationConfigTests
         );
         Assert.Equal(1, config.GetProperty("concurrency").GetInt32());
         Assert.Equal(180000, config.GetProperty("additional-timeout").GetInt32());
-        Assert.Contains("if ($Part -eq 'pointer-integration')", script);
+        Assert.Contains("if ($integrationParts.Contains($Part) -or $Part -eq 'pointer-integration')", script);
         Assert.Contains("'stryker-config.pointer-integration.json' 180", script);
         Assert.Contains("if ($project -ne $offlineProject) { CloseTestApps }", script);
+    }
+
+    [Fact]
+    public void ThePointerIntegrationPartsSplitTheConfigsFilesBetweenThem()
+    {
+        // Each part is its own Stryker run under the 3-hour cap; together they cover the config's files once.
+        var config = JsonDocument
+            .Parse(File.ReadAllText(RepoFile("stryker-config.pointer-integration.json")))
+            .RootElement.GetProperty("stryker-config");
+        var mutated = config
+            .GetProperty("mutate")
+            .EnumerateArray()
+            .Select(p => Path.GetFileNameWithoutExtension(p.GetString()!))
+            .Order(StringComparer.Ordinal);
+        var script = File.ReadAllText(RepoFile(Path.Combine("scripts", "mutation.ps1")));
+        string[] Part(string name) =>
+            System
+                .Text.RegularExpressions.Regex.Match(script, $@"(?m)^\s+{name} = (.+)$")
+                .Groups[1]
+                .Value.Split(',')
+                .Select(f => f.Trim().Trim('\''))
+                .ToArray();
+
+        var clicks = Part("clicks");
+        var input = Part("input");
+
+        Assert.Equal(["ClickTool", "ClickToolReplies", "ClickPoint", "ClickHitTest"], clicks);
+        Assert.Equal(["GuardedInput", "MouseTool", "PointerActions"], input);
+        Assert.Empty(clicks.Intersect(input));
+        Assert.Equal(mutated, clicks.Concat(input).Order(StringComparer.Ordinal));
     }
 }

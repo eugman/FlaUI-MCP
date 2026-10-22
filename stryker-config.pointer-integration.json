@@ -10,7 +10,8 @@
       "**/Tools/MouseTool.cs",
       "**/Tools/PointerActions.cs",
       "**/Core/ClickPoint.cs",
-      "**/Core/GuardedInput.cs"
+      "**/Core/GuardedInput.cs",
+      "**/Core/ClickHitTest.cs"
     ],
     "concurrency": 1,
     "coverage-analysis": "perTest",
