@@ -37,8 +37,8 @@ public sealed partial class Te3Page
     }
 
     // verifyFocus: Core's keyboard fallback (Ctrl+A, Backspace, text) first checks that focus reached the field and
-    // refuses otherwise. Every TE3 field filled here is a single focusable edit, so each call site asks for it.
-    private async Task Fill(Target target, string value, bool verifyFocus)
+    // refuses otherwise: true for the field itself, FocusRules.SelfOrDescendantName for it or a child (Scintilla).
+    private async Task Fill(Target target, string value, object verifyFocus)
     {
         var reference = await Reference(target);
         reportStep?.Invoke($"Fill {target.Selector}");

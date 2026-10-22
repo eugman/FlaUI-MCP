@@ -113,4 +113,22 @@ public sealed class DirectInputJournalTests
         Assert.All(fills, fill => Assert.Contains("verifyFocus", fill.Value));
         Assert.DoesNotMatch(@"await Fill\([^;]*\);", Regex.Replace(page, @"await Fill\([^;]*verifyFocus[^;]*\);", ""));
     }
+
+    [Fact]
+    public void TheScintillaEditorsAreFilledOnlyWithFocusOnTheEditorOrInsideIt()
+    {
+        // The expression and query editors (Scintilla) were filled with no focus check, so Ctrl+A could go wherever
+        // focus was. Core accepts focus on the ref or a descendant ("self-or-descendant"), which these hosts report.
+        var page = string.Concat(Directory.GetFiles(Sources(), "Te3Page*.cs").Select(File.ReadAllText));
+
+        Assert.DoesNotMatch(@"await Fill\([^;]*verifyFocus: false[^;]*\);", page);
+        Assert.Matches(
+            @"await Fill\(ExpressionInputTarget\(\), expression, verifyFocus: FocusRules\.SelfOrDescendantName\)",
+            page
+        );
+        Assert.Matches(
+            @"await Fill\(QueryInputTarget\(\), query, verifyFocus: FocusRules\.SelfOrDescendantName\)",
+            page
+        );
+    }
 }
