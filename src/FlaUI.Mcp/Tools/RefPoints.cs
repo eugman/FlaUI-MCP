@@ -45,6 +45,36 @@ internal sealed class RefPoints(ElementRegistry refs, PendingInvokeTracker pendi
     public Func<Point> Centre(string reference, ref string? scrolled) =>
         Pressable(reference, geometry => ClickPoint.Choose(geometry), ref scrolled).Choose;
 
+    /// <summary>Prove a fixed screenshot point lies on this ref without scrolling or moving the point.</summary>
+    public Press AtPoint(string reference, string handle, Point point)
+    {
+        var element = refs.ResolveRef(reference, handle);
+        ClickGeometry Read() => InputDesktop.Current.Geometry(element);
+        return new(
+            () =>
+            {
+                ClickPoint.Choose(Read(), point);
+                ClickPoint.Verify(point, element);
+                return point;
+            },
+            at => FixedPointMoved(at, element, Read)
+        );
+    }
+
+    private static string? FixedPointMoved(Point point, AutomationElement element, Func<ClickGeometry> read)
+    {
+        try
+        {
+            var geometry = read();
+            ClickPoint.Choose(geometry, point);
+            return ClickPoint.Moved(point, geometry, element);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return $"the guarded point is no longer visible ({error.Message})";
+        }
+    }
+
     /// <summary>A point on a ref chosen under the lease, then hit-tested: it must land on the ref itself.</summary>
     public Press Pressable(string reference, Func<ClickGeometry, Point> choose, ref string? scrolled)
     {

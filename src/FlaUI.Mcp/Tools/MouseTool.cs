@@ -51,7 +51,7 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         Point landed;
         try
         {
-            landed = Act(action, arguments, target, reference, origin, ref scrolled, out drag);
+            landed = Act(action, arguments, target, handle, origin, ref scrolled, out drag);
         }
         catch (Exception error) when (GuardedInput.IsRefusal(error))
         {
@@ -81,13 +81,14 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         string action,
         JsonElement? arguments,
         InputTarget target,
-        string? reference,
+        string handle,
         Rectangle origin,
         ref string? scrolled,
         out DragReport? drag
     )
     {
         drag = null;
+        var reference = GetStringArgument(arguments, "ref");
         try
         {
             return action switch
@@ -109,7 +110,7 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
                     Ticks(arguments)
                 ),
                 "click" => PointerActions.Click(target, ResolvePoint(arguments, "to", reference, origin, ref scrolled)),
-                "drag" => Drag(arguments, target, reference, origin, ref scrolled, out drag),
+                "drag" => Drag(arguments, target, reference, handle, origin, ref scrolled, out drag),
                 _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
             };
         }
@@ -123,6 +124,7 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         JsonElement? arguments,
         InputTarget target,
         string? reference,
+        string handle,
         Rectangle origin,
         ref string? scrolled,
         out DragReport drag
@@ -138,13 +140,15 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
             GetStringArgument(arguments, "toEdge") ?? "center",
             GetArgument<string[]>(arguments, "fromMustNotHit") ?? [],
             GetArgument<int?>(arguments, "steps") ?? PointerPlan.DefaultDragSteps
-        );
-        var plan = new DragPlanner(points).Plan(request, ref scrolled);
+        )
+        {
+            FromMustHit = GetStringArgument(arguments, "fromMustHit"),
+            ToMustHit = GetStringArgument(arguments, "toMustHit"),
+        };
+        var plan = new DragPlanner(points).Plan(request, handle, ref scrolled);
         try
         {
-            var landed = PointerActions.Drag(target, plan.Resolve, request.Steps, plan.DropMoved);
-            drag = plan.Report(landed);
-            return landed;
+            return plan.Execute(target, request.Steps, out drag);
         }
         catch (InputRefusedException refused)
             when (refused.Refusal.Code is RefusalCodes.DropTargetMoved or RefusalCodes.DragInterrupted)
