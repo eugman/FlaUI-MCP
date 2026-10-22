@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Waits that a fake clock can hold still are capped: `ClickTool`'s settling reads and the modal wait poll at most their timeout over 50 ms. `InputDesktop` gains `Time` (the clock those waits, the Diagnostics budget and the batch `wait` row read) and `Pause`; a fake that holds `Time` still must make `Pause` advance it (the shared `FakeDesktop` does, via `IManualClock` or `OnPause`). The shared `FakeDesktop` also answers `ClipboardText()` and `FocusedControl()` itself, and its written-clipboard property is `ClipboardWritten`.
 - `ProcessPolicy.NameOf(pid)` is the hosts' process-name seam, through `InputDesktop.ProcessNameOf`.
 - A drag's drop point on its `toRef` is hit-tested like a press. A target whose siblings cannot be read refuses with `click-point-covered`. The input observer's start is bounded (10 s).
+- `windows_mouse` reports a refusal (a covered or off-window point, a blocked scroll into view, a guard) as a failed result, `Failed to <action>: <reason>`, the way `windows_click` does, instead of throwing for the registry to type as `Error: <reason>`; `failure`, `dispatch` and `inputsSent` are unchanged. A direct caller of the tool now sees the same reply as an MCP client. Argument errors still throw.
 - `HostPath` validates host-configured paths (`Validate`) and checks containment (`Within`), for the products' config readers to adopt.
 
 ### Changed for tests and tooling

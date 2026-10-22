@@ -44,7 +44,16 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         OperationContext.Check();
         var target = sessions.GetInputTarget(handle);
         var origin = WindowOrigin(handle, target.Hwnd);
-        var landed = Act(action, arguments, target, reference, origin);
+        Point landed;
+        try
+        {
+            landed = Act(action, arguments, target, reference, origin);
+        }
+        catch (Exception error) when (GuardedInput.IsRefusal(error))
+        {
+            return Task.FromResult(Refused(action, error));
+        }
+
         return Task.FromResult(
             TextResult(
                 JsonSerializer.Serialize(
@@ -58,6 +67,13 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
             )
         );
     }
+
+    /// <summary>
+    /// A refusal as windows_click reports one: a failed result, not an exception, so a direct caller sees the
+    /// reply the registry sends. The refusal itself stays noted on the operation for the outcome's failure field.
+    /// </summary>
+    private static McpToolResult Refused(string action, Exception error) =>
+        ErrorResult($"Failed to {action}: {error.Message}");
 
     /// <summary>Run one pointer action; a refusal after a scroll into view says so.</summary>
     private Point Act(string action, JsonElement? arguments, InputTarget target, string? reference, Rectangle origin)
