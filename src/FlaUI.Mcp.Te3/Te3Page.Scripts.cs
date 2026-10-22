@@ -185,11 +185,14 @@ public sealed partial class Te3Page
     public async Task RunCSharpScript()
     {
         await Click(RunScriptTarget());
+        // The script's effect is the recipe's next assertion; the click itself has no read-back.
+        Unverified("Run C# script");
     }
 
     public async Task OpenBpa()
     {
         await Click(BpaTabTarget());
+        await RequireSelectedTab(BpaTabTarget());
     }
 
     public async Task AssertProperty(string property, string value)
@@ -239,11 +242,14 @@ public sealed partial class Te3Page
     public async Task Save()
     {
         await Keys("Ctrl+S");
+        Unverified("Save (Ctrl+S)");
     }
 
     public async Task NewQuery()
     {
         await Click(NewQueryTarget());
+        // Several query editors can be open, so the new one cannot be told apart by its locator.
+        Unverified("New DAX query");
     }
 
     public async Task RunQuery(string query)

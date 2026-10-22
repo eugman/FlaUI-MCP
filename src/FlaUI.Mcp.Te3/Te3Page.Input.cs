@@ -140,6 +140,17 @@ public sealed partial class Te3Page
         return arguments;
     }
 
+    private readonly List<string> unverified = [];
+
+    /// <summary>Steps this page sent without a read-back of their effect, in order: none is claimed as verified.</summary>
+    public IReadOnlyList<string> UnverifiedSteps => unverified;
+
+    private void Unverified(string step)
+    {
+        unverified.Add(step);
+        reportStep?.Invoke($"{step}: sent, not read back (unverified)");
+    }
+
     /// <summary>
     /// Where to park the pointer: the middle of the title bar, always inside the window. Clamping to
     /// screen zero instead put the point on a different monitor when the window sat on one arranged
