@@ -44,6 +44,7 @@
       "**/Te3EnvCheck.cs",
       "**/PlacementReadBack.cs",
       "**/LayoutProof.cs",
+      "**/Te3ToolNames.cs",
       "**/NavigationProof.cs",
       "**/Te3Destinations.Arguments.cs",
       "**/NavigationRetry.cs",

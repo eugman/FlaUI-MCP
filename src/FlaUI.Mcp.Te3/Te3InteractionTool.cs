@@ -10,6 +10,9 @@ public sealed class Te3InteractionTool(Te3Interaction interaction, string name) 
 
     public override string Name => name;
 
+    // The grant is in memory: beginning or ending it never waits on TE3's UI Automation provider.
+    protected override bool Recovery => true;
+
     // Neither sends input, but begin unlocks every tool that does, so neither is read-only: a client that runs
     // read-only tools without asking must never begin a grant on its own. Ending one again changes nothing.
     public override McpToolAnnotations Annotations =>

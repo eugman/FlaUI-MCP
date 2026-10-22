@@ -45,7 +45,15 @@ public sealed class ToolAnnotationTests : IDisposable
         // Core's status hint is for instant in-memory reports on other calls, run beside live calls without the
         // serial slot. These walk TE3's UI Automation tree or open a session in TE3 (up to 25 s), so they wait their
         // turn like any other call.
-        Assert.Equal(McpToolAnnotations.ReadOnly, Tool(name).Annotations);
+        // ReadOnly with the fact hints (observation, recovery) Core adds; never a status tool.
+        Assert.Equal(
+            McpToolAnnotations.ReadOnly,
+            Tool(name).Annotations! with
+            {
+                ObservationHint = null,
+                RecoveryHint = null,
+            }
+        );
         Assert.False(Tool(name).Annotations!.StatusHint);
     }
 

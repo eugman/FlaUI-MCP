@@ -15,6 +15,9 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
 
     public override string Name => name;
 
+    // A status-bar read is evidence of what TE3 shows; navigation is a change.
+    protected override bool Observation => name == ModelState;
+
     // A status-bar read changes nothing, but it walks TE3's UI Automation tree, so it is a plain read that waits its
     // turn, not a Core status tool. Navigation takes the desktop, types and clicks, but edits nothing.
     public override McpToolAnnotations Annotations =>

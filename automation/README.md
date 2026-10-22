@@ -43,6 +43,21 @@ Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `m
 
 Every TE3 tool carries MCP annotations: `te3_model_state`, `te3_layout_read`, `te3_native_preflight` and `te3_env_check` are read-only (plain reads, not Core status tools: they walk TE3's UI Automation tree or open a session in TE3, so they wait their turn like other calls); `te3_navigate` and `te3_layout` change the desktop (`te3_layout` is marked destructive, since it closes panes); `te3_interaction_begin` and `te3_interaction_end` are not read-only either, because the grant unlocks input. A failed `te3_navigate` or `te3_layout` call reports how much input went out in `structuredContent` (`dispatch`, `inputsSent`, `failure`), as Core's tools do.
 
+The table below is generated from each tool's Core `ToolFacts` (run the TE3 offline tests with `FLAUI_APPROVE_TOOL_SCHEMAS=1` to rewrite it); `observation` marks a call whose success is evidence of what TE3 shows, and `recovery` one usable while TE3's UI Automation provider is blocked. `tools/list` carries them as `observationHint` and `recoveryHint`.
+
+<!-- te3-tool-facts:begin -->
+| Tool | readOnly | destructive | idempotent | observation | recovery | mutating when |
+|---|---|---|---|---|---|---|
+| `te3_env_check` | yes |  | yes |  | yes |  |
+| `te3_interaction_begin` |  |  |  |  | yes |  |
+| `te3_interaction_end` |  |  | yes |  | yes |  |
+| `te3_layout` |  | yes |  |  |  |  |
+| `te3_layout_read` | yes |  | yes | yes |  |  |
+| `te3_model_state` | yes |  | yes | yes |  |  |
+| `te3_native_preflight` | yes |  | yes |  |  |  |
+| `te3_navigate` |  |  |  |  |  |  |
+<!-- te3-tool-facts:end -->
+
 Destinations: `native-mcp-server` (opens and verifies the native MCP Server dialog without starting it), `tom-explorer`, `tom-explorer/changes` and `tom-explorer/changes-off` (turn the TOM Explorer Show changes view filter on or off; `object` also clears it before walking the tree; Properties' Show changes is not driven), `expression-editor`, `object` (with `table`, `objectName`, `objectType` Table/Column/Measure and optional `folder`), `preferences/auto-formatting`, `preferences/code-actions`, `preferences/ai-provider`, `preferences/ai-assistant`, `preferences/mcp-server`, `preferences/permissions`.
 
 ```json

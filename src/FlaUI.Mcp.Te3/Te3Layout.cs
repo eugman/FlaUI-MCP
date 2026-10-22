@@ -37,6 +37,9 @@ public sealed partial class Te3Layout(
 
     public override string Name => readOnly ? ReadToolName : ToolName;
 
+    // te3_layout_read lists what TE3 shows; te3_layout changes it.
+    protected override bool Observation => readOnly;
+
     public override McpToolAnnotations Annotations =>
         readOnly ? McpToolAnnotations.ReadOnly : McpToolAnnotations.Input(destructive: true);
 

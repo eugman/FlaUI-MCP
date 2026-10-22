@@ -36,6 +36,9 @@ public sealed class Te3EnvCheck(
 
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
 
+    // Files and the registry only: usable while TE3's UI Automation provider is blocked.
+    protected override bool Recovery => true;
+
     public override string Description =>
         "Read which TE3 policies (HKCU/HKLM Software\\Policies\\Tabular Editor ApS\\TE3) and preferences are set: MCP "
         + "server (enabled, port, auto-start), remembered window state, layouts and keyboard customizations. A licence "
