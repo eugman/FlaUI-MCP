@@ -106,17 +106,58 @@ public sealed class MutationConfigTests
     public void EverySourceFileIsMutatedOrListedAsNotMutated()
     {
         var src = Path.GetDirectoryName(RepoFile(Path.Combine("src", "FlaUI.Mcp", "FlaUI.Mcp.csproj")))!;
-        var files = Directory
-            .EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
-            .Select(file => Path.GetRelativePath(src, file).Replace('\\', '/'))
-            .Where(file =>
-                !file.StartsWith("obj/", StringComparison.Ordinal) && !file.StartsWith("bin/", StringComparison.Ordinal)
-            )
-            .Order(StringComparer.Ordinal);
+        var files = SourceFiles(src);
 
         Assert.Empty(files.Where(file => !GuardFiles.Contains(file) && !NotMutated.Contains(file)));
         Assert.Empty(GuardFiles.Intersect(NotMutated));
     }
+
+    [Fact]
+    public void BuildOutputIsNotSourceAtAnyDepth()
+    {
+        // A stale artifacts/ folder (a .NET artifacts-output build) under src/FlaUI.Mcp failed the coverage test above.
+        var src = Directory.CreateTempSubdirectory("flaui-src-").FullName;
+        try
+        {
+            string[] made =
+            [
+                "Core/A.cs",
+                "artifacts/bin/X.cs",
+                "artifacts/obj/Y.cs",
+                "bin/B.cs",
+                "obj/C.cs",
+                "Tools/obj/D.cs",
+            ];
+            foreach (var file in made)
+            {
+                var path = Path.Combine(src, file);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, "");
+            }
+
+            Assert.Equal(["Core/A.cs"], SourceFiles(src));
+        }
+        finally
+        {
+            Directory.Delete(src, recursive: true);
+        }
+    }
+
+    // Build output, never source: bin and obj, and the artifacts folder of a .NET artifacts-output build, at any depth.
+    private static readonly string[] BuildFolders = ["bin", "obj", "artifacts"];
+
+    /// <summary>The C# files under <paramref name="src"/>, relative and with forward slashes, build output left out.</summary>
+    private static string[] SourceFiles(string src) =>
+        Directory
+            .EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(src, file).Replace('\\', '/'))
+            .Where(file =>
+                !file.Split('/')
+                    .SkipLast(1)
+                    .Any(folder => BuildFolders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+            )
+            .Order(StringComparer.Ordinal)
+            .ToArray();
 
     private static string RepoFile(string relative)
     {
