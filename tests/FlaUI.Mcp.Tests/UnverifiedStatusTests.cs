@@ -53,6 +53,7 @@ public sealed class UnverifiedStatusTests
         Assert.Equal("unverified", registryMade.Status);
         Assert.Equal("not-established", registryMade.Verification);
         Assert.Equal("unverified", toolMade.Status);
+        Assert.Equal("not-established", toolMade.Verification);
     }
 
     [Fact]

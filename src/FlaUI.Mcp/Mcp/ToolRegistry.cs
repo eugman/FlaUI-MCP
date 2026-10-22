@@ -229,6 +229,10 @@ public partial class ToolRegistry
             Outcome = outcome with
             {
                 Status = StatusOf(failed, outcome, inputsSent),
+                // Unverified because nothing checked the input's effect: say so, as the registry's own outcome does.
+                Verification =
+                    outcome.Verification
+                    ?? (!failed && outcome.Proof == null && inputsSent > 0 ? "not-established" : null),
                 InputsSent = inputsSent,
                 Failure =
                     // A refusal recorded as coming after input (a counted Select, say) keeps that, whatever this call counted.
