@@ -240,3 +240,32 @@ Verified: yes, unless the row says otherwise.
 | Properties for a column | 9 rows, no ObjectType row (Name Brand, Folder 1. Brand Hierarchy, Source Column Brand): a column's type comes from the status bar's selection slot (`Column "Brand"`) |
 | Object navigation, row strategy | Brands[Brand] with folder: strategy rows, rowsRead 23, indentPx 24, 1 select; the column (row 11 of the filtered tree, Node50 once the search cleared) was selected in 5.1 s and 8 inputs, the status bar read Column "Brand", and the Properties-only confirmation then turned it down (since fixed, not re-run). Not promoted |
 
+
+## Host actions verified live on te3-eb2ed6a (TE3 3.27.1, 2026-10-22)
+
+Window restored at (0,0,1920,1080) on `localhost/sp-demo-mcp` (TE3 remembered Normal state; no maximize). Verified: yes, unless the row says otherwise.
+
+| Action | What was seen |
+|---|---|
+| `te3_layout_read list` at launch | AI Assistant (0,61,663,947), Expression Editor document (663,61,738,947), TOM Explorer (1401,61,467,627), Properties (1401,688,467,320) |
+| `te3_layout hide-pane` / `reopen-pane Properties` | 1 input, then 3 inputs (View, popup Button `Properties`), 2.2 s each; bounds identical before and after |
+| `te3_layout resize TOM Explorer 480` | 467 -> 480 exactly, drag (1404,374)->(1391,374), 15 inputs, 5.2 s; Properties followed to 480 wide, the document shrank 738 -> 725 |
+| `te3_layout apply-preset assistant-model-review` | AI Assistant 663 -> 680, drag (660,534)->(677,534), 15 inputs, 5.3 s; TOM Explorer and Properties skipped at target. After: AI Assistant (0,61,680,947), document (680,61,708,947), TOM Explorer (1388,61,480,627), Properties (1388,688,480,320) |
+| `te3_layout snapshot` / `restore` | Snapshot before launch, restore after `windows_close` and `te3_interaction_end`: all three hashes read back |
+| `te3_navigate expression-editor` | 1 input, 0.4 s; arrival is the TabItem `Expression Editor`; `daxscilla` reads `keyboardFocus: true` afterwards |
+| `te3_navigate tom-explorer/changes` / `changes-off` | 1 input each (0.8-1.3 s); with changes on the tree lists only the changed path (root, Tables, table, folder, object) and reads empty when the model is clean; off drops the selection to "(Nothing selected)" |
+| `te3_native_preflight` | Connection refused at 127.0.0.1:42100 (server stopped), 2.2 s, no input |
+| Object walks | One of seven right (the typed folder miss); see KNOWN-ISSUES "Object walk timing" for the table-row-in-view false negative |
+| `windows_mouse drag` on a TOM row | Not promoted: it moved the measure to another table; see KNOWN-ISSUES |
+
+| Name | ControlType | AutomationId | ClassName | Parent chain | Notes |
+|---|---|---|---|---|---|
+| `daxscilla` | Pane | `daxscilla` | `WindowsForms10.Scintilla.app.0.1e2bef7_r3_ad1` | `DaxEditor` > `QuickEditorView` > `container6` > Window `QuickEditor` "Expression Editor" > Main | No patterns; takes keyboard focus itself (`keyboardFocus: true` after `te3_navigate expression-editor`). Bounds (710,188,679,880) with the preset applied. Not realized while the editor shows `(No DAX properties)`; `DaxEditor`'s name is the expression text |
+| `Property` | ComboBox | - | - | ToolBar `DAX Script Tools` > `QuickEditorView` | Value `Expression`; next to it a Text `Static` reading `on Measure [<name>]` with markup |
+| `Edit` | MenuItem | - | - | MenuBar `Main menu` | Bounds (70,64,47,29); physical click opens the popup |
+| `Undo Move objects` | Button | - | - | nameless Menu (hwnd) inside a nameless owned Window | Edit popup entry, found with `includeOwned: true`; the label names the last edit. Physical click undid the move (2 inputs) |
+| TreeItem `NodeN` | TreeItem | - | - | `treeList` | Does not take UIA SetFocus: `windows_send_keys` with a row ref and `verifyFocus` is refused with `focus-not-verified` before input |
+
+TOM Explorer after a search clears (2026-10-22): the selected row is scrolled to the first visible row (its table and folder rows sit above the viewport), so a confirmation that needs the table row in view fails even though the status bar names the object. Properties shows Name and Display Folder for a column and Display Folder for a measure.
+
+Calculation groups in SpaceParts (read from the DMV, not from the tree): `Z01CG1 - Quantity`, `Z01CG2 - Value (Budget Rate)`, `Z01CG4 - Lines`, `Z02CG1 - Unit`, `Z03CG1 - Sales Target`, `Z03CG2 - Orders Target`, `Z04CG1 - Time Intelligence`, each with columns `Measure` and `Ordinal`. Objects named `Rate` exist in both `Budget Rate` (folder `1. Facts`) and `Exchange Rate`.
