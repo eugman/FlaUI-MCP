@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- `te3_navigate object` returns its `walk` account as a top-level `structuredContent` field (Core's `ToolOutcome.Details`, merged at c9e94b8), on success and failure; the message text no longer carries it.
 - **Breaking (codes):** the grant's refusal codes are Core's hyphenated ones: `approval-required`, `focus-revoked`, `focus-unavailable`, `paused-after-failure`, `activation-denied`, `activation-pending`. Map old underscore spellings with `RefusalCodes.Canonical`.
 - Rebased on FlaUI-MCP-Core 84280c0. `Te3Interaction` is built on Core's `InteractionGrant`; TE3's own input observer, heartbeat and grant are gone. The run's activation prompt uses `BeginPrompt` then `Rebaseline(bounds)`; constructing the grant makes the host fail closed on a path without it (`MutationGuard.HookRequired`). The input lease is Core's machine-wide mutex; the offline tests take a lease of their own process.
 - A `windows_*` call that fails after sending input now pauses the grant, as a failed TE3 tool does (Core's `ToolRegistry.FailedAfterInput`).
