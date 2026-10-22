@@ -266,6 +266,20 @@ Window restored at (0,0,1920,1080) on `localhost/sp-demo-mcp` (TE3 remembered No
 | `Undo Move objects` | Button | - | - | nameless Menu (hwnd) inside a nameless owned Window | Edit popup entry, found with `includeOwned: true`; the label names the last edit. Physical click undid the move (2 inputs) |
 | TreeItem `NodeN` | TreeItem | - | - | `treeList` | Does not take UIA SetFocus: `windows_send_keys` with a row ref and `verifyFocus` is refused with `focus-not-verified` before input |
 
-TOM Explorer after a search clears (2026-10-22): the selected row is scrolled to the first visible row (its table and folder rows sit above the viewport), so a confirmation that needs the table row in view fails even though the status bar names the object. Properties shows Name and Display Folder for a column and Display Folder for a measure. The host (643bc77) confirms arrival from the status bar and Properties plus the rows read before the clear, and reads the display folder as DataItem `DisplayFolder`, then `Display Folder`: which spelling the grid uses is not verified; ObjectType's DataItem is named after the property.
+TOM Explorer after a search clears (2026-10-22): the selected row is scrolled to the first visible row (its table and folder rows sit above the viewport), so a confirmation that needs the table row in view fails even though the status bar names the object. Properties shows Name and Display Folder for a column and Display Folder for a measure. The host (643bc77) confirms arrival from the status bar and Properties plus the rows read before the clear, and reads the display folder as DataItem `DisplayFolder`, then `Display Folder`. Verified on te3-2ac1444 (2026-10-22): the grid names a column's DataItems after their labels with spaces (`Data Type`, `Description`, `Display Folder`, `Format String`, `Hidden`, `Name`, `Sort By Column`, `Source Column`, `Summarize By`; no ObjectType row for a column), so `Display Folder` is the spelling that matches.
 
 Calculation groups in SpaceParts (read from the DMV, not from the tree): `Z01CG1 - Quantity`, `Z01CG2 - Value (Budget Rate)`, `Z01CG4 - Lines`, `Z02CG1 - Unit`, `Z03CG1 - Sales Target`, `Z03CG2 - Orders Target`, `Z04CG1 - Time Intelligence`, each with columns `Measure` and `Ordinal`. Objects named `Rate` exist in both `Budget Rate` (folder `1. Facts`) and `Exchange Rate`.
+
+## Host actions verified live on te3-2ac1444 (TE3 3.27.1, 2026-10-22, afternoon)
+
+Window restored at (0,0,1920,1080), same layout as the morning. Verified: yes, unless the row says otherwise.
+
+| Action | What was seen |
+|---|---|
+| `te3_navigate object`, row strategy | Brands[Brand] with folder 10 inputs / 1 select; the same request again 5 inputs / 0 selects; Orders[Order Lines] and Orders[Net Orders (Quantity)] 10 inputs / 1 select each; proof "<object> (<type>) in <table>" with source "TE3 status bar or Properties, read after the walk; the table from the rows in view, else from the rows read before the search cleared" |
+| `te3_navigate object`, misses | Typed folder miss ends with no selection; Budget Rate[Rate] and Exchange Rate[Rate] miss with the folder opens named; the calc group column misses naming both searches, no keyboard walk. See KNOWN-ISSUES |
+| `te3_layout resize TOM Explorer 480` | 467 -> 480, drag (1404,374)->(1391,374), 15 inputs, 3.4 s, 125% insets |
+| `te3_navigate native-mcp-server` + `te3_model_state` | Dialog `MCP Server` open as w2; the status bar read normally through it |
+| `windows_find` DataItem in `propertyGrid` | A column's rows are named by label with spaces: `Display Folder` holds the folder |
+| `te3_layout snapshot` / `restore` | Snapshot before launch, restore after close and end: verified |
+| Activation at launch | The first `te3_navigate` after `windows_launch` was refused `activation-denied` (WindowsTerminal in front) with 1 input (the focus call); a second call right after was refused before any input (`actionDispatched: false`, 0 inputs, no quarantine) |
