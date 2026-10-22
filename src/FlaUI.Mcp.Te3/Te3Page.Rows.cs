@@ -153,6 +153,19 @@ public sealed partial class Te3Page
 
         public Task Select(TreeRow row) => page.SelectRow(row, outOfTime);
 
+        // A new filter: the indent is measured again from the rows it shows.
+        public async Task Search(string text)
+        {
+            await KeyBudget.Press(outOfTime, () => page.SearchTomTyped(text), $"the search for '{text}'");
+            page.depthScale = null;
+        }
+
+        public async Task Expand()
+        {
+            await KeyBudget.Press(outOfTime, () => page.Keys("Right", TomExplorerTarget()), "Right to open the table");
+            await Task.Delay(WalkClock.CollapseSettleMs);
+        }
+
         // A miss's text, with one read of where the selection ended and its table from the rows above it (the paged
         // rows are not kept here, so a table row above the screen is not known and the text says so).
         public async Task<string> Miss(WalkRequest request, string? reason, int inputs)
@@ -161,7 +174,9 @@ public sealed partial class Te3Page
             string? table = null;
             try
             {
-                var (rows, selected) = await ReadSelected();
+                // After a keyboard walk the walk's indent may be unmeasured: measure it from the rows in view, so the
+                // nearest table row above the selection names its table.
+                var (rows, selected) = page.depthScale == null ? await ReadInPlace() : await ReadSelected();
                 row = rows?.FirstOrDefault(r => r.Index == selected);
                 table = row == null || rows == null ? null : SearchPick.TableOf(rows, row.Index);
             }

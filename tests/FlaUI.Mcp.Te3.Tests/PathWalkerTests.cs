@@ -236,6 +236,21 @@ public sealed class PathWalkerTests
     }
 
     [Fact]
+    public async Task AWalkThatReadNoTableRowNeverSaysTableNone()
+    {
+        // Live (vte3g walks 4 and 6): the filtered tree began on a calculation item, the walk ended after one row and
+        // the text said "under table 'none'", as if the item were in no table. The walk read no table row, so it says
+        // that, and the miss text names the table from a depth read of the rows instead.
+        var tree = new FakeTree(new RowObservation("Value (Budget Rate)", "Calculation Item"));
+
+        var walk = await PathWalker.Find(tree, "Budget Rate", "Rate", "Column", outOfTime: () => false);
+
+        Assert.False(walk.Found);
+        Assert.DoesNotContain("'none'", walk.Reason);
+        Assert.Contains("no table row was read on the way", walk.Reason);
+    }
+
+    [Fact]
     public async Task ATableRowWithNoTreeValueIsNamedFromTheStatusBar()
     {
         // Live, the Brands TreeItem gave no value mid-scroll; only the status bar named it.

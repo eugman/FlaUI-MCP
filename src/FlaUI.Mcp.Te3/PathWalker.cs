@@ -93,7 +93,7 @@ public static class PathWalker
                     place.Table,
                     visited,
                     $"Stopped before the tool deadline after {visited} rows, on '{row.Value}' ({row.Type ?? "unknown type"}) "
-                        + $"under table '{place.Table ?? "none"}'. Narrow the search or retry from here.",
+                        + $"{Under(place)}. Narrow the search or retry from here.",
                     Undecided(place, row)
                 );
             }
@@ -126,7 +126,11 @@ public static class PathWalker
 
     // The row a walk ended on, so a miss never reads as if it had searched somewhere else.
     private static string Where(RowObservation row, WalkPlace place) =>
-        $"on '{row.Value}' ({row.Type ?? "unknown type"}) under table '{place.Table ?? "none"}'";
+        $"on '{row.Value}' ({row.Type ?? "unknown type"}) {Under(place)}";
+
+    // The table the walk passed, or that it read none: a row is never said to be in no table.
+    private static string Under(WalkPlace place) =>
+        place.Table is { } table ? $"under table '{table}'" : "(no table row was read on the way)";
 
     // A stop the walk did not decide, on a placed row inside the folder: a read of the selection may still settle it.
     private static bool Undecided(WalkPlace place, RowObservation row) => row.Depth != null && place.InFolder;

@@ -86,11 +86,12 @@ public sealed partial class Te3Page
         SelectResult picked;
         try
         {
-            picked = await ObjectSelect.Run(
-                new RowTree(this, WalkClock.OutOfTime(elapsed)),
-                request,
-                WalkClock.OutOfTime(elapsed)
-            );
+            var rows = new RowTree(this, WalkClock.OutOfTime(elapsed));
+            picked = await ObjectSelect.Run(rows, request, WalkClock.OutOfTime(elapsed));
+            if (picked.FallBack && request.Table != request.ObjectName)
+            {
+                picked = await ByTable(rows, request, picked, elapsed);
+            }
         }
         catch (TimeoutException stopped)
         {
@@ -100,7 +101,7 @@ public sealed partial class Te3Page
 
         WalkReport = new
         {
-            strategy = "rows",
+            strategy = picked.ByTable ? "rows-by-table" : "rows",
             objectType = picked.ConfirmedType,
             rowsRead = picked.RowsRead,
             indentPx = picked.IndentPx,
@@ -137,6 +138,26 @@ public sealed partial class Te3Page
             rowsWalked = walk.RowsVisited,
         };
         return walk;
+    }
+
+    // The second row try, filtered by the table's name; when it misses too, the object's name is searched again so
+    // the keyboard walk sees the tree it always walked.
+    private async Task<SelectResult> ByTable(
+        RowTree rows,
+        WalkRequest request,
+        SelectResult first,
+        Func<TimeSpan> elapsed
+    )
+    {
+        reportStep?.Invoke($"Row read could not place the object ({first.Reason}); filtering by the table's name");
+        var byTable = await ObjectSelect.ByTable(rows, request, WalkClock.OutOfTime(elapsed));
+        if (byTable.Found || !byTable.FallBack)
+        {
+            return byTable;
+        }
+
+        await rows.Search(request.ObjectName);
+        return first with { Reason = $"{first.Reason} {byTable.Reason}" };
     }
 
     /// <summary>te3_navigate object's arrival check: the last walk's object, in its folder, is still selected.</summary>

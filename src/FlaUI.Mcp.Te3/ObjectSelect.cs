@@ -31,6 +31,12 @@ public interface IRowTree
     /// <summary>A fresh read after a select: the rows, and the index of the TreeItem that is selected now.</summary>
     Task<(IReadOnlyList<TreeRow>? Rows, int? Selected)> ReadSelected();
 
+    /// <summary>Types <paramref name="text"/> into the tree's search box in place of what was there.</summary>
+    Task Search(string text) => Task.CompletedTask;
+
+    /// <summary>Opens the selected row (Right).</summary>
+    Task Expand() => Task.CompletedTask;
+
     /// <summary>The status bar's selection slot and Properties' Name, ObjectType and Folder, as they read now.</summary>
     Task<SelectionView> View();
 
@@ -82,6 +88,9 @@ public sealed record SelectResult(
 
     public bool TruncatedByViewport { get; init; }
 
+    /// <summary>Found by the second try, with the tree filtered by the table's name.</summary>
+    public bool ByTable { get; init; }
+
     public IReadOnlyList<RejectedRow> Rejected => RejectedRows ?? [];
 }
 
@@ -90,7 +99,7 @@ public sealed record SelectResult(
 /// (<see cref="SearchPick"/>), select it, and confirm by Properties' Name and ObjectType. No row is walked with keys.
 /// Falls back to the keyboard walk only when depth is unknown or the tree may hold unrealized rows.
 /// </summary>
-internal static class ObjectSelect
+internal static partial class ObjectSelect
 {
     /// <summary>At most this many same-named candidates are selected in turn (a column and a hierarchy level).</summary>
     public const int MaxTries = 3;
