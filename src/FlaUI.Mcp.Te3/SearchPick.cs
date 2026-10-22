@@ -73,7 +73,15 @@ internal static class SearchPick
         {
             if (row.Index == tableRow)
             {
-                scan.EnterTable(row);
+                if (row.Value == request.Table && row.Depth == TableDepth)
+                {
+                    scan.EnterTable(row);
+                }
+                else
+                {
+                    unplaced = true;
+                    scan.Break();
+                }
             }
             else if (row.Depth is not { } depth)
             {

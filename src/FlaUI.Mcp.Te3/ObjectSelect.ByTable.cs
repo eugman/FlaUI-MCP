@@ -95,16 +95,29 @@ internal static partial class ObjectSelect
 
         await tree.ClearSearch();
         var (below, selected) = await tree.ReadBelow();
-        if (selected is not { } index)
+        if (selected is not { } index || !await IsTableAnchor(tree, below, index, request.Table))
         {
-            var why = $"Clearing the search lost the selection on table '{request.Table}'.";
+            var why = $"Clearing the search lost the confirmed selection on table '{request.Table}'.";
             return new(false, table, below.Rows?.Count ?? 0, below.IndentPx, 1, why, false, below.Truncated);
         }
 
         if (!ChildBelow(below.Rows, index))
         {
             await tree.Expand();
-            (below, _) = await tree.ReadBelow();
+            (below, selected) = await tree.ReadBelow();
+            if (selected != index || !await IsTableAnchor(tree, below, index, request.Table))
+            {
+                return new(
+                    false,
+                    table,
+                    below.Rows?.Count ?? 0,
+                    below.IndentPx,
+                    1,
+                    "Expanding the table lost its confirmed selection.",
+                    false,
+                    below.Truncated
+                );
+            }
         }
 
         return await UnderTable(tree, request, outOfTime, below, new Anchor(index, request.Table));
@@ -112,6 +125,18 @@ internal static partial class ObjectSelect
 
     // The table's row in the tree filtered by its name. TE3's filter may not match a whole hyphenated name (te3b-28,
     // "Z01CG1 - Quantity"): its first token is searched next, and the row is still confirmed by its full text.
+    private static async Task<bool> IsTableAnchor(IRowTree tree, RowRead read, int index, string tableName)
+    {
+        var row = read.Rows?.FirstOrDefault(r => r.Index == index);
+        if (row?.Value != tableName || row.Depth != TableDepth)
+        {
+            return false;
+        }
+
+        var seen = await Settled(tree, row, new WalkRequest(tableName, tableName, "Table"));
+        return seen != null && TomSelection.ObjectTypeMatches("Table", seen.Type);
+    }
+
     private static async Task<(RowRead Read, TreeRow? Table, List<string> Searches)> FindTable(
         IRowTree tree,
         string name
