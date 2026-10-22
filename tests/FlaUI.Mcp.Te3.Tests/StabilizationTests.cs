@@ -57,11 +57,14 @@ public sealed class StabilizationTests
     [Fact]
     public async Task PersistentUnavailableElementNeverPassesAbsence()
     {
+        var clock = new FakeClock();
         var error = await Assert.ThrowsAsync<TimeoutException>(() =>
-            Te3Page.WaitForAbsence(
+            Absence.WaitFor(
                 () => throw new FlaUI.Core.Exceptions.ElementNotAvailableException(),
                 timeoutMs: 200,
-                settleMs: 50
+                settleMs: 50,
+                clock.Elapsed,
+                clock.Delay
             )
         );
         Assert.IsType<FlaUI.Core.Exceptions.ElementNotAvailableException>(error.InnerException);

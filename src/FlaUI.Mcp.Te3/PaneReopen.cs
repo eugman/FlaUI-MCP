@@ -68,6 +68,9 @@ internal static class PaneReopen
         /// unowned top-level window; 3.27.1).
         /// </summary>
         Task<bool> IsFloating(string title) => Task.FromResult(false);
+
+        /// <summary>The pause between reads while the pane settles; a test's menu passes its own clock.</summary>
+        Task Delay(int ms) => Task.Delay(ms);
     }
 
     /// <summary>Shows the pane; a visible pane is left alone, and a mapped hidden one is reopened and checked.</summary>
@@ -121,7 +124,7 @@ internal static class PaneReopen
                 };
             }
 
-            await Task.Delay(PollMs);
+            await menu.Delay(PollMs);
         }
 
         throw new InvalidOperationException(
