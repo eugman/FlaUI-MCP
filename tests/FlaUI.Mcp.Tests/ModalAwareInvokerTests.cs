@@ -164,16 +164,17 @@ public class ModalAwareInvokerTests
                     "Invoke on 'Slow'",
                     () => release.Wait(),
                     tracker,
-                    gracePeriod: TimeSpan.FromMilliseconds(300),
+                    // Long enough that the poll cap (one 50 ms poll per 50 ms of grace) cannot end it first.
+                    gracePeriod: TimeSpan.FromSeconds(10),
                     windowEnumerator: _ => windows
                 )
             );
 
             // The wait reads the clock once for its deadline, then once a turn.
             Eventually.WaitUntil(() => clock.NowReads >= 3, "the wait to poll");
-            clock.Advance(TimeSpan.FromMilliseconds(299));
+            clock.Advance(TimeSpan.FromSeconds(10) - TimeSpan.FromMilliseconds(1));
             var reads = clock.NowReads;
-            Eventually.WaitUntil(() => clock.NowReads >= reads + 2, "the wait to poll after 299 ms");
+            Eventually.WaitUntil(() => clock.NowReads >= reads + 2, "the wait to poll 1 ms before its deadline");
             Assert.False(call.IsCompleted, "Returned before the grace period passed");
             clock.Advance(TimeSpan.FromMilliseconds(1));
             var result = Eventually.Result(call);
@@ -187,6 +188,42 @@ public class ModalAwareInvokerTests
         }
 
         Eventually.WaitUntil(() => !tracker.TryGetPending(TestProcessId, out _), "the tracker to clear");
+    }
+
+    [Fact]
+    public void AHungCallOnAStillClockStopsAfterItsGracePeriodsPolls()
+    {
+        // No modal and a clock nobody moves: only the poll cap ends the wait, after the grace period's 50 ms polls.
+        var tracker = new PendingInvokeTracker();
+        using var release = new ManualResetEventSlim(false);
+        var (_, installed) = StillClock();
+        using var desktop = installed;
+        var reads = 0;
+        try
+        {
+            var result = Eventually.Returns(() =>
+                ModalAwareInvoker.Execute(
+                    TestProcessId,
+                    "Invoke on 'Hung'",
+                    () => release.Wait(),
+                    tracker,
+                    gracePeriod: TimeSpan.FromMilliseconds(300),
+                    windowEnumerator: _ =>
+                    {
+                        Interlocked.Increment(ref reads);
+                        return [MakeWindow(1, "Main")];
+                    }
+                )
+            );
+
+            Assert.Equal(PatternCallOutcome.StillPending, result.Outcome);
+            // The baseline read, then one read after each of the six 50 ms polls of the 300 ms grace period.
+            Assert.Equal(7, reads);
+        }
+        finally
+        {
+            release.Set();
+        }
     }
 
     [Fact]
