@@ -6,39 +6,6 @@ using FlaUI.Mcp.Core;
 
 public sealed partial class Te3Page
 {
-    /// <summary>Opens a ComboBox in Preferences with Alt+Down. Without a name there must be exactly one visible ComboBox.</summary>
-    public async Task OpenPreferencesDropdown(string? name = null)
-    {
-        var preferences = PreferencesHandle();
-        var found = await Task.Run(() =>
-                query.Find(
-                    preferences,
-                    new(ControlType: "ComboBox", Name: name, Visible: true),
-                    maxResults: 10,
-                    budget: new SearchBudget(3000, TimeSpan.FromSeconds(3))
-                )
-            )
-            .WaitAsync(TimeSpan.FromSeconds(5));
-        if (found.Elements.Count != 1)
-        {
-            throw new InvalidOperationException(
-                $"Expected one Preferences ComboBox{(name == null ? "" : $" named {name}")}; found: "
-                    + string.Join(", ", found.Elements.Select(e => $"'{e.Name}'"))
-            );
-        }
-
-        await invoke(
-            "windows_send_keys",
-            new
-            {
-                handle = preferences,
-                @ref = found.Elements[0].Ref,
-                chord = "Alt+Down",
-            }
-        );
-        await Task.Delay(500);
-    }
-
     public Task SendKeysToPreferences(string chord) => SendKeysTo(PreferencesHandle(), chord);
 
     public sealed record Dialog(string Handle, nint Hwnd, string Title);
@@ -65,46 +32,6 @@ public sealed partial class Te3Page
                 reference => invoke("windows_click", new { @ref = reference })
             )
         );
-
-    public async Task StageField(Dialog dialog, string name, string controlType, string value) =>
-        await invoke(
-            "windows_fill",
-            new
-            {
-                @ref = await DialogRef(dialog, name, controlType),
-                value,
-                verifyFocus = true,
-            }
-        );
-
-    public async Task SetDialogChoice(Dialog dialog, string name, string value)
-    {
-        var reference = await DialogRef(
-            dialog,
-            new(Name: name, ControlType: "ComboBox", Pattern: "Value", Visible: true)
-        );
-        await invoke(
-            "windows_fill",
-            new
-            {
-                @ref = reference,
-                value,
-                verifyFocus = true,
-            }
-        );
-        var observed = (
-            await ResolveDialog(dialog, new(Name: name, ControlType: "ComboBox", Pattern: "Value", Visible: true))
-        )
-            .Patterns
-            .Value
-            .Pattern
-            .Value
-            .ValueOrDefault;
-        if (observed != value)
-        {
-            throw new InvalidOperationException($"{name} expected {value}, observed {observed}");
-        }
-    }
 
     public async Task<string> ReadDialogValue(Dialog dialog, string automationId)
     {
