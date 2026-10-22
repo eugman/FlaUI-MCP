@@ -21,13 +21,21 @@ public sealed partial class InteractionGrant : IDisposable
     /// <summary>How long the foreground may be missing (a window switch in progress) before the grant is revoked.</summary>
     public const long MissingForegroundGraceMilliseconds = 500;
 
-    private const string UserInput = "non-injected keyboard or mouse input observed; ask the user before resuming";
+    /// <summary>Refused while the user is asked to click the host's window (<see cref="BeginPrompt"/>).</summary>
+    public const string ActivationPending = "activation-pending";
+
+    // Camtasia's reason texts, kept word for word: the broker's text fallback and the contract's safety reasons
+    // match them. The typed code travels beside them.
+    private const string UserInput = "Non-injected keyboard or mouse input observed; ask the user before resuming";
 
     private readonly Func<(nint Window, int Pid)> foreground;
     private readonly object sync = new();
     private readonly HashSet<int> targets = [];
     private readonly Func<long>? physicalInput;
+    private readonly Func<InputCounts>? counts;
     private readonly Func<IInputObserver> createObserver;
+    private readonly bool observerInjected;
+    private readonly IDisposable interactiveHost;
     private readonly Func<long> clock;
     private readonly List<CancellationTokenSource> retired = [];
     private System.Threading.Timer? monitor;
@@ -45,13 +53,19 @@ public sealed partial class InteractionGrant : IDisposable
     /// <param name="physicalInput">Counts the user's input; null starts a <see cref="PhysicalInputObserver"/>.</param>
     /// <param name="clock">Milliseconds for the missing-foreground grace; Environment.TickCount64 by default.</param>
     /// <param name="createObserver">Starts an observer once a batch begins.</param>
+    /// <param name="counts">Keys and button-downs for <see cref="Mark"/> when <paramref name="physicalInput"/> is injected.</param>
+    /// <remarks>Constructing a grant declares the host interactive (<see cref="MutationGuard.RequireHook"/>).</remarks>
     public InteractionGrant(
         Func<(nint Window, int Pid)>? foreground = null,
         Func<long>? physicalInput = null,
         Func<long>? clock = null,
-        Func<IInputObserver>? createObserver = null
+        Func<IInputObserver>? createObserver = null,
+        Func<InputCounts>? counts = null
     )
     {
+        interactiveHost = MutationGuard.RequireHook();
+        this.counts = counts;
+        observerInjected = createObserver != null;
         this.createObserver = createObserver ?? (() => new PhysicalInputObserver());
         this.clock = clock ?? (() => Environment.TickCount64);
         this.foreground =
@@ -92,7 +106,7 @@ public sealed partial class InteractionGrant : IDisposable
 
     public string? Batch { get; private set; }
 
-    public string Reason { get; private set; } = "the user has not approved an interactive batch";
+    public string Reason { get; private set; } = "User has not approved an interactive batch";
 
     /// <summary>The refusal code <see cref="Require"/> would give now (hyphenated).</summary>
     public string Code
@@ -133,13 +147,19 @@ public sealed partial class InteractionGrant : IDisposable
             }
 
             ObjectDisposedException.ThrowIf(disposed, this);
+            if (physicalInput == null && !monitorChanges && !observerInjected)
+            {
+                // No monitor and no input source would leave the batch unwatched: never fail open.
+                throw new ArgumentException("A batch without monitoring needs an injected input source.");
+            }
+
             if (foreground().Window == 0)
             {
                 throw new InvalidOperationException("No interactive foreground window.");
             }
 
             Renew();
-            if (physicalInput == null && monitorChanges)
+            if (physicalInput == null)
             {
                 inputObserver = Live(inputObserver) ?? createObserver();
             }
@@ -148,7 +168,8 @@ public sealed partial class InteractionGrant : IDisposable
             targets.Clear();
             missingForegroundSince = null;
             paused = null;
-            (Batch, Reason, code, watching) = (batch, "approved", ApprovalRequired, true);
+            promptUntil = null;
+            (Batch, Reason, code, watching) = (batch, "Approved", ApprovalRequired, true);
             monitor?.Dispose();
             monitor = monitorChanges ? new System.Threading.Timer(_ => Observe(), null, 100, 100) : null;
         }
@@ -209,9 +230,14 @@ public sealed partial class InteractionGrant : IDisposable
         {
             if (Batch == null)
             {
+                throw Refused(code, "Interaction approval required: " + Reason);
+            }
+
+            if (promptUntil != null)
+            {
                 throw Refused(
-                    code,
-                    $"Desktop input needs the user's approval: {Reason}. Ask the user, then begin a new batch."
+                    ActivationPending,
+                    "The user is being asked to click the window; no input until they have."
                 );
             }
 
@@ -222,7 +248,7 @@ public sealed partial class InteractionGrant : IDisposable
 
             if (foreground().Window == 0)
             {
-                throw Refused(FocusUnavailable, "Foreground is transitioning; no input permitted. Observe again.");
+                throw Refused(FocusUnavailable, "Foreground is transitioning; no input permitted");
             }
         }
     }
@@ -238,7 +264,7 @@ public sealed partial class InteractionGrant : IDisposable
             {
                 if (Batch == null)
                 {
-                    throw Refused(code, $"Desktop input needs the user's approval: {Reason}.");
+                    throw Refused(code, "Interaction approval required: " + Reason);
                 }
 
                 if (foreground().Window != 0)
@@ -283,29 +309,12 @@ public sealed partial class InteractionGrant : IDisposable
         }
     }
 
-    /// <summary>The user's keys and clicks now, for a host that asks the user to click; null without an observer.</summary>
+    /// <summary>The user's keys and clicks now; null without a counting source.</summary>
     public InputCounts? Mark()
     {
         lock (sync)
         {
-            return inputObserver?.Counts;
-        }
-    }
-
-    /// <summary>
-    /// Count input from now on, keeping the batch: for a host that asked the user to click its window and has checked
-    /// (with <see cref="Mark"/>) that the click, and nothing else, happened.
-    /// </summary>
-    public void Rebaseline()
-    {
-        lock (sync)
-        {
-            if (Batch == null)
-            {
-                throw Refused(code, $"No batch to continue: {Reason}.");
-            }
-
-            inputAtApproval = InputSequence();
+            return counts?.Invoke() ?? inputObserver?.Counts;
         }
     }
 
@@ -313,13 +322,14 @@ public sealed partial class InteractionGrant : IDisposable
     /// Ends the grant. A normal end keeps <see cref="SafetyToken"/> alive while physical input is still watched; a
     /// safety end (host stop) also cancels it.
     /// </summary>
-    public void End(string reason = "the batch finished", bool safetyEvent = false)
+    /// <param name="code">The refusal later input gets: approval-required, or activation-denied for a failed prompt.</param>
+    public void End(string reason = "Batch finished", bool safetyEvent = false, string code = ApprovalRequired)
     {
         CancellationTokenSource stop,
             stopSafety;
         lock (sync)
         {
-            stop = RevokeLocked(reason, ApprovalRequired, safetyEvent);
+            stop = RevokeLocked(reason, code, safetyEvent);
             stopSafety = safety;
         }
 
@@ -358,7 +368,7 @@ public sealed partial class InteractionGrant : IDisposable
             disposed = true;
         }
 
-        End("the host stopped", safetyEvent: true);
+        End("Host stopped", safetyEvent: true);
         lock (sync)
         {
             monitor?.Dispose();
@@ -373,5 +383,6 @@ public sealed partial class InteractionGrant : IDisposable
 
         lifetime.Dispose();
         safety.Dispose();
+        interactiveHost.Dispose();
     }
 }

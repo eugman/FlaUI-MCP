@@ -42,6 +42,14 @@ public sealed partial class InteractionGrant
     /// <summary>Why the grant must end now, or null: the user's input, a lost foreground, a failed observation.</summary>
     private (string Reason, string Code)? SafetyProblem()
     {
+        if (promptUntil is { } until)
+        {
+            // While the user is asked to click, their input is expected: Rebaseline judges it. Bounded.
+            return clock() > until
+                ? ("the user did not click the window before the prompt ended", RefusalCodes.ActivationDenied)
+                : null;
+        }
+
         try
         {
             if (InputSequence() != inputAtApproval)
@@ -55,23 +63,20 @@ public sealed partial class InteractionGrant
                 missingForegroundSince = null;
                 Reason =
                     targets.Count == 0 || targets.Contains(current.Pid)
-                        ? "approved"
-                        : "approved; owned target activation required before input";
+                        ? "Approved"
+                        : "Approved; owned target activation required before input";
                 return null;
             }
 
             missingForegroundSince ??= clock();
             return clock() - missingForegroundSince.Value > MissingForegroundGraceMilliseconds
-                ? (
-                    $"the foreground was unavailable for more than {MissingForegroundGraceMilliseconds} ms",
-                    FocusRevoked
-                )
+                ? ($"Foreground unavailable for more than {MissingForegroundGraceMilliseconds} ms", FocusRevoked)
                 : null;
         }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
             // An observer that stopped, or a failed foreground read, cannot vouch that the user is away.
-            return ("focus or input observation failed", FocusRevoked);
+            return ("Focus/input observation failed", FocusRevoked);
         }
     }
 
@@ -81,8 +86,9 @@ public sealed partial class InteractionGrant
         {
             return InputSequence() != inputAtApproval;
         }
-        catch (InvalidOperationException)
+        catch (Exception error) when (error is not OutOfMemoryException)
         {
+            // Any observer failure (not only "unavailable") revokes rather than killing the host's monitor.
             return true;
         }
     }

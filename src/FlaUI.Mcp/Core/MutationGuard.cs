@@ -7,6 +7,9 @@ public static class MutationGuard
 
     private static int hookRequired;
 
+    /// <summary>Whether this host has declared itself interactive, so a mutation with no hook is refused.</summary>
+    public static bool HookRequired => Volatile.Read(ref hookRequired) > 0;
+
     /// <summary>
     /// Declare this host interactive: from now on a mutation with no <see cref="BeforeMutation"/> hook on its flow is
     /// refused (approval-required) instead of allowed, so a path that forgot to install the grant fails closed. A
