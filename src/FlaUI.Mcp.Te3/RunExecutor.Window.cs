@@ -64,38 +64,64 @@ public static partial class RunExecutor
         var target = host.Sessions.GetInputTarget(handle);
         var activation = Stopwatch.StartNew();
         var waited = Win32Desktop.GetForegroundWindow() != target.Hwnd;
-        // Core's prompt flow: the grant holds input and keeps the user's counts from here; only a click inside TE3,
-        // and no typing, may bring it forward (Te3Interaction.Rebaseline at the first poll that sees it in front).
-        if (waited)
+        async Task Wait()
         {
-            interaction.BeginPrompt();
-            Console.WriteLine(
-                $"Click the TE3 window containing {label}; waiting 120 seconds. Then leave the keyboard and mouse "
-                    + "alone: input after that click stops the run."
-            );
-        }
-
-        while (Win32Desktop.GetForegroundWindow() != target.Hwnd)
-        {
-            RunSafety.RequireExclusiveTe3(target.ProcessId);
-            target.EnsureAlive();
-            if (activation.Elapsed > TimeSpan.FromSeconds(120))
+            while (Win32Desktop.GetForegroundWindow() != target.Hwnd)
             {
-                throw new TimeoutException(ActivationTimeout);
+                RunSafety.RequireExclusiveTe3(target.ProcessId);
+                target.EnsureAlive();
+                if (activation.Elapsed > TimeSpan.FromSeconds(120))
+                {
+                    throw new TimeoutException(ActivationTimeout);
+                }
+
+                await Task.Delay(250, cancellationToken);
             }
-
-            await Task.Delay(250, cancellationToken);
         }
 
-        if (waited)
+        if (!waited)
         {
-            interaction.Rebaseline(
-                Win32Desktop.GetWindowBounds(target.Hwnd)
-                    ?? throw new InvalidOperationException(
-                        "The run's TE3 window has no bounds to check the click against."
-                    )
-            );
+            await Wait();
+            return;
         }
+
+        Console.WriteLine(
+            $"Click the TE3 window containing {label}; waiting 120 seconds. Then leave the keyboard and mouse "
+                + "alone: input after that click stops the run."
+        );
+        await PromptForClick(interaction, Wait, () => Win32Desktop.GetWindowBounds(target.Hwnd));
+    }
+
+    /// <summary>
+    /// Core's prompt flow: the grant holds input and keeps the user's counts from BeginPrompt; only a click inside
+    /// TE3, and no typing, may bring it forward (Rebaseline at the first poll that sees it in front). However the wait
+    /// fails (timeout, cancellation, TE3 gone, a second TE3, no bounds to judge the click by), the prompt is ended
+    /// with activation-denied before the failure goes on to the run's capture and cleanup.
+    /// </summary>
+    internal static async Task PromptForClick(
+        Te3Interaction interaction,
+        Func<Task> wait,
+        Func<System.Drawing.Rectangle?> bounds
+    )
+    {
+        interaction.BeginPrompt();
+        System.Drawing.Rectangle window;
+        try
+        {
+            await wait();
+            window =
+                bounds()
+                ?? throw new InvalidOperationException(
+                    "The run's TE3 window has no bounds to check the click against."
+                );
+        }
+        catch (Exception error)
+        {
+            interaction.DenyActivation(error.Message);
+            throw;
+        }
+
+        interaction.Rebaseline(window);
     }
 
     /// <summary>

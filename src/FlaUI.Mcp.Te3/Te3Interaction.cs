@@ -122,5 +122,9 @@ public sealed class Te3Interaction : IDisposable
     internal void Rebaseline(Rectangle bounds) =>
         (grant ?? throw new InvalidOperationException("This tool was built without a grant.")).Rebaseline(bounds);
 
+    /// <summary>Ends an open click prompt that cannot be judged: later input is refused with activation-denied.</summary>
+    internal void DenyActivation(string why) =>
+        grant?.End("Activation not accepted: " + why, safetyEvent: true, code: ActivationDenied);
+
     public void Dispose() => grant?.Dispose();
 }
