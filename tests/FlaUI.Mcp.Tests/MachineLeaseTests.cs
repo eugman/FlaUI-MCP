@@ -98,3 +98,23 @@ public sealed class MachineLeaseFailureTests
         Assert.Contains("no input sent", error.Message);
     }
 }
+
+/// <summary>A lease handle that stops working (disposed under the owner) is also a refusal, not a crash.</summary>
+[Collection(InputLeaseCollection.Name)]
+public sealed class MachineLeaseDisposedTests
+{
+    [Fact]
+    public void ADisposedMutexHandleIsALeaseRefusal()
+    {
+        var owner = new DesktopLease.MutexOwner(() =>
+        {
+            var mutex = new Mutex(false, $@"Local\FlaUI-MCP-Disposed-{Guid.NewGuid():N}");
+            mutex.Dispose();
+            return mutex;
+        });
+
+        var error = Assert.Throws<InputRefusedException>(() => owner.Acquire(TimeSpan.FromMilliseconds(100), default));
+
+        Assert.Equal("lease-unavailable", error.Refusal.Code);
+    }
+}
