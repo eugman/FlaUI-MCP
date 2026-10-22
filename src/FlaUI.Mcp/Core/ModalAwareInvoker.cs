@@ -66,6 +66,12 @@ public static class ModalAwareInvoker
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
     /// <summary>
+    /// How long after a completed call a dialog it opened is still looked for: some open a moment after the
+    /// pattern call returns, after the state was already read back.
+    /// </summary>
+    public static readonly TimeSpan LateModalGrace = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
     /// Execute a pattern call with modal detection.
     /// </summary>
     /// <param name="processId">Target process id (0 if unknown; disables modal detection).</param>
@@ -122,7 +128,7 @@ public static class ModalAwareInvoker
         );
         if (waited is WaitOutcome<PatternCallResult>.Done done)
         {
-            return done.Value;
+            return done.Value with { ModalTitle = LateModal(processId, baseline, windowEnumerator, desktop) };
         }
 
         ending.ReportedPending(task);
@@ -141,6 +147,43 @@ public static class ModalAwareInvoker
             WaitError = (waited as WaitOutcome<PatternCallResult>.TimedOut)?.LastError?.Message,
         };
         return operation == null ? pending : pending with { Dispatched = operation.InputsSent > sentBefore };
+    }
+
+    /// <summary>
+    /// A modal dialog the completed call opened a moment later, or null: polled for <see cref="LateModalGrace"/> on
+    /// the desktop's clock (a fake moves it), so the caller can say the state it read back may not stand.
+    /// </summary>
+    private static string? LateModal(
+        int processId,
+        WindowBaseline baseline,
+        Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
+        InputDesktop desktop
+    )
+    {
+        if (processId == 0)
+        {
+            return null;
+        }
+
+        var deadline = desktop.Time.GetUtcNow() + LateModalGrace;
+        var maxPolls = (int)Math.Ceiling(LateModalGrace / PollInterval);
+        for (var polls = 1; polls <= maxPolls; polls++)
+        {
+            desktop.Pause(PollInterval);
+            OperationContext.Check();
+            var (windows, error) = ReadWindows(windowEnumerator, processId);
+            if (error == null && baseline.NewModal(windows) is { } modalTitle)
+            {
+                return modalTitle;
+            }
+
+            if (desktop.Time.GetUtcNow() >= deadline)
+            {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
