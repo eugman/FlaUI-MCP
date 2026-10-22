@@ -12,6 +12,15 @@ public sealed class CoreCallException : AutomationRefusal
     /// <summary>The code of a failed call whose outcome names no refusal.</summary>
     public const string ToolFailed = "tool-failed";
 
+    /// <summary>The code of a call refused for its arguments before any input (the broker's invalid-arguments).</summary>
+    public const string InvalidArguments = "invalid-arguments";
+
+    /// <summary>
+    /// The code of a call stopped before any input because a precondition it checks first did not hold: TE3 not
+    /// running, no single document window, another dialog open, the window minimized (the broker's precondition-failed).
+    /// </summary>
+    public const string PreconditionFailed = "precondition-failed";
+
     public CoreCallException(string? tool, McpToolResult result)
         : this(tool, result, result.Outcome ?? new ToolOutcome("unknown", "unknown")) { }
 
@@ -142,9 +151,40 @@ internal static class CoreFailure
             Verification = "not-established",
             Status = "failed",
             InputsSent = inputsSent,
-            Failure = failing?.Failure is { } refusal ? refusal with { ActionDispatched = inputsSent > 0 } : null,
+            Failure = Refusal(failing, error, inputsSent),
             Details = WalkAccount.Details(walk, null),
         };
+    }
+
+    // The refusal Core typed, saying whether this call's input went out, or for a failure Core never saw, the typed
+    // pre-input refusal.
+    private static InputRefusal? Refusal(ToolOutcome? failing, Exception error, int inputsSent)
+    {
+        if (failing == null)
+        {
+            return BeforeInput(error, inputsSent);
+        }
+
+        return failing.Failure is { } refusal ? refusal with { ActionDispatched = inputsSent > 0 } : null;
+    }
+
+    /// <summary>
+    /// The typed refusal for a failure that no Core outcome typed, before any input went out: the tool refused its
+    /// arguments (invalid-arguments), or a precondition it checks first did not hold (precondition-failed), so the
+    /// broker reads actionDispatched false instead of nothing. A read that timed out or was cancelled is neither, and
+    /// stays untyped; so does a failure after input, which the caller's tally already says went out.
+    /// </summary>
+    internal static InputRefusal? BeforeInput(Exception error, int inputsSent)
+    {
+        var cause = error.GetBaseException();
+        if (inputsSent > 0 || cause is TimeoutException or OperationCanceledException)
+        {
+            return null;
+        }
+
+        var code =
+            cause is ArgumentException ? CoreCallException.InvalidArguments : CoreCallException.PreconditionFailed;
+        return new InputRefusal(code, error.Message) { ActionDispatched = false };
     }
 
     /// <summary>

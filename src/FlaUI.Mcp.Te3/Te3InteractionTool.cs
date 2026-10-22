@@ -71,9 +71,16 @@ public sealed class Te3InteractionTool(Te3Interaction interaction, string name) 
                 )
             );
         }
+        // Refused before anything changed: the arguments (no approval) or the grant's state, typed so the broker
+        // reads a pre-input refusal, not a bare error.
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return Task.FromResult(ErrorResult($"{name}: {ex.Message}"));
+            return Task.FromResult(
+                ErrorResult($"{name}: {ex.Message}") with
+                {
+                    Outcome = CoreFailure.Reply(ex, inputsSent: 0),
+                }
+            );
         }
     }
 }

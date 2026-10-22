@@ -87,31 +87,29 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
             );
             return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
         }
-        catch (ArgumentException error)
+        catch (Exception error) when (Answered(error))
         {
-            return ErrorResult($"{ToolName}: {error.Message}");
-        }
-        catch (InvalidOperationException error)
-        {
-            return ErrorResult($"{ToolName}: {error.Message}");
-        }
-        catch (TimeoutException error)
-        {
-            return ErrorResult($"{ToolName}: {error.Message}");
-        }
-        catch (HttpRequestException error)
-        {
-            return ErrorResult($"{ToolName}: {error.Message}");
-        }
-        catch (TaskCanceledException error) when (OperationContext.Current.Value?.Stop.IsCancellationRequested != true)
-        {
-            return ErrorResult($"{ToolName}: {error.Message}");
-        }
-        catch (JsonException error)
-        {
-            return ErrorResult($"{ToolName}: {error.Message}");
+            return Failure(error);
         }
     }
+
+    // The failures this read answers with its reply: bad arguments, a refused or unreachable endpoint, a bad reply,
+    // and a request that timed out (TaskCanceledException), unless the operation itself was stopped.
+    private static bool Answered(Exception error) =>
+        error switch
+        {
+            ArgumentException or InvalidOperationException or TimeoutException => true,
+            HttpRequestException or JsonException => true,
+            TaskCanceledException => OperationContext.Current.Value?.Stop.IsCancellationRequested != true,
+            _ => false,
+        };
+
+    // A read that sent nothing, typed (invalid-arguments, precondition-failed) so the broker reads a pre-input refusal.
+    private static McpToolResult Failure(Exception error) =>
+        ErrorResult($"{ToolName}: {error.Message}") with
+        {
+            Outcome = CoreFailure.Reply(error, inputsSent: 0),
+        };
 
     private static string? Optional(JsonElement a, string name) =>
         a.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

@@ -26,7 +26,9 @@ public sealed class AdaptationMutationTests
         Assert.Equal("not-dispatched", outcome.Dispatch);
         Assert.Equal("not-tracked", outcome.Provider);
         Assert.Equal("not-established", outcome.Verification);
-        Assert.Null(outcome.Failure);
+        // Typed for the broker: a precondition failed before any input, so nothing was dispatched.
+        Assert.Equal(CoreCallException.PreconditionFailed, outcome.Failure?.Code);
+        Assert.False(outcome.Failure?.ActionDispatched);
     }
 
     [Theory]
