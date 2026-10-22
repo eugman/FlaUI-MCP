@@ -27,7 +27,7 @@ $testApps = 'WinFormsTestApp', 'WpfTestApp'
 $parts = [ordered]@{
     guards = 'GuardedInput', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'ClickHitTest', 'FocusRule', 'InteractionGrant', 'InteractionGrantObserve', 'Heartbeat', 'MutationGuard', 'DesktopLease', 'AutomationRefusal', 'InputRefusal', 'WindowBaseline', 'Diagnostics'
     state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext', 'WaitOutcome'
-    protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolBase', 'ToolFacts', 'Proof'
+    protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolRegistrySchemas', 'ToolRegistryStrand', 'ToolBase', 'ToolFacts', 'Proof'
     pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'PointerActions'
     keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
 }

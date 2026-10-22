@@ -7,7 +7,7 @@ namespace FlaUI.Mcp;
 /// <summary>
 /// Registry for MCP tools - maps tool names to handlers
 /// </summary>
-public class ToolRegistry
+public partial class ToolRegistry
 {
     private readonly Dictionary<string, ITool> _tools = new();
     private readonly TimeSpan _toolTimeout;
@@ -35,68 +35,6 @@ public class ToolRegistry
         }
 
         _onToolActivity = onToolActivity;
-    }
-
-    // The declared arguments of each tool whose schema is closed (additionalProperties: false).
-    private readonly Dictionary<string, string[]> _closedSchemas = new();
-
-    public void RegisterTool(ITool tool)
-    {
-        _tools[tool.Name] = tool;
-        _closedSchemas.Remove(tool.Name);
-        if (DeclaredArguments(tool) is { } declared)
-        {
-            _closedSchemas[tool.Name] = declared;
-        }
-    }
-
-    /// <summary>
-    /// The declared arguments of a closed schema, or null for an open one. A definition that throws is left
-    /// unenforced here; calling the tool reports its error, as before.
-    /// </summary>
-    private static string[]? DeclaredArguments(ITool tool)
-    {
-        JsonElement schema;
-        try
-        {
-            schema = JsonSerializer.SerializeToElement(tool.GetDefinition().InputSchema, McpProtocol.JsonOptions);
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-
-        if (
-            schema.ValueKind == JsonValueKind.Object
-            && schema.TryGetProperty("additionalProperties", out var additional)
-            && additional.ValueKind == JsonValueKind.False
-        )
-        {
-            return schema.TryGetProperty("properties", out var properties)
-                ? properties.EnumerateObject().Select(p => p.Name).ToArray()
-                : [];
-        }
-
-        return null;
-    }
-
-    /// <summary>The refusal for an argument a closed schema does not declare, or null when every one is declared.</summary>
-    private McpToolResult? UndeclaredArgument(string name, JsonElement? arguments)
-    {
-        if (
-            !_closedSchemas.TryGetValue(name, out var declared)
-            || arguments is not { ValueKind: JsonValueKind.Object } args
-            || args.EnumerateObject().Select(p => p.Name).FirstOrDefault(n => !declared.Contains(n)) is not { } unknown
-        )
-        {
-            return null;
-        }
-
-        var known = declared.Length == 0 ? "none" : string.Join(", ", declared);
-        return ErrorText($"Unknown argument '{unknown}' for {name}; no input sent. Declared arguments: {known}.") with
-        {
-            Outcome = new ToolOutcome("not-dispatched", "not-tracked") { Status = "failed", InputsSent = 0 },
-        };
     }
 
     /// <summary>
@@ -330,80 +268,6 @@ public class ToolRegistry
             },
             IsError = true,
         };
-
-    /// <summary>
-    /// Result for a call that returned before its tool task ended: the caller cancelled (<paramref name="settled"/>
-    /// is set) or the tool timed out. The tool may still be running and may have partially executed.
-    /// </summary>
-    private McpToolResult Strand(
-        string name,
-        OperationContext operation,
-        Task<McpToolResult> toolTask,
-        Task? settled,
-        Action<Task>? whenStranded
-    )
-    {
-        operation.Stop.Cancel();
-        if (settled != null)
-        {
-            whenStranded?.Invoke(settled);
-        }
-
-        // A stranded call can still hold this app's UIA provider. Fail later ref tools fast until it returns.
-        if (Pending != null && operation.ProcessId != 0)
-        {
-            var stranded = Pending.Begin(
-                operation.ProcessId,
-                settled != null ? $"cancelled {name}" : $"timed-out {name}"
-            );
-            _ = toolTask.ContinueWith(_ => Pending.Complete(stranded), TaskScheduler.Default);
-        }
-
-        _ = toolTask.ContinueWith(
-            task =>
-            {
-                _ = task.Exception;
-            },
-            TaskContinuationOptions.OnlyOnFaulted
-        );
-
-        return new McpToolResult
-        {
-            Content = new List<McpContent>
-            {
-                new() { Type = "text", Text = PendingMessage(name, settled != null) },
-            },
-            // Failed like any error result, and carrying a refusal the call recorded before it stranded.
-            Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id)
-            {
-                InputsSent = operation.InputsSent,
-                Status = "failed",
-                Failure = operation.Refusal is { } refusal
-                    ? refusal with
-                    {
-                        ActionDispatched = refusal.ActionDispatched == true || operation.InputsSent > 0,
-                    }
-                    : null,
-            },
-            IsError = true,
-        };
-    }
-
-    /// <summary>Completes when the tool returns, or when its timeout would have expired had it not been cancelled.</summary>
-    private Task SettledOrTimedOut(Task toolTask, TimeSpan elapsed)
-    {
-        var remaining = _toolTimeout - elapsed;
-        return Task.WhenAny(toolTask, Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, _time));
-    }
-
-    private string PendingMessage(string name, bool cancelled) =>
-        (
-            cancelled
-                ? $"Tool '{name}' cancellation requested. "
-                : $"Tool '{name}' timed out after {(int)_toolTimeout.TotalMilliseconds}ms. "
-        )
-        + "A modal dialog or blocked UI Automation provider may still be running in the background. "
-        + "Inspect the target and operation status before continuing. The request may have partially executed; do not blindly replay it.";
 
     private static McpToolResult CompleteResult(McpToolResult result, OperationContext operation) =>
         result with
