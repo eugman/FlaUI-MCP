@@ -51,20 +51,25 @@ internal static class ObjectWalk
             return walk;
         }
 
-        return await Arrived(cursor, walk, request, propertiesName) ? walk with { Found = true } : walk;
+        // A rescue happens before the search clears, on the row the walk itself read its way to: the table and folder
+        // are the ones the walk passed through (Rescuable requires the row inside the folder).
+        var walked = () => Task.FromResult(new SelectionPlace(walk.Table, true));
+        return await Arrived(cursor, walk, request, propertiesName, walked) ? walk with { Found = true } : walk;
     }
 
     /// <summary>
-    /// The selection is the object the walk reached, by identity: name and type (the cursor types the row), the table
-    /// the walk confirmed and, when shown, Properties' Name. Not by its row or depth: clearing the search re-indexes
-    /// the rows and the unfiltered view may give no depth, while the folder was already checked during the walk. A
-    /// walk that was not found, or not inside the folder, never arrived.
+    /// The selection is the object the walk reached: by identity (name and type, the cursor typing the row, and
+    /// Properties' Name when shown) and by where the rows read now place it (<paramref name="place"/>: the table from
+    /// the nearest table row above it under Tables, and whether it is the object's row in that table and folder), not
+    /// by its row index or the walk's own table. A walk that was not found, or rows that cannot place the selection,
+    /// never arrived.
     /// </summary>
     public static async Task<bool> Arrived(
         ITreeCursor cursor,
         WalkResult walk,
         WalkRequest request,
-        Func<string?> propertiesName
+        Func<string?> propertiesName,
+        Func<Task<SelectionPlace>> place
     )
     {
         if (!(walk.Found || walk.Rescuable))
@@ -73,14 +78,20 @@ internal static class ObjectWalk
         }
 
         var row = await cursor.Current();
-        return PathWalker.Arrived(
-            row,
-            propertiesName(),
-            null,
-            walk.Table,
-            request.Table,
-            request.ObjectName,
-            request.ObjectType
-        );
+        var at = await place();
+        return at.Placed
+            && PathWalker.Arrived(
+                row,
+                propertiesName(),
+                null,
+                at.Table,
+                request.Table,
+                request.ObjectName,
+                request.ObjectType
+            );
     }
 }
+
+/// <summary>Where the rows read place the selection: its table (null when no table row above it was read), and
+/// whether it is a candidate for the request there (right name, table, folder and depth).</summary>
+public sealed record SelectionPlace(string? Table, bool Placed);

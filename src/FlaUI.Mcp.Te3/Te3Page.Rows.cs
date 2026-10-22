@@ -14,7 +14,33 @@ public sealed partial class Te3Page
 
     /// <summary>The proof of an object navigation: the selection TE3 names now against the request.</summary>
     internal async Task<FlaUI.Mcp.Core.Proof> ObjectProof(string table, string name, string? type) =>
-        NavigationProof.Object(table, name, type, await Task.Run(ViewSelection), lastWalk?.Table);
+        NavigationProof.Object(
+            table,
+            name,
+            type,
+            await Task.Run(ViewSelection),
+            (await PlaceOf(lastRequest ?? new WalkRequest(table, name, type ?? ""))).Table
+        );
+
+    /// <summary>
+    /// Where the rows in view place the selection now, read again rather than taken from the walk: the walk's
+    /// indent (the tree's step does not change when the filter clears), else one measured in place.
+    /// </summary>
+    internal async Task<SelectionPlace> PlaceOf(WalkRequest request)
+    {
+        var found = await ReadTree();
+        var scale = depthScale ?? TomRows.Calibrate(found.Elements);
+        if (scale == null || RowTree.SelectedIndex(found) is not { } selected)
+        {
+            return new(null, false);
+        }
+
+        var rows = TomRows.Rows(found.Elements, scale);
+        return new(
+            SearchPick.TableOf(rows, selected),
+            SearchPick.Candidates(rows, request).Candidates.Any(c => c.Index == selected)
+        );
+    }
 
     /// <summary>
     /// The last object navigation's account for the reply: the strategy used, the rows read, the measured indent
@@ -131,7 +157,7 @@ public sealed partial class Te3Page
             return (scale == null ? null : TomRows.Rows(found.Elements, scale), SelectedIndex(found));
         }
 
-        private static int? SelectedIndex(QueryResult found)
+        internal static int? SelectedIndex(QueryResult found)
         {
             var selected = found.Elements.FirstOrDefault(e => e.ControlType == "TreeItem" && e.Selected == true);
             return

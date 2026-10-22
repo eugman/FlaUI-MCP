@@ -103,6 +103,10 @@ public sealed class ObjectWalkTests
         Assert.Equal(0, reads);
     }
 
+    // Where the rows read after the clear place the selection: its table, and whether it is the object's row there.
+    private static Func<Task<SelectionPlace>> At(string? table, bool placed = true) =>
+        () => Task.FromResult(new SelectionPlace(table, placed));
+
     [Fact]
     public async Task TheArrivalCheckReadsTheRowTypedAsTheWalkTypesIt()
     {
@@ -110,27 +114,33 @@ public sealed class ObjectWalkTests
         var found = new WalkResult(true, "Brands", 3, null);
         var untyped = new FakeTree(At(4, "Brand", null));
 
-        Assert.True(await ObjectWalk.Arrived(new TypedTree(untyped, "Column"), found, InFolder, () => "Brand"));
-        Assert.False(await ObjectWalk.Arrived(new TypedTree(untyped, null), found, InFolder, () => "Brand"));
-        Assert.False(await ObjectWalk.Arrived(new TypedTree(untyped, "Column"), found, InFolder, () => "Type"));
+        Assert.True(
+            await ObjectWalk.Arrived(new TypedTree(untyped, "Column"), found, InFolder, () => "Brand", At("Brands"))
+        );
+        Assert.False(
+            await ObjectWalk.Arrived(new TypedTree(untyped, null), found, InFolder, () => "Brand", At("Brands"))
+        );
+        Assert.False(
+            await ObjectWalk.Arrived(new TypedTree(untyped, "Column"), found, InFolder, () => "Type", At("Brands"))
+        );
     }
 
     [Fact]
-    public async Task ASelectionThatStillNamesTheObjectAfterTheClearHasArrivedWhateverItsRowNow()
+    public async Task ASelectionThatStillNamesTheObjectInItsTableAndFolderAfterTheClearHasArrived()
     {
-        // Live (vte3g walk 1'): the filter cleared, the rows re-indexed and the depth could not be read from the
-        // unfiltered view, while the status bar still said Column "Brand". The folder was checked during the walk;
-        // after the clear the selection's identity (name, type, the table the walk confirmed) decides.
+        // Live (vte3g walk 1'): after the clear the rows re-indexed while the status bar still said Column "Brand".
+        // The row index does not decide; the selection's identity and where the rows read now place it do.
         var found = new WalkResult(true, "Brands", 22, null);
         var cleared = new FakeTree(new RowObservation("Brand", "Column", null));
 
-        Assert.True(await ObjectWalk.Arrived(cleared, found, InFolder, () => "Brand"));
+        Assert.True(await ObjectWalk.Arrived(cleared, found, InFolder, () => "Brand", At("Brands")));
         Assert.False(
             await ObjectWalk.Arrived(
                 new FakeTree(new RowObservation("Brand", "Hierarchy", null)),
                 found,
                 InFolder,
-                () => "Brand"
+                () => "Brand",
+                At("Brands")
             )
         );
         Assert.False(
@@ -138,10 +148,24 @@ public sealed class ObjectWalkTests
                 new FakeTree(new RowObservation("Sub Brand", "Column", null)),
                 found,
                 InFolder,
-                () => null
+                () => null,
+                At("Brands")
             )
         );
-        Assert.False(await ObjectWalk.Arrived(cleared, found with { Table = "Products" }, InFolder, () => "Brand"));
+    }
+
+    [Fact]
+    public async Task AnotherTablesSameNamedColumnNeverPassesForTheRequestedOne()
+    {
+        // Review: the check trusted walk.Table, so Sales[Brand] selected after the clear passed for Brands[Brand].
+        // The table is read from the rows (the nearest table row above the selection under Tables), and the folder
+        // check is made again; rows that cannot place the selection prove nothing.
+        var found = new WalkResult(true, "Brands", 22, null);
+        var brand = new FakeTree(new RowObservation("Brand", "Column", null));
+
+        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, () => "Brand", At("Sales", placed: false)));
+        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, () => "Brand", At("Brands", placed: false)));
+        Assert.False(await ObjectWalk.Arrived(brand, found, InFolder, () => "Brand", At(null, placed: false)));
     }
 
     [Fact]
@@ -151,7 +175,8 @@ public sealed class ObjectWalkTests
                 new TypedTree(new FakeTree(At(4, "Brand", "Column")), "Column"),
                 new WalkResult(false, "Brands", 3, "outside the folder"),
                 InFolder,
-                () => "Brand"
+                () => "Brand",
+                At("Brands")
             )
         );
 

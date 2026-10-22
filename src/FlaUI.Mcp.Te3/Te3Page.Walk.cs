@@ -67,7 +67,7 @@ public sealed partial class Te3Page
         reportStep?.Invoke($"Found {objectType} '{objectName}' under '{walk.Table}' after {walk.RowsVisited} rows");
         await ClearTomSearchTyped();
         // Clearing the filter keeps the selection; check it really did before reporting arrival.
-        if (!await ObjectWalk.Arrived(cursor, walk, request, () => PropertiesValue("Name")))
+        if (!await ObjectWalk.Arrived(cursor, walk, request, () => PropertiesValue("Name"), () => PlaceOf(request)))
         {
             var after = await cursor.Current();
             throw new InvalidOperationException(
@@ -144,7 +144,13 @@ public sealed partial class Te3Page
         if (
             lastWalk == null
             || lastRequest == null
-            || !await ObjectWalk.Arrived(new TomCursor(this), lastWalk, lastRequest, () => PropertiesValue("Name"))
+            || !await ObjectWalk.Arrived(
+                new TomCursor(this),
+                lastWalk,
+                lastRequest,
+                () => PropertiesValue("Name"),
+                () => PlaceOf(lastRequest)
+            )
         )
         {
             throw new InvalidOperationException(
