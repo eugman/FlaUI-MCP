@@ -116,7 +116,9 @@ public sealed partial class Te3Page
     }
 
     // Null when the checkbox is not on screen (builds without it, or the TOM Explorer toolbar hidden).
-    private async Task<bool?> TomChangesState() => await IsOnScreen(TomChangesTarget()) ? await TomChangesOn() : null;
+    // Unknown (IsOffscreen unreadable) reads the checkbox anyway: only a checkbox seen absent is left alone.
+    private async Task<bool?> TomChangesState() =>
+        await IsOnScreen(TomChangesTarget()) is false ? null : await TomChangesOn();
 
     private async Task<bool> TomChangesOn()
     {
@@ -131,12 +133,15 @@ public sealed partial class Te3Page
         return state == ToggleState.On;
     }
 
-    /// <summary>One lookup, no retries: whether the target exists and is not offscreen; a failed read throws.</summary>
-    private async Task<bool> IsOnScreen(Target target) =>
+    /// <summary>
+    /// One lookup, no retries: whether the target exists and is not offscreen; null when it exists but its
+    /// IsOffscreen could not be read (unknown, never taken for on screen); a failed lookup throws.
+    /// </summary>
+    private async Task<bool?> IsOnScreen(Target target) =>
         await Task.Run(() =>
             ScreenPresence.Read(
                 () =>
-                    !query
+                    query
                         .Resolve(
                             handle,
                             target.Selector,
@@ -144,7 +149,9 @@ public sealed partial class Te3Page
                             target.IncludeOwned,
                             budget: new SearchBudget(3000, TimeSpan.FromSeconds(2))
                         )
-                        .Properties.IsOffscreen.ValueOrDefault,
+                        .Properties.IsOffscreen.TryGetValue(out var offscreen)
+                        ? !offscreen
+                        : (bool?)null,
                 target.Selector.ToString()
             )
         );

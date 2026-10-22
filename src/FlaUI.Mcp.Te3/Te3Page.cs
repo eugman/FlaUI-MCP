@@ -201,7 +201,8 @@ public sealed partial class Te3Page(
                 await VerifyObjectArrival();
                 break;
             case { Id: "tom-explorer" }:
-                if (!await IsOnScreen(TomTreeTarget()))
+                // Unknown is not on screen: the tab must then be shown selected.
+                if (await IsOnScreen(TomTreeTarget()) != true)
                 {
                     await RequireSelectedTab(TomTabTarget());
                 }
@@ -211,14 +212,14 @@ public sealed partial class Te3Page(
                 await VerifyNativeMcpServer();
                 break;
             case { Id: "tom-explorer/changes" }:
-                if (!await IsOnScreen(TomTreeTarget()) || !await TomChangesOn())
+                if (await IsOnScreen(TomTreeTarget()) != true || !await TomChangesOn())
                 {
                     throw new InvalidOperationException("TOM Explorer Show changes is not visible and on.");
                 }
 
                 break;
             case { Id: "tom-explorer/changes-off" }:
-                if (!await IsOnScreen(TomTreeTarget()) || await TomChangesOn())
+                if (await IsOnScreen(TomTreeTarget()) != true || await TomChangesOn())
                 {
                     throw new InvalidOperationException("TOM Explorer Show changes is not visible and off.");
                 }

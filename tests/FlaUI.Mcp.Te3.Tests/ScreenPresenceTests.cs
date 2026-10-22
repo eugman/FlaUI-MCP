@@ -42,4 +42,10 @@ public sealed class ScreenPresenceTests
         Assert.Throws<OperationCanceledException>(() =>
             ScreenPresence.Read(() => throw new OperationCanceledException(), "x")
         );
+
+    [Fact]
+    public void AnOffscreenFlagThatCouldNotBeReadIsUnknownNotOnScreen() =>
+        // Te3Page.IsOnScreen took a failed IsOffscreen read for "on screen", and the tom-explorer arrival check then
+        // skipped requiring its tab.
+        Assert.Null(ScreenPresence.Read(() => (bool?)null, "the TOM Explorer tree"));
 }

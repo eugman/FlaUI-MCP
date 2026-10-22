@@ -148,7 +148,7 @@ public sealed partial class Te3Page
     public async Task OpenTom()
     {
         // A docked TOM Explorer pane has no tab to click; its tree being on screen is enough.
-        if (await IsOnScreen(TomTreeTarget()))
+        if (await IsOnScreen(TomTreeTarget()) == true)
         {
             return;
         }

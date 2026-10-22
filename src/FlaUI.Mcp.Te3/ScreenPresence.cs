@@ -8,7 +8,11 @@ internal static class ScreenPresence
     /// incomplete search, a COM or provider error) throws, so a caller does not act on an absence nobody saw.
     /// </summary>
     /// <param name="what">The control, for the failure text.</param>
-    public static bool Read(Func<bool> visible, string what)
+    public static bool Read(Func<bool> visible, string what) => Read(() => (bool?)visible(), what) == true;
+
+    /// <summary>As above, where <paramref name="visible"/> may answer null: found, but whether it is on screen could
+    /// not be read. Null is passed on as unknown, never taken for on screen.</summary>
+    public static bool? Read(Func<bool?> visible, string what)
     {
         try
         {
