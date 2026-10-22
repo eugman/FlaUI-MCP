@@ -2,6 +2,7 @@ using System.Diagnostics;
 using FlaUI.Mcp.Core;
 using FlaUI.Mcp.Tools;
 using Xunit.Abstractions;
+using static FlaUI.Mcp.IntegrationTests.PointerTestSupport;
 
 namespace FlaUI.Mcp.IntegrationTests;
 
@@ -33,15 +34,10 @@ public class TextAndValueTests
         await _fixture.CallTool(clickTool, new { @ref = tabRef });
 
         // Poll for the element to appear after tab switch
-        var sw = Stopwatch.StartNew();
-        while (sw.ElapsedMilliseconds < 5000)
+        string? found = null;
+        if (WaitFor(() => (found = _fixture.FindRefByName(windowHandle, elementName)) != null))
         {
-            await Task.Delay(100);
-            var found = _fixture.FindRefByName(windowHandle, elementName);
-            if (found != null)
-            {
-                return found;
-            }
+            return found!;
         }
 
         Assert.Fail($"Element \"{elementName}\" not found after navigating to \"{tabName}\" tab.");
@@ -95,13 +91,11 @@ public class TextAndValueTests
     {
         var read = new GetTextTool(_fixture.Elements);
         var text = "";
-        for (var sw = Stopwatch.StartNew(); sw.ElapsedMilliseconds < 3000; await Task.Delay(100))
+        await WaitForAsync(async () =>
         {
-            if ((text = await _fixture.CallTool(read, new { @ref = elementRef })) == expected)
-            {
-                break;
-            }
-        }
+            text = await _fixture.CallTool(read, new { @ref = elementRef });
+            return text == expected;
+        });
 
         return text;
     }

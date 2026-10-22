@@ -111,7 +111,14 @@ public static class ModalAwareInvoker
             TaskScheduler.Default
         );
 
-        var waited = AwaitResult(task, processId, baseline, windowEnumerator, DateTime.UtcNow + grace);
+        var waited = AwaitResult(
+            task,
+            processId,
+            baseline,
+            windowEnumerator,
+            desktop.Time,
+            desktop.Time.GetUtcNow() + grace
+        );
         if (waited is WaitOutcome<PatternCallResult>.Done done)
         {
             return done.Value;
@@ -232,7 +239,8 @@ public static class ModalAwareInvoker
         int processId,
         WindowBaseline baseline,
         Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
-        DateTime deadline
+        TimeProvider time,
+        DateTimeOffset deadline
     )
     {
         Exception? lastError = null;
@@ -267,7 +275,7 @@ public static class ModalAwareInvoker
                 }
             }
 
-            if (DateTime.UtcNow >= deadline)
+            if (time.GetUtcNow() >= deadline)
             {
                 return new WaitOutcome<PatternCallResult>.TimedOut(null, lastError);
             }

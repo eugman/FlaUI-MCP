@@ -195,7 +195,11 @@ public sealed class BatchTool : ToolBase
                 throw new ArgumentException("Wait must be nonnegative");
             }
 
-            await Task.Delay(ms, OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None);
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(ms),
+                InputDesktop.Current.Time,
+                OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None
+            );
             trace.Add($"{number}. wait: Waited {ms}ms");
             steps.Add(new(number, "wait", false, new("completed", "returned")));
         }

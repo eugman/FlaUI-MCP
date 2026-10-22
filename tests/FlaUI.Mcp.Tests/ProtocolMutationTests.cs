@@ -27,7 +27,7 @@ public sealed class ProtocolMutationTests
     public async Task RefusedLinesSayNothingWasDispatched()
     {
         var server = new McpServer(new ToolRegistry());
-        var output = new StringWriter();
+        var output = new LockedOutput();
 
         await new McpLineTransport(server).RunAsync(new StringReader("{\"id\":4,\n"), output, CancellationToken.None);
 
@@ -42,9 +42,9 @@ public sealed class ProtocolMutationTests
         registry.RegisterTool(new Immediate("fast"));
         var server = new McpServer(registry);
         var calls = Enumerable.Range(1, McpLineTransport.MaxRequestsInFlight + 8).Select(id => Call(id, "fast"));
-        var output = new StringWriter();
+        var output = new LockedOutput();
 
-        await new McpLineTransport(server).RunAsync(new SlowReader(calls), output, CancellationToken.None);
+        await new McpLineTransport(server).RunAsync(new PacedReader(calls, output), output, CancellationToken.None);
 
         var responses = Lines(output);
         Assert.Equal(McpLineTransport.MaxRequestsInFlight + 8, responses.Length);
@@ -59,14 +59,17 @@ public sealed class ProtocolMutationTests
         registry.RegisterTool(new Gated(gate.Task));
         var server = new McpServer(registry, concurrentRequests: true);
         var calls = Enumerable.Range(1, McpLineTransport.MaxRequestsInFlight + 1).Select(id => Call(id, "gated"));
-        var output = new StringWriter();
+        var output = new LockedOutput();
 
         var run = new McpLineTransport(server).RunAsync(
             new StringReader(string.Join("\n", calls) + "\n"),
             output,
             CancellationToken.None
         );
-        await WaitFor(() => output.ToString().Contains("capacity", StringComparison.Ordinal));
+        await Eventually.WaitUntilAsync(
+            () => output.ToString().Contains("capacity", StringComparison.Ordinal),
+            "the response"
+        );
         gate.SetResult();
         await run.WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -311,23 +314,20 @@ public sealed class ProtocolMutationTests
         Assert.True(probe.Flag(Json(new { other = 1 }), true));
     }
 
-    private static async Task WaitFor(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!condition() && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(20);
-        }
-    }
-
-    /// <summary>Hands out one line every 20ms, so each request finishes before the next arrives.</summary>
-    private sealed class SlowReader(IEnumerable<string> lines) : TextReader
+    /// <summary>Hands out the next line only once every earlier request has its response, so none overlap.</summary>
+    private sealed class PacedReader(IEnumerable<string> lines, StringWriter output) : TextReader
     {
         private readonly Queue<string> pending = new(lines);
+        private int handedOut;
 
         public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
         {
-            await Task.Delay(20, cancellationToken);
+            var answered = handedOut;
+            await Eventually.WaitUntilAsync(
+                () => output.ToString().Count(c => c == '\n') >= answered,
+                $"response {answered}"
+            );
+            handedOut++;
             return pending.Count > 0 ? pending.Dequeue() : null;
         }
     }

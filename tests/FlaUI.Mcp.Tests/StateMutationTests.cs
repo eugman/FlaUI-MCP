@@ -103,10 +103,9 @@ public sealed class StateMutationTests
     [Fact]
     public void PruningDropsTheOldestFinishedOperation()
     {
-        var operations = new OperationCoordinator();
+        var operations = new OperationCoordinator(new ManualTimeProvider());
         var oldest = operations.Begin("oldest");
         oldest.Finished = true;
-        Thread.Sleep(30);
         for (var i = 0; i < 100; i++)
         {
             operations.Begin("done").Finished = true;
@@ -126,14 +125,29 @@ public sealed class StateMutationTests
     [Fact]
     public void StatusListsTheNewestOperationFirst()
     {
-        var operations = new OperationCoordinator();
+        var operations = new OperationCoordinator(new ManualTimeProvider());
         operations.Begin("first");
-        Thread.Sleep(30);
         var second = operations.Begin("second");
 
         var first = JsonSerializer.SerializeToElement(operations.Status()).EnumerateArray().First();
 
         Assert.Equal(second.Id, first.GetProperty("operationId").GetString());
+    }
+
+    [Fact]
+    public void OperationsBegunWithinOneClockTickStillListNewestFirst()
+    {
+        // A clock that never moves gives them all one StartedUtc: the order must not depend on its resolution.
+        var operations = new OperationCoordinator(new ManualTimeProvider());
+        var begun = Enumerable.Range(0, 50).Select(i => operations.Begin($"tool{i}").Id).ToArray();
+
+        var listed = JsonSerializer
+            .SerializeToElement(operations.Status())
+            .EnumerateArray()
+            .Select(o => o.GetProperty("operationId").GetString())
+            .ToArray();
+
+        Assert.Equal(begun.Reverse(), listed);
     }
 
     [Fact]

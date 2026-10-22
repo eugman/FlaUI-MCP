@@ -15,7 +15,10 @@ public sealed class OperationContext
     /// <summary>The tool's MCP annotations, echoed by operation status.</summary>
     public McpToolAnnotations? Annotations { get; init; }
     public string? RequestKey { get; init; }
-    public DateTime StartedUtc { get; } = DateTime.UtcNow;
+    public DateTime StartedUtc { get; init; } = DateTime.UtcNow;
+
+    /// <summary>The order the coordinator began this operation in; start times can tie, this cannot.</summary>
+    internal long Sequence { get; init; }
     public CancellationTokenSource Stop { get; } = new();
     public volatile bool Finished;
     public string? Error { get; set; }
@@ -42,9 +45,11 @@ public sealed class OperationContext
     public static void Check() => Current.Value?.Stop.Token.ThrowIfCancellationRequested();
 }
 
-public sealed class OperationCoordinator
+public sealed class OperationCoordinator(TimeProvider? time = null)
 {
+    private readonly TimeProvider time = time ?? TimeProvider.System;
     private readonly object gate = new();
+    private long begun;
     private readonly ConcurrentDictionary<string, OperationContext> operations = new();
 
     public OperationContext Begin(string tool, string? requestKey = null, McpToolAnnotations? annotations = null)
@@ -54,7 +59,7 @@ public sealed class OperationCoordinator
             foreach (
                 var old in operations
                     .Values.Where(o => o.Finished)
-                    .OrderByDescending(o => o.StartedUtc)
+                    .OrderByDescending(o => o.Sequence)
                     .Skip(100)
                     .ToArray()
             )
@@ -64,6 +69,8 @@ public sealed class OperationCoordinator
 
             var op = new OperationContext
             {
+                StartedUtc = time.GetUtcNow().UtcDateTime,
+                Sequence = ++begun,
                 Tool = tool,
                 RequestKey = requestKey,
                 Annotations = annotations,
@@ -79,7 +86,7 @@ public sealed class OperationCoordinator
     public object Status(string? id = null, PendingInvokeTracker? pending = null, string? requestKey = null) =>
         operations
             .Values.Where(o => (id == null || o.Id == id) && (requestKey == null || o.RequestKey == requestKey))
-            .OrderByDescending(o => o.StartedUtc)
+            .OrderByDescending(o => o.Sequence)
             .Select(o =>
             {
                 var dispatch = o.ResultOutcome?.Dispatch ?? DispatchSoFar(o);

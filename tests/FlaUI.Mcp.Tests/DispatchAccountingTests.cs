@@ -117,14 +117,22 @@ public sealed class DispatchAccountingTests
     public void APatternCallStillValidatingIsTimedOutPendingNotCompleted()
     {
         using var hold = new ManualResetEventSlim();
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop { Clock = clock }.Install();
+        var grace = TimeSpan.FromMilliseconds(100);
         PatternCallResult result = null!;
         var counted = Counted(() =>
-            result = ModalAwareInvoker.Execute(
-                0,
-                "Invoke on 'OK'",
-                () => MutationGuard.Execute(() => hold.Wait(), () => { }),
-                new PendingInvokeTracker(),
-                TimeSpan.FromMilliseconds(100)
+            result = Eventually.PastDeadline(
+                clock,
+                grace,
+                () =>
+                    ModalAwareInvoker.Execute(
+                        0,
+                        "Invoke on 'OK'",
+                        () => MutationGuard.Execute(() => hold.Wait(), () => { }),
+                        new PendingInvokeTracker(),
+                        grace
+                    )
             )
         );
         hold.Set();

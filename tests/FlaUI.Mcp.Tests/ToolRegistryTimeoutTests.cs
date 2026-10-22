@@ -11,13 +11,14 @@ public class ToolRegistryTimeoutTests
     {
         using var release = new ManualResetEventSlim();
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(50))
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(50), time: clock)
         {
             ResolveTarget = _ =>
             {
                 try
                 {
-                    release.Wait(TimeSpan.FromSeconds(5));
+                    release.Wait(Eventually.Bound);
                     return null;
                 }
                 finally
@@ -29,14 +30,16 @@ public class ToolRegistryTimeoutTests
         registry.RegisterTool(new SuccessfulTool());
         try
         {
-            var result = await registry.ExecuteToolAsync("successful", null).WaitAsync(TimeSpan.FromSeconds(2));
+            var call = registry.ExecuteToolAsync("successful", null);
+            clock.Advance(TimeSpan.FromMilliseconds(50));
+            var result = await call.WaitAsync(Eventually.Bound);
             Assert.True(result.IsError);
             Assert.Contains("timed out", result.Content[0].Text);
         }
         finally
         {
             release.Set();
-            await finished.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await finished.Task.WaitAsync(Eventually.Bound);
         }
     }
 

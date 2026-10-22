@@ -17,8 +17,16 @@ internal sealed class ManualTimeProvider : TimeProvider
         }
     }
 
-    public override DateTimeOffset GetUtcNow() =>
-        new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddTicks(GetTimestamp());
+    private int nowReads;
+
+    /// <summary>How many times the clock was read for the time of day: a loop that checks a deadline reads it each turn.</summary>
+    public int NowReads => Volatile.Read(ref nowReads);
+
+    public override DateTimeOffset GetUtcNow()
+    {
+        Interlocked.Increment(ref nowReads);
+        return new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddTicks(GetTimestamp());
+    }
 
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {

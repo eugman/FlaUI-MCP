@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
@@ -14,15 +13,20 @@ public sealed class StrandedCallMutationTests
     {
         var gate = new TaskCompletionSource();
         var pending = new PendingInvokeTracker(_ => 456);
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100))
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
         {
             ResolveTarget = _ => new ProcessIdentity(123, 456),
             Pending = pending,
         };
-        registry.RegisterTool(new Gated(gate.Task));
+        var gated = new Gated(gate.Task);
+        registry.RegisterTool(gated);
         try
         {
-            var result = await registry.ExecuteToolAsync("gated", null);
+            var call = registry.ExecuteToolAsync("gated", null);
+            await gated.Entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            var result = await call.WaitAsync(Eventually.Bound);
 
             Assert.Equal("text", result.Content[0].Type);
             Assert.Equal(
@@ -46,10 +50,12 @@ public sealed class StrandedCallMutationTests
         var gate = new TaskCompletionSource();
         var registry = new ToolRegistry(TimeSpan.FromSeconds(10));
         registry.RegisterTool(new Gated(gate.Task));
-        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        using var cancel = new CancellationTokenSource();
         try
         {
-            var result = await registry.ExecuteToolAsync("gated", null, cancel.Token);
+            var call = registry.ExecuteToolAsync("gated", null, cancel.Token);
+            await cancel.CancelAsync();
+            var result = await call.WaitAsync(Eventually.Bound);
 
             Assert.StartsWith("Tool 'gated' cancellation requested. A modal dialog", result.Content[0].Text);
         }
@@ -63,18 +69,24 @@ public sealed class StrandedCallMutationTests
     public async Task ACancelledCallKeepsTheSlotOnlyUntilItsTimeoutWouldHaveExpired()
     {
         var gate = new TaskCompletionSource();
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(600));
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(600), time: clock);
         registry.RegisterTool(new Gated(gate.Task));
         Task? settled = null;
-        var started = Stopwatch.StartNew();
-        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
+        using var cancel = new CancellationTokenSource();
         try
         {
-            await registry.ExecuteToolAsync("gated", null, cancel.Token, whenStranded: task => settled = task);
-            await settled!.WaitAsync(TimeSpan.FromSeconds(10));
+            var call = registry.ExecuteToolAsync("gated", null, cancel.Token, whenStranded: task => settled = task);
+            clock.Advance(TimeSpan.FromMilliseconds(400));
+            await cancel.CancelAsync();
+            await call.WaitAsync(Eventually.Bound);
 
-            // Due at 600ms from the start; counting the 400ms already waited twice would push it past 1000ms.
-            Assert.InRange(started.ElapsedMilliseconds, 500, 950);
+            // Due at 600 ms from the start, so 200 ms after the cancel: not sooner (the 400 ms counted twice)
+            // and not later (the 400 ms not counted at all).
+            clock.Advance(TimeSpan.FromMilliseconds(199));
+            Assert.False(settled!.IsCompleted, "The slot was freed before the call's timeout would have expired.");
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            await settled.WaitAsync(Eventually.Bound);
         }
         finally
         {
@@ -86,11 +98,16 @@ public sealed class StrandedCallMutationTests
     public async Task ATimedOutCallReportsTheInputItAlreadySent()
     {
         var gate = new TaskCompletionSource();
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100));
-        registry.RegisterTool(new SendsThenWaits(gate.Task));
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock);
+        var sends = new SendsThenWaits(gate.Task);
+        registry.RegisterTool(sends);
         try
         {
-            var result = await registry.ExecuteToolAsync("sends-then-waits", null);
+            var call = registry.ExecuteToolAsync("sends-then-waits", null);
+            await sends.Sent.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            var result = await call.WaitAsync(Eventually.Bound);
 
             Assert.Equal("timed_out_pending", result.Outcome!.Dispatch);
             Assert.Equal(1, result.Outcome.InputsSent);
@@ -112,6 +129,8 @@ public sealed class StrandedCallMutationTests
 
     private sealed class SendsThenWaits(Task gate) : ToolBase
     {
+        public TaskCompletionSource Sent { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public override string Name => "sends-then-waits";
         public override string Description => "no desktop";
         public override object InputSchema => new { };
@@ -119,6 +138,7 @@ public sealed class StrandedCallMutationTests
         public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
         {
             MutationGuard.RecordDispatch();
+            Sent.TrySetResult();
             await gate;
             return TextResult("released");
         }
@@ -136,12 +156,15 @@ public sealed class StrandedCallMutationTests
 
     private sealed class Gated(Task gate) : ToolBase
     {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public override string Name => "gated";
         public override string Description => "no desktop";
         public override object InputSchema => new { };
 
         public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
         {
+            Entered.TrySetResult();
             await gate;
             return TextResult("released");
         }

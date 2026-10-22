@@ -67,15 +67,20 @@ public sealed class GenericHardeningTests
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var tracker = new PendingInvokeTracker(_ => 456);
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(200))
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(200), time: clock)
         {
             ResolveTarget = _ => new ProcessIdentity(123, 456),
             Pending = tracker,
         };
-        registry.RegisterTool(new AwaitingTool(release.Task));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        registry.RegisterTool(new AwaitingTool(release.Task, entered));
         try
         {
-            var result = await registry.ExecuteToolAsync("awaiting", null);
+            var call = registry.ExecuteToolAsync("awaiting", null);
+            await entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(200));
+            var result = await call.WaitAsync(Eventually.Bound);
             Assert.Equal("timed_out_pending", result.Outcome!.Dispatch);
             Assert.True(tracker.TryGetPending(123, out var stranded));
             Assert.Equal("timed-out awaiting", stranded.Description);
@@ -85,7 +90,7 @@ public sealed class GenericHardeningTests
             release.TrySetResult();
         }
 
-        Assert.True(SpinWait.SpinUntil(() => !tracker.TryGetPending(123, out _), TimeSpan.FromSeconds(3)));
+        Eventually.WaitUntil(() => !tracker.TryGetPending(123, out _), "the stranded call to clear");
     }
 
     [Fact]
@@ -121,11 +126,16 @@ public sealed class GenericHardeningTests
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var tracker = new PendingInvokeTracker(_ => 456);
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(200)) { Pending = tracker };
-        registry.RegisterTool(new AwaitingTool(release.Task));
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(200), time: clock) { Pending = tracker };
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        registry.RegisterTool(new AwaitingTool(release.Task, entered));
         try
         {
-            await registry.ExecuteToolAsync("awaiting", null);
+            var call = registry.ExecuteToolAsync("awaiting", null);
+            await entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(200));
+            await call.WaitAsync(Eventually.Bound);
             Assert.Empty((System.Collections.IEnumerable)tracker.Status());
         }
         finally

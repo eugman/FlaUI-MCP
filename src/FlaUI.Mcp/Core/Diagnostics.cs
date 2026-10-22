@@ -33,8 +33,8 @@ public static class Diagnostics
     /// </summary>
     public static DiagnosticCapture Capture(nint hwnd, string path, TimeSpan? timeout = null)
     {
-        var deadline = new Budget(timeout ?? DefaultTimeout);
         var desktop = InputDesktop.Current;
+        var deadline = new Budget(timeout ?? DefaultTimeout, desktop.Time);
         var (image, skip) = Render(desktop, hwnd, deadline);
         var windows = Bounded(() => desktop.TopLevelWindows(desktop.ProcessOf(hwnd)), deadline, "answer").Value ?? [];
         var (tree, treeError) = Bounded(() => desktop.ElementTree(hwnd), deadline, "answer");
@@ -109,13 +109,16 @@ public static class Diagnostics
     }
 
     /// <summary>The whole capture's time: one deadline shared by its stages.</summary>
-    private sealed class Budget(TimeSpan total)
+    private sealed class Budget(TimeSpan total, TimeProvider time)
     {
-        private readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+        private readonly long started = time.GetTimestamp();
 
         public int TotalMs => (int)total.TotalMilliseconds;
 
-        public TimeSpan Remaining => Spent ? TimeSpan.Zero : total - clock.Elapsed;
+        public TimeSpan Remaining => Spent ? TimeSpan.Zero : total - time.GetElapsedTime(started);
+
+        /// <summary>A task that completes when what is left of the budget has passed.</summary>
+        public Task Expiry(TimeSpan remaining) => Task.Delay(remaining, time);
 
         /// <summary>Set when a stage ran out the budget, so the later stages skip even if the clock lags the wait.</summary>
         public bool Spent { get; set; }
@@ -136,7 +139,7 @@ public static class Diagnostics
         var task = Task.Run(read, CancellationToken.None);
         try
         {
-            if (!task.Wait(remaining, CancellationToken.None))
+            if (Task.WaitAny(task, budget.Expiry(remaining)) != 0)
             {
                 // Abandoned: the worker keeps running (a hung provider may never return); its result is dropped.
                 budget.Spent = true;
@@ -147,7 +150,7 @@ public static class Diagnostics
                 );
             }
 
-            return (task.Result, null);
+            return (task.GetAwaiter().GetResult(), null);
         }
         catch (AggregateException error)
         {

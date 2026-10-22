@@ -59,12 +59,17 @@ public sealed class FailedResultStatusTests
     public async Task AStrandedCallIsFailedAndKeepsTheRefusalItRecorded()
     {
         var gate = new TaskCompletionSource();
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100));
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock);
         var refusal = new InputRefusal("activation-denied", "activation-denied: kept in front. No input sent.");
-        registry.RegisterTool(new RefusesThenHangs(refusal, gate.Task));
+        var refused = new RefusesThenHangs(refusal, gate.Task);
+        registry.RegisterTool(refused);
         try
         {
-            var result = await registry.ExecuteToolAsync("refuses-then-hangs", null);
+            var call = registry.ExecuteToolAsync("refuses-then-hangs", null);
+            await refused.Entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            var result = await call.WaitAsync(Eventually.Bound);
 
             Assert.True(result.IsError);
             Assert.Equal("timed_out_pending", result.Outcome!.Dispatch);
@@ -81,6 +86,8 @@ public sealed class FailedResultStatusTests
 
     private sealed class RefusesThenHangs(InputRefusal refusal, Task gate) : ToolBase
     {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public override string Name => "refuses-then-hangs";
         public override string Description => "no desktop";
         public override object InputSchema => new { };
@@ -89,6 +96,7 @@ public sealed class FailedResultStatusTests
         {
             MutationGuard.RecordDispatch();
             _ = InputRefusedException.Record(refusal);
+            Entered.TrySetResult();
             await gate;
             return TextResult("late");
         }

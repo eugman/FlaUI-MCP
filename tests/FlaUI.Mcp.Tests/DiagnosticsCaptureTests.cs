@@ -81,11 +81,22 @@ public sealed class DiagnosticsCaptureTests
     public void AHungRenderIsBoundedAndReportedAsTimedOut()
     {
         using var release = new ManualResetEventSlim();
-        using var installed = new FakeDesktop { WindowImage = [1], RenderBlock = release }.Install();
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop
+        {
+            WindowImage = [1],
+            RenderBlock = release,
+            Clock = clock,
+        }.Install();
         var path = TempPng();
         try
         {
-            var capture = Diagnostics.Capture(FakeDesktop.TargetHwnd, path, TimeSpan.FromMilliseconds(100));
+            var budget = TimeSpan.FromMilliseconds(100);
+            var capture = Eventually.PastDeadline(
+                clock,
+                budget,
+                () => Diagnostics.Capture(FakeDesktop.TargetHwnd, path, budget)
+            );
 
             Assert.False(capture.Saved);
             Assert.Equal(
