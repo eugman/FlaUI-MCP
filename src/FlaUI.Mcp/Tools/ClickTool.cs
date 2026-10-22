@@ -316,16 +316,26 @@ public partial class ClickTool : ToolBase
         }
     }
 
-    /// <summary>Polls a condition until it holds or the time runs out; providers update state asynchronously.</summary>
-    /// <summary>Poll <paramref name="condition"/> every 50 ms until it holds or the time passes, on the desktop's clock.</summary>
+    /// <summary>
+    /// Poll <paramref name="condition"/> every 50 ms until it holds or the time passes on the desktop's clock;
+    /// providers update state asynchronously. The poll count is capped as well, so a clock that never moves (a fake
+    /// held still) cannot keep it waiting.
+    /// </summary>
     private static bool Settled(Func<bool> condition, int timeoutMs)
     {
+        const int PollMs = 50;
         var desktop = InputDesktop.Current;
         var started = desktop.Time.GetTimestamp();
         var held = condition();
-        while (!held && desktop.Time.GetElapsedTime(started) < TimeSpan.FromMilliseconds(timeoutMs))
+        for (
+            var polls = 0;
+            !held
+                && polls < (timeoutMs + PollMs - 1) / PollMs
+                && desktop.Time.GetElapsedTime(started) < TimeSpan.FromMilliseconds(timeoutMs);
+            polls++
+        )
         {
-            desktop.Pause(TimeSpan.FromMilliseconds(50));
+            desktop.Pause(TimeSpan.FromMilliseconds(PollMs));
             held = condition();
         }
 

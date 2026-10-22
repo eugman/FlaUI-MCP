@@ -160,6 +160,43 @@ public sealed class PointerMutationTests
         );
     }
 
+    /// <summary>A clock that is never moved and cannot be: only a poll cap ends a wait on it.</summary>
+    private sealed class FrozenClock : TimeProvider
+    {
+        public override long GetTimestamp() => 0;
+    }
+
+    [Fact]
+    public void ASettlingReadOnAStillManualClockAdvancesItWithoutAPauseHook()
+    {
+        // The fakes that only hold the clock still set no OnPause; their pauses must still move it.
+        var clock = new ManualTimeProvider();
+        using var installed = new FakeDesktop { Clock = clock }.Install();
+        var started = clock.GetTimestamp();
+
+        Assert.False(Eventually.Returns(() => ClickTool.ObserveSelection(() => false)));
+        Assert.Equal(TimeSpan.FromMilliseconds(500), clock.GetElapsedTime(started));
+    }
+
+    [Fact]
+    public void ASettlingReadOnAClockThatNeverMovesStopsAfterItsPolls()
+    {
+        var polls = 0;
+        using var installed = new FakeDesktop { Clock = new FrozenClock(), OnPause = _ => { } }.Install();
+
+        Assert.False(
+            Eventually.Returns(() =>
+                ClickTool.ObserveSelection(() =>
+                {
+                    polls++;
+                    return false;
+                })
+            )
+        );
+        // One read up front, then one after each 50 ms pause of the 500 ms window.
+        Assert.Equal(11, polls);
+    }
+
     [Fact]
     public void ObservingASelectionWaitsForTheProvider()
     {

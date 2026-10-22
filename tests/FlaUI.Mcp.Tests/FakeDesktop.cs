@@ -14,6 +14,12 @@ public sealed class InputLeaseCollection
     public const string Name = "Input lease";
 }
 
+/// <summary>A clock a test moves by hand; FakeDesktop's pauses move it. Declared here so the fake needs nothing else.</summary>
+internal interface IManualClock
+{
+    void Advance(TimeSpan by);
+}
+
 /// <summary>
 /// A desktop with one target window and one other window. Input is counted, never sent. Install it
 /// for the duration of a test; it applies to the installing flow and the tasks it starts.
@@ -120,10 +126,27 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override TimeProvider Time => Clock;
 
-    /// <summary>What a pause does instead of sleeping, such as moving a manual clock; null sleeps for real.</summary>
+    /// <summary>
+    /// What a pause does instead of sleeping. Unset, a pause moves <see cref="Clock"/> when it is a clock a test moves
+    /// by hand (<see cref="IManualClock"/>), so a still clock cannot hold a poll forever; otherwise it sleeps for real.
+    /// </summary>
     public Action<TimeSpan>? OnPause { get; set; }
 
-    public override void Pause(TimeSpan delay) => (OnPause ?? Thread.Sleep)(delay);
+    public override void Pause(TimeSpan delay)
+    {
+        if (OnPause != null)
+        {
+            OnPause(delay);
+        }
+        else if (Clock is IManualClock manual)
+        {
+            manual.Advance(delay);
+        }
+        else
+        {
+            Thread.Sleep(delay);
+        }
+    }
 
     /// <summary>The process that owns the other window.</summary>
     public int OtherProcessId { get; set; } = OtherPid;

@@ -1,7 +1,7 @@
 namespace FlaUI.Mcp.Tests;
 
 /// <summary>A clock that moves only when a test calls <see cref="Advance"/>; its timers fire then.</summary>
-internal sealed class ManualTimeProvider : TimeProvider
+internal sealed class ManualTimeProvider : TimeProvider, IManualClock
 {
     private readonly object sync = new();
     private readonly List<ManualTimer> timers = [];
