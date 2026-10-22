@@ -239,7 +239,7 @@ public sealed class DispatchAccountingTests
         var result = await registry.ExecuteToolAsync("windows_paste", Args(new { handle, text = "abc" }));
 
         Assert.True(result.IsError);
-        Assert.Equal("abc", desktop.ClipboardText);
+        Assert.Equal("abc", desktop.ClipboardWritten);
         Assert.Contains("The clipboard now holds that text", result.Content[0].Text);
         Assert.Equal(0, desktop.Dispatched);
         Assert.Equal(1, result.Outcome!.InputsSent);

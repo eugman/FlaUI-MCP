@@ -87,7 +87,7 @@ public sealed class GuardRecipeTests
         );
 
         Assert.Equal(PermissionTrip.Message, error.Message);
-        Assert.Null(desktop.ClipboardText);
+        Assert.Null(desktop.ClipboardWritten);
         Assert.Equal(0, desktop.Dispatched);
     }
 

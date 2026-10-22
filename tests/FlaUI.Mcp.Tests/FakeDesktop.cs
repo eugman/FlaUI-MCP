@@ -173,7 +173,16 @@ internal sealed class FakeDesktop : InputDesktop
     public bool PostCloseResult { get; set; } = true;
 
     /// <summary>The text placed on the clipboard, or null when nothing was.</summary>
-    public string? ClipboardText { get; private set; }
+    public string? ClipboardWritten { get; private set; }
+
+    /// <summary>The fake clipboard as a read sees it: what was written, never the machine's own clipboard.</summary>
+    public override Win32Desktop.ClipboardText ClipboardText() => new(ClipboardWritten, false, null);
+
+    /// <summary>The control the fake reports as focused: the target window's, until a test moves or clears it.</summary>
+    public FocusedControl? Focused { get; set; } = new(TargetHwnd, "Edit", TargetHwnd, "Fake target", TargetPid);
+
+    /// <summary>Keyboard focus as the fake reports it, never the machine's own.</summary>
+    public override FocusedControl? FocusedControl() => Focused;
 
     /// <summary>When true, another window takes the foreground as soon as the clipboard is written.</summary>
     public bool FocusLostOnClipboardWrite { get; set; }
@@ -183,7 +192,7 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override Win32Desktop.TextClipboardLease? PreserveAndSetClipboardText(string text)
     {
-        ClipboardText = text;
+        ClipboardWritten = text;
         return null;
     }
 
@@ -194,7 +203,7 @@ internal sealed class FakeDesktop : InputDesktop
             return false;
         }
 
-        ClipboardText = text;
+        ClipboardWritten = text;
         if (FocusLostOnClipboardWrite)
         {
             ForegroundWindow = OtherHwnd;
