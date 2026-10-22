@@ -66,7 +66,8 @@ public partial class ClickTool
 
     /// <summary>
     /// The reply with its proof: the pattern state read back (from the same provider that acted, so not
-    /// independent) against the state expected.
+    /// independent) against the state expected. A state that agreed but was followed by a dialog a moment later
+    /// is unsettled, not verified: the dialog may undo or supersede it.
     /// </summary>
     internal static McpToolResult CheckedPatternResult(
         PatternCallResult result,
@@ -76,12 +77,16 @@ public partial class ClickTool
     )
     {
         var reply = CheckedPatternResult(result, verdict.Message, verdict.Verification);
-        return verdict.Verification == null
+        var kind =
+            verdict.Verification == Proof.Verified && result.ModalTitle != null
+                ? Proof.Unsettled
+                : verdict.Verification;
+        return kind == null
             ? reply
             : reply with
             {
                 Outcome = reply.Outcome!.WithProof(
-                    new Proof(verdict.Verification, verdict.Observed, expected, source, Independent: false)
+                    new Proof(kind, verdict.Observed, expected, source, Independent: false)
                 ),
             };
     }
@@ -154,6 +159,10 @@ public partial class ClickTool
     {
         var response = result.Outcome switch
         {
+            PatternCallOutcome.Completed when result.ModalTitle != null => TextResult(
+                $"{completedMessage}; then dialog \"{result.ModalTitle}\" opened. Find it with windows_list_windows and "
+                    + "handle it before relying on the state read back."
+            ),
             PatternCallOutcome.Completed => TextResult(completedMessage),
             PatternCallOutcome.ModalDetected => TextResult(
                 $"{completedMessage}; a modal dialog \"{result.ModalTitle}\" opened and blocks UI Automation on this app until it closes. "

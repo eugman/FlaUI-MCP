@@ -44,9 +44,68 @@ public partial class FillTool
             }
         );
 
+    private const int MaxAncestors = 50;
+
+    // The classes a file dialog's "#32770" window hosts that a message box, Find or Font dialog never does.
+    private static readonly string[] FileDialogHosts = ["DirectUIHWND", "ShellView", "FileNameControlHost"];
+
+    /// <summary>
+    /// Whether the control sits in a common file dialog: under a FileNameControlHost, or in a "#32770" dialog
+    /// (the control's own window, or a dialog hosted inside it) that also hosts the shell view or whose control is
+    /// the file-name field itself (AutomationId 1148, the ComboBox, or 1152, its Edit). Such a field accepts
+    /// SetValue without applying it, so it is filled by keyboard instead. Every other "#32770" (a MessageBox, Find,
+    /// Font, Colour or Print dialog) keeps the Value pattern. The walk stops at the control's own window.
+    /// </summary>
+    internal static bool InFileDialog(AutomationElement element, InputDesktop desktop)
+    {
+        AutomationElement? current = element;
+        for (var depth = 0; current != null && depth < MaxAncestors; depth++)
+        {
+            var className = desktop.ClassNameOf(current);
+            if (className == "FileNameControlHost")
+            {
+                return true;
+            }
+
+            if (className == "#32770" && (IsFileNameField(desktop, element) || HostsShellView(desktop, current)))
+            {
+                return true;
+            }
+
+            if (desktop.ControlTypeOf(current) == FlaUI.Core.Definitions.ControlType.Window)
+            {
+                return false;
+            }
+
+            current = desktop.ParentOf(current);
+        }
+
+        return false;
+    }
+
+    private static bool IsFileNameField(InputDesktop desktop, AutomationElement element) =>
+        desktop.AutomationIdOf(element) is "1148" or "1152";
+
+    /// <summary>Whether a "#32770" window has a shell-view child; a children read that fails says no.</summary>
+    private static bool HostsShellView(InputDesktop desktop, AutomationElement dialog)
+    {
+        try
+        {
+            return desktop
+                .ChildBoxes(dialog)
+                .Any(child => FileDialogHosts.Contains(desktop.ClassNameOf(child.Element), StringComparer.Ordinal));
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// "Filled" only when the control reads back the requested value. A different value is a failure (the input
-    /// went out, so dispatch stays completed); a control that cannot be read back is reported as not verified.
+    /// went out, so dispatch stays completed); a control that cannot be read back is reported as not verified. A
+    /// read back through the same pattern that set it (SetValue, then Value) is self-reported, never verified: a
+    /// provider can accept the value without the app taking it.
     /// </summary>
     internal static McpToolResult FillReply(
         string elementName,
@@ -60,16 +119,20 @@ public partial class FillTool
         var verification = observed.Verify(value);
         var reply = verification switch
         {
+            "verified" when !independent => TextResult(
+                $"Set {elementName} to \"{value}\" through its Value pattern, which reads the same back; the app "
+                    + "taking it is not independently verified. Observe the control before relying on it."
+            ),
             "verified" => TextResult($"Filled {elementName} with \"{value}\""),
             "mismatch" => ErrorResult($"Sent \"{value}\" to {elementName}" + FillMismatch(value, observed.Text, type)),
             _ => TextResult(
                 $"Sent \"{value}\" to {elementName}; it could not be read back, so the fill is not verified."
             ),
         };
-        // Independent unless read back through the same pattern that set it (SetValue then Value).
+        var verdict = verification == "verified" && !independent ? Proof.SelfReported : verification;
         return reply with
         {
-            Outcome = outcome.WithProof(new Proof(verification, observed.Text, value, observed.Pattern, independent)),
+            Outcome = outcome.WithProof(new Proof(verdict, observed.Text, value, observed.Pattern, independent)),
         };
     }
 

@@ -52,6 +52,17 @@ internal sealed partial class FakeDesktop
 
     public override string AutomationIdOf(AutomationElement element) => "";
 
+    public override string ClassNameOf(AutomationElement element) => "";
+
+    public override ClickGeometry Geometry(AutomationElement element) => new(false, null, BoundsOf(element), [], []);
+
+    public override string? ScrollIntoView(
+        AutomationElement element,
+        int processId,
+        PendingInvokeTracker pending,
+        Action validate
+    ) => null;
+
     public override Rectangle BoundsOf(AutomationElement element) => new(100, 100, 800, 600);
 
     public override FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>

@@ -41,7 +41,7 @@ public class GetTextTool : ToolBase
         var refId = GetStringArgument(arguments, "ref");
         if (string.IsNullOrEmpty(refId))
         {
-            return Task.FromResult(ErrorResult("Missing required argument: ref"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: ref"));
         }
 
         // Fail fast if this app's UIA provider is blocked by a pending pattern call

@@ -195,7 +195,14 @@ internal sealed class FakeDesktop : InputDesktop
     public override bool HasKeyboardFocus(AutomationElement element) =>
         KeyboardFocus && !ignoresFocus.Contains(element) && Dispatched < ElementFocusLostAfter;
 
-    public override void Dispatch(Action input) => Interlocked.Increment(ref dispatched);
+    /// <summary>Runs with the count of each input as it is sent; throw from it for an input that fails to go out.</summary>
+    public Action<int>? OnDispatch { get; set; }
+
+    public override void Dispatch(Action input)
+    {
+        var count = Interlocked.Increment(ref dispatched);
+        OnDispatch?.Invoke(count);
+    }
 
     /// <summary>What PostMessage(WM_CLOSE) returns.</summary>
     public bool PostCloseResult { get; set; } = true;
@@ -311,8 +318,9 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override void MovePointer(Point point)
     {
-        Interlocked.Increment(ref dispatched);
+        var count = Interlocked.Increment(ref dispatched);
         Pointer = point;
+        OnDispatch?.Invoke(count);
     }
 
     /// <summary>The visible top-level windows of a process; none unless a test says otherwise.</summary>
@@ -352,6 +360,12 @@ internal sealed class FakeDesktop : InputDesktop
     public override FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         ControlTypes.TryGetValue(element, out var type) ? type : FlaUI.Core.Definitions.ControlType.Custom;
 
+    /// <summary>Each element's window class; empty unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, string> ClassNames { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override string ClassNameOf(AutomationElement element) =>
+        ClassNames.TryGetValue(element, out var name) ? name : "";
+
     /// <summary>Each element's AutomationId; empty unless a test says otherwise.</summary>
     public Dictionary<AutomationElement, string> AutomationIds { get; } = new(ReferenceEqualityComparer.Instance);
 
@@ -360,6 +374,43 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override Rectangle BoundsOf(AutomationElement element) =>
         ElementBounds.TryGetValue(element, out var bounds) ? bounds : Rectangle.Empty;
+
+    /// <summary>The viewports of each element's scrolling ancestors; none unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, IReadOnlyList<Rectangle>> Viewports { get; } =
+        new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Elements whose scrolling ancestors' content extends beyond their viewports vertically.</summary>
+    public HashSet<AutomationElement> ScrollsVertically { get; } = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>What a geometry read returns instead of the tables, when set; read again at every read.</summary>
+    public Func<AutomationElement, ClickGeometry>? OnGeometry { get; set; }
+
+    /// <summary>Geometry from the tables: no clickable point, so the centre of the bounds is the default press point.</summary>
+    public override ClickGeometry Geometry(AutomationElement element) =>
+        OnGeometry?.Invoke(element)
+        ?? new(
+            Offscreen.Contains(element),
+            null,
+            BoundsOf(element),
+            Viewports.TryGetValue(element, out var viewports) ? viewports : [],
+            ScrollsVertically.Contains(element) ? viewports : []
+        );
+
+    /// <summary>What a scroll into view reports ("the view was scrolled"), or null: nothing here scrolls.</summary>
+    public string? ScrollNote { get; set; }
+
+    public int ScrollRequests { get; private set; }
+
+    public override string? ScrollIntoView(
+        AutomationElement element,
+        int processId,
+        PendingInvokeTracker pending,
+        Action validate
+    )
+    {
+        ScrollRequests++;
+        return ScrollNote;
+    }
 
     /// <summary>Elements that support the Value pattern.</summary>
     public HashSet<AutomationElement> ValueBearing { get; } = new(ReferenceEqualityComparer.Instance);

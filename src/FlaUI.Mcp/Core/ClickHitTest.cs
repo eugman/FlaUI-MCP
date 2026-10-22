@@ -26,6 +26,25 @@ public static class ClickHitTest
     public static string Verify(Point point, AutomationElement target) => Note(Prove(point, target));
 
     /// <summary>
+    /// Why the hit test refuses <paramref name="point"/> on <paramref name="target"/> now, or null when it passes.
+    /// For a check after input (a drag's drop point before the release): the reason alone, without the
+    /// "no input sent" advice, and the refusal is not left noted on the operation.
+    /// </summary>
+    public static string? Covering(Point point, AutomationElement target)
+    {
+        try
+        {
+            Verify(point, target);
+            return null;
+        }
+        catch (InputRefusedException refused)
+        {
+            InputRefusedException.Handled(refused);
+            return refused.Refusal.Message[..^NoInput.Length];
+        }
+    }
+
+    /// <summary>
     /// A host's own check on a pass-through press: why the press at <c>point</c> on <c>target</c> through
     /// <c>overlay</c> must be refused (Camtasia: an acting part such as a trim handle lies under the point), or null.
     /// </summary>
@@ -189,16 +208,7 @@ public static class ClickHitTest
     private static string Prove(Point point, AutomationElement target)
     {
         var desktop = InputDesktop.Current;
-        AutomationElement? hit;
-        try
-        {
-            hit = desktop.ElementAt(target, point);
-        }
-        catch (Exception error) when (error is not OperationCanceledException)
-        {
-            throw Covered($"The point ({point.X},{point.Y}) could not be hit-tested ({error.Message})");
-        }
-
+        var hit = HitAt(desktop, target, point);
         if (hit != null && desktop.SameElement(hit, target))
         {
             return "target";
@@ -206,7 +216,7 @@ public static class ClickHitTest
 
         if (Levels(desktop, hit, target, MaxWalk) > 0)
         {
-            return "descendant";
+            return Inside(desktop, target, hit!, point);
         }
 
         if (hit != null && Listed(desktop, hit) && desktop.BoundsOf(target).Contains(point))
@@ -221,10 +231,64 @@ public static class ClickHitTest
             return "pass-through";
         }
 
+        return ThroughContainer(desktop, target, hit, point);
+    }
+
+    private static AutomationElement? HitAt(InputDesktop desktop, AutomationElement target, Point point)
+    {
+        try
+        {
+            return desktop.ElementAt(target, point);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            throw Covered($"The point ({point.X},{point.Y}) could not be hit-tested ({error.Message})");
+        }
+    }
+
+    /// <summary>
+    /// A descendant answered. A row inside the target (the child row of an expanded tree item, whose bounds include
+    /// its children's) takes the press itself, so it covers; any other descendant proves the point. The MSAA proxy
+    /// reports a grid's rows and cells both as DataItem, so a DataItem inside a DataItem is a cell inside its row.
+    /// </summary>
+    private static string Inside(InputDesktop desktop, AutomationElement target, AutomationElement hit, Point point)
+    {
+        if (IsRow(desktop, hit) && !(IsDataItem(desktop, hit) && IsDataItem(desktop, target)))
+        {
+            throw Covered(
+                $"The point ({point.X},{point.Y}) is on {desktop.DescribeElement(hit)}, a row inside the element"
+            );
+        }
+
+        return "descendant";
+    }
+
+    private static bool IsRow(InputDesktop desktop, AutomationElement element) =>
+        desktop.ControlTypeOf(element) is ControlType.TreeItem or ControlType.ListItem or ControlType.DataItem;
+
+    private static bool IsDataItem(InputDesktop desktop, AutomationElement element) =>
+        desktop.ControlTypeOf(element) == ControlType.DataItem;
+
+    /// <summary>
+    /// A container answered. It must be a near one, the target's own bounds must hold the point (outside them the
+    /// press goes to the container or another child of it), and nothing beside the path down may cover the point.
+    /// </summary>
+    private static string ThroughContainer(
+        InputDesktop desktop,
+        AutomationElement target,
+        AutomationElement? hit,
+        Point point
+    )
+    {
         var covering = hit == null ? "nothing UI Automation can see" : desktop.DescribeElement(hit);
         if (hit == null || !IsNearContainer(desktop, target, hit))
         {
             throw Covered($"The point ({point.X},{point.Y}) is covered by {covering}");
+        }
+
+        if (!desktop.BoundsOf(target).Contains(point))
+        {
+            throw Covered($"The point ({point.X},{point.Y}) is outside the element's bounds, on {covering}");
         }
 
         // The container answered for the point, so check what lies beside the path down to the target: a sibling of
@@ -318,11 +382,8 @@ public static class ClickHitTest
         return 0;
     }
 
+    private const string NoInput = "; no input sent. Scroll the element into view, then observe again.";
+
     private static InputRefusedException Covered(string reason) =>
-        InputRefusedException.Record(
-            new InputRefusal(
-                "click-point-covered",
-                $"{reason}; no input sent. Scroll the element into view, then observe again."
-            )
-        );
+        InputRefusedException.Record(new InputRefusal("click-point-covered", reason + NoInput));
 }

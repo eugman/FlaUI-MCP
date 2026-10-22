@@ -78,17 +78,29 @@ public static class PointerPlan
 
     public static readonly string[] Edges = ["center", "left", "right", "top", "bottom"];
 
-    /// <summary>The middle of one edge of <paramref name="r"/>, one pixel inside it, or its centre.</summary>
-    public static Point EdgePoint(Rectangle r, string edge)
+    /// <summary>
+    /// How far inside its edge a drop point lands: the outermost pixel of a row or pane is routinely its
+    /// neighbour's border, which takes the drop instead.
+    /// </summary>
+    public const int DropInset = 2;
+
+    /// <summary>
+    /// The middle of one edge of <paramref name="r"/>, or its centre. With no inset the point is the edge's own
+    /// first or last pixel; <paramref name="inset"/> moves it that many pixels inward, symmetric on every side
+    /// and clamped so it stays inside a rectangle thinner than two insets.
+    /// </summary>
+    public static Point EdgePoint(Rectangle r, string edge, int inset = 0)
     {
         var midX = r.X + r.Width / 2;
         var midY = r.Y + r.Height / 2;
+        var dx = Math.Min(inset, Math.Max(0, (r.Width - 1) / 2));
+        var dy = Math.Min(inset, Math.Max(0, (r.Height - 1) / 2));
         return edge switch
         {
-            "left" => new Point(r.Left, midY),
-            "right" => new Point(r.Right - 1, midY),
-            "top" => new Point(midX, r.Top),
-            "bottom" => new Point(midX, r.Bottom - 1),
+            "left" => new Point(r.Left + dx, midY),
+            "right" => new Point(r.Right - 1 - dx, midY),
+            "top" => new Point(midX, r.Top + dy),
+            "bottom" => new Point(midX, r.Bottom - 1 - dy),
             "center" => new Point(midX, midY),
             _ => throw new ArgumentException("edge must be center, left, right, top or bottom"),
         };

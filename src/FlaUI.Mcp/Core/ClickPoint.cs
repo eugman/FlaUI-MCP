@@ -11,11 +11,16 @@ namespace FlaUI.Mcp.Core;
 /// <param name="ScrollableAncestors">
 /// The viewport of every ancestor that scrolls, up to its window: its bounds without its own scrollbars and headers.
 /// </param>
+/// <param name="VerticallyScrollable">
+/// Those viewports whose content extends beyond them vertically now (the Scroll pattern's VerticallyScrollable with
+/// a view smaller than the content): the ones a resting drag auto-scrolls. Null when unread.
+/// </param>
 public sealed record ClickGeometry(
     bool IsOffscreen,
     Point? Clickable,
     Rectangle Bounds,
-    IReadOnlyList<Rectangle> ScrollableAncestors
+    IReadOnlyList<Rectangle> ScrollableAncestors,
+    IReadOnlyList<Rectangle>? VerticallyScrollable = null
 )
 {
     private const int MaxAncestors = 50;
@@ -155,12 +160,18 @@ public sealed record ClickGeometry(
         OperationContext.Check();
         var bounds = element.BoundingRectangle;
         var scrollers = new List<Rectangle>();
+        var vertical = new List<Rectangle>();
         var ancestor = element.Parent;
         for (var depth = 0; ancestor != null && depth < MaxAncestors; depth++)
         {
-            if (ancestor.Patterns.Scroll.IsSupported)
+            if (ancestor.Patterns.Scroll.TryGetPattern(out var scroll))
             {
-                scrollers.Add(Viewport(ancestor, element, bounds));
+                var viewport = Viewport(ancestor, element, bounds);
+                scrollers.Add(viewport);
+                if (scroll.VerticallyScrollable.ValueOrDefault && scroll.VerticalViewSize.ValueOrDefault < 100)
+                {
+                    vertical.Add(viewport);
+                }
             }
 
             if (ancestor.Properties.ControlType.ValueOrDefault == ControlType.Window)
@@ -172,7 +183,7 @@ public sealed record ClickGeometry(
         }
 
         var clickable = UsableClickable(element.TryGetClickablePoint(out var point), point, bounds);
-        return new(element.Properties.IsOffscreen.ValueOrDefault, clickable, bounds, scrollers);
+        return new(element.Properties.IsOffscreen.ValueOrDefault, clickable, bounds, scrollers, vertical);
     }
 }
 
@@ -222,6 +233,42 @@ public static class ClickPoint
 
     private const int MinVisible = 4;
 
+    /// <summary>
+    /// Refuse a drop point within one row (the element's own height) of the top or bottom of an ancestor's viewport
+    /// whose content scrolls vertically now: a drag resting there auto-scrolls the view (a tree did, six rows), so
+    /// the release lands on another row. A list that holds all its rows, or a viewport shorter than three such
+    /// bands, has none.
+    /// </summary>
+    public static void RequireOutsideScrollBand(Point point, ClickGeometry geometry)
+    {
+        var band = geometry.Bounds.Height;
+        foreach (var viewport in (geometry.VerticallyScrollable ?? []).Where(v => v.Height >= 3 * band))
+        {
+            string? edge = null;
+            if (point.Y < viewport.Top + band)
+            {
+                edge = "top";
+            }
+            else if (point.Y >= viewport.Bottom - band)
+            {
+                edge = "bottom";
+            }
+
+            if (edge != null)
+            {
+                throw InputRefusedException.Record(
+                    new InputRefusal(
+                        RefusalCodes.DropPointInScrollBand,
+                        $"The drop point ({point.X},{point.Y}) is within {band} px of the {edge} of a scrolling list "
+                            + $"or pane (its viewport is ({viewport.X},{viewport.Y} {viewport.Width}x{viewport.Height})); "
+                            + "a drag resting there scrolls the view, so the release would land on another row; no "
+                            + "input sent. Scroll the view so the target is away from that edge, then observe and retry."
+                    )
+                );
+            }
+        }
+    }
+
     private static Rectangle VisiblePart(ClickGeometry geometry) =>
         geometry.ScrollableAncestors.Aggregate(geometry.Bounds, Rectangle.Intersect);
 
@@ -230,6 +277,23 @@ public static class ClickPoint
     /// point was proven to be on the element: "target", "descendant" or "ancestor".
     /// </summary>
     public static string Verify(Point point, AutomationElement target) => ClickHitTest.Verify(point, target);
+
+    /// <summary>
+    /// Why <paramref name="point"/>, chosen on <paramref name="target"/> earlier, is no longer on it, or null: the
+    /// bounds read <paramref name="now"/> must still hold the point and the hit test must still pass. For a check
+    /// after input, so the reason never claims nothing was sent.
+    /// </summary>
+    public static string? Moved(Point point, ClickGeometry now, AutomationElement target)
+    {
+        var bounds = now.Bounds;
+        if (!bounds.Contains(point))
+        {
+            return $"{InputDesktop.Current.DescribeElement(target)} is now at ({bounds.X},{bounds.Y} "
+                + $"{bounds.Width}x{bounds.Height}), which no longer holds the drop point ({point.X},{point.Y})";
+        }
+
+        return ClickHitTest.Covering(point, target);
+    }
 
     private static InputRefusedException Refuse(string reason) =>
         InputRefusedException.Record(

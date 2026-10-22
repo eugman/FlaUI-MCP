@@ -112,19 +112,19 @@ public class MouseToolTests(TestAppFixture fixture, ITestOutputHelper output)
         // click and the move path.
         var origin = Origin(fixture.WinFormsHandle);
         var parked = FlaUI.Core.Input.Mouse.Position;
-        var error = await Assert.ThrowsAsync<InputRefusedException>(() =>
-            Run(
-                Pointer(),
-                new
-                {
-                    action,
-                    handle = fixture.WinFormsHandle,
-                    to = new { x = -40, y = origin.Height / 2 },
-                }
-            )
+        var result = await Run(
+            Pointer(),
+            new
+            {
+                action,
+                handle = fixture.WinFormsHandle,
+                to = new { x = -40, y = origin.Height / 2 },
+            }
         );
-        output.WriteLine(error.Message);
-        Assert.Contains("Point is not on the target window (off-window or covered)", error.Message);
+        output.WriteLine(Text(result));
+        // A refusal is a failed result, as windows_click reports one, never an exception.
+        Assert.True(result.IsError);
+        Assert.Contains("Point is not on the target window (off-window or covered)", Text(result));
         Assert.Equal(parked, FlaUI.Core.Input.Mouse.Position);
     }
 

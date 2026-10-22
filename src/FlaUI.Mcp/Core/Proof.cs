@@ -22,6 +22,18 @@ public sealed record Proof(
     public const string NotApplied = "not-applied";
     public const string Unavailable = "unavailable";
 
+    /// <summary>
+    /// The channel that acted reports the effect itself (a Value pattern read back after its own SetValue): the
+    /// read agrees, but nothing independent confirmed it, so the status is unverified, never ok.
+    /// </summary>
+    public const string SelfReported = "self-reported";
+
+    /// <summary>
+    /// The state read back right after the call agreed, but a dialog opened a moment later, so it may not stand;
+    /// the status is unverified until the dialog is handled and the state observed again.
+    /// </summary>
+    public const string Unsettled = "unsettled";
+
     /// <summary>Verified when <paramref name="observed"/> equals <paramref name="expected"/>, unavailable when unread.</summary>
     public static Proof Compare(string? expected, string? observed, string source, bool independent)
     {

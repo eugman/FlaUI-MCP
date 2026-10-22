@@ -57,7 +57,7 @@ public sealed class BatchTool : ToolBase
     {
         if (arguments is not { } args || !args.TryGetProperty("actions", out var actions))
         {
-            return ErrorResult("Missing actions");
+            return ErrorResult(RefusalCodes.InvalidArguments, "Missing actions");
         }
 
         var rows = actions.EnumerateArray().ToArray();

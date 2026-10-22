@@ -167,6 +167,8 @@ public sealed class ClickPointVisibilityTests
     private static AutomationElement[] Chain(FakeDesktop desktop, params ControlType[] types)
     {
         var chain = types.Select(_ => Element()).ToArray();
+        // The target's own bounds hold the press point: a container may vouch for the point only inside them.
+        desktop.ElementBounds[chain[0]] = Clip;
         for (var i = 0; i < chain.Length; i++)
         {
             desktop.ControlTypes[chain[i]] = types[i];
