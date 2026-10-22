@@ -17,6 +17,7 @@
       "**/Core/Interaction/InteractionGrantActivation.cs",
       "**/Core/Interaction/Heartbeat.cs",
       "**/Core/MutationGuard.cs",
+      "**/Core/ProcessPolicy.cs",
       "**/Core/DesktopLease.cs",
       "**/Core/AutomationRefusal.cs",
       "**/Core/Proof.cs",

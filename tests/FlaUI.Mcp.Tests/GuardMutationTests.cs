@@ -103,6 +103,7 @@ public sealed class GuardMutationTests
     [Fact]
     public void ADeniedForegroundProcessIsNamed()
     {
+        using var installed = new FakeDesktop().Install();
         var policy = new ProcessPolicy(["some-app-that-is-not-running"]);
         var self = Process.GetCurrentProcess().ProcessName;
 
@@ -350,19 +351,20 @@ public sealed class GuardMutationTests
     [Fact]
     public void AnActivationRefusalNamesTheProcessInFront()
     {
-        // PID 4 is the System process on every Windows machine.
+        // The name comes through the desktop seam, so it is the same on every machine.
         var desktop = new FakeDesktop
         {
             ForegroundWindow = FakeDesktop.OtherHwnd,
             ActivationAllowed = false,
             OtherProcessId = 4,
         };
+        desktop.ProcessNames[4] = "System";
         using var installed = desktop.Install();
 
         var error = Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target));
 
-        Assert.Equal(ProcessPolicy.TryGetProcessName(4), error.Refusal.ForegroundProcess!.Name);
-        Assert.NotNull(error.Refusal.ForegroundProcess.Name);
+        Assert.Equal("System", error.Refusal.ForegroundProcess!.Name);
+        Assert.Equal(4, error.Refusal.ForegroundProcess.Pid);
     }
 
     [Fact]

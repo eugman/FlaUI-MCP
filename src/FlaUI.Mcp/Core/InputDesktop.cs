@@ -128,6 +128,9 @@ internal class InputDesktop
 
     public virtual AutomationElement? ParentOf(AutomationElement element) => element.Parent;
 
+    /// <summary>A process's name for a refusal, or null when it cannot be read (exited, protected, no such PID).</summary>
+    public virtual string? ProcessNameOf(int processId) => ProcessPolicy.TryGetProcessName(processId);
+
     public virtual bool HasValuePattern(AutomationElement element) => element.Patterns.Value.IsSupported;
 
     /// <summary>The element UI Automation reports as having keyboard focus, or null.</summary>

@@ -106,6 +106,15 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override nint LastActivePopup(nint owner) => ModalHwnd == 0 ? owner : ModalHwnd;
 
+    /// <summary>
+    /// Process names the fake knows: this test process under its own name, nothing else. A real read of OtherPid
+    /// would name whatever runs at PID 4240 (Windows ignores a PID's low two bits), which differs per machine.
+    /// </summary>
+    public Dictionary<int, string> ProcessNames { get; } =
+        new() { [TargetPid] = System.Diagnostics.Process.GetCurrentProcess().ProcessName };
+
+    public override string? ProcessNameOf(int processId) => ProcessNames.GetValueOrDefault(processId);
+
     /// <summary>The process that owns the other window.</summary>
     public int OtherProcessId { get; set; } = OtherPid;
 

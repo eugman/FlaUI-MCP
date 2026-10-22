@@ -167,7 +167,8 @@ public sealed class ActivationContractTests
         var (grant, _) = Begun();
         using var __ = grant;
 
-        Assert.Throws<InputRefusedException>(() => grant.Rebaseline(Window));
+        var error = Assert.Throws<InputRefusedException>(() => grant.Rebaseline(Window));
+        Assert.Equal(RefusalCodes.ActivationDenied, error.Refusal.Code);
         Assert.True(grant.Active);
     }
 
@@ -185,6 +186,21 @@ public sealed class ActivationContractTests
 
         Assert.Equal(RefusalCodes.ActivationDenied, error.Refusal.Code);
         Assert.False(grant.Active);
+    }
+
+    [Fact]
+    public void ARebaselineAtTheLastMomentOfThePromptStillCounts()
+    {
+        long now = 0;
+        var (grant, input) = Begun(() => now);
+        using var _ = grant;
+        grant.BeginPrompt(TimeSpan.FromSeconds(1));
+        input.Counts = new InputCounts(0, 1, new Point(400, 300));
+        now = 1_000;
+
+        grant.Rebaseline(Window);
+
+        Assert.True(grant.Active);
     }
 
     [Fact]

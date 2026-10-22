@@ -216,7 +216,7 @@ public sealed class GuardedInput : IDisposable
         // Authorize the captured identity, not an earlier foreground observation.
         if (!policy.IsProcessAllowed(captured.ProcessId))
         {
-            var name = ProcessPolicy.TryGetProcessName(captured.ProcessId) ?? "unknown";
+            var name = InputDesktop.Current.ProcessNameOf(captured.ProcessId) ?? "unknown";
             throw new InvalidOperationException(
                 policy.DescribeDenied($"The foreground window's process '{name}'")
                     + " Focus an allowed window first, or target an element ref directly."
@@ -239,7 +239,7 @@ public sealed class GuardedInput : IDisposable
             return;
         }
 
-        var name = ProcessPolicy.TryGetProcessName(processId);
+        var name = InputDesktop.Current.ProcessNameOf(processId);
         throw InputRefusedException.Record(ProcessIntegrity.DescribeBlocked(self, target, processId, name)!);
     }
 
@@ -257,7 +257,7 @@ public sealed class GuardedInput : IDisposable
                 target.ProcessId,
                 foreground,
                 foregroundPid,
-                foregroundPid == 0 ? null : ProcessPolicy.TryGetProcessName(foregroundPid)
+                foregroundPid == 0 ? null : InputDesktop.Current.ProcessNameOf(foregroundPid)
             )
         );
     }
@@ -459,7 +459,7 @@ public sealed class GuardedInput : IDisposable
         return InputRefusedException.Record(
             new InputRefusal("point-not-on-target", message)
             {
-                ForegroundProcess = pid == 0 ? null : new ProcessRef(ProcessPolicy.TryGetProcessName(pid), pid),
+                ForegroundProcess = pid == 0 ? null : new ProcessRef(InputDesktop.Current.ProcessNameOf(pid), pid),
                 Target = new ProcessRef(null, target.ProcessId),
             }
         );
