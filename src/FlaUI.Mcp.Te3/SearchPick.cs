@@ -18,7 +18,8 @@ internal static class SearchPick
 
     /// <summary>
     /// The table <paramref name="index"/>'s row sits under: the nearest row above it at table depth under Tables, as
-    /// the rows read place it; null when none was read.
+    /// the rows read place it; null when none was read. A row of unknown depth could be a table, so it ends the table
+    /// above it, as it ends a candidate (<see cref="Candidates"/>).
     /// </summary>
     public static string? TableOf(IReadOnlyList<TreeRow> rows, int index)
     {
@@ -29,13 +30,28 @@ internal static class SearchPick
             group = row.Depth == TablesDepth ? row.Value : group;
             table = row.Depth switch
             {
-                <= TablesDepth => null,
+                null or <= TablesDepth => null,
                 TableDepth => group == WalkPlace.TablesGroup ? row.Value : null,
                 _ => table,
             };
         }
 
         return table;
+    }
+
+    /// <summary>
+    /// Where <paramref name="rows"/> place the selected row: its table (null when no table row above it is in view)
+    /// and whether it is a candidate for the request there.
+    /// </summary>
+    public static SelectionPlace Place(IReadOnlyList<TreeRow> rows, int? selected, WalkRequest request)
+    {
+        if (selected is not { } index)
+        {
+            return new(null, false);
+        }
+
+        var table = TableOf(rows, index);
+        return new(table, table != null && Candidates(rows, request).Candidates.Any(c => c.Index == index));
     }
 
     /// <summary>

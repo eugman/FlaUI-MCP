@@ -58,6 +58,25 @@ internal static class ObjectWalk
     }
 
     /// <summary>
+    /// Why the selection after the search cleared is not proven to be the object: its table row is out of view (the
+    /// table and folder cannot be confirmed), it is in another table, or it is not the object's row there.
+    /// </summary>
+    public static string ClearMiss(RowObservation after, SelectionPlace place, WalkRequest request)
+    {
+        var now = $"'{after.Value}' ({after.Type ?? "unknown type"})";
+        if (place.Table == null)
+        {
+            return $"After the search cleared, the selection is {now}, but its table row is not in view, so its table "
+                + $"and folder could not be confirmed as '{request.Table}'. Observe the selection before continuing.";
+        }
+
+        return place.Table != request.Table
+            ? $"Selection moved when the search was cleared: now {now} under table '{place.Table}'."
+            : $"Selection moved when the search was cleared: now {now} under table '{place.Table}', not the "
+                + "requested object's row in its folder.";
+    }
+
+    /// <summary>
     /// The selection is the object the walk reached: by identity (name and type, the cursor typing the row, and
     /// Properties' Name when shown) and by where the rows read now place it (<paramref name="place"/>: the table from
     /// the nearest table row above it under Tables, and whether it is the object's row in that table and folder), not

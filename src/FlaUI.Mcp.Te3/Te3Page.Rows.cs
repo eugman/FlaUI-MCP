@@ -35,11 +35,7 @@ public sealed partial class Te3Page
             return new(null, false);
         }
 
-        var rows = TomRows.Rows(found.Elements, scale);
-        return new(
-            SearchPick.TableOf(rows, selected),
-            SearchPick.Candidates(rows, request).Candidates.Any(c => c.Index == selected)
-        );
+        return SearchPick.Place(TomRows.Rows(found.Elements, scale), selected, request);
     }
 
     /// <summary>
