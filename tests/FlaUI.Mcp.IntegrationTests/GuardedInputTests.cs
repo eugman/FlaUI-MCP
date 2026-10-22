@@ -64,7 +64,7 @@ public class GuardedInputTests(TestAppFixture fixture)
         // SessionManager.FocusWindow would wait for the lease this test holds.
         Win32Desktop.FocusWindow(fixture.Session.GetWindowHwnd(fixture.WinFormsHandle));
         var sent = false;
-        Assert.Throws<InvalidOperationException>(() => input.Send(() => sent = true));
+        Assert.Throws<InputRefusedException>(() => input.Send(() => sent = true));
         Assert.False(sent);
     }
 

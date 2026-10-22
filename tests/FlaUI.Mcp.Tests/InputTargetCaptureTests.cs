@@ -22,9 +22,7 @@ public sealed class InputTargetCaptureTests
     {
         using var installed = new FakeDesktop().Install();
 
-        Assert.Throws<InvalidOperationException>(() => InputTarget.Capture(0, FakeDesktop.TargetPid));
-        Assert.Throws<InvalidOperationException>(() =>
-            InputTarget.Capture(FakeDesktop.OtherHwnd, FakeDesktop.TargetPid)
-        );
+        Assert.Throws<InputRefusedException>(() => InputTarget.Capture(0, FakeDesktop.TargetPid));
+        Assert.Throws<InputRefusedException>(() => InputTarget.Capture(FakeDesktop.OtherHwnd, FakeDesktop.TargetPid));
     }
 }

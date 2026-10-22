@@ -25,7 +25,7 @@ public sealed class GuardedInputBranchTests
         var desktop = new FakeDesktop { KeyboardFocus = false, ElementTakesFocus = false };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             new GuardedInput(FakeDesktop.Target, Element(), verifyFocus: true)
         );
 
@@ -41,9 +41,7 @@ public sealed class GuardedInputBranchTests
         var desktop = new FakeDesktop();
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
-            new GuardedInput(FakeDesktop.Target, verifyFocus: true)
-        );
+        var error = Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target, verifyFocus: true));
 
         Assert.Contains("did not receive verified keyboard focus", error.Message);
         AssertLeaseReleased();
@@ -89,7 +87,7 @@ public sealed class GuardedInputBranchTests
         using var installed = desktop.Install();
         using var input = new GuardedInput(FakeDesktop.Target);
 
-        Assert.Throws<InvalidOperationException>(() => input.Type(new string('a', 200)));
+        Assert.Throws<InputRefusedException>(() => input.Type(new string('a', 200)));
 
         Assert.Equal(1, desktop.Dispatched);
     }
@@ -133,7 +131,7 @@ public sealed class GuardedInputBranchTests
         var desktop = new FakeDesktop { TargetEnabled = false };
         using var installed = desktop.Install();
 
-        Assert.Throws<InvalidOperationException>(() => new GuardedInput(FakeDesktop.Target));
+        Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target));
 
         Assert.Equal(0, desktop.Dispatched);
         AssertLeaseReleased();

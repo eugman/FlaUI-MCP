@@ -353,7 +353,7 @@ public class SessionManager : IDisposable
                 ForgetWindow(handle);
                 return null;
             }
-            catch (InvalidOperationException)
+            catch (Exception stale) when (InputTarget.IsStale(stale))
             {
                 ForgetWindow(handle);
                 return null;

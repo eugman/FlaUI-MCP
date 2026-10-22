@@ -45,7 +45,7 @@ public sealed class FocusRuleTests
 
         new GuardedInput(FakeDesktop.Target, combo, FocusRule.SelfOrDescendant).Dispose();
 
-        Assert.Throws<InvalidOperationException>(() => new GuardedInput(FakeDesktop.Target, combo, FocusRule.Exact));
+        Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target, combo, FocusRule.Exact));
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public sealed class FocusRuleTests
         desktop.IgnoreFocus(combo);
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             new GuardedInput(FakeDesktop.Target, combo, FocusRule.SelfOrDescendant)
         );
         Assert.Contains("no input sent", error.Message);
@@ -91,7 +91,7 @@ public sealed class FocusRuleTests
         desktop.ControlTypes[button] = FlaUI.Core.Definitions.ControlType.Button;
         using var installed = desktop.Install();
 
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<InputRefusedException>(() =>
             new GuardedInput(FakeDesktop.Target, canvas, FocusRule.EditInComposite)
         );
         Assert.Equal(0, desktop.Dispatched);
@@ -113,7 +113,7 @@ public sealed class FocusRuleTests
         new GuardedInput(FakeDesktop.Target, field, FocusRule.EditInComposite).Dispose();
 
         desktop.ValueBearing.Add(middle);
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<InputRefusedException>(() =>
             new GuardedInput(FakeDesktop.Target, field, FocusRule.EditInComposite)
         );
     }

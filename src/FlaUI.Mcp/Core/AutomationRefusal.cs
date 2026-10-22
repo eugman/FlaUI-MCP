@@ -56,6 +56,24 @@ public static class RefusalCodes
     public const string ProviderBlocked = "provider-blocked";
     public const string PlacementMismatch = "placement-mismatch";
 
+    /// <summary>The target's process or window is no longer the one observed; nothing was sent.</summary>
+    public const string TargetStale = "target-stale";
+
+    /// <summary>Which process owns the window could not be read, so it cannot be authorized; nothing was sent.</summary>
+    public const string WindowOwnershipUnknown = "window-ownership-unknown";
+
+    /// <summary>The intended control did not take keyboard focus before input; nothing was sent.</summary>
+    public const string FocusNotVerified = "focus-not-verified";
+
+    /// <summary>The foreground window's process is not on the app allowlist; nothing was sent.</summary>
+    public const string ProcessNotAllowed = "process-not-allowed";
+
+    /// <summary>The target lost the foreground or was disabled; input already sent by the call stays sent.</summary>
+    public const string TargetChanged = "target-changed";
+
+    /// <summary>Keyboard focus left the control part-way through a keyboard fill; Ctrl+A had gone out.</summary>
+    public const string FocusLost = "focus-lost";
+
     /// <summary>A code in the canonical form: lower case, words joined by hyphens.</summary>
     public static string Canonical(string code) => code.Replace('_', '-').ToLowerInvariant();
 }

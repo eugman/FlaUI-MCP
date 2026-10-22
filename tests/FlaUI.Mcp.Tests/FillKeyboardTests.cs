@@ -38,7 +38,7 @@ public sealed class FillKeyboardTests
         desktop.IgnoreFocus(field);
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             Fallback(field, verifyFocus: FocusRule.EditInComposite, reads: "")
         );
 
@@ -150,7 +150,7 @@ public sealed class FillKeyboardTests
         var desktop = new FakeDesktop { KeyboardFocus = false, ElementFocusLostAfter = 1 };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             Fallback(Element(), verifyFocus: FocusRule.EditInComposite, reads: "")
         );
 

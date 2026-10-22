@@ -14,8 +14,15 @@ public partial class FillTool
     {
         if (focused is { } f && !FocusRules.Holds(f.Rule, f.Element, InputDesktop.Current))
         {
-            throw new InvalidOperationException(
-                "Keyboard focus left the control after Ctrl+A, so the selection was not replaced; no further input sent."
+            // Ctrl+A already went out, so this refusal counts as dispatched: never replay the fill.
+            throw InputRefusedException.Record(
+                new InputRefusal(
+                    RefusalCodes.FocusLost,
+                    "Keyboard focus left the control after Ctrl+A, so the selection was not replaced; no further input sent."
+                )
+                {
+                    ActionDispatched = true,
+                }
             );
         }
     }
