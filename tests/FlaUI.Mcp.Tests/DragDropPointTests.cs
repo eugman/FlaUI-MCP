@@ -225,4 +225,119 @@ public sealed class DragDropPointTests
         Assert.True(result.IsError != true, result.Content[0].Text);
         Assert.False(Reply(result).TryGetProperty("changed", out var changed), changed.ToString());
     }
+
+    [Fact]
+    public void ADropPointInTheTopAutoScrollBandIsRefusedBeforeInput()
+    {
+        // The live seed: the first visible row of a tree; a drag resting on it scrolled the tree six rows.
+        var tree = new Rectangle(427, 214, 467, 400);
+        var geometry = new ClickGeometry(false, null, Row, [tree]);
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            ClickPoint.RequireOutsideScrollBand(new Point(435, 225), geometry)
+        );
+
+        Assert.Equal("drop-point-in-scroll-band", error.Refusal.Code);
+        Assert.Equal(
+            "The drop point (435,225) is within 22 px of the top of a scrolling list or pane (its viewport is "
+                + "(427,214 467x400)); a drag resting there scrolls the view, so the release would land on another "
+                + "row; no input sent. Scroll the view so the target is away from that edge, then observe and retry.",
+            error.Message
+        );
+    }
+
+    [Theory]
+    [InlineData(592, "bottom")]
+    [InlineData(613, "bottom")]
+    [InlineData(235, "top")]
+    public void TheBandIsOneRowAtEitherEnd(int y, string edge)
+    {
+        var tree = new Rectangle(427, 214, 467, 400);
+        var geometry = new ClickGeometry(false, null, Row, [tree]);
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            ClickPoint.RequireOutsideScrollBand(new Point(435, y), geometry)
+        );
+
+        Assert.Contains($"of the {edge} of a scrolling", error.Message);
+    }
+
+    [Theory]
+    [InlineData(236)]
+    [InlineData(400)]
+    [InlineData(591)]
+    public void ADropPointBetweenTheBandsPasses(int y)
+    {
+        var tree = new Rectangle(427, 214, 467, 400);
+
+        ClickPoint.RequireOutsideScrollBand(new Point(435, y), new ClickGeometry(false, null, Row, [tree]));
+    }
+
+    [Fact]
+    public void AViewportShorterThanThreeRowsHasNoBand()
+    {
+        var shortList = new Rectangle(427, 214, 467, 65);
+
+        ClickPoint.RequireOutsideScrollBand(new Point(435, 225), new ClickGeometry(false, null, Row, [shortList]));
+        ClickPoint.RequireOutsideScrollBand(new Point(435, 225), new ClickGeometry(false, null, Row, []));
+    }
+
+    [Fact]
+    public async Task ADragOntoTheFirstVisibleRowIsRefusedWithNothingSent()
+    {
+        var row = Element();
+        var desktop = new FakeDesktop();
+        desktop.ElementBounds[row] = Row;
+        desktop.Viewports[row] = [new Rectangle(427, 214, 467, 400)];
+        using var installed = desktop.Install();
+        var (refs, sessions, handle) = Window();
+        using var _ = sessions;
+        var reference = refs.Register(handle, row);
+
+        var result = await Run(
+            new MouseTool(refs, new PendingInvokeTracker(), sessions),
+            new
+            {
+                action = "drag",
+                @ref = reference,
+                toRef = reference,
+                toEdge = "bottom",
+            }
+        );
+
+        Assert.True(result.IsError);
+        Assert.StartsWith(
+            "Failed to drag: The drop point (650,233) is within 22 px of the top",
+            result.Content[0].Text
+        );
+        Assert.Equal("drop-point-in-scroll-band", result.Outcome!.Failure!.Code);
+        Assert.Equal("not-dispatched", result.Outcome.Dispatch);
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
+    public async Task ADragOntoARowAwayFromTheEdgesIsSent()
+    {
+        var row = Element();
+        var desktop = new FakeDesktop();
+        desktop.ElementBounds[row] = Row;
+        desktop.Viewports[row] = [new Rectangle(427, 150, 467, 400)];
+        using var installed = desktop.Install();
+        var (refs, sessions, handle) = Window();
+        using var _ = sessions;
+        var reference = refs.Register(handle, row);
+
+        var result = await Run(
+            new MouseTool(refs, new PendingInvokeTracker(), sessions),
+            new
+            {
+                action = "drag",
+                @ref = reference,
+                toRef = reference,
+            }
+        );
+
+        Assert.True(result.IsError != true, result.Content[0].Text);
+        Assert.Equal(15, desktop.Dispatched);
+    }
 }

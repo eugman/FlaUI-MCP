@@ -55,6 +55,9 @@ public static class RefusalCodes
 
     /// <summary>A drag's drop target moved while the button was down; the drag was cancelled with Escape.</summary>
     public const string DropTargetMoved = "drop-target-moved";
+
+    /// <summary>A drag's drop point lies where a resting drag auto-scrolls its list; refused before input.</summary>
+    public const string DropPointInScrollBand = "drop-point-in-scroll-band";
     public const string ElementNotFound = "element-not-found";
     public const string ProviderBlocked = "provider-blocked";
     public const string PlacementMismatch = "placement-mismatch";

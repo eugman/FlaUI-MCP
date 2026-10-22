@@ -222,6 +222,41 @@ public static class ClickPoint
 
     private const int MinVisible = 4;
 
+    /// <summary>
+    /// Refuse a drop point within one row (the element's own height) of the top or bottom of a scrolling
+    /// ancestor's viewport: a drag resting there auto-scrolls the view (a tree did, six rows), so the release
+    /// lands on another row. A viewport shorter than three such bands has none.
+    /// </summary>
+    public static void RequireOutsideScrollBand(Point point, ClickGeometry geometry)
+    {
+        var band = geometry.Bounds.Height;
+        foreach (var viewport in geometry.ScrollableAncestors.Where(v => v.Height >= 3 * band))
+        {
+            string? edge = null;
+            if (point.Y < viewport.Top + band)
+            {
+                edge = "top";
+            }
+            else if (point.Y >= viewport.Bottom - band)
+            {
+                edge = "bottom";
+            }
+
+            if (edge != null)
+            {
+                throw InputRefusedException.Record(
+                    new InputRefusal(
+                        RefusalCodes.DropPointInScrollBand,
+                        $"The drop point ({point.X},{point.Y}) is within {band} px of the {edge} of a scrolling list "
+                            + $"or pane (its viewport is ({viewport.X},{viewport.Y} {viewport.Width}x{viewport.Height})); "
+                            + "a drag resting there scrolls the view, so the release would land on another row; no "
+                            + "input sent. Scroll the view so the target is away from that edge, then observe and retry."
+                    )
+                );
+            }
+        }
+    }
+
     private static Rectangle VisiblePart(ClickGeometry geometry) =>
         geometry.ScrollableAncestors.Aggregate(geometry.Bounds, Rectangle.Intersect);
 

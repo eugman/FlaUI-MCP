@@ -83,12 +83,19 @@ internal sealed class DragPlanner(RefPoints points)
     }
 
     // The drop point is hit-tested like a press: releasing over an overlay or a sibling drops on that instead. It
-    // sits DropInset pixels inside the edge, off the neighbour's border.
+    // sits DropInset pixels inside the edge, off the neighbour's border, and never where a resting drag scrolls.
     private Press EdgeOf(string reference, string edge, ref string? scrolled) =>
         points.Pressable(
             reference,
             geometry =>
-                ClickPoint.Choose(geometry, PointerPlan.EdgePoint(geometry.Bounds, edge, PointerPlan.DropInset)),
+            {
+                var point = ClickPoint.Choose(
+                    geometry,
+                    PointerPlan.EdgePoint(geometry.Bounds, edge, PointerPlan.DropInset)
+                );
+                ClickPoint.RequireOutsideScrollBand(point, geometry);
+                return point;
+            },
             ref scrolled
         );
 
