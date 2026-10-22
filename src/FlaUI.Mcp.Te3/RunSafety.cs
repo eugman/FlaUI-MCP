@@ -2,18 +2,24 @@ using System.Diagnostics;
 
 public static class RunSafety
 {
-    public static void RequireExclusiveTe3(int? ownedPid = null)
+    /// <param name="running">The TE3 process IDs; the real process list when null.</param>
+    public static void RequireExclusiveTe3(int? ownedPid = null, Func<int[]>? running = null)
+    {
+        var ids = (running ?? RunningTe3)().Where(id => id != ownedPid).ToArray();
+        if (ids.Length != 0)
+        {
+            throw new InvalidOperationException(
+                $"Close TE3 yourself before running/recovery. Existing process IDs: {string.Join(", ", ids)}. No user window will be closed."
+            );
+        }
+    }
+
+    private static int[] RunningTe3()
     {
         var processes = Process.GetProcessesByName("TabularEditor3");
         try
         {
-            var ids = processes.Where(p => p.Id != ownedPid && !p.HasExited).Select(p => p.Id).ToArray();
-            if (ids.Length != 0)
-            {
-                throw new InvalidOperationException(
-                    $"Close TE3 yourself before running/recovery. Existing process IDs: {string.Join(", ", ids)}. No user window will be closed."
-                );
-            }
+            return processes.Where(p => !p.HasExited).Select(p => p.Id).ToArray();
         }
         finally
         {

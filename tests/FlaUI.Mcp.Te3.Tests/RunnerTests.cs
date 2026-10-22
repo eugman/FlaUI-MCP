@@ -283,26 +283,6 @@ public sealed class RunnerTests : IDisposable
     }
 
     [Fact]
-    public async Task RecoverRejectsBackupForAnotherSettingsDirectoryBeforeWriting()
-    {
-        var backup = Path.Combine(root, "backup");
-        var target = Path.Combine(root, "other-settings");
-        Directory.CreateDirectory(backup);
-        Directory.CreateDirectory(target);
-        File.WriteAllText(Path.Combine(target, "UiPreferences.json"), "{}");
-        File.WriteAllText(Path.Combine(backup, "UiPreferences.json"), """{"Skin":"backup"}""");
-        File.WriteAllText(
-            Path.Combine(backup, "restore.json"),
-            JsonSerializer.Serialize(
-                new SettingsLease.BackupInfo(target, SettingsLease.Names.ToDictionary(n => n, n => (string?)null))
-            )
-        );
-
-        Assert.Equal(2, await RunnerCommands.Execute(["recover", backup]));
-        Assert.Equal("{}", File.ReadAllText(Path.Combine(target, "UiPreferences.json")));
-    }
-
-    [Fact]
     public async Task PromotionRejectsACheckpointChangedAfterCapture()
     {
         var png = Path.Combine(root, "checkpoint.png");

@@ -19,6 +19,25 @@ public static class RunnerCommands
 
     public static Task<int> Execute(string[] args) => Execute(args, CancellationToken.None);
 
+    /// <summary>
+    /// Restores an interrupted run's exact backup; hashes are checked before and after copying. Without
+    /// <paramref name="force"/> it refuses settings changed since the run normalized them. Holds the runner lock and
+    /// refuses while any TE3 runs; tests pass their own lock path, settings directory and process list.
+    /// </summary>
+    internal static object Recover(string backup, bool force, RunPaths? paths = null, Func<int[]>? running = null)
+    {
+        using var recoveryGate = RunExecutor.AcquireRunnerLock(paths?.LockPath);
+        RunSafety.RequireExclusiveTe3(running: running);
+        var manifestMarked = SettingsLease.Recover(backup, force, paths?.SettingsDirectory);
+        return new
+        {
+            restored = backup,
+            verified = "sha256",
+            backupRetained = true,
+            manifestMarked,
+        };
+    }
+
     internal static async Task<int> Execute(string[] args, CancellationToken cancellationToken)
     {
         try
@@ -95,23 +114,8 @@ public static class RunnerCommands
                 {
                     throw new ArgumentException(Usage);
                 }
-                // Restores an interrupted run's exact backup; hashes are checked before and after copying.
-                // Without --force it refuses settings changed since the run normalized them.
-                var backup = Path.GetFullPath(args[1]);
-                using var recoveryGate = RunExecutor.AcquireRunnerLock();
-                RunSafety.RequireExclusiveTe3();
-                var manifestMarked = SettingsLease.Recover(backup, force);
-                Console.WriteLine(
-                    JsonSerializer.Serialize(
-                        new
-                        {
-                            restored = backup,
-                            verified = "sha256",
-                            backupRetained = true,
-                            manifestMarked,
-                        }
-                    )
-                );
+
+                Console.WriteLine(JsonSerializer.Serialize(Recover(Path.GetFullPath(args[1]), force)));
                 return 0;
             }
 
