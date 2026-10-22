@@ -42,8 +42,8 @@ internal static class CoreFailure
     // user has not approved (or has revoked) the batch.
     private static readonly HashSet<string> DesktopBlockers =
     [
-        "activation-denied",
-        "desktop-unavailable",
+        RefusalCodes.ActivationDenied,
+        RefusalCodes.DesktopUnavailable,
         Te3Interaction.ApprovalRequired,
         Te3Interaction.FocusRevoked,
         Te3Interaction.PausedAfterFailure,
