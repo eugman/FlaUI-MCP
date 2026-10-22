@@ -17,7 +17,7 @@ internal static class Te3McpServer
     /// <summary>
     /// Registers the TE3 tools beside the generic ones, and puts every tool that changes the desktop behind the user's
     /// grant: Core checks the mutation hook before each input it sends, each focus, close and launch, and each window
-    /// placement or state change. Reads stay free. The hook is set in the calling flow, so install before the server
+    /// placement or state change, and any call that fails after sending input pauses the grant. Reads stay free. The hook is set in the calling flow, so install before the server
     /// starts.
     /// </summary>
     internal static void Install(AutomationHost host, Te3Interaction interaction)
@@ -39,5 +39,10 @@ internal static class Te3McpServer
         registry.RegisterTool(new Te3EnvCheck());
 
         MutationGuard.BeforeMutation.Value = interaction.Require;
+        // A windows_* call that failed after sending input pauses the grant as a failed TE3 tool does (FailurePause).
+        registry.FailedAfterInput = (tool, outcome) =>
+            interaction.Pause(
+                $"{tool} failed after sending {outcome.InputsSent ?? 0} input(s), so TE3's state is unknown"
+            );
     }
 }

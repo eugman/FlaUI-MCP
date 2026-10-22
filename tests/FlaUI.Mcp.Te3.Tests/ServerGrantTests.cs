@@ -39,6 +39,45 @@ public sealed class ServerGrantTests : IDisposable
         Assert.Throws<InputRefusedException>(MutationGuard.CheckPermission);
     }
 
+    [Fact]
+    public async Task ACoreCallThatFailsAfterSendingInputPausesTheGrant()
+    {
+        // A windows_* call that sent input and then failed leaves TE3 in a state nobody has looked at, as a failed
+        // te3_layout does: Core's registry reports it (FailedAfterInput) and the grant refuses until TE3 is read.
+        interaction.Begin("Click Save", userApproved: true);
+        host.Tools.RegisterTool(new SendsThenFails());
+        using var installed = new FakeDesktop().Install();
+
+        var result = await host.Tools.ExecuteToolAsync(
+            SendsThenFails.ToolName,
+            JsonSerializer.SerializeToElement(new { })
+        );
+
+        Assert.True(result.IsError);
+        var paused = Assert.Throws<InputRefusedException>(interaction.Require);
+        Assert.Equal(Te3Interaction.PausedAfterFailure, paused.Refusal.Code);
+        Assert.Contains(SendsThenFails.ToolName, paused.Message);
+    }
+
+    private sealed class SendsThenFails : FlaUI.Mcp.ToolBase
+    {
+        public const string ToolName = "test_sends_then_fails";
+
+        public override string Name => ToolName;
+        public override string Description => "Sends one input to the fake desktop, then fails.";
+        public override object InputSchema => new { type = "object", additionalProperties = false };
+
+        public override Task<FlaUI.Mcp.McpToolResult> ExecuteAsync(JsonElement? arguments)
+        {
+            using (var input = new GuardedInput(FakeDesktop.Target))
+            {
+                input.Send(() => { });
+            }
+
+            return Task.FromResult(ErrorResult("the click went out, then the read-back failed"));
+        }
+    }
+
     [Theory]
     [InlineData("windows_focus")]
     [InlineData("windows_close")]
