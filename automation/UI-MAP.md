@@ -238,5 +238,5 @@ Verified: yes, unless the row says otherwise.
 | Floating-pane rule | The floating Dependencies window (hwnd A511A2) has owner 0 and class `WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1`, as the host's Win32 owner/class rule requires |
 | TOM Explorer rows | treeList (a Tree, class WindowsForms10.Window.8.app...) has no patterns and realizes only the ~23 on-screen TreeItems (none offscreen) |
 | Properties for a column | 9 rows, no ObjectType row (Name Brand, Folder 1. Brand Hierarchy, Source Column Brand): a column's type comes from the status bar's selection slot (`Column "Brand"`) |
-| Object navigation, row strategy | Brands[Brand] with folder: one read of 23 rows (indent 24 px), Column Brand (Node50) selected in 5.1 s and 8 inputs; then turned down by the Properties-only confirmation (since fixed, not re-run). Not promoted |
+| Object navigation, row strategy | Brands[Brand] with folder: strategy rows, rowsRead 23, indentPx 24, 1 select; the column (row 11 of the filtered tree, Node50 once the search cleared) was selected in 5.1 s and 8 inputs, the status bar read Column "Brand", and the Properties-only confirmation then turned it down (since fixed, not re-run). Not promoted |
 
