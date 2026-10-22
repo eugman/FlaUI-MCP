@@ -59,4 +59,21 @@ public sealed class InputRefusedException(InputRefusal refusal) : AutomationRefu
 
         return exception;
     }
+
+    /// <summary>
+    /// The caller caught <paramref name="error"/> and dealt with it (forgot a stale window, captured without a
+    /// park): drop its note from the running operation, so a later, unrelated failure in the same call is not
+    /// reported under this refusal's code. A newer refusal noted since is kept.
+    /// </summary>
+    public static void Handled(Exception error)
+    {
+        if (
+            error is InputRefusedException refused
+            && OperationContext.Current.Value is { } operation
+            && ReferenceEquals(operation.Refusal, refused.Refusal)
+        )
+        {
+            operation.Refusal = null;
+        }
+    }
 }

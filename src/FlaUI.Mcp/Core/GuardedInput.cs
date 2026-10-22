@@ -24,6 +24,9 @@ public sealed record InputTarget(nint Hwnd, int ProcessId, long StartedTicks, ni
         error is InvalidOperationException
         || error is AutomationRefusal { Code: RefusalCodes.TargetStale or RefusalCodes.WindowOwnershipUnknown };
 
+    /// <summary>A stale-identity refusal the caller dealt with: it no longer stands as the operation's refusal.</summary>
+    internal static void Handled(Exception error) => InputRefusedException.Handled(error);
+
     public static InputTarget Capture(nint hwnd, int pid)
     {
         if (hwnd == 0 || pid == 0 || InputDesktop.Current.ProcessOf(hwnd) != pid)

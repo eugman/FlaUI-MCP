@@ -200,6 +200,8 @@ public partial class ScreenshotTool : ToolBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or AutomationRefusal)
         {
+            // Handled: the capture goes ahead with a warning, so the refusal is not the call's failure.
+            InputRefusedException.Handled(ex);
             warning = ParkRefused(ex);
             proof = ParkProof(bounds, null);
         }

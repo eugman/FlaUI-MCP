@@ -332,6 +332,24 @@ public class SessionManager : IDisposable
     public Window? GetWindow(string handle) =>
         GetWindow(handle, hwnd => Automation.FromHandle(hwnd)?.AsWindow(), identity => identity.EnsureAlive());
 
+    /// <summary>Whether the handle's window is still the one registered; a stale one is forgotten, and false.</summary>
+    private bool IdentityHolds(string handle, InputTarget identity, Action<InputTarget> validateIdentity)
+    {
+        try
+        {
+            validateIdentity(identity);
+            return true;
+        }
+        catch (Exception stale)
+            when (stale is ArgumentException or System.ComponentModel.Win32Exception || InputTarget.IsStale(stale))
+        {
+            // Handled here: the window is forgotten, so the refusal is not the call's failure.
+            InputTarget.Handled(stale);
+            ForgetWindow(handle);
+            return false;
+        }
+    }
+
     internal Window? GetWindow(string handle, Func<nint, Window?> attach, Action<InputTarget> validateIdentity)
     {
         OperationContext.Check();
@@ -345,27 +363,9 @@ public class SessionManager : IDisposable
             hwnd = _windowHwnds.GetValueOrDefault(handle);
         }
 
-        if (identity != null)
+        if (identity != null && !IdentityHolds(handle, identity, validateIdentity))
         {
-            try
-            {
-                validateIdentity(identity);
-            }
-            catch (ArgumentException)
-            {
-                ForgetWindow(handle);
-                return null;
-            }
-            catch (Exception stale) when (InputTarget.IsStale(stale))
-            {
-                ForgetWindow(handle);
-                return null;
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                ForgetWindow(handle);
-                return null;
-            }
+            return null;
         }
 
         OperationContext.Check();
