@@ -38,30 +38,41 @@ internal static partial class ObjectSelect
         read = await tree.Read();
         var picked = await Pick(tree, read, request, outOfTime);
         var opened = new List<string>();
+        var selected = new List<string>();
         // With a folder path its folders are opened segment by segment; without one each row directly under the
-        // table in turn (a column takes the Right and shows nothing more).
+        // table in turn, selected first and opened only when TE3 does not type it as an object (a column or measure
+        // takes the select and nothing more); Partitions never holds either and is skipped by name.
         while (
-            NoCandidate(picked)
-            && opened.Count < MaxFolderOpens
-            && !outOfTime()
-            && NextToOpen(read.Rows, request, opened) is { } folder
+            MayOpen(picked, opened.Count, selected.Count, outOfTime)
+            && NextToOpen(read.Rows, request, selected) is { } row
         )
         {
-            opened.Add(folder.Value ?? "");
-            await Open(tree, folder);
+            selected.Add(row.Value ?? "");
+            if (!await OpenIfFolder(tree, row, request))
+            {
+                continue;
+            }
+
+            opened.Add(row.Value ?? "");
             read = await tree.Read();
             picked = await Pick(tree, read, request, outOfTime);
         }
 
         return picked with
         {
-            Tried = picked.Tried + 1 + opened.Count,
+            Tried = picked.Tried + 1 + selected.Count,
             ByTable = true,
             Pages = read.Pages,
             TruncatedByViewport = read.TruncatedByViewport,
-            Reason = NoCandidate(picked) && opened.Count > 0 ? Unopened(request, read, opened) : picked.Reason,
+            Reason =
+                NoCandidate(picked) && selected.Count > 0 ? Unopened(request, read, opened, selected) : picked.Reason,
         };
     }
+
+    /// <summary>Rows selected under the table at most, to tell its folders from its objects (each costs a select).</summary>
+    public const int MaxProbes = 8;
+
+    private const string PartitionsGroup = "Partitions";
 
     // Selected, unless it is, then Right.
     private static async Task Open(IRowTree tree, TreeRow row)
@@ -74,10 +85,50 @@ internal static partial class ObjectSelect
         await tree.Expand();
     }
 
+    // A folder path's segment is opened as it is; any other row is selected first and opened only when TE3 types it
+    // as a folder or not at all (the status bar does not follow a display folder; Properties says Folder).
+    private static async Task<bool> OpenIfFolder(IRowTree tree, TreeRow row, WalkRequest request)
+    {
+        if (request.Folder.Length > 0)
+        {
+            await Open(tree, row);
+            return true;
+        }
+
+        if ((await tree.ReadSelected()).Selected != row.Index)
+        {
+            await tree.Select(row);
+        }
+
+        Confirmation? seen = null;
+        for (var attempt = 0; attempt < ProbeReads && seen == null; attempt++)
+        {
+            seen = SelectionView.Read(row, await tree.View());
+            if (seen == null)
+            {
+                await tree.Wait(ViewPollMs);
+            }
+        }
+
+        if (seen?.Type is { } type && type.Replace(" ", "", StringComparison.Ordinal) != "Folder")
+        {
+            return false;
+        }
+
+        await tree.Expand();
+        return true;
+    }
+
+    private const int ProbeReads = 3;
+
     private static bool NoCandidate(SelectResult picked) => !picked.Found && picked.Tried == 0;
 
+    // Another row may be opened: nothing placed yet, both bounds unspent, and the clock still running.
+    private static bool MayOpen(SelectResult picked, int opened, int selected, Func<bool> outOfTime) =>
+        NoCandidate(picked) && opened < MaxFolderOpens && selected < MaxProbes && !outOfTime();
+
     // The next row to open under the table: the folder path's next segment at its exact depth, or the first row
-    // directly under the table not opened yet that is not the object itself.
+    // directly under the table not selected yet that is neither the object itself nor the Partitions group.
     private static TreeRow? NextToOpen(IReadOnlyList<TreeRow>? rows, WalkRequest request, List<string> opened)
     {
         if (rows == null)
@@ -99,7 +150,10 @@ internal static partial class ObjectSelect
         }
 
         return under.FirstOrDefault(r =>
-            r.Depth == TableDepth + 1 && r.Value != request.ObjectName && !opened.Contains(r.Value ?? "")
+            r.Depth == TableDepth + 1
+            && r.Value != request.ObjectName
+            && r.Value != PartitionsGroup
+            && !opened.Contains(r.Value ?? "")
         );
     }
 
@@ -120,9 +174,9 @@ internal static partial class ObjectSelect
         }
     }
 
-    private static string Unopened(WalkRequest request, RowRead read, List<string> opened) =>
+    private static string Unopened(WalkRequest request, RowRead read, List<string> opened, List<string> selected) =>
         $"No row named '{request.ObjectName}' under table '{request.Table}'"
         + (request.Folder.Length > 0 ? $" in folder '{request.Folder}'" : "")
         + $" among the {read.Rows?.Count ?? 0} rows the table's name showed with {opened.Count} folder(s) under it "
-        + $"opened ({string.Join(", ", opened)}); only those were selected.";
+        + $"opened ({string.Join(", ", opened)}); {selected.Count} row(s) were selected under it and nothing else.";
 }

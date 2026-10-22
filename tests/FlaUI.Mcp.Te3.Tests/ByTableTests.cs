@@ -122,6 +122,7 @@ public sealed class ByTableTests
             rows.Add(("Budget Rate", 4, "Partition"));
         }
 
+        rows.Add(("Currency", 3, "Column"));
         rows.Add(("1. Facts", 3, "Folder"));
         if (opened.Contains("1. Facts"))
         {
@@ -140,10 +141,12 @@ public sealed class ByTableTests
 
         var result = await ObjectSelect.ByTable(tree, new WalkRequest("Budget Rate", "Rate", ""), () => false);
 
+        // Review: Partitions never holds a column or measure, so it is skipped by name; the column Currency is
+        // selected, typed Column by TE3 and left alone (no Right); the folder is opened and shows Rate.
         Assert.True(result.Found, result.Reason);
         Assert.Equal("Column", result.ConfirmedType);
-        Assert.Equal(["Budget Rate", "Partitions", "1. Facts"], tree.Opened);
-        Assert.Equal([2, 3, 5, 6], tree.Selects);
+        Assert.Equal(["Budget Rate", "1. Facts"], tree.Opened);
+        Assert.Equal([2, 4, 5, 6], tree.Selects);
         Assert.Equal(4, result.Tried);
         Assert.True(result.ByTable);
     }
@@ -193,6 +196,7 @@ public sealed class ByTableTests
         Assert.False(miss.Found);
         Assert.Equal(1 + ObjectSelect.MaxFolderOpens, bounded.Opened.Count);
         Assert.Contains($"{ObjectSelect.MaxFolderOpens} folder(s) under it opened (Folder 1, Folder 2", miss.Reason);
+        Assert.Contains("4 row(s) were selected", miss.Reason);
         Assert.Equal(["Budget Rate"], stopped.Opened);
         Assert.False(clock.Found);
     }
