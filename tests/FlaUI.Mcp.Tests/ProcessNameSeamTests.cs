@@ -20,6 +20,16 @@ public sealed class ProcessNameSeamTests
     }
 
     [Fact]
+    public void AHostNamesProcessesThroughTheSeam()
+    {
+        // The public entry point for host code (Camtasia's recorder and owned-process identity checks).
+        using var installed = Named().Install();
+
+        Assert.Equal(FakedName, ProcessPolicy.NameOf(FakeDesktop.OtherPid));
+        Assert.Null(ProcessPolicy.NameOf(4321));
+    }
+
+    [Fact]
     public void TheAllowlistReadsTheNameThroughTheSeam()
     {
         using var installed = Named().Install();
