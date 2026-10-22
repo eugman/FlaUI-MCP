@@ -8,7 +8,7 @@ public sealed record Te3Destination(
 );
 
 /// <summary>The one destination list behind the companion's schemas, validation, navigation and arrival checks.</summary>
-public static class Te3Destinations
+public static partial class Te3Destinations
 {
     public static readonly IReadOnlyList<Te3Destination> All =
     [

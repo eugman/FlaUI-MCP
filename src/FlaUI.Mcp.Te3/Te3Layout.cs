@@ -86,7 +86,7 @@ public sealed partial class Te3Layout(
         // Files only, no desktop: no grant (a restore still refuses while TE3 runs).
         if (GetStringArgument(a, "action") is "snapshot" or "restore")
         {
-            return TextResult(JsonSerializer.Serialize(SettingsFiles(a), McpProtocol.JsonOptions));
+            return Proven(GetStringArgument(a, "action")!, SettingsFiles(a));
         }
 
         using var guard = readOnly ? null : grant.Guard();
@@ -107,8 +107,17 @@ public sealed partial class Te3Layout(
             "close-document" => await CloseDocument(surface, Required(a, "title")),
             _ => throw new ArgumentException("Unsupported TE3 layout action"),
         };
-        return TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions));
+        return readOnly
+            ? TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions))
+            : Proven(GetStringArgument(a, "action")!, result);
     }
+
+    // A change's reply with the proof of its read-back (LayoutProof), so its status is ok only when verified.
+    private McpToolResult Proven(string action, object result) =>
+        LayoutProof.Attach(
+            TextResult(JsonSerializer.Serialize(result, McpProtocol.JsonOptions)),
+            LayoutProof.For(action, JsonSerializer.SerializeToElement(result, McpProtocol.JsonOptions))
+        );
 
     // The running TE3's window, or the scripted layout a test passed (which has no window for the drag actions).
     private (ILayoutSurface Surface, string Handle, Window? Window) Attach(JsonElement a, InputTally inputs)

@@ -10,7 +10,8 @@ public sealed class PlacementReadBackTests
 {
     private static readonly Rectangle Requested = new(96, 192, 555, 254);
 
-    // Core's windows_place_window when the window did not land exactly: completed, verification "mismatch".
+    // Core's windows_place_window when the window did not land exactly: completed, failure.code placement-mismatch
+    // (its proof also says mismatch; the code is what names a constrained placement).
     private static CoreCallException Mismatch() =>
         new(
             "windows_place_window",
@@ -18,7 +19,11 @@ public sealed class PlacementReadBackTests
             {
                 IsError = true,
                 Content = [new() { Text = "Window did not land where requested" }],
-                Outcome = new ToolOutcome("completed", "not-tracked") { Verification = "mismatch", InputsSent = 1 },
+                Outcome = new ToolOutcome("completed", "not-tracked")
+                {
+                    InputsSent = 1,
+                    Failure = new InputRefusal(RefusalCodes.PlacementMismatch, "x") { ActionDispatched = true },
+                },
             }
         );
 

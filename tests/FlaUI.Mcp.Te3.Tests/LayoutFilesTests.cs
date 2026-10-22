@@ -131,6 +131,10 @@ public sealed class LayoutFilesTests : IDisposable
         Assert.NotEqual(true, taken.IsError);
         Assert.NotEqual(true, restored.IsError);
         Assert.True(File.Exists(Path.Combine(Snapshot, LayoutFiles.Manifest)));
+        // Both are proven by the SHA-256 read-back of each file.
+        Assert.Equal(FlaUI.Mcp.Core.Proof.Verified, taken.Outcome?.Proof?.Verdict);
+        Assert.Equal(FlaUI.Mcp.Core.Proof.Verified, restored.Outcome?.Proof?.Verdict);
+        Assert.Contains("SHA-256", restored.Outcome?.Proof?.Source);
     }
 
     [Fact]

@@ -179,15 +179,19 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             GetStringArgument(a, "objectName"),
             GetStringArgument(a, "objectType")
         );
-        return Json(
-            new
-            {
-                assessment = Assessment(true),
-                destination = destination.Id,
-                phase = step.Phase,
-                lastStep = step.Last,
-                walk = destination.Id == "object" ? page.WalkReport : null,
-            }
+        return await page.WithArrivalProof(
+            Json(
+                new
+                {
+                    assessment = Assessment(true),
+                    destination = destination.Id,
+                    phase = step.Phase,
+                    lastStep = step.Last,
+                    walk = destination.Id == "object" ? page.WalkReport : null,
+                }
+            ),
+            destination.Id,
+            a
         );
     }
 
@@ -315,77 +319,12 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         };
     }
 
-    internal static void Validate(JsonElement a, string tool)
-    {
-        if (a.ValueKind != JsonValueKind.Object)
-        {
-            throw new ArgumentException("Arguments must be an object.");
-        }
+    /// <summary>Refuses arguments the tool cannot act on, before any input (see <see cref="Te3Destinations"/>).</summary>
+    internal static void Validate(JsonElement a, string tool) => Te3Destinations.Validate(a, tool, ModelState);
 
-        if (
-            HasProcessId(a, out var pid)
-            && (pid.ValueKind != JsonValueKind.Number || !pid.TryGetInt32(out var id) || id < 1)
-        )
-        {
-            throw new ArgumentException("processId must be a positive integer.");
-        }
-
-        // A state read names no destination; requiring one would reject every valid call.
-        if (tool == ModelState)
-        {
-            return;
-        }
-
-        if (!a.TryGetProperty("destination", out var d) || Te3Destinations.Find(d.GetString()) is not { } destination)
-        {
-            throw new ArgumentException(
-                $"Unsupported destination; use one of: {string.Join(", ", Te3Destinations.Ids)}."
-            );
-        }
-
-        if (destination.Id == "object")
-        {
-            ValidateObject(a);
-        }
-    }
-
-    private static void ValidateObject(JsonElement a)
-    {
-        foreach (var field in new[] { "table", "objectName" })
-        {
-            if (!a.TryGetProperty(field, out var value) || string.IsNullOrWhiteSpace(value.GetString()))
-            {
-                throw new ArgumentException("Object destination requires " + field);
-            }
-        }
-
-        // Optional: without it the first same-named object under the table that TE3 confirms is taken (a level).
-        if (
-            a.TryGetProperty("objectType", out var type)
-            && type.ValueKind != JsonValueKind.Null
-            && !Te3Destinations.ObjectTypes.Contains(type.GetString())
-        )
-        {
-            throw new ArgumentException("Unsupported objectType.");
-        }
-
-        var isTable =
-            a.TryGetProperty("objectType", out var requested)
-            && requested.ValueKind == JsonValueKind.String
-            && requested.GetString() == "Table";
-        if (isTable && a.TryGetProperty("folder", out var folder) && !string.IsNullOrWhiteSpace(folder.GetString()))
-        {
-            throw new ArgumentException("folder applies to columns and measures; a table is in no display folder.");
-        }
-    }
-
-    private static bool HasProcessId(JsonElement a, out JsonElement pid) =>
-        a.TryGetProperty("processId", out pid) && pid.ValueKind != JsonValueKind.Null;
-
-    /// <summary>The caller's processId, or the only running TE3 when none was given.</summary>
     internal static int ResolveProcessId(JsonElement a, Func<int[]> running)
     {
-        if (HasProcessId(a, out var pid))
+        if (Te3Destinations.HasProcessId(a, out var pid))
         {
             return pid.GetInt32();
         }

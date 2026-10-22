@@ -1,7 +1,8 @@
 using System.Drawing;
 
 /// <summary>
-/// A windows_place_window the page sends: Core fails a placement that did not land exactly (verification "mismatch"),
+/// A windows_place_window the page sends: Core fails a placement that did not land exactly (failure.code
+/// placement-mismatch),
 /// but TE3 dialogs keep their OS minimum sizes on purpose. Only that mismatch, and only growth at the requested
 /// top-left, is read back and reported with its deltas; any other failure stays a failure.
 /// </summary>
@@ -60,9 +61,11 @@ internal static class PlacementReadBack
         return placed;
     }
 
-    // Core's windows_place_window when the move went out in full but the window did not land exactly.
+    // Core's windows_place_window when the move went out in full but the window did not land exactly: its own code.
     private static bool IsMismatch(CoreCallException error) =>
-        error.Tool == "windows_place_window" && error.Outcome is { Dispatch: "completed", Verification: "mismatch" };
+        error.Tool == "windows_place_window"
+        && error.Code == FlaUI.Mcp.Core.RefusalCodes.PlacementMismatch
+        && error.Outcome.Dispatch == "completed";
 
     // An OS minimum size: the same top-left, and no smaller than asked in either direction.
     internal static bool GrewToMinimum(Rectangle requested, Rectangle observed) =>

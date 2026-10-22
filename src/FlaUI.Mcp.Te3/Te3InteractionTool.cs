@@ -61,7 +61,12 @@ public sealed class Te3InteractionTool(Te3Interaction interaction, string name) 
                 interaction.End("ended by " + End + ".");
             }
 
-            return Task.FromResult(TextResult(JsonSerializer.Serialize(new { active = interaction.Active })));
+            return Task.FromResult(
+                LayoutProof.Attach(
+                    TextResult(JsonSerializer.Serialize(new { active = interaction.Active })),
+                    NavigationProof.Grant(name == Begin, interaction.Active)
+                )
+            );
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
