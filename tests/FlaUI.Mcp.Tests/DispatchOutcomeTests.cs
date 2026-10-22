@@ -74,7 +74,7 @@ public sealed class DispatchOutcomeTests
         var result = await registry.ExecuteToolAsync("fill-fallback", null);
 
         Assert.True(result.IsError);
-        Assert.Contains("changed", result.Content[0].Text);
+        Assert.Contains("lost the foreground while the fill was being read back", result.Content[0].Text);
         AssertDispatch(result, "partial", 2);
     }
 

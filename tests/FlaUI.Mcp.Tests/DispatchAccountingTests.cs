@@ -102,7 +102,7 @@ public sealed class DispatchAccountingTests
         desktop.ElementTakesFocus = false;
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             new GuardedInput(FakeDesktop.Target, Element(), verifyFocus: true)
         );
 

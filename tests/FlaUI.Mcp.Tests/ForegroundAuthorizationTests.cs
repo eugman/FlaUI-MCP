@@ -76,7 +76,7 @@ public sealed class ForegroundAuthorizationTests
         var captured = new InputTarget(123, -1, 0);
         var captures = 0;
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             GuardedInput.ForegroundTarget(
                 policy,
                 () =>

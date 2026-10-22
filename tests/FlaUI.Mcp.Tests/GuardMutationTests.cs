@@ -33,7 +33,7 @@ public sealed class GuardMutationTests
         };
         using var installed = desktop.Install();
 
-        Assert.Throws<InvalidOperationException>(() => new GuardedInput(FakeDesktop.Target, Element(), true));
+        Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target, Element(), true));
 
         AssertLeaseReleased();
     }
@@ -45,7 +45,7 @@ public sealed class GuardMutationTests
         var desktop = new FakeDesktop { KeyboardFocus = false, TargetEnabled = false };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() => new GuardedInput(FakeDesktop.Target, Element()));
+        var error = Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target, Element()));
 
         Assert.EndsWith("Before this, the control was focused.", error.Message);
     }
@@ -56,7 +56,7 @@ public sealed class GuardMutationTests
         var desktop = new FakeDesktop { TargetEnabled = false };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() => new GuardedInput(FakeDesktop.Target, Element()));
+        var error = Assert.Throws<InputRefusedException>(() => new GuardedInput(FakeDesktop.Target, Element()));
 
         Assert.Equal("Input target/focus changed or is disabled; no further input sent.", error.Message);
     }
@@ -95,7 +95,7 @@ public sealed class GuardMutationTests
     [Fact]
     public void AWindowWithoutAHandleHasNoOwner()
     {
-        var error = Assert.Throws<InvalidOperationException>(() => InputTarget.Capture(0, FakeDesktop.TargetPid));
+        var error = Assert.Throws<InputRefusedException>(() => InputTarget.Capture(0, FakeDesktop.TargetPid));
 
         Assert.Equal("Cannot establish window ownership.", error.Message);
     }
@@ -107,10 +107,10 @@ public sealed class GuardMutationTests
         var policy = new ProcessPolicy(["some-app-that-is-not-running"]);
         var self = Process.GetCurrentProcess().ProcessName;
 
-        var named = Assert.Throws<InvalidOperationException>(() =>
+        var named = Assert.Throws<InputRefusedException>(() =>
             GuardedInput.ForegroundTarget(policy, () => new InputTarget(1, Environment.ProcessId, 0))
         );
-        var unnamed = Assert.Throws<InvalidOperationException>(() =>
+        var unnamed = Assert.Throws<InputRefusedException>(() =>
             GuardedInput.ForegroundTarget(policy, () => new InputTarget(1, FakeDesktop.OtherPid, 0))
         );
 

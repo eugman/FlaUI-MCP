@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Capturing;
 using FlaUI.Mcp.Core;
@@ -301,5 +302,45 @@ internal static class ScreenshotChecks
         {
             return $"Failed to save screenshot to {savePath}: {ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// A capture that parked the pointer first: the capture is a read that succeeded, and the park is its own
+    /// detail (<c>details.park</c>). A verified park is also the outcome's proof (status ok). One that left the pointer
+    /// over the window is not: it makes the capture unverified with a warning (a hover state may show), never failed,
+    /// so it does not read as a failure after input. A refused park moved nothing and only adds the detail.
+    /// </summary>
+    internal static McpToolResult WithPark(McpToolResult result, Proof park)
+    {
+        var outcome = (result.Outcome ?? new ToolOutcome("completed", "not-tracked")) with
+        {
+            Details = new Dictionary<string, JsonElement>
+            {
+                ["park"] = JsonSerializer.SerializeToElement(park, McpProtocol.JsonOptions),
+            },
+        };
+        if (park.Verdict is Proof.Verified or Proof.NoOp)
+        {
+            return result with { Outcome = outcome.WithProof(park) };
+        }
+
+        var content = result.Content.ToList();
+        if (park.Verdict == Proof.Mismatch)
+        {
+            content.Add(
+                new McpContent
+                {
+                    Text =
+                        $"parkPointer moved the pointer, but it is still over the window (at {park.Observed}); a hover "
+                        + "state or tooltip may show in the capture.",
+                }
+            );
+        }
+
+        return result with
+        {
+            Outcome = outcome,
+            Content = content,
+        };
     }
 }

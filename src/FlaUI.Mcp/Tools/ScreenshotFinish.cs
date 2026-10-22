@@ -52,10 +52,7 @@ public partial class ScreenshotTool
 
         if (shot.ParkProof != null)
         {
-            result = result with
-            {
-                Outcome = (result.Outcome ?? new ToolOutcome("completed", "not-tracked")).WithProof(shot.ParkProof),
-            };
+            result = ScreenshotChecks.WithPark(result, shot.ParkProof);
         }
         // Warnings do not depend on includeMetadata: a warning the caller has to opt into is
         // not a warning, and the default call is the one that produced a mis-scaled capture.

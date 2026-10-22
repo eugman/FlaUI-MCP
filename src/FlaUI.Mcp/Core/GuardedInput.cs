@@ -13,15 +13,27 @@ public sealed record InputTarget(nint Hwnd, int ProcessId, long StartedTicks, ni
         using var process = Process.GetProcessById(ProcessId);
         if (process.StartTime.ToUniversalTime().Ticks != StartedTicks || Win32Desktop.GetProcessId(Hwnd) != ProcessId)
         {
-            throw new InvalidOperationException("Stale process/window identity.");
+            throw InputRefusedException.Record(
+                new InputRefusal(RefusalCodes.TargetStale, "Stale process/window identity.")
+            );
         }
     }
+
+    /// <summary>Whether an identity check failed because the window or its process is gone or changed.</summary>
+    internal static bool IsStale(Exception error) =>
+        error is InvalidOperationException
+        || error is AutomationRefusal { Code: RefusalCodes.TargetStale or RefusalCodes.WindowOwnershipUnknown };
+
+    /// <summary>A stale-identity refusal the caller dealt with: it no longer stands as the operation's refusal.</summary>
+    internal static void Handled(Exception error) => InputRefusedException.Handled(error);
 
     public static InputTarget Capture(nint hwnd, int pid)
     {
         if (hwnd == 0 || pid == 0 || InputDesktop.Current.ProcessOf(hwnd) != pid)
         {
-            throw new InvalidOperationException("Cannot establish window ownership.");
+            throw InputRefusedException.Record(
+                new InputRefusal(RefusalCodes.WindowOwnershipUnknown, "Cannot establish window ownership.")
+            );
         }
 
         using var process = Process.GetProcessById(pid);
@@ -41,6 +53,9 @@ public sealed class GuardedInput : IDisposable
 
     /// <summary>What this guard changed before any input (such as "the target window was activated"), or null.</summary>
     public string? Changed => changedFirst;
+
+    // Inputs this guard has sent, so a refusal before a later one says the earlier ones went out.
+    private int sent;
 
     public GuardedInput(InputTarget target, AutomationElement? element = null, bool verifyFocus = false)
         : this(target, element, verifyFocus ? FocusRule.Exact : FocusRule.None) { }
@@ -66,8 +81,11 @@ public sealed class GuardedInput : IDisposable
             Verify();
             if (focus != FocusRule.None && (element == null || !FocusRules.Holds(focus, element, desktop)))
             {
-                throw new InvalidOperationException(
-                    "Intended control did not receive verified keyboard focus; no input sent."
+                throw InputRefusedException.Record(
+                    new InputRefusal(
+                        RefusalCodes.FocusNotVerified,
+                        "Intended control did not receive verified keyboard focus; no input sent."
+                    )
                 );
             }
 
@@ -217,9 +235,12 @@ public sealed class GuardedInput : IDisposable
         if (!policy.IsProcessAllowed(captured.ProcessId))
         {
             var name = InputDesktop.Current.ProcessNameOf(captured.ProcessId) ?? "unknown";
-            throw new InvalidOperationException(
-                policy.DescribeDenied($"The foreground window's process '{name}'")
-                    + " Focus an allowed window first, or target an element ref directly."
+            throw InputRefusedException.Record(
+                new InputRefusal(
+                    RefusalCodes.ProcessNotAllowed,
+                    policy.DescribeDenied($"The foreground window's process '{name}'")
+                        + " Focus an allowed window first, or target an element ref directly."
+                )
             );
         }
 
@@ -325,7 +346,16 @@ public sealed class GuardedInput : IDisposable
             )
         )
         {
-            throw new InvalidOperationException("Input target/focus changed or is disabled; no further input sent.");
+            // Raised before a send as well as before the first: input this guard already sent stays sent.
+            throw InputRefusedException.Record(
+                new InputRefusal(
+                    RefusalCodes.TargetChanged,
+                    "Input target/focus changed or is disabled; no further input sent."
+                )
+                {
+                    ActionDispatched = sent > 0,
+                }
+            );
         }
     }
 
@@ -359,6 +389,7 @@ public sealed class GuardedInput : IDisposable
     {
         Verify();
         MutationGuard.RecordDispatch();
+        sent++;
         desktop.Dispatch(input);
     }
 
@@ -369,6 +400,7 @@ public sealed class GuardedInput : IDisposable
     public void Release(Action input)
     {
         MutationGuard.RecordDispatch();
+        sent++;
         desktop.Dispatch(input);
     }
 
@@ -382,6 +414,7 @@ public sealed class GuardedInput : IDisposable
         }
 
         MutationGuard.RecordDispatch();
+        sent++;
         return true;
     }
 
@@ -394,6 +427,7 @@ public sealed class GuardedInput : IDisposable
         Verify();
         var clipboard = desktop.PreserveAndSetClipboardText(text);
         MutationGuard.RecordDispatch();
+        sent++;
         return clipboard;
     }
 

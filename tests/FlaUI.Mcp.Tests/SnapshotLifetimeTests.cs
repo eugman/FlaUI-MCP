@@ -11,7 +11,7 @@ public sealed class SnapshotLifetimeTests
     {
         var registry = new ElementRegistry();
         registry.SetWindowProcessId("w1", 42);
-        Assert.Throws<InvalidOperationException>(() => registry.SetWindowIdentity("w1", 42, 0));
+        Assert.Throws<InputRefusedException>(() => registry.SetWindowIdentity("w1", 42, 0));
         var reference = registry.Register("w1", Element());
         Assert.Equal(42, registry.GetProcessIdForRef(reference));
     }

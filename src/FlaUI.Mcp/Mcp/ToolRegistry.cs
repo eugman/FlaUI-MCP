@@ -228,7 +228,11 @@ public partial class ToolRegistry
         {
             Outcome = outcome with
             {
-                Status = StatusOf(failed, outcome),
+                Status = StatusOf(failed, outcome, inputsSent),
+                // Unverified because nothing checked the input's effect: say so, as the registry's own outcome does.
+                Verification =
+                    outcome.Verification
+                    ?? (!failed && outcome.Proof == null && inputsSent > 0 ? "not-established" : null),
                 InputsSent = inputsSent,
                 Failure =
                     // A refusal recorded as coming after input (a counted Select, say) keeps that, whatever this call counted.
@@ -242,8 +246,10 @@ public partial class ToolRegistry
         };
     }
 
-    // An error is always failed; otherwise a proof decides between ok, failed and unverified.
-    private static string StatusOf(bool failed, ToolOutcome outcome)
+    // An error is always failed; otherwise a proof decides between ok, failed and unverified. Without one, a call
+    // that sent input is unverified (nothing checked its effect: verification not-established), and one that sent
+    // none, a read or a mutating tool with nothing to do, is ok.
+    private static string StatusOf(bool failed, ToolOutcome outcome, int inputsSent)
     {
         if (failed)
         {
@@ -256,7 +262,7 @@ public partial class ToolRegistry
         }
 
         // A composite (a batch) that rolled an unverified step up keeps it.
-        return outcome.Status == "unverified" ? "unverified" : "ok";
+        return outcome.Status == "unverified" || inputsSent > 0 ? "unverified" : "ok";
     }
 
     private static McpToolResult ErrorText(string message) =>

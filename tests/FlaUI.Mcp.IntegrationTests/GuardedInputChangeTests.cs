@@ -148,7 +148,7 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
         var context = Counting();
         try
         {
-            var error = Assert.Throws<InvalidOperationException>(() => new GuardedInput(stale));
+            var error = Assert.Throws<InputRefusedException>(() => new GuardedInput(stale));
             Assert.Equal("Stale process/window identity.", error.Message);
             Assert.Equal(0, context.InputsSent);
             Assert.Equal(WinFormsHwnd, Win32Desktop.GetForegroundWindow());
@@ -163,7 +163,7 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     public void CaptureRefusesAWindowOfAnotherProcess()
     {
         // Kills GuardedInput:22 Logical (hwnd == 0 || pid == 0 && owner check: a nonzero pair skips the check).
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             InputTarget.Capture(WinFormsHwnd, fixture.Session.GetWindowProcessId(fixture.WpfHandle))
         );
         Assert.Equal("Cannot establish window ownership.", error.Message);
@@ -206,7 +206,7 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
             Assert.Equal(WinFormsHwnd, Win32Desktop.GetForegroundWindow());
 
             Foreground(modeless.Hwnd);
-            var error = Assert.Throws<InvalidOperationException>(input.Verify);
+            var error = Assert.Throws<InputRefusedException>(input.Verify);
             Assert.Equal("Input target/focus changed or is disabled; no further input sent.", error.Message);
         }
         finally

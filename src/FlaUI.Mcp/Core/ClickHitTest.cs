@@ -252,6 +252,22 @@ public static class ClickHitTest
     private static bool MayCover(ChildBox box, Point point) =>
         box.IsOffscreen != true && (box.Bounds is not { } bounds || bounds.Contains(point));
 
+    /// <summary>The children beside the path; a failed read refuses the press, as an unreadable hit does.</summary>
+    private static IReadOnlyList<ChildBox> Siblings(InputDesktop desktop, AutomationElement parent, Point point)
+    {
+        try
+        {
+            return desktop.ChildBoxes(parent);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            throw Covered(
+                $"The point ({point.X},{point.Y}) could not be checked for overlays: the elements beside the target "
+                    + $"could not be read ({error.Message})"
+            );
+        }
+    }
+
     private static ChildBox? OverlayOver(
         InputDesktop desktop,
         AutomationElement target,
@@ -262,8 +278,7 @@ public static class ClickHitTest
         var child = target;
         for (var level = 0; level < MaxAncestorLevels && desktop.ParentOf(child) is { } parent; level++)
         {
-            var overlay = desktop
-                .ChildBoxes(parent)
+            var overlay = Siblings(desktop, parent, point)
                 .FirstOrDefault(box =>
                     MayCover(box, point)
                     && !desktop.SameElement(box.Element, child)

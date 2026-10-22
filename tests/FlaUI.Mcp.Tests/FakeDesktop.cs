@@ -369,18 +369,23 @@ internal sealed class FakeDesktop : InputDesktop
     /// <summary>Elements UI Automation reports as offscreen.</summary>
     public HashSet<AutomationElement> Offscreen { get; } = new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>Elements whose children cannot be read: ChildBoxes throws for them, as a provider that fails does.</summary>
+    public HashSet<AutomationElement> ChildrenUnreadable { get; } = new(ReferenceEqualityComparer.Instance);
+
     public override IReadOnlyList<ChildBox> ChildBoxes(AutomationElement parent) =>
-        Parents
-            .Where(pair => ReferenceEquals(pair.Value, parent))
-            .Select(pair => new ChildBox(
-                pair.Key,
-                // An element with no bounds set reads as unreadable, as an uncached provider property does.
-                ElementBounds.TryGetValue(pair.Key, out var bounds)
-                    ? bounds
-                    : null,
-                Offscreen.Contains(pair.Key)
-            ))
-            .ToList();
+        ChildrenUnreadable.Contains(parent)
+            ? throw new InvalidOperationException("children unreadable")
+            : Parents
+                .Where(pair => ReferenceEquals(pair.Value, parent))
+                .Select(pair => new ChildBox(
+                    pair.Key,
+                    // An element with no bounds set reads as unreadable, as an uncached provider property does.
+                    ElementBounds.TryGetValue(pair.Key, out var bounds)
+                        ? bounds
+                        : null,
+                    Offscreen.Contains(pair.Key)
+                ))
+                .ToList();
 
     public override string DescribeElement(AutomationElement element) =>
         Descriptions.TryGetValue(element, out var description) ? description : "Custom ''";

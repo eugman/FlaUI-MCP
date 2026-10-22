@@ -14,11 +14,35 @@ public partial class FillTool
     {
         if (focused is { } f && !FocusRules.Holds(f.Rule, f.Element, InputDesktop.Current))
         {
-            throw new InvalidOperationException(
-                "Keyboard focus left the control after Ctrl+A, so the selection was not replaced; no further input sent."
+            // Ctrl+A already went out, so this refusal counts as dispatched: never replay the fill.
+            throw InputRefusedException.Record(
+                new InputRefusal(
+                    RefusalCodes.FocusLost,
+                    "Keyboard focus left the control after Ctrl+A, so the selection was not replaced; no further input sent."
+                )
+                {
+                    ActionDispatched = true,
+                }
             );
         }
     }
+
+    /// <summary>
+    /// The refusal when the target lost the foreground after every key went out, while the fill was being read back:
+    /// the text was sent (dispatched), only its check stopped.
+    /// </summary>
+    internal static InputRefusedException ReadBackInterrupted(string elementName, string value) =>
+        InputRefusedException.Record(
+            new InputRefusal(
+                RefusalCodes.TargetChanged,
+                $"Sent \"{value}\" to {elementName}, then the target lost the foreground while the fill was being read "
+                    + "back, so it is not verified; no further input sent. Observe it before relying on it; do not "
+                    + "repeat the fill."
+            )
+            {
+                ActionDispatched = true,
+            }
+        );
 
     /// <summary>
     /// "Filled" only when the control reads back the requested value. A different value is a failure (the input

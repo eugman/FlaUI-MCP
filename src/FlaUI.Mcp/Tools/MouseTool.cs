@@ -100,13 +100,6 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
     }
 
     /// <summary>
-    /// Scroll a ref into view through the guards now, and return a reader for where it is. The reader runs
-    /// under the input lease, so the point pressed is the one measured just before the input.
-    /// </summary>
-    private Func<ClickGeometry> Geometry(string reference, ref string? scrolled) =>
-        Located(reference, ref scrolled).Read;
-
-    /// <summary>
     /// Scroll a ref into view through the guards now; the element and a reader for its geometry, which runs
     /// under the input lease.
     /// </summary>
@@ -235,15 +228,13 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
         return Pressable(reference, geometry => ClickPoint.Choose(geometry), ref scrolled);
     }
 
-    private Func<Point> EdgeOf(string reference, string edge, ref string? scrolled)
-    {
-        var read = Geometry(reference, ref scrolled);
-        return () =>
-        {
-            var geometry = read();
-            return ClickPoint.Choose(geometry, PointerPlan.EdgePoint(geometry.Bounds, edge));
-        };
-    }
+    // The drop point is hit-tested like a press: releasing over an overlay or a sibling drops on that instead.
+    private Func<Point> EdgeOf(string reference, string edge, ref string? scrolled) =>
+        Pressable(
+            reference,
+            geometry => ClickPoint.Choose(geometry, PointerPlan.EdgePoint(geometry.Bounds, edge)),
+            ref scrolled
+        );
 
     private int HoverMs(JsonElement? arguments) =>
         Math.Clamp(GetArgument<int?>(arguments, "durationMs") ?? DefaultHoverMs, 0, MaxHoverMs);

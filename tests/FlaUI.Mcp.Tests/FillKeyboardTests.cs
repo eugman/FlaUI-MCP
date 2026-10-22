@@ -38,7 +38,7 @@ public sealed class FillKeyboardTests
         desktop.IgnoreFocus(field);
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             Fallback(field, verifyFocus: FocusRule.EditInComposite, reads: "")
         );
 
@@ -87,6 +87,34 @@ public sealed class FillKeyboardTests
         );
         Assert.Equal(1, desktop.ElementFocusRequests);
         Assert.True(desktop.Dispatched > 0);
+    }
+
+    [Fact]
+    public void FocusThatMovesDuringTheReadBackSaysTheTextWentOut()
+    {
+        // Ctrl+A and the text both went out; the window lost the foreground only while the fill was being read.
+        var desktop = new FakeDesktop { FocusLostAfter = 2 };
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            FillTool.FillByKeyboardFallback(
+                FakeDesktop.Target,
+                Element(),
+                FocusRule.None,
+                "abc",
+                "field",
+                () => new("", "Value"),
+                () => { }
+            )
+        );
+
+        Assert.Equal(2, desktop.Dispatched);
+        Assert.Equal(RefusalCodes.TargetChanged, error.Code);
+        Assert.True(error.Refusal.ActionDispatched);
+        Assert.StartsWith(
+            "Sent \"abc\" to field, then the target lost the foreground while the fill was being read back",
+            error.Message
+        );
     }
 
     [Fact]
@@ -150,7 +178,7 @@ public sealed class FillKeyboardTests
         var desktop = new FakeDesktop { KeyboardFocus = false, ElementFocusLostAfter = 1 };
         using var installed = desktop.Install();
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        var error = Assert.Throws<InputRefusedException>(() =>
             Fallback(Element(), verifyFocus: FocusRule.EditInComposite, reads: "")
         );
 

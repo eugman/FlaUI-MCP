@@ -53,7 +53,11 @@ public sealed class PhysicalInputObserver : IInputObserver
             Priority = ThreadPriority.AboveNormal,
         };
         thread.Start();
-        ready.Wait();
+        if (StartFailure(ready, null, StartTimeout) is { } timedOut)
+        {
+            failure = timedOut;
+        }
+
         if (failure != null)
         {
             Dispose();
@@ -62,6 +66,18 @@ public sealed class PhysicalInputObserver : IInputObserver
 
         pulse.Start();
     }
+
+    /// <summary>How long the hook thread may take to install its hooks before the start fails.</summary>
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Why the hook thread did not start: its own failure, or a timeout when it never reported ready (a wedged
+    /// thread would otherwise hold the caller forever). Null when it started.
+    /// </summary>
+    internal static Exception? StartFailure(ManualResetEventSlim ready, Exception? failure, TimeSpan timeout) =>
+        !ready.Wait(timeout)
+            ? new TimeoutException($"The input observer's hook thread did not start within {timeout.TotalSeconds:0} s.")
+            : failure;
 
     public long Sequence
     {
@@ -138,9 +154,16 @@ public sealed class PhysicalInputObserver : IInputObserver
             mouseHook = 0;
         try
         {
-            threadId = GetCurrentThreadId();
-            // Creates this thread's message queue before anyone posts to it.
+            // Creates this thread's message queue, then publishes the id: a WM_QUIT posted to the id always lands.
             PeekMessage(out _, 0, 0, 0, 0);
+            Volatile.Write(ref threadId, GetCurrentThreadId());
+            // A Dispose that came first (a start that timed out) posted nowhere; it set stopping, so stop here,
+            // before any hook is installed.
+            if (stopping.IsSet)
+            {
+                return;
+            }
+
             keyHook = SetWindowsHookEx(13, keyboard, GetModuleHandle(null), 0);
             if (keyHook == 0)
             {
@@ -151,6 +174,11 @@ public sealed class PhysicalInputObserver : IInputObserver
             if (mouseHook == 0)
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+
+            if (stopping.IsSet)
+            {
+                return;
             }
 
             heartbeat.Beat(Environment.TickCount64);
@@ -197,7 +225,7 @@ public sealed class PhysicalInputObserver : IInputObserver
     {
         while (!stopping.Wait(HeartbeatMs))
         {
-            PostThreadMessage(threadId, BeatMessage, 0, 0);
+            PostThreadMessage(Volatile.Read(ref threadId), BeatMessage, 0, 0);
         }
     }
 
@@ -208,10 +236,12 @@ public sealed class PhysicalInputObserver : IInputObserver
             return;
         }
 
+        // Stopping is set before the id is read: a thread that has not published its id yet sees it and exits.
         stopping.Set();
-        if (thread.IsAlive)
+        var observer = Volatile.Read(ref threadId);
+        if (thread.IsAlive && observer != 0)
         {
-            PostThreadMessage(threadId, QuitMessage, 0, 0); // on the observer thread only
+            PostThreadMessage(observer, QuitMessage, 0, 0); // on the observer thread only
         }
 
         if (Thread.CurrentThread != thread)

@@ -424,16 +424,26 @@ public partial class FillTool : ToolBase
                 input.Type(text);
             }
         );
-        var observation = ControlText.WaitForExpected(
-            value,
-            read,
-            () =>
-            {
-                validate();
-                input.Verify();
-            },
-            () => Thread.Sleep(50)
-        );
+        TextObservation observation;
+        try
+        {
+            observation = ControlText.WaitForExpected(
+                value,
+                read,
+                () =>
+                {
+                    validate();
+                    input.Verify();
+                },
+                () => Thread.Sleep(50)
+            );
+        }
+        catch (InputRefusedException moved) when (moved.Code == RefusalCodes.TargetChanged)
+        {
+            // Every key already went out; only the read-back stopped. Say that, not just "no further input sent".
+            throw ReadBackInterrupted(elementName, value);
+        }
+
         return FillReply(elementName, value, observation, new ToolOutcome("completed", "returned"));
     }
 }
