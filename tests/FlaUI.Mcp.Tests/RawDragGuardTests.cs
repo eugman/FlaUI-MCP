@@ -43,6 +43,8 @@ public sealed class RawDragGuardTests
         public bool HoverCoversStart { get; init; }
         public bool DropOffscreen { get; init; }
         public bool WrongWindow { get; init; }
+        public bool WrongStartWindow { get; init; }
+        public bool RefDrop { get; init; }
         public bool OmitStart { get; init; }
         public bool OmitDrop { get; init; }
         public bool RefStart { get; init; }
@@ -68,21 +70,22 @@ public sealed class RawDragGuardTests
         }
     }
 
+    private static string? SourceRef(GuardScenario scenario, string startRef) =>
+        scenario.RefStart || scenario.Incompatible is "fromEdge" or "resizeTo" or "toResize" ? startRef : null;
+
     private static object DragArgs(GuardScenario scenario, string handle, string startRef, string dropRef) =>
         new
         {
             action = "drag",
             handle,
-            @ref = scenario.RefStart || scenario.Incompatible is "fromEdge" or "resizeTo" or "toResize"
-                ? startRef
-                : null,
+            @ref = SourceRef(scenario, startRef),
             from = scenario.OmitStart || scenario.RefStart ? null : new { x = 10, y = 10 },
             fromEdge = scenario.RefStart || scenario.Incompatible == "fromEdge" ? "right" : null,
             resizeTo = scenario.Incompatible is "resizeTo" or "toResize" ? 250 : (int?)null,
-            to = scenario.OmitDrop ? null : new { x = 50, y = 10 },
-            toRef = scenario.Incompatible == "toRef" ? dropRef : null,
+            to = scenario.OmitDrop || scenario.RefDrop ? null : new { x = 50, y = 10 },
+            toRef = scenario.RefDrop || scenario.Incompatible == "toRef" ? dropRef : null,
             fromMustHit = scenario.RefStart || scenario.Incompatible == "toResize" ? null : startRef,
-            toMustHit = dropRef,
+            toMustHit = scenario.RefDrop ? null : dropRef,
         };
 
     private static async Task<McpToolResult> Run(FakeDesktop desktop, GuardScenario scenario)
@@ -112,7 +115,7 @@ public sealed class RawDragGuardTests
 
             return scenario.WrongDrop ? covering : drop;
         };
-        var startRef = refs.Register(handle, start);
+        var startRef = refs.Register(scenario.WrongStartWindow ? "other" : handle, start);
         var dropRef = refs.Register(scenario.WrongWindow ? "other" : handle, drop);
         var registry = new ToolRegistry();
         var tool = new MouseTool(refs, new PendingInvokeTracker(), sessions);
@@ -174,6 +177,18 @@ public sealed class RawDragGuardTests
         var desktop = new FakeDesktop();
         using var installed = desktop.Install();
         var result = await Run(desktop, new() { RefStart = true, WrongWindow = true });
+        Assert.Equal("invalid-arguments", result.Outcome!.Failure!.Code);
+        Assert.Equal("not-dispatched", result.Outcome.Dispatch);
+        Assert.Equal(0, desktop.ScrollRequests);
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
+    public async Task WrongWindowStartGuardRefusesBeforeRefDropCanScroll()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var result = await Run(desktop, new() { WrongStartWindow = true, RefDrop = true });
         Assert.Equal("invalid-arguments", result.Outcome!.Failure!.Code);
         Assert.Equal("not-dispatched", result.Outcome.Dispatch);
         Assert.Equal(0, desktop.ScrollRequests);
