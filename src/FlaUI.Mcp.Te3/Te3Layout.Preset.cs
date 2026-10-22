@@ -82,7 +82,7 @@ public sealed partial class Te3Layout
         var start = new Point(from.X - origin.X, from.Y - origin.Y);
         var end = new Point(to.X - origin.X, to.Y - origin.Y);
         var sentBefore = inputs.Sent;
-        await Drag(inputs, handle, title, start, end);
+        await Drag(inputs, handle, title, start, end, Captions(parts, pane.Title));
         var after = FindPane(window, title).Container.BoundingRectangle;
         var requested = width ?? GetArgument<int?>(a, "height")!.Value;
         var reached = width is null ? after.Height : after.Width;
@@ -101,10 +101,25 @@ public sealed partial class Te3Layout
         );
     }
 
-    /// <summary>One drag in window pixels, then a check that it did not float the pane (see KNOWN-ISSUES).</summary>
-    private async Task Drag(InputTally inputs, string handle, string title, Point from, Point to)
+    // The other panes' captions and the document tabs: a drag that starts on one floats or re-docks it.
+    private static List<AutomationElement> Captions(List<Part> parts, string pane) =>
+        [.. parts.Where(p => p.Title != pane && p.Close.Parent != null).Select(p => p.Close.Parent!)];
+
+    /// <summary>
+    /// One drag in window pixels, refused by Core before the button goes down when the start lands on one of
+    /// <paramref name="neighbours"/> (fromMustNotHit), then a check that it did not float the pane (see KNOWN-ISSUES).
+    /// </summary>
+    private async Task Drag(
+        InputTally inputs,
+        string handle,
+        string title,
+        Point from,
+        Point to,
+        List<AutomationElement> neighbours
+    )
     {
         var pid = host.Sessions.GetWindowProcessId(handle);
+        var avoid = neighbours.Select(caption => host.Elements.Register(handle, caption)).ToArray();
         var windowsBefore = Win32Desktop.GetTopLevelWindows(pid).Select(w => w.Hwnd).ToList();
         await Tool(
             inputs,
@@ -115,6 +130,7 @@ public sealed partial class Te3Layout
                 handle,
                 from = new { x = from.X, y = from.Y },
                 to = new { x = to.X, y = to.Y },
+                fromMustNotHit = avoid,
             }
         );
         await Task.Delay(SettleMs);

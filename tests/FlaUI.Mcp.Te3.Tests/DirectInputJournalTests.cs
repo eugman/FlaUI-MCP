@@ -131,4 +131,15 @@ public sealed class DirectInputJournalTests
             page
         );
     }
+
+    [Fact]
+    public void TheSplitterDragRefusesAStartOnANeighbouringCaption()
+    {
+        // A splitter start a few pixels off lands on the next pane's caption or a document tab, and dragging that
+        // floats or re-docks the pane. Core's fromMustNotHit hit-tests the start under the lease and refuses first.
+        var preset = File.ReadAllText(Path.Combine(Sources(), "Te3Layout.Preset.cs"));
+
+        Assert.Matches(@"fromMustNotHit\s*=\s*avoid", preset);
+        Assert.Matches(@"Captions\(parts, pane\.Title\)", preset);
+    }
 }
