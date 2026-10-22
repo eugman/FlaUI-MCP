@@ -32,10 +32,14 @@ public sealed partial class Te3Page
     {
         MarkPopups();
         await Keys("Alt+Down", language);
-        await Task.Delay(500);
         var main = host.Sessions.GetInputTarget(handle);
         var preferences = host.Elements.InputForRef(await Reference(PreferencesTarget()));
-        var popups = await ObservePopups(main.ProcessId, maxWindows: 5);
+        // Read until a complete observation shows the list's items, not once after a fixed pause.
+        var popups = await SettlePoll.Until(
+            () => ObservePopups(main.ProcessId, maxWindows: 5),
+            seen =>
+                seen.All(p => p.Tree.Complete) && seen.Any(p => p.Tree.Elements.Any(e => e.ControlType == "ListItem"))
+        );
         File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(popups, Indented));
         var popup = LanguagePopup(popups);
         return (new LanguageScene(popup, main, preferences), new nint(popup.Hwnd));

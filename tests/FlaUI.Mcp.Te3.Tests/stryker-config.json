@@ -20,6 +20,7 @@
       "**/Te3Page.Input.cs",
       "**/Te3Page.Language.cs",
       "**/PopupScope.cs",
+      "**/SettlePoll.cs",
       "**/Te3Page.Capture.cs",
       "**/Te3Page.Targets.cs",
       "**/Te3Page.ModelState.cs",

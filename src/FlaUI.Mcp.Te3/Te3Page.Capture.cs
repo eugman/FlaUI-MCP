@@ -105,8 +105,11 @@ public sealed partial class Te3Page
         // Invoke can remain pending for TE3 menu popups; use the guarded input path.
         MarkPopups();
         await Click(modelMenu);
-        await Task.Delay(500);
-        var discovery = await ObservePopups(ownerIdentity.ProcessId, maxWindows: null);
+        // Read until the menu's popup has opened, not once after a fixed pause.
+        var discovery = await SettlePoll.Until(
+            () => ObservePopups(ownerIdentity.ProcessId, maxWindows: null),
+            seen => seen.Length > 0
+        );
         File.WriteAllText(Path.ChangeExtension(path, ".uia.json"), JsonSerializer.Serialize(discovery, Indented));
         var target = new Target(new(Name: "Add Calculation Group", ControlType: "Button"), null, true);
         var element = await Resolve(target);
