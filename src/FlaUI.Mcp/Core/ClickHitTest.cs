@@ -25,28 +25,110 @@ public static class ClickHitTest
 
     public static string Verify(Point point, AutomationElement target) => Note(Prove(point, target));
 
-    private static string[] passThrough = [];
+    /// <summary>
+    /// A host's own check on a pass-through press: why the press at <c>point</c> on <c>target</c> through
+    /// <c>overlay</c> must be refused (Camtasia: an acting part such as a trim handle lies under the point), or null.
+    /// </summary>
+    public delegate string? PassThroughCheck(Point point, AutomationElement target, AutomationElement overlay);
+
+    private sealed record PassThroughList(string[] AutomationIds, PassThroughCheck? Check);
+
+    private static readonly PassThroughList NoPassThrough = new([], null);
+
+    // Per flow, like InputDesktop's override: a registration applies to the flow that made it and the tasks it starts
+    // afterwards. A host registers at startup, before it serves, so every call sees it; tests running side by side
+    // no longer see each other's lists.
+    private static readonly AsyncLocal<PassThroughList?> passThrough = new();
+
+    private static PassThroughList Current => passThrough.Value ?? NoPassThrough;
 
     /// <summary>
     /// Opt-in for a host: overlays (by AutomationId) that do not take a press, such as Camtasia's selectionPlayhead
-    /// line over a clip. A hit on one passes ("pass-through") when the point lies in the target's bounds, and they
-    /// are not counted as covering siblings. Dispose to restore the previous list.
+    /// line over a clip. A hit on one passes ("pass-through") when the point lies in the target's bounds and the
+    /// overlay sits in the target's own top-level window, and they are not counted as covering siblings. Dispose to
+    /// restore the previous list.
     /// </summary>
-    public static IDisposable PassThrough(params string[] automationIds)
+    public static IDisposable PassThrough(params string[] automationIds) => Register(new(automationIds, null));
+
+    /// <inheritdoc cref="PassThrough(string[])"/>
+    /// <param name="check">Run for every pass-through; a reason it returns refuses the press with nothing sent.</param>
+    /// <param name="automationIds">The overlays that do not take a press.</param>
+    public static IDisposable PassThrough(PassThroughCheck check, params string[] automationIds) =>
+        Register(new(automationIds, check));
+
+    private static Restore Register(PassThroughList list)
     {
-        var previous = Interlocked.Exchange(ref passThrough, automationIds);
-        return new Restore(previous);
+        var previous = passThrough.Value;
+        passThrough.Value = list;
+        return new(previous);
     }
 
-    private sealed class Restore(string[] previous) : IDisposable
+    private sealed class Restore(PassThroughList? previous) : IDisposable
     {
-        public void Dispose() => Volatile.Write(ref passThrough, previous);
+        public void Dispose() => passThrough.Value = previous;
     }
 
-    private static bool PassesThrough(InputDesktop desktop, AutomationElement element)
+    private static bool Listed(InputDesktop desktop, AutomationElement element)
     {
-        var listed = Volatile.Read(ref passThrough);
+        var listed = Current.AutomationIds;
         return listed.Length > 0 && listed.Contains(desktop.AutomationIdOf(element), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Why a listed overlay must not vouch for this press, or null when it passes: it has to sit in the target's own
+    /// top-level window (an AutomationId alone matches any window's element of that name), and the host's check
+    /// must not object.
+    /// </summary>
+    private static string? PassThroughRefusal(
+        InputDesktop desktop,
+        AutomationElement overlay,
+        AutomationElement target,
+        Point point
+    )
+    {
+        var window = TopWindow(desktop, target);
+        if (
+            window == null
+            || TopWindow(desktop, overlay) is not { } overlayWindow
+            || !desktop.SameElement(window, overlayWindow)
+        )
+        {
+            return "it is not in the target's window";
+        }
+
+        return Current.Check?.Invoke(point, target, overlay);
+    }
+
+    private static bool PassesThrough(
+        InputDesktop desktop,
+        AutomationElement element,
+        AutomationElement target,
+        Point point
+    ) => Listed(desktop, element) && PassThroughRefusal(desktop, element, target, point) == null;
+
+    /// <summary>The outermost Window above (or at) <paramref name="element"/>, or null when none can be read.</summary>
+    private static AutomationElement? TopWindow(InputDesktop desktop, AutomationElement element)
+    {
+        AutomationElement? window = null;
+        try
+        {
+            var current = (AutomationElement?)element;
+            for (var level = 0; current != null && level <= MaxWalk; level++)
+            {
+                if (desktop.ControlTypeOf(current) == ControlType.Window)
+                {
+                    window = current;
+                }
+
+                current = desktop.ParentOf(current);
+            }
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return null;
+        }
+
+        return window;
     }
 
     /// <summary>
@@ -127,8 +209,15 @@ public static class ClickHitTest
             return "descendant";
         }
 
-        if (hit != null && PassesThrough(desktop, hit) && desktop.BoundsOf(target).Contains(point))
+        if (hit != null && Listed(desktop, hit) && desktop.BoundsOf(target).Contains(point))
         {
+            if (PassThroughRefusal(desktop, hit, target, point) is { } refused)
+            {
+                throw Covered(
+                    $"The point ({point.X},{point.Y}) is on {desktop.DescribeElement(hit)}, which passes the press through, but {refused}"
+                );
+            }
+
             return "pass-through";
         }
 
@@ -178,7 +267,7 @@ public static class ClickHitTest
                 .FirstOrDefault(box =>
                     MayCover(box, point)
                     && !desktop.SameElement(box.Element, child)
-                    && !PassesThrough(desktop, box.Element)
+                    && !PassesThrough(desktop, box.Element, target, point)
                 );
             if (overlay != null)
             {
