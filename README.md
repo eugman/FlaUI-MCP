@@ -112,6 +112,8 @@ Product hosts embed the core and may expose only some of these. `launch`, `list_
 - `locate: ["w1e5"]` returns each element's rectangle in the captured image.
 - The result reports window and monitor DPI and flags a mismatch.
 
+**Drags.** `windows_mouse` `drag` resolves and hit-tests both ends under the input lease just before the press. A drop on a `toRef` edge (`toEdge` left, right, top or bottom) is placed 2 px inside that edge, symmetric on every side, so it never lands on the neighbour's border; `center` is the centre of the bounds, and a drag start on `fromEdge` keeps the edge's own first or last pixel, where a column divider is. Before the button is released the drop point is checked again: it must still be on the target window, and the `toRef`'s bounds, re-read then, must still hold it with the hit test still passing. When something moved (a tree auto-scrolled under the drag, an overlay came up, the geometry could not be re-read) the drag is cancelled with Escape while the button is still down, then released, and the call fails with `drop-target-moved`, `dispatch: partial` and `inputsSent` counting the moves, the Escape and the release; nothing is dropped. The reply's `changed` says when the tool scrolled a ref into view first (`the view was scrolled`), so an element's bounds may differ from your last snapshot.
+
 **Batches.** `windows_batch` stops at a step whose action is still pending, even with `stopOnError: false`. Inspect the application before sending dependent input.
 
 **Timeouts.** Every tool call times out after 30 seconds, so a hung provider returns an error instead of hanging the server. The action may still complete afterwards: observe before retrying.
