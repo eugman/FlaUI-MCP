@@ -426,6 +426,7 @@ public sealed class LayoutEntryTests : IDisposable
         Assert.Equal(["CloseWindow Dependencies"], surface!.Presses);
         Assert.Contains("Dependencies", reply.GetProperty("closed").EnumerateArray().Select(e => e.GetString()));
         Assert.Empty(reply.GetProperty("unresolved").EnumerateArray());
+        Assert.Contains("windows_close", reply.GetProperty("floatingClosedWith").GetString());
     }
 
     [Fact]

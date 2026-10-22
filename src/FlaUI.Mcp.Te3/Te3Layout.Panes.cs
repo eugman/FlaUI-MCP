@@ -180,7 +180,8 @@ public sealed partial class Te3Layout
         );
 
         // A floating pane is a window of its own: closed through that window's Close, then read back.
-        closed.AddRange(await CloseFloating(surface, titles, keep));
+        var floatingClosed = await CloseFloating(surface, titles, keep);
+        closed.AddRange(floatingClosed);
         var remaining = surface.Parts().Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
         var floating = FloatingTitles(surface);
         var unresolved = titles
@@ -194,6 +195,7 @@ public sealed partial class Te3Layout
             remaining,
             unresolved,
             floating,
+            floatingClosedWith = floatingClosed.Count > 0 ? "windows_close on the floating window's own handle" : null,
         };
     }
 
