@@ -68,7 +68,11 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
     /// dropped on the release is unknown.
     /// </summary>
     private static McpToolResult Refused(string action, Exception error) =>
-        error is InputRefusedException { Refusal.Code: RefusalCodes.DropTargetMoved } moved
+        error
+            is InputRefusedException
+            {
+                Refusal.Code: RefusalCodes.DropTargetMoved or RefusalCodes.DragInterrupted,
+            } moved
             ? MouseReplies.Unverified(moved.Refusal)
             : ErrorResult($"Failed to {action}: {error.Message}");
 
@@ -142,7 +146,8 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
             drag = plan.Report(landed);
             return landed;
         }
-        catch (InputRefusedException refused) when (refused.Refusal.Code == RefusalCodes.DropTargetMoved)
+        catch (InputRefusedException refused)
+            when (refused.Refusal.Code is RefusalCodes.DropTargetMoved or RefusalCodes.DragInterrupted)
         {
             // The release may have dropped anyway: say what is under the pointer now, as a completed drag does.
             throw plan.AfterCancel(refused, InputDesktop.Current.PointerPosition());

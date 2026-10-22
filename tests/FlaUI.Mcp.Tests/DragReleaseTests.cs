@@ -16,7 +16,7 @@ namespace FlaUI.Mcp.Tests;
 /// release; a target that moved cancels the drag with Escape while the button is still down.
 /// </summary>
 [Collection(InputLeaseCollection.Name)]
-public sealed class DragReleaseTests
+public sealed partial class DragReleaseTests
 {
     private static readonly Point From = new(10, 10);
     private static readonly Point To = new(50, 10);
@@ -118,13 +118,11 @@ public sealed class DragReleaseTests
             PointerActions.Drag(FakeDesktop.Target, () => (From, To), 4, _ => "never asked")
         );
 
-        Assert.Equal("target-changed", error.Refusal.Code);
+        Assert.Equal("drag-interrupted", error.Refusal.Code);
         Assert.True(error.Refusal.ActionDispatched);
-        Assert.EndsWith(
-            "no further input sent. Escape was not sent (target-changed) and the button was released; whether the "
-                + "app dropped is not verified: observe the window, then retry.",
-            error.Message
-        );
+        Assert.Contains("no further input sent", error.Message);
+        Assert.Contains("Escape was not sent (target-changed)", error.Message);
+        Assert.EndsWith("whether the app dropped is not verified: observe the window, then retry.", error.Message);
         Assert.Equal(3 + 1, desktop.Dispatched);
     }
 

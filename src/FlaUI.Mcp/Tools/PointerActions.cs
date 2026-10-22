@@ -183,8 +183,14 @@ internal static class PointerActions
                 RefusalCodes.DropTargetMoved,
                 $"The drop target moved during the drag: {moved}.{tail}"
             ),
-            (_, InputRefusedException refused) => refused.Refusal with { Message = refused.Message + tail },
-            (_, AutomationRefusal other) => new InputRefusal(other.Code, other.Message + tail),
+            (_, InputRefusedException refused) => new InputRefusal(
+                RefusalCodes.DragInterrupted,
+                $"The drag was interrupted ({refused.Refusal.Code}): {refused.Message}{tail}"
+            ),
+            (_, AutomationRefusal other) => new InputRefusal(
+                RefusalCodes.DragInterrupted,
+                $"The drag was interrupted ({other.Code}): {other.Message}{tail}"
+            ),
             (_, OperationCanceledException) => new InputRefusal(
                 RefusalCodes.DragInterrupted,
                 $"The drag was cancelled while the button was down.{tail}"
