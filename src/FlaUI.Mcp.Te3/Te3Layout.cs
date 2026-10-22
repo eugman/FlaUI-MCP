@@ -95,6 +95,11 @@ public sealed partial class Te3Layout(
         using var guard = readOnly ? null : grant.Guard();
 
         var (surface, handle, window) = Attach(a, inputs);
+        if (!readOnly)
+        {
+            RequireNoOpenDialog(surface);
+        }
+
         object result = GetStringArgument(a, "action") switch
         {
             "list" => List(surface),

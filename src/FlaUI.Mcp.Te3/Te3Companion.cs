@@ -126,7 +126,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             {
                 step.Phase = "observe";
                 step.Last = "read status bar";
-                return ReadModelState(page, hwnd, step.Phase, step.Last);
+                return ReadModelState(page, windows, hwnd, step.Phase, step.Last);
             }
 
             return await NavigateAndVerify(page, windows, hwnd, a, step);
@@ -220,9 +220,15 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
         return (windows, hwnd, handle, identity);
     }
 
-    // No extra-window guard: an open dialog is exactly when a caller wants to read the status bar,
-    // and this reads without touching anything.
-    private static McpToolResult ReadModelState(Te3Page page, nint hwnd, string phase, string lastStep)
+    // No extra-window guard: an open dialog is exactly when a caller wants to read the status bar, and this reads
+    // without touching anything; the dialogs open beside the main window are reported (te3b-38).
+    private static McpToolResult ReadModelState(
+        Te3Page page,
+        IReadOnlyList<Win32WindowInfo> windows,
+        nint hwnd,
+        string phase,
+        string lastStep
+    )
     {
         RequireRestored(hwnd);
 
@@ -233,6 +239,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
             {
                 assessment = Assessment(false),
                 state = page.ObserveModelState(),
+                dialogs = Te3Dialogs.Report(windows, hwnd),
                 phase,
                 lastStep,
             }

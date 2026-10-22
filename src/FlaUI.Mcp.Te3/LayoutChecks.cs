@@ -152,10 +152,7 @@ internal static class LayoutChecks
     )
     {
         if (
-            windows.FirstOrDefault(w =>
-                w.Hwnd != main && w.Title.Length > 0 && !w.IsToolWindow && !IsFloatingPane(w, shapeOf)
-            ) is
-            { } open
+            windows.FirstOrDefault(w => w.Hwnd != main && w.Title.Length > 0 && !IsFloatingPane(w, shapeOf)) is { } open
         )
         {
             throw new InvalidOperationException(

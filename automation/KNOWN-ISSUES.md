@@ -106,3 +106,7 @@ On te3-2ac1444 (2026-10-22) `te3_navigate native-mcp-server` opened the MCP Serv
 
 `windows_close` on the TE3 window is a desktop change like any other, so it is refused (not-dispatched, 0 inputs) after `te3_interaction_end`. The host keeps it that way rather than exempting its own close: end the interaction only after TE3 is closed, or begin a new one for the teardown (te3-6535504 did the latter). `te3_layout restore` needs no interaction, so it can run after the end. Done that way on te3-eb2ed6a and again on te3-2ac1444 (2026-10-22): `windows_close` before the end (1 input, no prompt with a clean model), `te3_interaction_end`, then `restore` with TE3 closed put the three files back and read the snapshot's hashes.
 
+
+## Unknown dialogs: offline review, 2026-10-22
+
+`te3_model_state` now reports other titled windows with their class, ownership and any known advice while retaining its read-only status-bar observation. Every live `te3_layout` mutation checks for an open dialog before choosing an action, including resize, reopen and presets. A tool-window style does not exempt an unknown dialog; the observed floating Dependencies pane remains allowed. Navigation allows only the dialog explicitly associated with its destination. Fake-window/entry-point regressions passed after demonstrating the previous bypasses. The MCP Server dialog case still needs a fresh granted live check.

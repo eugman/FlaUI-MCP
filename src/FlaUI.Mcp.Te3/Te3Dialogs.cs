@@ -1,5 +1,8 @@
 using FlaUI.Mcp.Core;
 
+/// <summary>A titled TE3 window open beside the main one, as te3_model_state reports it.</summary>
+public sealed record OpenDialog(string Title, string ClassName, bool Owned, string? Advice);
+
 /// <summary>
 /// TE3 prompts that can block a run, with what to do about each. The titles come from TE3's documentation and release
 /// notes and have not been observed by this host (Unverified): any window that matches is refused before input, and
@@ -29,6 +32,35 @@ internal static class Te3Dialogs
     /// <summary>What to do about a known prompt with this title, or null.</summary>
     public static string? Advice(string title) =>
         Known.FirstOrDefault(k => title.Contains(k.Match, StringComparison.OrdinalIgnoreCase)).Advice;
+
+    /// <summary>
+    /// The titled windows of the process other than the main window and the floating panes, as a read-only tool
+    /// reports them: a dialog nobody has answered (te3b-38: the owned "MCP Server" dialog was open while the status
+    /// bar read normally). Nothing is refused here.
+    /// </summary>
+    public static IReadOnlyList<OpenDialog> OpenDialogs(
+        IReadOnlyList<Win32WindowInfo> windows,
+        nint main,
+        Func<nint, WindowShape?> shapeOf
+    ) =>
+        [
+            .. windows
+                .Where(w => w.Hwnd != main && w.Title.Length > 0 && !LayoutChecks.IsFloatingPane(w, shapeOf))
+                .Select(w =>
+                {
+                    var shape = shapeOf(w.Hwnd);
+                    return new OpenDialog(
+                        w.Title,
+                        shape?.ClassName ?? "",
+                        shape != null && shape.Owner != 0,
+                        Advice(w.Title)
+                    );
+                }),
+        ];
+
+    /// <summary>The open dialogs as te3_model_state's reply carries them, read with the live window shapes.</summary>
+    public static object Report(IReadOnlyList<Win32WindowInfo> windows, nint main) =>
+        OpenDialogs(windows, main, WindowShape.Read);
 
     /// <summary>The window's title, with the advice when it is a known prompt.</summary>
     public static string Describe(Win32WindowInfo window) =>

@@ -114,6 +114,39 @@ public sealed class LayoutEntryTests : IDisposable
         Assert.Empty(surface!.Presses);
     }
 
+    [Theory]
+    [InlineData("resize")]
+    [InlineData("reopen-pane")]
+    [InlineData("apply-preset")]
+    public async Task GeometryAndReopenEntryPointsRefuseAnUnknownDialogBeforeInput(string action)
+    {
+        var tool = Tool(inputs =>
+        {
+            var layout = Standard(inputs);
+            layout.Extra.Add(new(0x40, "MCP Server", 7, true, false, false));
+            layout.Shapes[0x40] = new WindowShape("WindowsForms10.Window.8.test", Main);
+            return layout;
+        });
+
+        var result = await tool.ExecuteAsync(
+            Args(
+                new
+                {
+                    action,
+                    title = "TOM Explorer",
+                    width = 480,
+                    preset = "assistant-model-review",
+                }
+            )
+        );
+
+        Assert.Equal(true, result.IsError);
+        Assert.Contains("MCP Server", result.Content.Single().Text);
+        Assert.Equal("precondition-failed", result.Outcome?.Failure?.Code);
+        Assert.Equal(0, result.Outcome?.InputsSent);
+        Assert.Empty(surface!.Presses);
+    }
+
     [Fact]
     public async Task ADialogTheFirstCloseOpenedLateStopsTheNextClose()
     {

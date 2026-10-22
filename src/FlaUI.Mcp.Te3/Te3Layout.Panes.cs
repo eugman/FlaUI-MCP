@@ -9,6 +9,9 @@ using FlaUI.Mcp.Te3;
 /// </summary>
 public sealed partial class Te3Layout
 {
+    private static void RequireNoOpenDialog(ILayoutSurface surface) =>
+        LayoutChecks.Baseline(surface.Windows(), surface.MainWindow, surface.ShapeOf);
+
     // Docked panes and documents, then TE3's other titled top-level windows (a floating pane such as Dependencies is
     // one: unowned and not a tool window), which are outside the main window and so not among its parts.
     private static object List(ILayoutSurface surface)
