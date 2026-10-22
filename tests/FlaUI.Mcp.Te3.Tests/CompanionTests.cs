@@ -2,6 +2,7 @@ using System.Text.Json;
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 using Xunit;
+using static CoreResults;
 
 public sealed class CompanionTests
 {
@@ -197,27 +198,10 @@ public sealed class CompanionTests
         Assert.Contains("no uncertain input", response.GetProperty("next").GetString());
     }
 
-    // A failed Core call as the tally reports it: Core's text for people, and its outcome with the refusal's code.
-    private static CoreCallException CoreRefusal(string code, string text = "Failed to click w1e5: Windows refused.") =>
-        new(
-            "windows_click",
-            new McpToolResult
-            {
-                IsError = true,
-                Content = [new() { Text = text }],
-                Outcome = new ToolOutcome("not-dispatched", "not-tracked")
-                {
-                    Status = "failed",
-                    InputsSent = 0,
-                    Failure = new InputRefusal(code, text),
-                },
-            }
-        );
-
     public static TheoryData<Exception, string, string> CoreActivationFailures() =>
         new()
         {
-            { CoreRefusal("activation-denied"), "activation-denied", "title bar" },
+            { Refused("activation-denied"), "activation-denied", "title bar" },
             {
                 // The page's own send, refused by GuardedInput, and a retry that wrapped the refusal.
                 new InvalidOperationException(
@@ -227,7 +211,7 @@ public sealed class CompanionTests
                 "activation-denied",
                 "title bar"
             },
-            { CoreRefusal("desktop-unavailable"), "desktop-unavailable", "locked" },
+            { Refused("desktop-unavailable"), "desktop-unavailable", "locked" },
         };
 
     [Theory]
@@ -263,7 +247,7 @@ public sealed class CompanionTests
     public void ARefusalThatIsNotADesktopBlockerIsNotOne()
     {
         var response = JsonDocument
-            .Parse(Te3Companion.Failure("navigate", "click", CoreRefusal("point-not-on-target")).Content[0].Text!)
+            .Parse(Te3Companion.Failure("navigate", "click", Refused("point-not-on-target")).Content[0].Text!)
             .RootElement;
         Assert.False(response.TryGetProperty("blocker", out _));
     }

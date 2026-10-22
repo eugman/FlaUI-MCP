@@ -1,6 +1,7 @@
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 using Xunit;
+using static CoreResults;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
@@ -11,15 +12,7 @@ namespace FlaUI.Mcp.Te3.Tests;
 public sealed class InputTallyTests
 {
     private static Func<Task<McpToolResult>> Returns(string text, ToolOutcome outcome, bool error = false) =>
-        () =>
-            Task.FromResult(
-                new McpToolResult
-                {
-                    IsError = error,
-                    Outcome = outcome,
-                    Content = [new() { Text = text }],
-                }
-            );
+        () => Task.FromResult(Result(outcome, error, text));
 
     private static ToolOutcome Outcome(string dispatch, int inputsSent, string provider = "not-tracked") =>
         new(dispatch, provider) { InputsSent = inputsSent, Status = dispatch == "completed" ? "ok" : "failed" };

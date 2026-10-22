@@ -2,6 +2,7 @@ using System.Text.Json;
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 using Xunit;
+using static CoreResults;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
@@ -11,9 +12,6 @@ namespace FlaUI.Mcp.Te3.Tests;
 /// </summary>
 public sealed class FailureCaptureTests
 {
-    private static McpToolResult Result(string text, bool error = false) =>
-        new() { IsError = error, Content = [new() { Text = text }] };
-
     [Fact]
     public async Task TheFailureCaptureRunsWithoutTheGrantAndAsksForABackgroundReadOnly()
     {
@@ -26,7 +24,7 @@ public sealed class FailureCaptureTests
             (tool, args) =>
             {
                 calls.Add((tool, JsonSerializer.SerializeToElement(args)));
-                return Task.FromResult(Result("ok"));
+                return Task.FromResult(Text("ok"));
             },
             "w1",
             "out",
@@ -48,7 +46,7 @@ public sealed class FailureCaptureTests
             (tool, _) =>
                 tool == "windows_screenshot"
                     ? throw new InvalidOperationException("window gone")
-                    : Task.FromResult(Result("element tree unreadable", error: true)),
+                    : Task.FromResult(Text("element tree unreadable", error: true)),
             "w1",
             "out",
             manifest

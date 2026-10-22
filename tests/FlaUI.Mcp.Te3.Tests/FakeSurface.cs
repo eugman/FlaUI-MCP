@@ -1,6 +1,7 @@
 using System.Drawing;
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
+using static CoreResults;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
@@ -114,17 +115,4 @@ internal sealed class FakeSurface : ILayoutSurface
             Extra.Remove(window);
         }
     }
-
-    // A Core click result that sent one input; failed when asked, after the input went out.
-    internal static McpToolResult Sent(string text, bool failed) =>
-        new()
-        {
-            IsError = failed,
-            Content = [new() { Text = text }],
-            Outcome = new ToolOutcome(ToolOutcome.DispatchFor(failed, 1), "not-tracked")
-            {
-                Status = failed ? "failed" : "ok",
-                InputsSent = 1,
-            },
-        };
 }

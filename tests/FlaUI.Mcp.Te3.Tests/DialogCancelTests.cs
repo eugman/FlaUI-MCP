@@ -1,5 +1,6 @@
 using FlaUI.Mcp.Core;
 using Xunit;
+using static CoreResults;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
@@ -79,7 +80,9 @@ public sealed class DialogCancelTests
                 Dialog(click: reference =>
                 {
                     clicks.Add(reference);
-                    return reference == "Cancel" ? throw ClickFailed("Point is covered.") : Task.CompletedTask;
+                    return reference == "Cancel"
+                        ? throw Failed("not-dispatched", "Point is covered.")
+                        : Task.CompletedTask;
                 })
             )
         );
@@ -97,7 +100,7 @@ public sealed class DialogCancelTests
                 Dialog(click: reference =>
                 {
                     clicks.Add(reference);
-                    throw ClickFailed("Click is pending; no input sent.", dispatch);
+                    throw Failed(dispatch, "Click is pending; no input sent.");
                 })
             )
         );
@@ -121,17 +124,6 @@ public sealed class DialogCancelTests
 
         Assert.Equal(["Cancel"], clicks);
     }
-
-    private static CoreCallException ClickFailed(string text, string dispatch = "not-dispatched") =>
-        new(
-            "windows_click",
-            new FlaUI.Mcp.McpToolResult
-            {
-                IsError = true,
-                Content = [new() { Text = text }],
-                Outcome = new ToolOutcome(dispatch, "not-tracked") { Status = "failed", InputsSent = 0 },
-            }
-        );
 
     [Fact]
     public async Task ADialogThatClosesNeedsNoClick()

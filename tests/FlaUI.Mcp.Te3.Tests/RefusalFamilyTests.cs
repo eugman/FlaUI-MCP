@@ -1,6 +1,7 @@
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 using Xunit;
+using static CoreResults;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
@@ -10,13 +11,10 @@ namespace FlaUI.Mcp.Te3.Tests;
 /// </summary>
 public sealed class RefusalFamilyTests
 {
-    private static CoreCallException Failed(ToolOutcome outcome) =>
-        new("windows_click", new McpToolResult { Content = [new() { Text = "refused" }], Outcome = outcome });
-
     [Fact]
     public void AFailedCoreCallIsARefusalWithItsCodeAndInputs()
     {
-        var error = Failed(
+        var error = Thrown(
             new ToolOutcome("partial", "not-tracked")
             {
                 InputsSent = 2,
@@ -37,9 +35,9 @@ public sealed class RefusalFamilyTests
     {
         Assert.Equal(
             RefusalDisposition.Uncertain,
-            Failed(new ToolOutcome("timed_out_pending", "pending") { InputsSent = 0 }).Disposition
+            Thrown(new ToolOutcome("timed_out_pending", "pending") { InputsSent = 0 }).Disposition
         );
-        var none = Failed(new ToolOutcome("not-dispatched", "not-tracked") { InputsSent = 0 });
+        var none = Thrown(new ToolOutcome("not-dispatched", "not-tracked") { InputsSent = 0 });
         Assert.Equal(RefusalDisposition.NoInput, none.Disposition);
         Assert.Equal("tool-failed", none.Code);
     }
@@ -50,7 +48,7 @@ public sealed class RefusalFamilyTests
     [InlineData("paused-after-failure", "paused-after-failure")]
     public void AnUnderscoredBlockerCodeIsReadAsTheHyphenatedOne(string given, string blocker)
     {
-        var error = Failed(new ToolOutcome("not-dispatched", "not-tracked") { Failure = new InputRefusal(given, "x") });
+        var error = Thrown(new ToolOutcome("not-dispatched", "not-tracked") { Failure = new InputRefusal(given, "x") });
 
         Assert.Equal(blocker, CoreFailure.Blocker(error));
     }

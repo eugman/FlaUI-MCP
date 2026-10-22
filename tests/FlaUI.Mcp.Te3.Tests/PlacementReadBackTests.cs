@@ -2,6 +2,7 @@ using System.Drawing;
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 using Xunit;
+using static CoreResults;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
@@ -13,30 +14,18 @@ public sealed class PlacementReadBackTests
     // Core's windows_place_window when the window did not land exactly: completed, failure.code placement-mismatch
     // (its proof also says mismatch; the code is what names a constrained placement).
     private static CoreCallException Mismatch() =>
-        new(
-            "windows_place_window",
-            new McpToolResult
+        Thrown(
+            new ToolOutcome("completed", "not-tracked")
             {
-                IsError = true,
-                Content = [new() { Text = "Window did not land where requested" }],
-                Outcome = new ToolOutcome("completed", "not-tracked")
-                {
-                    InputsSent = 1,
-                    Failure = new InputRefusal(RefusalCodes.PlacementMismatch, "x") { ActionDispatched = true },
-                },
-            }
+                InputsSent = 1,
+                Failure = new InputRefusal(RefusalCodes.PlacementMismatch, "x") { ActionDispatched = true },
+            },
+            "Window did not land where requested",
+            "windows_place_window"
         );
 
     private static CoreCallException OtherFailure() =>
-        new(
-            "windows_place_window",
-            new McpToolResult
-            {
-                IsError = true,
-                Content = [new() { Text = "refused" }],
-                Outcome = new ToolOutcome("partial", "not-tracked") { InputsSent = 1 },
-            }
-        );
+        Thrown(new ToolOutcome("partial", "not-tracked") { InputsSent = 1 }, tool: "windows_place_window");
 
     [Fact]
     public async Task GrowthToTheMinimumSizeAtTheSamePlaceIsReadBackWithItsDeltas()

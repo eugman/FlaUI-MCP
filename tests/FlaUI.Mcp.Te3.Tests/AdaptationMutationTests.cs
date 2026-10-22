@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FlaUI.Mcp.Core;
 using Xunit;
+using static CoreResults;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
@@ -10,17 +11,6 @@ namespace FlaUI.Mcp.Te3.Tests;
 /// </summary>
 public sealed class AdaptationMutationTests
 {
-    private static McpToolResult Result(ToolOutcome? outcome, bool error = true, params string[] texts) =>
-        new()
-        {
-            IsError = error,
-            Content = (texts.Length == 0 ? ["Failed."] : texts).Select(t => new McpContent { Text = t }).ToList(),
-            Outcome = outcome,
-        };
-
-    private static CoreCallException Call(string dispatch, string provider) =>
-        new("windows_click", Result(new ToolOutcome(dispatch, provider) { Status = "failed", InputsSent = 0 }));
-
     [Fact]
     public void ACoreCallFailureKeepsEveryLineOfTheToolsText() =>
         Assert.Equal(
@@ -43,7 +33,10 @@ public sealed class AdaptationMutationTests
     [InlineData("completed", "pending")]
     [InlineData("timed_out_pending", "unknown")]
     public void AFailingCallThatMayStillGoOutIsTimedOutPending(string dispatch, string provider) =>
-        Assert.Equal("timed_out_pending", CoreFailure.Reply(Call(dispatch, provider), 0).Dispatch);
+        Assert.Equal(
+            "timed_out_pending",
+            CoreFailure.Reply(Failed(dispatch, "Failed.", provider: provider), 0).Dispatch
+        );
 
     [Fact]
     public void ARefusalBeforeAnyInputSaysNoActionWasDispatched()
@@ -133,7 +126,10 @@ public sealed class AdaptationMutationTests
         var attempts = 0;
 
         await NavigationRetry.Once(
-            () => attempts++ == 0 ? throw Call("not-dispatched", "not-tracked") : Task.CompletedTask,
+            () =>
+                attempts++ == 0
+                    ? throw Failed("not-dispatched", "Failed.", provider: "not-tracked")
+                    : Task.CompletedTask,
             () => 5,
             null
         );

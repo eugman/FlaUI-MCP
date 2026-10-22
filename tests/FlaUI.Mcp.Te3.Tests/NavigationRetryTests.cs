@@ -1,6 +1,7 @@
 using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 using Xunit;
+using static CoreResults;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
@@ -14,28 +15,6 @@ public sealed class NavigationRetryTests
 
     private Task Retry(Func<Task> attempt, List<string>? reports = null) =>
         NavigationRetry.Once(attempt, () => inputs, reports == null ? null : reports.Add);
-
-    private static CoreCallException Core(
-        string dispatch,
-        string text = "Failed to click w1e3.",
-        int inputsSent = 0,
-        string provider = "not-tracked",
-        string? code = null
-    ) =>
-        new(
-            "windows_click",
-            new McpToolResult
-            {
-                IsError = true,
-                Content = [new() { Text = text }],
-                Outcome = new ToolOutcome(dispatch, provider)
-                {
-                    Status = "failed",
-                    InputsSent = inputsSent,
-                    Failure = code == null ? null : new InputRefusal(code, text),
-                },
-            }
-        );
 
     [Fact]
     public async Task AFailureThatIsNotACoreCallIsNotRetried()
@@ -78,7 +57,7 @@ public sealed class NavigationRetryTests
         var reports = new List<string>();
 
         await Retry(
-            () => attempts++ == 0 ? throw Core("not-dispatched", "Desktop input is busy.") : Task.CompletedTask,
+            () => attempts++ == 0 ? throw Failed("not-dispatched", "Desktop input is busy.") : Task.CompletedTask,
             reports
         );
 
@@ -98,7 +77,7 @@ public sealed class NavigationRetryTests
             Retry(() =>
             {
                 attempts++;
-                throw Core("not-dispatched", code: code);
+                throw Failed("not-dispatched", code: code);
             })
         );
 
@@ -115,7 +94,7 @@ public sealed class NavigationRetryTests
             Retry(() =>
             {
                 attempts++;
-                throw Core("not-dispatched", "Blocked: an earlier call is still pending.", provider: "pending");
+                throw Failed("not-dispatched", "Blocked: an earlier call is still pending.", provider: "pending");
             })
         );
 
@@ -135,7 +114,7 @@ public sealed class NavigationRetryTests
             Retry(() =>
             {
                 attempts++;
-                throw Core(dispatch, "Failed to send keys: no further input sent.", provider: provider);
+                throw Failed(dispatch, "Failed to send keys: no further input sent.", provider: provider);
             })
         );
 
@@ -153,7 +132,7 @@ public sealed class NavigationRetryTests
             {
                 attempts++;
                 inputs += 3;
-                throw Core("not-dispatched", "Point is not on the target window (off-window or covered).");
+                throw Failed("not-dispatched", "Point is not on the target window (off-window or covered).");
             })
         );
 
@@ -170,7 +149,7 @@ public sealed class NavigationRetryTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             Retry(() =>
                 attempts++ == 0
-                    ? throw Core("not-dispatched", "Clipboard is busy.")
+                    ? throw Failed("not-dispatched", "Clipboard is busy.")
                     : throw new InvalidOperationException("Object identity unverified")
             )
         );
