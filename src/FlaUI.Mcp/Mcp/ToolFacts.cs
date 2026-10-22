@@ -109,7 +109,7 @@ public static class ToolSchema
     /// </summary>
     public static object For<T>()
     {
-        var (properties, required) = Members(typeof(T));
+        var (properties, required) = Members(typeof(T), []);
         var schema = new Dictionary<string, object>
         {
             ["type"] = "object",
@@ -124,8 +124,16 @@ public static class ToolSchema
         return schema;
     }
 
-    private static (Dictionary<string, object> Properties, List<string> Required) Members(Type record)
+    private static (Dictionary<string, object> Properties, List<string> Required) Members(Type record, Type[] outer)
     {
+        if (outer.Contains(record))
+        {
+            throw new InvalidOperationException(
+                $"Argument record {record.Name} refers to itself, so it has no finite schema; give that argument a "
+                    + "[ToolSchemaFrom] schema instead."
+            );
+        }
+
         // Required: a `required` member, or a positional parameter with no default. Any other member is optional.
         var positional =
             record
@@ -148,7 +156,7 @@ public static class ToolSchema
             }
 
             var name = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
-            properties[name] = PropertySchema(property, record);
+            properties[name] = PropertySchema(property, record, [.. outer, record]);
             if (IsRequired(property))
             {
                 required.Add(name);
@@ -159,7 +167,7 @@ public static class ToolSchema
     }
 
     /// <summary>type, then enum, minimum, maximum, default, items, then description, then a nested object's members.</summary>
-    private static object PropertySchema(PropertyInfo property, Type record)
+    private static object PropertySchema(PropertyInfo property, Type record, Type[] outer)
     {
         if (property.GetCustomAttribute<ToolSchemaFromAttribute>() is { } from)
         {
@@ -178,9 +186,9 @@ public static class ToolSchema
             AddRange(schema, range);
         }
 
-        if (type.IsArray)
+        if (ElementType(type) is { } element)
         {
-            schema["items"] = new Dictionary<string, object> { ["type"] = JsonType(type.GetElementType()!) };
+            schema["items"] = new Dictionary<string, object> { ["type"] = JsonType(element) };
         }
 
         if (property.GetCustomAttribute<ToolDocAttribute>() is { } doc)
@@ -190,7 +198,7 @@ public static class ToolSchema
 
         if (IsRecord(type))
         {
-            var (members, required) = Members(type);
+            var (members, required) = Members(type, outer);
             schema["properties"] = members;
             if (required.Count > 0)
             {
@@ -236,7 +244,30 @@ public static class ToolSchema
         );
     }
 
-    private static bool IsRecord(Type type) => type.IsClass && type != typeof(string) && !type.IsArray;
+    // Only a record (it has the compiler's public <Clone>$) is expanded into its members: List<T>'s Capacity or a
+    // dictionary's Keys are not arguments, so other reference types are an untyped object or an array.
+    private static bool IsRecord(Type type) => type.IsClass && type.GetMethod("<Clone>$") != null;
+
+    /// <summary>The element type of an array or of a sequence such as List&lt;T&gt;, or null for anything else.</summary>
+    private static Type? ElementType(Type type)
+    {
+        if (type.IsArray)
+        {
+            return type.GetElementType();
+        }
+
+        if (type == typeof(string) || !type.IsGenericType)
+        {
+            return null;
+        }
+
+        var sequence = type.GetInterfaces()
+            .Append(type)
+            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+        return sequence == null || typeof(System.Collections.IDictionary).IsAssignableFrom(type)
+            ? null
+            : sequence.GetGenericArguments()[0];
+    }
 
     private static string JsonType(Type type)
     {
@@ -251,7 +282,7 @@ public static class ToolSchema
             return "integer";
         }
 
-        if (bare.IsArray)
+        if (ElementType(bare) != null)
         {
             return "array";
         }

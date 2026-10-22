@@ -72,6 +72,44 @@ public sealed class ToolSchemaGeneratorTests
         );
     }
 
+    internal sealed record Collections
+    {
+        public List<string>? Names { get; init; }
+
+        public Dictionary<string, string>? Labels { get; init; }
+
+        public object? Anything { get; init; }
+    }
+
+    [Fact]
+    public void ACollectionOrPlainObjectIsNotExpandedIntoItsMembers()
+    {
+        // List<T>'s Capacity and Count, or a dictionary's Keys, are not arguments.
+        Assert.Equal(
+            Q(
+                "{'type':'object','additionalProperties':false,'properties':{"
+                    + "'names':{'type':'array','items':{'type':'string'}},"
+                    + "'labels':{'type':'object'},"
+                    + "'anything':{'type':'object'}}}"
+            ),
+            Json<Collections>()
+        );
+    }
+
+    internal sealed record Node
+    {
+        public Node? Next { get; init; }
+    }
+
+    [Fact]
+    public void ASelfReferencingRecordIsRefusedByName()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => ToolSchema.For<Node>());
+
+        Assert.Contains("Node", error.Message);
+        Assert.Contains("refers to itself", error.Message);
+    }
+
     internal sealed record NoneRequired(bool? Flag = null);
 
     [ToolSchemaRequiredList]
