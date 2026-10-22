@@ -44,7 +44,9 @@ public sealed record ToolOutcome(
     [JsonPropertyName("proof"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Proof? Proof { get; init; }
 
-    private readonly IReadOnlyDictionary<string, JsonElement>? details;
+    // One copy of the caller's entries: handed out read-only, and serialised from the dictionary behind it.
+    private readonly Dictionary<string, JsonElement>? detailFields;
+    private readonly ReadOnlyDictionary<string, JsonElement>? details;
 
     /// <summary>
     /// A host's own structured fields, such as TE3's <c>walk</c>, written at the top level of structuredContent beside
@@ -54,15 +56,15 @@ public sealed record ToolOutcome(
     public IReadOnlyDictionary<string, JsonElement>? Details
     {
         get => details;
-        init => details = value is null ? null : CheckDetails(value);
+        init => (detailFields, details) = CheckDetails(value);
     }
 
-    // Serialised flat, as the extension data of the outcome; the copy is never handed out, so it cannot be changed.
+    // Serialised flat, as the extension data of the outcome; only the read-only view is ever handed out.
     [JsonExtensionData, JsonInclude]
     private Dictionary<string, JsonElement>? DetailFields
     {
-        get => details is null ? null : new Dictionary<string, JsonElement>(details);
-        init => details = value is null || value.Count == 0 ? null : CheckDetails(value);
+        get => detailFields;
+        init => (detailFields, details) = CheckDetails(value is { Count: > 0 } ? value : null);
     }
 
     private static readonly HashSet<string> FixedFields = typeof(ToolOutcome)
@@ -71,8 +73,15 @@ public sealed record ToolOutcome(
         .OfType<string>()
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    private static ReadOnlyDictionary<string, JsonElement> CheckDetails(IReadOnlyDictionary<string, JsonElement> value)
+    private static (Dictionary<string, JsonElement>?, ReadOnlyDictionary<string, JsonElement>?) CheckDetails(
+        IReadOnlyDictionary<string, JsonElement>? value
+    )
     {
+        if (value is null)
+        {
+            return (null, null);
+        }
+
         foreach (var key in value.Keys)
         {
             if (FixedFields.Contains(key))
@@ -86,7 +95,8 @@ public sealed record ToolOutcome(
             }
         }
 
-        return new Dictionary<string, JsonElement>(value).AsReadOnly();
+        var copy = new Dictionary<string, JsonElement>(value);
+        return (copy, copy.AsReadOnly());
     }
 
     /// <summary>This outcome with <paramref name="proof"/>, its verdict also given as the verification.</summary>

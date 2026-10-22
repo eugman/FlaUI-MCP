@@ -115,7 +115,7 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override string? ProcessNameOf(int processId) => ProcessNames.GetValueOrDefault(processId);
 
-    /// <summary>The desktop's clock; set a <see cref="ManualTimeProvider"/> to move pattern-call deadlines by hand.</summary>
+    /// <summary>The desktop's clock; set a manual clock to move pattern-call deadlines by hand.</summary>
     public TimeProvider Clock { get; set; } = TimeProvider.System;
 
     public override TimeProvider Time => Clock;
