@@ -45,6 +45,47 @@ public sealed class TomRowsTests
     public void AnOffsetOffTheIndentGridIsNoDepth(double tree, double label) =>
         Assert.Null(TomRows.Depth(tree, label, Live125));
 
+    [Fact]
+    public void WithTheRootOutOfViewTheIndentIsMeasuredFromTheTablesGroupAndItsFirstTable()
+    {
+        // Live (te3b-28): after the "Measure" search the root was off screen and no depth was known. The Tables group
+        // (depth 1, found by its text) and the row below it, its first table, give the same scale.
+        ElementInfo[] elements =
+        [
+            Item("TreeItem", "Node7", "Tables", 1161, 100),
+            Item("DataItem", "Name row 7", "Tables", 1233, 100),
+            Item("TreeItem", "Node8", "Brands", 1161, 122),
+            Item("DataItem", "Name row 8", "Brands", 1257, 122),
+        ];
+
+        Assert.Equal(Live125, TomRows.Calibrate(elements));
+    }
+
+    [Fact]
+    public void ASelectedTableAndItsFirstChildGiveTheScaleAndACollapsedTableGivesNone()
+    {
+        // After the search clears, TE3 scrolls the selected table to the top of the viewport: it is at depth 2 and the
+        // row below it, when it is open, its first child at depth 3.
+        ElementInfo[] open =
+        [
+            Item("TreeItem", "Node12", "Budget Rate", 1161, 100, selected: true),
+            Item("DataItem", "Name row 12", "Budget Rate", 1257, 100),
+            Item("TreeItem", "Node13", "Partitions", 1161, 122),
+            Item("DataItem", "Name row 13", "Partitions", 1281, 122),
+        ];
+        ElementInfo[] collapsed =
+        [
+            Item("TreeItem", "Node12", "Budget Rate", 1161, 100, selected: true),
+            Item("DataItem", "Name row 12", "Budget Rate", 1257, 100),
+            Item("TreeItem", "Node13", "Customers", 1161, 122),
+            Item("DataItem", "Name row 13", "Customers", 1257, 122),
+        ];
+
+        Assert.Equal(Live125, TomRows.CalibrateFrom(open, 12, 2));
+        Assert.Null(TomRows.CalibrateFrom(collapsed, 12, 2));
+        Assert.Null(TomRows.Calibrate(open));
+    }
+
     [Theory]
     // TreeItem x, model root label x, its first child's label x, a column-in-folder label x (depth 4).
     [InlineData(1161, 1209, 1233, 1305)] // 125%, measured live

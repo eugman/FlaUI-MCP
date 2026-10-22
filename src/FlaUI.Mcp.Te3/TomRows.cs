@@ -16,22 +16,44 @@ internal static class TomRows
     public sealed record Scale(double RootIndent, double Step);
 
     /// <summary>
-    /// The scale from the model root (row 0, depth 0) and its first child (row 1, depth 1) when both are realized; null
-    /// otherwise, and then no depth is known.
+    /// The scale from the model root (row 0, depth 0) and its first child (row 1, depth 1) when both are realized;
+    /// else, the root scrolled out of view, from the Tables group row (depth 1, found by its text) and the row below
+    /// it, its first table when the group is open (as it is whenever the filter shows a table); null otherwise, and
+    /// then no depth is known.
     /// </summary>
-    public static Scale? Calibrate(IReadOnlyList<ElementInfo> elements)
+    public static Scale? Calibrate(IReadOnlyList<ElementInfo> elements) =>
+        CalibrateFrom(elements, 0, 0) ?? FromTablesGroup(elements);
+
+    /// <summary>
+    /// The scale from the realized row <paramref name="index"/> of known <paramref name="depth"/> (the model root at
+    /// 0, a selected table at 2) and the row right below it, taken as its first child one level deeper; null when a
+    /// label is missing or the row below is not deeper (the row is collapsed, or a leaf).
+    /// </summary>
+    public static Scale? CalibrateFrom(IReadOnlyList<ElementInfo> elements, int index, int depth)
     {
-        var tree = elements.FirstOrDefault(e => e.ControlType == "TreeItem" && e.Name == "Node0")?.Bounds;
-        var root = Label(elements, "0")?.Bounds;
-        var child = Label(elements, "1")?.Bounds;
-        if (tree == null || root == null || child == null)
+        var tree = elements.FirstOrDefault(e => e.ControlType == "TreeItem" && e.Name == "Node" + index)?.Bounds;
+        var label = Label(elements, index.ToString())?.Bounds;
+        var child = Label(elements, (index + 1).ToString())?.Bounds;
+        if (tree == null || label == null || child == null)
         {
             return null;
         }
 
-        var step = child.X - root.X;
-        var indent = root.X - tree.X;
+        var step = child.X - label.X;
+        var indent = label.X - tree.X - step * depth;
         return step > Slack && indent > Slack ? new(indent, step) : null;
+    }
+
+    private static Scale? FromTablesGroup(IReadOnlyList<ElementInfo> elements)
+    {
+        var tables = elements.FirstOrDefault(e =>
+            e.ControlType == "TreeItem"
+            && e.Value == WalkPlace.TablesGroup
+            && e.Name.StartsWith("Node", StringComparison.Ordinal)
+        );
+        return tables != null && int.TryParse(tables.Name[4..], out var index)
+            ? CalibrateFrom(elements, index, 1)
+            : null;
     }
 
     /// <summary>The depth of a row whose TreeItem starts at <paramref name="tree"/> and label at <paramref name="label"/>.</summary>
