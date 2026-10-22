@@ -54,6 +54,8 @@ public class SendKeysTool : ToolBase
     /// </summary>
     public override string Name => "windows_send_keys";
 
+    protected override bool Recovery => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 
     /// <summary>
@@ -70,6 +72,7 @@ public class SendKeysTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
@@ -77,11 +80,9 @@ public class SendKeysTool : ToolBase
                     type = "string",
                     description = "Optional explicit window handle; otherwise uses the focused element.",
                 },
-                verifyFocus = new
-                {
-                    type = "boolean",
-                    description = "Require ref and verified keyboard focus on that exact control before the sequence (default false).",
-                },
+                verifyFocus = FocusRules.Schema(
+                    "Require verified keyboard focus before the sequence: true for the ref's exact control, \"self-or-descendant\" for it or a descendant (an editable ComboBox focuses its Edit child), false for no check. Default \"self-or-descendant\" when a ref is given, since keys such as Ctrl+A or Delete go wherever focus is."
+                ),
                 expectFocusClass = new
                 {
                     type = "string",
@@ -117,8 +118,9 @@ public class SendKeysTool : ToolBase
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var refId = GetStringArgument(arguments, "ref");
-        var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
-        if (verifyFocus && string.IsNullOrWhiteSpace(refId))
+        // Verified focus by default whenever the keys target a ref (on the ref or a descendant).
+        var verifyFocus = FocusRules.Parse(arguments, refId);
+        if (verifyFocus != FocusRule.None && string.IsNullOrWhiteSpace(refId))
         {
             return Task.FromResult(ErrorResult("verifyFocus requires an element ref; no input sent."));
         }
@@ -183,7 +185,7 @@ public class SendKeysTool : ToolBase
             );
             var targetName = string.IsNullOrWhiteSpace(refId) ? "focused element" : refId;
             var expectFocusClass = GetStringArgument(arguments, "expectFocusClass");
-            var focus = Win32Desktop.GetFocusedControl();
+            var focus = InputDesktop.Current.FocusedControl();
             // Where the first chord went. The loop overwrites `focus` as the sequence moves it.
             var dispatchFocus = focus;
             foreach (var step in prepared)
@@ -203,7 +205,7 @@ public class SendKeysTool : ToolBase
                     Thread.Sleep(30);
                 }
 
-                focus = Win32Desktop.GetFocusedControl();
+                focus = InputDesktop.Current.FocusedControl();
             }
 
             // "focus at dispatch" is where the input went; the after-state is reported only when

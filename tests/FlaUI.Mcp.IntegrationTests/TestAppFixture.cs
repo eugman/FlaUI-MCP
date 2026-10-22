@@ -33,6 +33,7 @@ public class TestAppFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        DesktopClaim.RequireFree();
         CloseStrayTestApps();
         var winFormsPath =
             FindTestAppPath("WinFormsTestApp")
@@ -94,21 +95,43 @@ public class TestAppFixture : IAsyncLifetime
 
     /// <summary>
     /// Close test apps an earlier test host left running. A host killed by a timeout (as mutation runs do)
-    /// never reaches DisposeAsync, and its apps would stay on the desktop.
+    /// never reaches DisposeAsync, and its apps would stay on the desktop. Only apps built under this checkout's
+    /// tests/TestApps are closed: another checkout's suite may be running its own.
     /// </summary>
     private static void CloseStrayTestApps()
     {
+        var root = TestAppsRoot();
         foreach (var name in new[] { "WinFormsTestApp", "WpfTestApp" })
         {
             foreach (var stray in Process.GetProcessesByName(name))
             {
                 using (stray)
                 {
+                    if (root == null || !DesktopClaim.IsOurTestApp(DesktopClaim.ExecutableOf(stray), root))
+                    {
+                        continue;
+                    }
+
                     stray.Kill(entireProcessTree: true);
                     stray.WaitForExit(5000);
                 }
             }
         }
+    }
+
+    /// <summary>This checkout's tests/TestApps folder, or null when it cannot be found.</summary>
+    private static string? TestAppsRoot()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var apps = Path.Combine(dir.FullName, "tests", "TestApps");
+            if (Directory.Exists(apps) && Directory.Exists(Path.Combine(dir.FullName, "src")))
+            {
+                return apps;
+            }
+        }
+
+        return null;
     }
 
     private static Process LaunchTestApp(string path)

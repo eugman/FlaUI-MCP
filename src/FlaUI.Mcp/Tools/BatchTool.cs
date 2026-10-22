@@ -19,6 +19,7 @@ public sealed class BatchTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 actions = new
@@ -153,7 +154,7 @@ public sealed class BatchTool : ToolBase
                 "snapshot" => "windows_snapshot",
                 _ => throw new ArgumentException($"Unknown action: {op}"),
             };
-            var result = await invoke(tool, row);
+            var result = await invoke(tool, ToolArguments(row));
             trace.Add($"{number}. {op}: {string.Join("\n", result.Content.Select(c => c.Text ?? ""))}");
             steps.Add(new(number, op, result.IsError == true, result.Outcome));
             if (result.Outcome?.IsPending == true)
@@ -173,6 +174,17 @@ public sealed class BatchTool : ToolBase
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// The row without its batch-only keys. "action" names the batch step; passed on, it would reach
+        /// windows_click as its own action argument and force a mouse click on every click row.
+        /// </summary>
+        private static JsonElement ToolArguments(JsonElement row)
+        {
+            var arguments = System.Text.Json.Nodes.JsonNode.Parse(row.GetRawText())!.AsObject();
+            arguments.Remove("action");
+            return JsonSerializer.SerializeToElement(arguments);
         }
 
         private async Task Wait(JsonElement row, int number)
@@ -206,9 +218,21 @@ public sealed class BatchTool : ToolBase
             };
         }
 
+        // Failed wins; a step that could not check its effect makes the batch unverified, never ok.
+        private string? RolledUp(bool failed)
+        {
+            if (failed)
+            {
+                return "failed";
+            }
+
+            return steps.Any(step => step.Outcome?.Status == "unverified") ? "unverified" : null;
+        }
+
         /// <summary>
-        /// The numbered trace as text, with IsError left as before, and the structured outcome beside it. A step
-        /// that fails after completed ones makes the batch partial: earlier input reached the app.
+        /// The numbered trace as text, and the structured outcome beside it. A step that fails after completed ones
+        /// makes the batch partial: earlier input reached the app. IsError mirrors status: failed, so a client
+        /// that reads only isError does not take a failed batch for a successful one.
         /// </summary>
         public McpToolResult Result()
         {
@@ -219,7 +243,8 @@ public sealed class BatchTool : ToolBase
                 : PendingOutcome(pending, sent, pendingNumber < rowCount);
             return TextResult(string.Join("\n", trace)) with
             {
-                Outcome = outcome with { Steps = steps, InputsSent = sent, Status = failed ? "failed" : null },
+                IsError = failed ? true : null,
+                Outcome = outcome with { Steps = steps, InputsSent = sent, Status = RolledUp(failed) },
             };
         }
     }

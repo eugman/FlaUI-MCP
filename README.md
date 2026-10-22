@@ -61,6 +61,35 @@ Put personal recipes, configs and notes in `local/` at the repo root. Git ignore
 | `src/FlaUI.Mcp.Te3`, `tests/FlaUI.Mcp.Te3.Tests` | The TE3 tools and runner. |
 | `automation/` | TE3 docs, the agent skill, the example config, the test model script and the engine reset script. |
 
+## Generic tool annotations
+
+The core `windows_*` tools this server includes carry MCP `annotations` in `tools/list`, generated from each tool's `ToolFacts` (run the offline tests with `FLAUI_APPROVE_TOOL_SCHEMAS=1` to rewrite the table). The TE3 tools are listed in [automation/README.md](automation/README.md).
+
+<!-- tool-facts:begin -->
+| Tool | readOnly | destructive | idempotent | observation | recovery | mutating when |
+|---|---|---|---|---|---|---|
+| `windows_batch` |  | yes |  |  |  |  |
+| `windows_click` |  | yes |  |  |  |  |
+| `windows_close` |  | yes |  |  | yes |  |
+| `windows_fill` |  | yes |  |  |  |  |
+| `windows_find` | yes |  | yes | yes |  |  |
+| `windows_focus` |  |  | yes |  | yes |  |
+| `windows_get_clipboard` | yes |  | yes | yes |  |  |
+| `windows_get_text` | yes |  | yes | yes |  |  |
+| `windows_launch` |  |  |  |  |  |  |
+| `windows_list_windows` | yes |  | yes | yes | yes |  |
+| `windows_mouse` |  | yes |  |  |  |  |
+| `windows_operation_status` | yes |  | yes |  | yes |  |
+| `windows_paste` |  | yes |  |  |  |  |
+| `windows_place_window` |  |  | yes |  |  |  |
+| `windows_screenshot` |  |  | yes | yes | yes | `parkPointer` |
+| `windows_send_keys` |  | yes |  |  | yes |  |
+| `windows_set_window_state` |  |  | yes |  |  |  |
+| `windows_snapshot` | yes |  | yes | yes |  |  |
+| `windows_type` |  |  |  |  |  |  |
+| `windows_wait` | yes |  | yes | yes |  |  |
+<!-- tool-facts:end -->
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

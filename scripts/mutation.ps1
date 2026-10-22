@@ -25,11 +25,11 @@ $offlineProject = 'FlaUI.Mcp.Tests.csproj'
 $integrationProject = 'FlaUI.Mcp.IntegrationTests.csproj'
 $testApps = 'WinFormsTestApp', 'WpfTestApp'
 $parts = [ordered]@{
-    guards = 'GuardedInput', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'InputRefusal'
-    state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext'
-    protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolBase'
+    guards = 'GuardedInput', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'ClickHitTest', 'FocusRule', 'InteractionGrant', 'InteractionGrantObserve', 'InteractionGrantActivation', 'Heartbeat', 'MutationGuard', 'ProcessPolicy', 'DesktopLease', 'AutomationRefusal', 'InputRefusal', 'WindowBaseline', 'Diagnostics'
+    state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext', 'WaitOutcome'
+    protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolRegistrySchemas', 'ToolRegistryStrand', 'ToolBase', 'ToolFacts', 'Proof'
     pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'PointerActions'
-    keyboard = 'SendKeysTool', 'TypeTools', 'BatchTool'
+    keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
 }
 
 function RemoveWorktree($path) {
@@ -76,13 +76,17 @@ function UnsafeRun($logs, $expected, $allowed = $offlineProject) {
     return $null
 }
 
-# Close test apps a timed-out test host left behind.
+# Close test apps a timed-out test host left behind: only those built under this checkout (its worktrees
+# included), never another checkout's, whose own suite may be running.
 function CloseTestApps {
+    $prefix = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($root)) + [IO.Path]::DirectorySeparatorChar
     foreach ($app in $testApps) {
-        Get-Process -Name $app -ErrorAction SilentlyContinue | ForEach-Object {
-            $_.Kill($true)
-            $null = $_.WaitForExit(5000)
-        }
+        Get-Process -Name $app -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -and $_.Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } |
+            ForEach-Object {
+                $_.Kill($true)
+                $null = $_.WaitForExit(5000)
+            }
     }
 }
 

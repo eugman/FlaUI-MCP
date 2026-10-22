@@ -7,7 +7,7 @@ namespace FlaUI.Mcp;
 /// <summary>
 /// Registry for MCP tools - maps tool names to handlers
 /// </summary>
-public class ToolRegistry
+public partial class ToolRegistry
 {
     private readonly Dictionary<string, ITool> _tools = new();
     private readonly TimeSpan _toolTimeout;
@@ -16,8 +16,18 @@ public class ToolRegistry
     public Func<JsonElement?, ProcessIdentity?>? ResolveTarget { get; set; }
     public PendingInvokeTracker? Pending { get; set; }
 
-    public ToolRegistry(TimeSpan? toolTimeout = null, Action? onToolActivity = null)
+    /// <summary>
+    /// Called when a top-level call failed after sending input (inputsSent above 0, or a refusal that says input went
+    /// out), with the tool's name and outcome, so a host can pause its grant until the app has been observed.
+    /// </summary>
+    public Action<string, ToolOutcome>? FailedAfterInput { get; set; }
+
+    private readonly TimeProvider _time;
+
+    /// <param name="time">The clock for tool timeouts; the system clock by default (tests inject one).</param>
+    public ToolRegistry(TimeSpan? toolTimeout = null, Action? onToolActivity = null, TimeProvider? time = null)
     {
+        _time = time ?? TimeProvider.System;
         _toolTimeout = toolTimeout ?? TimeSpan.FromSeconds(30);
         if (_toolTimeout <= TimeSpan.Zero)
         {
@@ -25,11 +35,6 @@ public class ToolRegistry
         }
 
         _onToolActivity = onToolActivity;
-    }
-
-    public void RegisterTool(ITool tool)
-    {
-        _tools[tool.Name] = tool;
     }
 
     /// <summary>
@@ -40,6 +45,9 @@ public class ToolRegistry
         name == Tools.OperationStatusTool.ToolName
         || _tools.TryGetValue(name, out var tool)
             && tool.GetDefinition().Annotations is { ReadOnlyHint: true, StatusHint: true };
+
+    /// <summary>The registered tools, for contract tests.</summary>
+    internal IReadOnlyCollection<ITool> All => _tools.Values;
 
     public List<McpTool> GetToolDefinitions()
     {
@@ -72,6 +80,11 @@ public class ToolRegistry
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        if (UndeclaredArgument(name, arguments) is { } refused)
+        {
+            return refused;
+        }
+
         try
         {
             _onToolActivity?.Invoke();
@@ -83,9 +96,9 @@ public class ToolRegistry
             var operation = Operations.Begin(name, requestKey, tool.GetDefinition().Annotations);
             using var cancellation = cancellationToken.Register(() => operation.Stop.Cancel());
             var toolTask = Task.Run(() => RunOperation(tool, arguments, operation));
-            var started = Stopwatch.GetTimestamp();
+            var started = _time.GetTimestamp();
             using var timer = new CancellationTokenSource();
-            var timeoutTask = Task.Delay(_toolTimeout, timer.Token);
+            var timeoutTask = Task.Delay(_toolTimeout, _time, timer.Token);
             var cancelledTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             var finished = await Task.WhenAny(toolTask, timeoutTask, cancelledTask);
             // Stop the timer once the tool returns, so a fast call doesn't leave it running for the full timeout.
@@ -93,7 +106,7 @@ public class ToolRegistry
             if (finished != toolTask)
             {
                 var settled =
-                    finished == cancelledTask ? SettledOrTimedOut(toolTask, Stopwatch.GetElapsedTime(started)) : null;
+                    finished == cancelledTask ? SettledOrTimedOut(toolTask, _time.GetElapsedTime(started)) : null;
                 return Strand(name, operation, toolTask, settled, whenStranded);
             }
 
@@ -146,6 +159,7 @@ public class ToolRegistry
             OperationContext.Check();
             var returned = await tool.ExecuteAsync(arguments);
             result = WithDispatch(returned, operation.InputsSent, operation.Refusal, ProviderPending(operation));
+            result = result with { Outcome = result.Outcome! with { HitTest = operation.HitTest } };
         }
         catch (Exception ex)
         {
@@ -170,6 +184,14 @@ public class ToolRegistry
         }
 
         operation.Finished = true;
+        if (
+            result.Outcome is { Status: "failed" } failed
+            && (failed.InputsSent > 0 || failed.Failure?.ActionDispatched == true)
+        )
+        {
+            FailedAfterInput?.Invoke(tool.Name, failed);
+        }
+
         return result;
     }
 
@@ -206,12 +228,35 @@ public class ToolRegistry
         {
             Outcome = outcome with
             {
-                Status = failed ? "failed" : "ok",
+                Status = StatusOf(failed, outcome),
                 InputsSent = inputsSent,
                 Failure =
-                    failed && refusal != null ? refusal with { ActionDispatched = inputsSent > 0 } : outcome.Failure,
+                    // A refusal recorded as coming after input (a counted Select, say) keeps that, whatever this call counted.
+                    failed && refusal != null
+                        ? refusal with
+                        {
+                            ActionDispatched = refusal.ActionDispatched == true || inputsSent > 0,
+                        }
+                        : outcome.Failure,
             },
         };
+    }
+
+    // An error is always failed; otherwise a proof decides between ok, failed and unverified.
+    private static string StatusOf(bool failed, ToolOutcome outcome)
+    {
+        if (failed)
+        {
+            return "failed";
+        }
+
+        if (outcome.Proof is { } proof)
+        {
+            return Proof.StatusFor(proof.Verdict);
+        }
+
+        // A composite (a batch) that rolled an unverified step up keeps it.
+        return outcome.Status == "unverified" ? "unverified" : "ok";
     }
 
     private static McpToolResult ErrorText(string message) =>
@@ -223,72 +268,6 @@ public class ToolRegistry
             },
             IsError = true,
         };
-
-    /// <summary>
-    /// Result for a call that returned before its tool task ended: the caller cancelled (<paramref name="settled"/>
-    /// is set) or the tool timed out. The tool may still be running and may have partially executed.
-    /// </summary>
-    private McpToolResult Strand(
-        string name,
-        OperationContext operation,
-        Task<McpToolResult> toolTask,
-        Task? settled,
-        Action<Task>? whenStranded
-    )
-    {
-        operation.Stop.Cancel();
-        if (settled != null)
-        {
-            whenStranded?.Invoke(settled);
-        }
-
-        // A stranded call can still hold this app's UIA provider. Fail later ref tools fast until it returns.
-        if (Pending != null && operation.ProcessId != 0)
-        {
-            var stranded = Pending.Begin(
-                operation.ProcessId,
-                settled != null ? $"cancelled {name}" : $"timed-out {name}"
-            );
-            _ = toolTask.ContinueWith(_ => Pending.Complete(stranded), TaskScheduler.Default);
-        }
-
-        _ = toolTask.ContinueWith(
-            task =>
-            {
-                _ = task.Exception;
-            },
-            TaskContinuationOptions.OnlyOnFaulted
-        );
-
-        return new McpToolResult
-        {
-            Content = new List<McpContent>
-            {
-                new() { Type = "text", Text = PendingMessage(name, settled != null) },
-            },
-            Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id)
-            {
-                InputsSent = operation.InputsSent,
-            },
-            IsError = true,
-        };
-    }
-
-    /// <summary>Completes when the tool returns, or when its timeout would have expired had it not been cancelled.</summary>
-    private Task SettledOrTimedOut(Task toolTask, TimeSpan elapsed)
-    {
-        var remaining = _toolTimeout - elapsed;
-        return Task.WhenAny(toolTask, Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero));
-    }
-
-    private string PendingMessage(string name, bool cancelled) =>
-        (
-            cancelled
-                ? $"Tool '{name}' cancellation requested. "
-                : $"Tool '{name}' timed out after {(int)_toolTimeout.TotalMilliseconds}ms. "
-        )
-        + "A modal dialog or blocked UI Automation provider may still be running in the background. "
-        + "Inspect the target and operation status before continuing. The request may have partially executed; do not blindly replay it.";
 
     private static McpToolResult CompleteResult(McpToolResult result, OperationContext operation) =>
         result with

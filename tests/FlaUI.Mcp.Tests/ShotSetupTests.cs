@@ -105,12 +105,49 @@ public sealed class ShotSetupTests
         Assert.Throws<ArgumentException>(() => PointerPlan.DragPath(Point.Empty, new Point(5, 5), steps));
 
     [Fact]
-    public void ParkPrefersAnotherMonitor()
+    public void ParkBesideTheWindowOnItsOwnMonitorNotOnAnotherOne()
     {
         var primary = new Rectangle(0, 0, 1920, 1080);
         var second = new Rectangle(1920, 0, 1920, 1080);
-        Assert.Equal(new Point(1928, 8), PointerPlan.ParkPoint(new Rectangle(10, 10, 1800, 1000), [primary, second]));
+        Assert.Equal(new Point(1818, 510), PointerPlan.ParkPoint(new Rectangle(10, 10, 1800, 1000), [primary, second]));
     }
+
+    [Fact]
+    public void ParkNeverJumpsToTheFarLeftMonitor()
+    {
+        // The far-left monitor is the first that misses the window; the pointer used to land at its top-left.
+        var left = new Rectangle(-1920, 0, 1920, 1080);
+        var primary = new Rectangle(0, 0, 1920, 1080);
+        var right = new Rectangle(1920, 0, 1920, 1080);
+        var window = new Rectangle(1930, 10, 1800, 1000);
+        Assert.Equal(new Point(3738, 510), PointerPlan.ParkPoint(window, [left, primary, right]));
+    }
+
+    [Fact]
+    public void ParkUsesTheMonitorHoldingMostOfAWindowThatSpansTwo()
+    {
+        var primary = new Rectangle(0, 0, 1920, 1080);
+        var second = new Rectangle(1920, 0, 1920, 1080);
+        var window = new Rectangle(1500, 100, 1000, 600); // 420 px on primary, 580 px on second
+        Assert.Equal(new Point(2508, 400), PointerPlan.ParkPoint(window, [primary, second]));
+    }
+
+    [Fact]
+    public void ParkJustOffAFullScreenWindowOntoTheNeighbouringMonitor()
+    {
+        // The window covers the second monitor; the point beside its left edge lies on the primary.
+        var primary = new Rectangle(0, 0, 1920, 1080);
+        var second = new Rectangle(1920, 0, 1920, 1080);
+        var window = new Rectangle(1912, -8, 1936, 1096);
+        var park = PointerPlan.ParkPoint(window, [primary, second]);
+        Assert.NotNull(park);
+        Assert.False(window.Contains(park.Value));
+        Assert.True(primary.Contains(park.Value));
+    }
+
+    [Fact]
+    public void NoParkForAWindowOnNoMonitor() =>
+        Assert.Null(PointerPlan.ParkPoint(new Rectangle(5000, 5000, 100, 100), [new Rectangle(0, 0, 1920, 1080)]));
 
     [Fact]
     public void ParkBesideANormalWindow()
@@ -133,8 +170,21 @@ public sealed class ShotSetupTests
     }
 
     [Fact]
-    public void NoParkWhenTheWindowCoversTheScreen() =>
+    public void NoParkPointWhenTheWindowCoversEveryMonitor() =>
+        // Every point of the only screen is on the window, so there is nowhere off it to park.
         Assert.Null(PointerPlan.ParkPoint(new Rectangle(-8, -8, 1936, 1096), [new Rectangle(0, 0, 1920, 1080)]));
+
+    [Fact]
+    public void ParkInAFreeCornerWhenNoPointBesideTheWindowIsOnAScreen()
+    {
+        // The window overhangs the monitor on three sides and leaves a strip free along its bottom, but the
+        // point below the middle of its bottom edge is off the screen; the bottom-left corner is free.
+        var monitor = new Rectangle(0, 0, 1920, 1080);
+        var window = new Rectangle(-1000, -8, 3000, 1060);
+        var park = PointerPlan.ParkPoint(window, [monitor]);
+        Assert.Equal(new Point(8, 1071), park);
+        Assert.False(window.Contains(park!.Value));
+    }
 
     [Fact]
     public void TreeRowsSelectInsteadOfInvoking() =>

@@ -19,6 +19,8 @@ public class GetTextTool : ToolBase
 
     public override string Name => "windows_get_text";
 
+    protected override bool Observation => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
 
     public override string Description =>
@@ -29,6 +31,7 @@ public class GetTextTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },

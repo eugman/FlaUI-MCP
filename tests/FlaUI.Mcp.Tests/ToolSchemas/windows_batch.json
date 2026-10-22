@@ -3,6 +3,7 @@
   "description": "Execute click/type/fill/wait/snapshot actions in order, returning numbered results and structured step outcomes. Stops on errors by default; always stops when an action is still pending. Never replay a pending action.",
   "inputSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "actions": {
         "type": "array",

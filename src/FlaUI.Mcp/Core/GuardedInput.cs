@@ -19,7 +19,7 @@ public sealed record InputTarget(nint Hwnd, int ProcessId, long StartedTicks, ni
 
     public static InputTarget Capture(nint hwnd, int pid)
     {
-        if (hwnd == 0 || pid == 0 || Win32Desktop.GetProcessId(hwnd) != pid)
+        if (hwnd == 0 || pid == 0 || InputDesktop.Current.ProcessOf(hwnd) != pid)
         {
             throw new InvalidOperationException("Cannot establish window ownership.");
         }
@@ -43,6 +43,9 @@ public sealed class GuardedInput : IDisposable
     public string? Changed => changedFirst;
 
     public GuardedInput(InputTarget target, AutomationElement? element = null, bool verifyFocus = false)
+        : this(target, element, verifyFocus ? FocusRule.Exact : FocusRule.None) { }
+
+    public GuardedInput(InputTarget target, AutomationElement? element, FocusRule focus)
     {
         this.target = target;
         OperationContext.Check();
@@ -61,7 +64,7 @@ public sealed class GuardedInput : IDisposable
 
             RequireActivated(target);
             Verify();
-            if (verifyFocus && (element == null || !desktop.HasKeyboardFocus(element)))
+            if (focus != FocusRule.None && (element == null || !FocusRules.Holds(focus, element, desktop)))
             {
                 throw new InvalidOperationException(
                     "Intended control did not receive verified keyboard focus; no input sent."
@@ -70,7 +73,7 @@ public sealed class GuardedInput : IDisposable
 
             changedFirst = focusedFirst;
         }
-        catch (InvalidOperationException error) when (focusedFirst != null)
+        catch (Exception error) when (focusedFirst != null && IsRefusal(error))
         {
             lease.Dispose();
             throw ChangedFirst(error, focusedFirst);
@@ -85,7 +88,8 @@ public sealed class GuardedInput : IDisposable
     /// <summary>
     /// Bring the target to the foreground when another window is in front. Counted as one change when the
     /// foreground moved or the window was restored; returns a note for a later refusal, or null when nothing
-    /// changed.
+    /// changed. Only the target (or its modal dialog) in front is an activation: a foreground that moved to any
+    /// other window is noted as a change, and the activation check that follows refuses it.
     /// </summary>
     private string? Activate(InputTarget target)
     {
@@ -100,14 +104,20 @@ public sealed class GuardedInput : IDisposable
         // Focusing a minimized window restores it even when Windows then refuses to activate it.
         var stateBefore = desktop.WindowState(window);
         desktop.Focus(window);
-        var activated = desktop.Foreground() != before;
-        if (!activated && desktop.WindowState(window) == stateBefore)
+        var after = desktop.Foreground();
+        var restored = desktop.WindowState(window) != stateBefore;
+        if (after == before && !restored)
         {
             return null;
         }
 
         MutationGuard.RecordDispatch();
-        return activated ? "the target window was activated" : "the target window was restored";
+        if (IsTargetWindow(after, target))
+        {
+            return "the target window was activated";
+        }
+
+        return restored ? "the target window was restored" : "the foreground window changed";
     }
 
     /// <summary>Focus the intended control. Counted as one change, and true, when it gained keyboard focus.</summary>
@@ -124,13 +134,28 @@ public sealed class GuardedInput : IDisposable
         return true;
     }
 
+    /// <summary>A refusal or guard failure: what a change noted before it must be added to.</summary>
+    internal static bool IsRefusal(Exception error) => error is InvalidOperationException or AutomationRefusal;
+
     /// <summary>A refusal raised after focus changed: it may not claim that nothing was sent.</summary>
-    internal static InvalidOperationException ChangedFirst(InvalidOperationException error, string note)
+    internal static Exception ChangedFirst(Exception error, string note)
     {
         var message = NoteFocusChange(error.Message, note);
-        return error is InputRefusedException refused
-            ? InputRefusedException.Record(refused.Refusal with { Message = message })
-            : new InvalidOperationException(message, error);
+        return error switch
+        {
+            // The change before it went out, so the refusal says input was dispatched.
+            InputRefusedException refused => InputRefusedException.Record(
+                refused.Refusal with
+                {
+                    Message = message,
+                    ActionDispatched = true,
+                }
+            ),
+            AutomationRefusal other => InputRefusedException.Record(
+                new InputRefusal(other.Code, message) { ActionDispatched = true }
+            ),
+            _ => new InvalidOperationException(message, error),
+        };
     }
 
     /// <summary>
@@ -143,7 +168,7 @@ public sealed class GuardedInput : IDisposable
         {
             check();
         }
-        catch (InvalidOperationException error) when (changedFirst != null)
+        catch (Exception error) when (changedFirst != null && IsRefusal(error))
         {
             throw ChangedFirst(error, changedFirst);
         }
@@ -168,27 +193,12 @@ public sealed class GuardedInput : IDisposable
         return message[..at] + replacement + message[(at + NothingSent.Length)..];
     }
 
-    private static readonly SemaphoreSlim InputGate = new(1, 1);
-
-    public static IDisposable AcquireLease()
-    {
-        if (
-            !InputGate.Wait(
-                TimeSpan.FromSeconds(2),
-                OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None
-            )
-        )
-        {
-            throw new TimeoutException("Desktop input is busy; no input sent.");
-        }
-
-        return new InputLease();
-    }
-
-    private sealed class InputLease : IDisposable
-    {
-        public void Dispose() => InputGate.Release();
-    }
+    /// <summary>The machine-wide input lease (<see cref="DesktopLease"/>): waits up to 2 s, then refuses as busy.</summary>
+    public static IDisposable AcquireLease() =>
+        DesktopLease.Acquire(
+            TimeSpan.FromSeconds(2),
+            OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None
+        );
 
     public static InputTarget ForegroundTarget(ProcessPolicy policy) =>
         ForegroundTarget(
@@ -206,7 +216,7 @@ public sealed class GuardedInput : IDisposable
         // Authorize the captured identity, not an earlier foreground observation.
         if (!policy.IsProcessAllowed(captured.ProcessId))
         {
-            var name = ProcessPolicy.TryGetProcessName(captured.ProcessId) ?? "unknown";
+            var name = InputDesktop.Current.ProcessNameOf(captured.ProcessId) ?? "unknown";
             throw new InvalidOperationException(
                 policy.DescribeDenied($"The foreground window's process '{name}'")
                     + " Focus an allowed window first, or target an element ref directly."
@@ -229,7 +239,7 @@ public sealed class GuardedInput : IDisposable
             return;
         }
 
-        var name = ProcessPolicy.TryGetProcessName(processId);
+        var name = InputDesktop.Current.ProcessNameOf(processId);
         throw InputRefusedException.Record(ProcessIntegrity.DescribeBlocked(self, target, processId, name)!);
     }
 
@@ -247,7 +257,7 @@ public sealed class GuardedInput : IDisposable
                 target.ProcessId,
                 foreground,
                 foregroundPid,
-                foregroundPid == 0 ? null : ProcessPolicy.TryGetProcessName(foregroundPid)
+                foregroundPid == 0 ? null : InputDesktop.Current.ProcessNameOf(foregroundPid)
             )
         );
     }
@@ -412,7 +422,13 @@ public sealed class GuardedInput : IDisposable
     public void Click(AutomationElement element, MouseButton button = MouseButton.Left, bool doubleClick = false)
     {
         var point = default(System.Drawing.Point);
-        Check(() => point = ClickPoint.Choose(ClickGeometry.Read(element)));
+        Check(() =>
+        {
+            var geometry = ClickGeometry.Read(element);
+            point = ClickPoint.Choose(geometry);
+            // A scrollbar, header or overlay inside the target window would take the click.
+            ClickPoint.Verify(point, element);
+        });
         Verify();
         var clickRoot = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
         if (desktop.ProcessOf(clickRoot) != target.ProcessId || desktop.WindowAt(point) != clickRoot)
@@ -443,7 +459,7 @@ public sealed class GuardedInput : IDisposable
         return InputRefusedException.Record(
             new InputRefusal("point-not-on-target", message)
             {
-                ForegroundProcess = pid == 0 ? null : new ProcessRef(ProcessPolicy.TryGetProcessName(pid), pid),
+                ForegroundProcess = pid == 0 ? null : new ProcessRef(InputDesktop.Current.ProcessNameOf(pid), pid),
                 Target = new ProcessRef(null, target.ProcessId),
             }
         );

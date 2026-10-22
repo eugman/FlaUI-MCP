@@ -21,6 +21,15 @@ public sealed class OperationContext
     public string? Error { get; set; }
     public ToolOutcome? ResultOutcome { get; set; }
 
+    /// <summary>
+    /// Why a pattern call this operation reported as pending failed when it finally ended, or null. Without it a
+    /// late refusal would read as idle, the same as a call that was sent and finished.
+    /// </summary>
+    public string? LateError { get; set; }
+
+    /// <summary>The weakest hit-test proof of a press in this operation: target, descendant or ancestor.</summary>
+    public string? HitTest { get; set; }
+
     /// <summary>The last refusal guarded input raised in this operation.</summary>
     public InputRefusal? Refusal { get; set; }
     private int inputsSent;
@@ -94,6 +103,7 @@ public sealed class OperationCoordinator
                     : "idle",
                     pendingPatternIds = patterns,
                     o.Error,
+                    lateError = o.LateError,
                     resultOutcome = o.ResultOutcome,
                 };
             })
@@ -104,7 +114,13 @@ public sealed class OperationCoordinator
     {
         if (o.Finished)
         {
-            return o.Error == null ? "ok" : "failed";
+            if (o.Error != null || o.LateError != null)
+            {
+                return "failed";
+            }
+
+            // A result that could not check its effect is never reported as ok.
+            return o.ResultOutcome?.Status == "unverified" ? "unverified" : "ok";
         }
 
         return o.Stop.IsCancellationRequested ? "timed_out_pending" : "running";

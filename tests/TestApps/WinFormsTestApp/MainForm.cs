@@ -556,6 +556,16 @@ public class MainForm : Form
         ellipsisButton.Click += (s, e) => modalButton.PerformClick();
         layout.Controls.Add(ellipsisButton);
 
+        // An ellipsis name that opens nothing, so windows_click's wait for a new window runs out
+        layout.Controls.Add(
+            new Button
+            {
+                Text = "Do Nothing...",
+                Name = "DoNothingButton",
+                AutoSize = true,
+            }
+        );
+
         // Button that opens a modeless dialog
         var modelessButton = new Button
         {

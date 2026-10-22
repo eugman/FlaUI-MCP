@@ -16,7 +16,7 @@ public sealed class PasteEvidenceTests
     public void ARefLessPasteSaysItCannotBeVerified()
     {
         // Nothing to read back, so the reply must not imply the text arrived.
-        var evidence = PasteTool.PasteEvidence(null, "foreach(var m in Selected.Measures)", null);
+        var evidence = PasteTool.PasteEvidence(null, "foreach(var m in Selected.Measures)", null).Sentence;
         Assert.Contains("Not verified", evidence);
         Assert.Contains("no ref was given", evidence);
     }

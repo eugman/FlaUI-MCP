@@ -8,7 +8,15 @@ namespace FlaUI.Mcp.Tests;
 internal static class OfflineTestSetup
 {
     [ModuleInitializer]
-    internal static void DisableRealDesktop() => Environment.SetEnvironmentVariable(InputDesktop.OfflineVariable, "1");
+    internal static void DisableRealDesktop()
+    {
+        Environment.SetEnvironmentVariable(InputDesktop.OfflineVariable, "1");
+        // A lease of this process's own, so the offline tests never wait on (or block) a host using the desktop.
+        Environment.SetEnvironmentVariable(
+            DesktopLease.NameVariable,
+            $@"Local\FlaUI-MCP-Tests-{Environment.ProcessId}"
+        );
+    }
 }
 
 /// <summary>
@@ -72,7 +80,8 @@ public sealed class OfflineDesktopTests
     {
         var called = false;
 
-        Assert.ThrowsAny<InvalidOperationException>(() =>
+        // Refused before the call: here by the integrity check, which cannot read process 0's token.
+        Assert.ThrowsAny<AutomationRefusal>(() =>
             ClickGeometry.Scroll(0, new PendingInvokeTracker(), () => { }, () => called = true, () => default)
         );
 

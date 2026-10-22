@@ -101,30 +101,73 @@ internal static class WindowMutation
         Action call,
         PendingInvokeTracker? pending,
         Action? validate = null,
-        TimeSpan? gracePeriod = null
+        TimeSpan? gracePeriod = null,
+        bool counted = true
     )
     {
         RefuseIfBlocked(processId, pending);
         using var lease = GuardedInput.AcquireLease();
+        var gate = new SendGate(description);
         void Validate()
         {
             validate?.Invoke();
             GuardedInput.RequireDrivable(processId, InputDesktop.Current);
         }
 
-        void Call() => InputDesktop.Current.CallPattern(call);
+        // The gate is entered after every check (validation, integrity, permission) and right before the count
+        // and the call, so a call held anywhere in its checks when the tool gives up can never go out.
+        void Guarded() =>
+            MutationGuard.ExecuteUncounted(
+                Validate,
+                () =>
+                {
+                    gate.Enter();
+                    if (counted)
+                    {
+                        MutationGuard.RecordDispatch();
+                    }
+
+                    InputDesktop.Current.CallPattern(call);
+                }
+            );
+
         if (pending == null)
         {
-            MutationGuard.Execute(Validate, Call);
+            Guarded();
             return new PatternCallResult(PatternCallOutcome.Completed);
         }
 
-        return ModalAwareInvoker.Execute(
-            processId,
-            description,
-            () => MutationGuard.Execute(Validate, Call),
-            pending,
-            gracePeriod
-        );
+        var result = ModalAwareInvoker.Execute(processId, description, Guarded, pending, gracePeriod);
+        // The lease is released when this returns. A call still in validation then must never go out unleased,
+        // interleaved with other input: close the gate, and it is certain that nothing was or will be sent.
+        return result.Outcome == PatternCallOutcome.StillPending && gate.Abandon()
+            ? result with
+            {
+                Dispatched = false,
+            }
+            : result;
+    }
+
+    /// <summary>Lets a pattern call through to its send only while the tool that started it still waits.</summary>
+    private sealed class SendGate(string description)
+    {
+        private const int Waiting = 0;
+        private const int Sending = 1;
+        private const int Abandoned = 2;
+        private int state = Waiting;
+
+        /// <summary>Called by the call just before it counts and sends; refuses once the tool gave up on it.</summary>
+        public void Enter()
+        {
+            if (Interlocked.CompareExchange(ref state, Sending, Waiting) != Waiting)
+            {
+                throw new InvalidOperationException(
+                    $"{description} was not sent: its tool had already returned and released the input lease."
+                );
+            }
+        }
+
+        /// <summary>Close the gate; true when the call had not reached its send, so it never will.</summary>
+        public bool Abandon() => Interlocked.CompareExchange(ref state, Abandoned, Waiting) == Waiting;
     }
 }

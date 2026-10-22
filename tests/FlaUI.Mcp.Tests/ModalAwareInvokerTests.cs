@@ -64,7 +64,7 @@ public class ModalAwareInvokerTests
             var windows = new List<Win32WindowInfo> { MakeWindow(1, "Main", enabled: callCount == 0) };
             if (Interlocked.Increment(ref callCount) > 1)
             {
-                windows.Add(MakeWindow(2, "Test Modal Dialog"));
+                windows.Add(MakeWindow(2, "Test Modal Dialog") with { Owner = 1 });
             }
 
             return windows;

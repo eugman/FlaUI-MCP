@@ -130,9 +130,23 @@ public sealed class PointerMutationTests
         var titled = ClickTool.ClickFailure(
             "Blocked.",
             "X",
-            [Window(1, "Main", false), Window(2, "", true), Window(3, "Save As", true)]
+            [
+                Window(1, "Main", false),
+                Window(2, "", true) with
+                {
+                    Owner = 1,
+                },
+                Window(3, "Save As", true) with
+                {
+                    Owner = 1,
+                },
+            ]
         );
-        var untitled = ClickTool.ClickFailure("Blocked.", "X", [Window(1, "Main", false), Window(2, "", true)]);
+        var untitled = ClickTool.ClickFailure(
+            "Blocked.",
+            "X",
+            [Window(1, "Main", false), Window(2, "", true) with { Owner = 1 }]
+        );
 
         Assert.Contains("Window \"Save As\" appears to be a modal dialog", titled);
         Assert.Equal("Blocked.", untitled);
@@ -199,14 +213,8 @@ public sealed class PointerMutationTests
             FakeDesktop.Target,
             () =>
             {
-                var gate = (SemaphoreSlim)
-                    typeof(GuardedInput)
-                        .GetField(
-                            "InputGate",
-                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
-                        )!
-                        .GetValue(null)!;
-                held = gate.CurrentCount == 0;
+                var gate = DesktopLease.Held;
+                held = gate;
                 return From;
             },
             0

@@ -229,7 +229,7 @@ public sealed class DispatchOutcomeTests
             )
         );
 
-        Assert.NotEqual(true, result.IsError); // The batch keeps its legacy numbered-text contract.
+        Assert.True(result.IsError); // isError mirrors status: failed.
         AssertDispatch(result, "partial", 1);
         Assert.Equal("failed", Outcome(result).GetProperty("status").GetString());
         var status = JsonSerializer.SerializeToElement(registry.Operations.Status())[0];

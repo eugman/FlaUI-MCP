@@ -66,6 +66,10 @@ public static partial class Win32Desktop
             IsWindowEnabled(hwnd),
             (exStyle & WS_EX_TOOLWINDOW) != 0,
             isCloaked
-        );
+        )
+        {
+            Owner = GetWindow(hwnd, GwOwner),
+            ClassName = GetWindowClassName(hwnd),
+        };
     }
 }

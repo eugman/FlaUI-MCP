@@ -60,7 +60,14 @@ public sealed class ReviewFollowUpTests
                 hold.Wait,
                 new PendingInvokeTracker(_ => 1),
                 TimeSpan.FromSeconds(5),
-                _ => calls++ == 0 ? [] : [new Win32WindowInfo(7, "Open", 123, true, false, false)]
+                _ =>
+                    calls++ == 0
+                        ? [new Win32WindowInfo(1, "Main", 123, true, false, false)]
+                        :
+                        [
+                            new Win32WindowInfo(1, "Main", 123, false, false, false),
+                            new Win32WindowInfo(7, "Open", 123, true, false, false) { Owner = 1 },
+                        ]
             );
 
             Assert.Equal(PatternCallOutcome.ModalDetected, result.Outcome);
@@ -384,14 +391,8 @@ public sealed class ReviewFollowUpTests
 
     private static bool LeaseHeld()
     {
-        var gate = (SemaphoreSlim)
-            typeof(GuardedInput)
-                .GetField(
-                    "InputGate",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
-                )!
-                .GetValue(null)!;
-        return gate.CurrentCount == 0;
+        var gate = DesktopLease.Held;
+        return gate;
     }
 
     private sealed class Runs(string name, Func<McpToolResult> run) : ToolBase

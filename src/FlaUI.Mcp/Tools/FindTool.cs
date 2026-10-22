@@ -14,6 +14,8 @@ public sealed class FindTool(ElementQuery query) : ToolBase
 
     public override string Name => "windows_find";
 
+    protected override bool Observation => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
     public override string Description =>
         "Find controls with exact UIA selectors (nameContains for a partial name) and optional ancestor scope (within, e.g. a pane's TitleBar to tell identical Close buttons apart; ancestry:true shows each match's parents); returns compact properties, patterns and fresh refs. Omit selector for bounded raw-tree inspection. An absent state field means unknown. Does not invalidate snapshot refs.";
@@ -51,6 +53,7 @@ public sealed class FindTool(ElementQuery query) : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new { type = "string" },
@@ -163,12 +166,15 @@ public sealed class FindTool(ElementQuery query) : ToolBase
         {
             return Task.FromResult(BlockedResult(ex.Pending));
         }
-        catch (Exception ex)
-            when (ex is ArgumentException or JsonException or InvalidOperationException or FormatException)
+        catch (Exception ex) when (IsReportable(ex))
         {
             return Task.FromResult(ErrorResult("windows_find: " + ex.Message));
         }
     }
+
+    // Bad arguments, a stale or unknown ref, and refusals are reported as text; anything else is the registry's.
+    private static bool IsReportable(Exception ex) =>
+        ex is ArgumentException or JsonException or FormatException || GuardedInput.IsRefusal(ex);
 
     internal static string? EmptyHint(ElementSelector selector, QueryResult found)
     {

@@ -11,7 +11,7 @@ public sealed class BatchDispatchTests
     private static JsonElement[] Rows(string json) => JsonSerializer.Deserialize<JsonElement[]>(json)!;
 
     [Fact]
-    public async Task DispatchesExistingToolsInOrderWithOriginalArguments()
+    public async Task DispatchesExistingToolsInOrderWithTheirOwnArguments()
     {
         var rows = Rows(
             """[{"action":"fill","ref":"target","value":"text"},{"action":"snapshot","handle":"window"}]"""
@@ -27,7 +27,11 @@ public sealed class BatchDispatchTests
         );
         Assert.NotEqual(true, result.IsError);
         Assert.Equal(new[] { "windows_fill", "windows_snapshot" }, calls.Select(c => c.Tool));
-        Assert.Equal(rows.Select(r => r.GetRawText()), calls.Select(c => c.Json));
+        // The step's own arguments, without the batch-only "action".
+        Assert.Equal(
+            new[] { """{"ref":"target","value":"text"}""", """{"handle":"window"}""" },
+            calls.Select(c => c.Json)
+        );
     }
 
     [Theory]
@@ -47,7 +51,7 @@ public sealed class BatchDispatchTests
             },
             stopOnError
         );
-        Assert.NotEqual(true, result.IsError); // Upstream batch returns numbered text, including failures.
+        Assert.True(result.IsError); // The numbered text keeps every step; isError mirrors status: failed.
         Assert.Equal(expectedCalls, calls);
         Assert.Contains("1. click: failed", result.Content[0].Text);
         Assert.Equal(stopOnError, result.Content[0].Text!.Contains("Stopped at action"));

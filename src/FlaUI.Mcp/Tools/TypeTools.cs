@@ -42,6 +42,7 @@ public class TypeTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
@@ -167,7 +168,7 @@ public class TypeTool : ToolBase
 /// <summary>
 /// Fill (clear and type) an element
 /// </summary>
-public class FillTool : ToolBase
+public partial class FillTool : ToolBase
 {
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
@@ -183,9 +184,11 @@ public class FillTool : ToolBase
     /// <summary>The reply when SetValue has not returned within the grace period.</summary>
     internal static McpToolResult PendingSetValueResult(PatternCallResult result) =>
         TextResult(
-            result.Dispatched
-                ? "SetValue dispatched; the provider call is still pending. The final value is not verified. Inspect the dialog before continuing; do not repeat the fill."
-                : "SetValue has not been sent yet: it is still waiting on the app's UI Automation provider. Check windows_operation_status before continuing; do not repeat the fill."
+            (
+                result.Dispatched
+                    ? "SetValue dispatched; the provider call is still pending. The final value is not verified. Inspect the dialog before continuing; do not repeat the fill."
+                    : "SetValue has not been sent yet: it is still waiting on the app's UI Automation provider. Check windows_operation_status before continuing; do not repeat the fill."
+            ) + result.WaitNote
         ) with
         {
             Outcome = ToolOutcome.FromPattern(result),
@@ -194,12 +197,15 @@ public class FillTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 
     public override string Description =>
-        "Clear and fill a text field with new value. Prefers Value pattern for reliability.";
+        "Clear and fill a text field with new value. Prefers Value pattern for reliability. "
+        + "Without a writable Value pattern it focuses the control and sends Ctrl+A, then Backspace or the new text; "
+        + "it refuses before any key when the control does not take keyboard focus. Reports Filled only when the control reads back the value.";
 
     public override object InputSchema =>
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
@@ -209,6 +215,9 @@ public class FillTool : ToolBase
                 },
                 @ref = new { type = "string", description = "Element ref from windows_snapshot (e.g., 'w1e5')" },
                 value = new { type = "string", description = "Value to fill" },
+                verifyFocus = FocusRules.Schema(
+                    "Keyboard fallback only: require verified keyboard focus before Ctrl+A, true for the exact control, \"self-or-descendant\" for it or any descendant. By default the exact control, or its Edit child when the ref is a ComboBox or Spinner, or a focused Edit inside it with no other value control in between; set false only for a control that never reports focus, and the keys then go wherever focus is."
+                ),
             },
             required = new[] { "ref", "value" },
         };
@@ -249,14 +258,11 @@ public class FillTool : ToolBase
             // Fall back to focus + select all + type
             OperationContext.Check();
             _elementRegistry.ValidateReference(refId, handle);
-            using var input = new GuardedInput(
-                _elementRegistry.InputForRef(refId),
-                element,
-                GetBoolArgument(arguments, "verifyFocus")
-            );
             return Task.FromResult(
-                FillByKeyboard(
-                    input,
+                FillByKeyboardFallback(
+                    _elementRegistry.InputForRef(refId),
+                    element,
+                    KeyboardVerifiesFocus(arguments),
                     value,
                     elementName,
                     () =>
@@ -305,16 +311,10 @@ public class FillTool : ToolBase
         }
 
         OperationContext.Check();
-        using var lease = GuardedInput.AcquireLease();
-        var result = ModalAwareInvoker.Execute(
+        var result = SetValue(
             _elementRegistry.GetProcessIdForRef(refId),
-            "SetValue",
-            () =>
-                MutationGuard.Execute(
-                    () => _elementRegistry.ValidateReference(refId, handle),
-                    () => InputDesktop.Current.CallPattern(() => valuePattern.SetValue(value))
-                ),
-            _invokeTracker
+            () => valuePattern.SetValue(value),
+            () => _elementRegistry.ValidateReference(refId, handle)
         );
         if (result.Outcome != PatternCallOutcome.Completed)
         {
@@ -348,17 +348,48 @@ public class FillTool : ToolBase
                 .Text;
         }
 
-        return TextResult(
-            $"Filled {elementName} with \"{value}\""
-                + FillMismatch(value, observed, element.Properties.ControlType.ValueOrDefault)
-        ) with
-        {
-            Outcome = ToolOutcome.FromPattern(result) with
-            {
-                Verification = new TextObservation(observed, "Value").Verify(value),
-            },
-        };
+        return FillReply(
+            elementName,
+            value,
+            new TextObservation(observed, "Value"),
+            ToolOutcome.FromPattern(result),
+            element.Properties.ControlType.ValueOrDefault,
+            independent: false
+        );
     }
+
+    /// <summary>Whether the keyboard fallback requires verified focus: true unless the caller turns it off.</summary>
+    internal static FocusRule KeyboardVerifiesFocus(JsonElement? arguments) =>
+        FocusRules.Parse(arguments, "ref", FocusRule.EditInComposite);
+
+    /// <summary>
+    /// Focus the control and replace its text by keyboard. With <paramref name="verifyFocus"/>, a control that did
+    /// not take keyboard focus is refused before Ctrl+A, which would otherwise select whatever has focus.
+    /// </summary>
+    internal static McpToolResult FillByKeyboardFallback(
+        InputTarget target,
+        AutomationElement element,
+        FocusRule verifyFocus,
+        string value,
+        string elementName,
+        Func<TextObservation> read,
+        Action validate
+    )
+    {
+        using var input = new GuardedInput(target, element, verifyFocus);
+        return FillByKeyboard(
+            input,
+            value,
+            elementName,
+            read,
+            validate,
+            verifyFocus == FocusRule.None ? null : (element, verifyFocus)
+        );
+    }
+
+    /// <summary>The SetValue call through the guarded pattern call: lease, integrity check, counted, modal-aware.</summary>
+    internal PatternCallResult SetValue(int processId, Action setValue, Action validate) =>
+        GuardedDesktop.CallPattern(processId, "SetValue", setValue, _invokeTracker, validate);
 
     /// <summary>Select all, replace by typing, then observe the text without retyping.</summary>
     internal static McpToolResult FillByKeyboard(
@@ -366,14 +397,23 @@ public class FillTool : ToolBase
         string value,
         string elementName,
         Func<TextObservation> read,
-        Action validate
+        Action validate,
+        (AutomationElement Element, FocusRule Rule)? focused = null
     )
     {
         ReplaceByKeyboard(
             value,
             () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A)),
-            () => input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.BACK)),
-            input.Type
+            () =>
+            {
+                RequireStillFocused(focused);
+                input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.BACK));
+            },
+            text =>
+            {
+                RequireStillFocused(focused);
+                input.Type(text);
+            }
         );
         var observation = ControlText.WaitForExpected(
             value,
@@ -385,34 +425,6 @@ public class FillTool : ToolBase
             },
             () => Thread.Sleep(50)
         );
-        return TextResult($"Filled {elementName} with \"{value}\"") with
-        {
-            Outcome = new ToolOutcome("completed", "returned") { Verification = observation.Verify(value) },
-        };
-    }
-
-    internal static string FillMismatch(string expected, string? observed, FlaUI.Core.Definitions.ControlType type) =>
-        observed == null || observed == expected
-            ? ""
-            : $"; warning: it now reads \"{observed}\", so the value may not have applied"
-                + (
-                    type == FlaUI.Core.Definitions.ControlType.ComboBox
-                        ? ". For a ComboBox, fill its Edit child instead."
-                        : "."
-                );
-
-    internal static void ReplaceByKeyboard(string value, Action selectAll, Action deleteSelection, Action<string> type)
-    {
-        selectAll();
-        // Typing an empty string sends no input and does not replace selection.
-        // Each supplied operation retains the normal focus/cancellation guard.
-        if (value.Length == 0)
-        {
-            deleteSelection();
-        }
-        else
-        {
-            type(value);
-        }
+        return FillReply(elementName, value, observation, new ToolOutcome("completed", "returned"));
     }
 }

@@ -44,9 +44,40 @@ public sealed class ClickPointTests
     }
 
     [Fact]
-    public void MissingClickablePointIsRefusedInsteadOfFallingBackToTheCentre()
+    public void VisibleElementWithoutAClickablePointUsesTheCentreOfItsBounds()
     {
-        Assert.Contains("no input sent", Refusal(Element()));
+        // A WPF slider reports no usable clickable point; its bounds are on screen and inside every viewport.
+        Assert.Equal(new Point(250, 210), ClickPoint.Choose(Element(scrollers: Viewport)));
+    }
+
+    [Fact]
+    public void CentreScrolledOutOfAnAncestorViewportIsRefused()
+    {
+        var clipped = new Rectangle(90, 150, 400, 40);
+        Assert.Contains("scrolled", Refusal(Element(scrollers: [Viewport, clipped])));
+    }
+
+    [Fact]
+    public void SentinelClickablePointIsTreatedAsMissing()
+    {
+        // UIA reports (int.MinValue, int.MinValue) with success when the provider has no clickable point.
+        Assert.Null(ClickGeometry.UsableClickable(true, new Point(int.MinValue, int.MinValue), Row));
+        Assert.Null(ClickGeometry.UsableClickable(true, new Point(int.MinValue, 210), Row));
+        Assert.Null(ClickGeometry.UsableClickable(true, new Point(150, int.MinValue), Row));
+    }
+
+    [Fact]
+    public void ClickablePointOutsideItsOwnBoundsIsTreatedAsMissing()
+    {
+        Assert.Null(ClickGeometry.UsableClickable(true, new Point(50, 50), Row));
+        Assert.Null(ClickGeometry.UsableClickable(true, new Point(400, 210), Row));
+    }
+
+    [Fact]
+    public void ReportedClickablePointInsideTheBoundsIsKept()
+    {
+        Assert.Equal(new Point(150, 210), ClickGeometry.UsableClickable(true, new Point(150, 210), Row));
+        Assert.Null(ClickGeometry.UsableClickable(false, new Point(150, 210), Row));
     }
 
     [Fact]

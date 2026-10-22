@@ -26,6 +26,8 @@ public class SnapshotTool : ToolBase
 
     public override string Name => "windows_snapshot";
 
+    protected override bool Observation => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
 
     public override string Description =>
@@ -37,6 +39,7 @@ public class SnapshotTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
@@ -92,7 +95,7 @@ public class SnapshotTool : ToolBase
             else
             {
                 // Resolve the foreground window through Win32; a focused-element walk can hang on unrelated apps.
-                var foreground = Win32Desktop.GetForegroundWindow();
+                var foreground = InputDesktop.Current.Foreground();
                 window = foreground == 0 ? null : _sessionManager.Automation.FromHandle(foreground)?.AsWindow();
                 if (window == null)
                 {
@@ -111,7 +114,8 @@ public class SnapshotTool : ToolBase
                 handle,
                 window,
                 GetArgument<int?>(arguments, "maxNodes") ?? 3000,
-                GetArgument<int?>(arguments, "maxCharacters") ?? 20000
+                GetArgument<int?>(arguments, "maxCharacters") ?? 20000,
+                _sessionManager.GetWindowHwnd(handle)
             );
             return Task.FromResult(TextResult(snapshot));
         }

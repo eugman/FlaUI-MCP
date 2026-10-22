@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Text.Json;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Input;
 using FlaUI.Mcp.Core;
 
@@ -26,6 +27,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 action = new { type = "string", @enum = new[] { "park", "move", "hover", "scroll", "drag", "click" } },
@@ -43,6 +45,12 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                     description = "drag: grab this edge of ref instead of its centre (e.g. right for a column header's divider).",
                 },
                 toRef = new { type = "string", description = "drag: release on this element instead of a `to` point." },
+                fromMustNotHit = new
+                {
+                    type = "array",
+                    items = new { type = "string" },
+                    description = "drag: refs the start point must not land on (a neighbouring pane's caption, say); the drag is refused before the button goes down when UI Automation reports one of them, or something inside it, there.",
+                },
                 toEdge = new
                 {
                     type = "string",
@@ -129,13 +137,13 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 "click" => PointerActions.Click(target, ResolvePoint(arguments, "to", reference, origin, ref scrolled)),
                 "drag" => PointerActions.Drag(
                     target,
-                    DragFromArguments(arguments, reference, origin, ref scrolled),
+                    AvoidingStart(arguments, DragFromArguments(arguments, reference, origin, ref scrolled)),
                     GetArgument<int?>(arguments, "steps") ?? PointerPlan.DefaultDragSteps
                 ),
                 _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
             };
         }
-        catch (InvalidOperationException error) when (scrolled != null)
+        catch (Exception error) when (scrolled != null && GuardedInput.IsRefusal(error))
         {
             throw GuardedInput.ChangedFirst(error, scrolled);
         }
@@ -145,7 +153,14 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
     /// Scroll a ref into view through the guards now, and return a reader for where it is. The reader runs
     /// under the input lease, so the point pressed is the one measured just before the input.
     /// </summary>
-    private Func<ClickGeometry> Geometry(string reference, ref string? scrolled)
+    private Func<ClickGeometry> Geometry(string reference, ref string? scrolled) =>
+        Located(reference, ref scrolled).Read;
+
+    /// <summary>
+    /// Scroll a ref into view through the guards now; the element and a reader for its geometry, which runs
+    /// under the input lease.
+    /// </summary>
+    private (AutomationElement Element, Func<ClickGeometry> Read) Located(string reference, ref string? scrolled)
     {
         var element = refs.ResolveRef(reference);
         scrolled =
@@ -155,7 +170,37 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 pending,
                 () => refs.ValidateReference(reference)
             ) ?? scrolled;
-        return () => ClickGeometry.Read(element);
+        return (element, () => ClickGeometry.Read(element));
+    }
+
+    /// <summary>A point on a ref chosen under the lease, then hit-tested: it must land on the ref itself.</summary>
+    private Func<Point> Pressable(string reference, Func<ClickGeometry, Point> choose, ref string? scrolled)
+    {
+        var (element, read) = Located(reference, ref scrolled);
+        return () =>
+        {
+            var geometry = read();
+            var point = choose(geometry);
+            ClickPoint.Verify(point, element);
+            return point;
+        };
+    }
+
+    /// <summary>The drag's points, refused under the lease when the start lands on a fromMustNotHit element.</summary>
+    private Func<(Point From, Point To)> AvoidingStart(JsonElement? arguments, Func<(Point From, Point To)> resolve)
+    {
+        var avoid = (GetArgument<string[]>(arguments, "fromMustNotHit") ?? []).Select(r => refs.ResolveRef(r)).ToList();
+        if (avoid.Count == 0)
+        {
+            return resolve;
+        }
+
+        return () =>
+        {
+            var points = resolve();
+            ClickHitTest.RequireNotWithin(points.From, avoid[0], avoid);
+            return points;
+        };
     }
 
     private Func<(Point From, Point To)> DragFromArguments(
@@ -170,7 +215,7 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
         var toRef = GetStringArgument(arguments, "toRef");
         if (fromEdge != null || resizeTo != null)
         {
-            var read = Geometry(
+            var (element, read) = Located(
                 reference ?? throw new ArgumentException("fromEdge and resizeTo need ref"),
                 ref scrolled
             );
@@ -180,6 +225,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
                 var geometry = read();
                 var bounds = geometry.Bounds;
                 var from = ClickPoint.Choose(geometry, PointerPlan.EdgePoint(bounds, fromEdge ?? "center"));
+                // The button goes down here, so the start must be on the ref, not a neighbouring header or pane.
+                ClickPoint.Verify(from, element);
                 return (from, to?.Invoke() ?? PointerPlan.ResizeTarget(bounds, fromEdge ?? "right", resizeTo!.Value));
             };
         }
@@ -208,7 +255,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             // A blocked provider: the Win32 bounds are the same rectangle the screen fallback captures.
         }
 
-        return Win32Desktop.GetWindowBounds(hwnd) ?? throw new InvalidOperationException("Window bounds unavailable");
+        return InputDesktop.Current.WindowBounds(hwnd)
+            ?? throw new InvalidOperationException("Window bounds unavailable");
     }
 
     private Func<Point> ResolvePoint(
@@ -233,9 +281,8 @@ public sealed class MouseTool(ElementRegistry refs, PendingInvokeTracker pending
             throw new ArgumentException($"{name} point or ref required");
         }
 
-        // Never the centre of the bounds: for an offscreen element that is (0,0), a maximized window's caption.
-        var read = Geometry(reference, ref scrolled);
-        return () => ClickPoint.Choose(read());
+        // Choose takes the centre only for an on-screen element with bounds; an offscreen one has (0,0), a caption.
+        return Pressable(reference, geometry => ClickPoint.Choose(geometry), ref scrolled);
     }
 
     private Func<Point> EdgeOf(string reference, string edge, ref string? scrolled)

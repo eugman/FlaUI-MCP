@@ -18,11 +18,16 @@ public class SnapshotBuilder
         _maxDepth = maxDepth;
     }
 
+    /// <param name="windowHwnd">
+    /// The handle's own native window, when the caller knows it; a scoped snapshot passes it so the handle keeps that
+    /// window's input identity rather than taking the scope root's.
+    /// </param>
     public string BuildSnapshot(
         string windowHandle,
         AutomationElement root,
         int maxNodes = 3000,
-        int maxCharacters = 120000
+        int maxCharacters = 120000,
+        nint windowHwnd = 0
     )
     {
         var budget = new SnapshotBudget(maxNodes, maxCharacters);
@@ -37,12 +42,15 @@ public class SnapshotBuilder
             if (processId != 0)
             {
                 _elementRegistry.SetWindowProcessId(windowHandle, processId);
-                _elementRegistry.SetWindowIdentity(
-                    windowHandle,
-                    processId,
+                var identity = IdentityWindow(
                     Read(() => root.Properties.NativeWindowHandle.ValueOrDefault),
-                    generation
+                    Read(() => root.Properties.ControlType.ValueOrDefault) == ControlType.Window,
+                    windowHwnd
                 );
+                if (identity != 0)
+                {
+                    _elementRegistry.SetWindowIdentity(windowHandle, processId, identity, generation);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -65,6 +73,21 @@ public class SnapshotBuilder
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The window whose input identity the handle takes: its own window when the caller knows it, else the root
+    /// only when the root is a window. A scoped child root (a pane with its own HWND) gives none, so it never
+    /// replaces the handle's identity with the child's.
+    /// </summary>
+    internal static nint IdentityWindow(nint rootHwnd, bool rootIsWindow, nint windowHwnd)
+    {
+        if (windowHwnd != 0)
+        {
+            return windowHwnd;
+        }
+
+        return rootIsWindow ? rootHwnd : 0;
     }
 
     private void BuildElementSnapshot(

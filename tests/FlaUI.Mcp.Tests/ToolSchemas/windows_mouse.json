@@ -3,6 +3,7 @@
   "description": "Move the pointer or click a captured window point. park: move it off the window so no tooltip or hover state lands in a screenshot. move/hover: to a point or ref. scroll: wheel ticks over a point or ref (positive scrolls up). click: left-click at a point or ref. drag: press at \u0060from\u0060 (or ref, or ref\u0027s fromEdge), move in steps, release at \u0060to\u0060, toRef/toEdge, or wherever resizeTo makes ref that size (a column header: ref \u002B fromEdge right \u002B resizeTo 250). Use it for splitters and other targets UI Automation does not expose. Points are pixels in a windows_screenshot of the same window (handle), so read them straight off a capture.",
   "inputSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "action": {
         "type": "string",
@@ -81,6 +82,13 @@
       "toRef": {
         "type": "string",
         "description": "drag: release on this element instead of a \u0060to\u0060 point."
+      },
+      "fromMustNotHit": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "drag: refs the start point must not land on (a neighbouring pane\u0027s caption, say); the drag is refused before the button goes down when UI Automation reports one of them, or something inside it, there."
       },
       "toEdge": {
         "type": "string",

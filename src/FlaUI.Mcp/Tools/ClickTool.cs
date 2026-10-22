@@ -36,6 +36,7 @@ public partial class ClickTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
@@ -115,7 +116,7 @@ public partial class ClickTool : ToolBase
                 var owner = _elementRegistry.GetProcessIdForRef(refId);
                 if (owner != 0)
                 {
-                    windows = Win32Desktop.GetTopLevelWindows(owner);
+                    windows = InputDesktop.Current.TopLevelWindows(owner);
                 }
             }
             catch { }
@@ -196,7 +197,7 @@ public partial class ClickTool : ToolBase
         {
             return MouseClick(request, element, elementName, physical, selectionFallback);
         }
-        catch (InvalidOperationException error) when (scrolled != null)
+        catch (Exception error) when (scrolled != null && GuardedInput.IsRefusal(error))
         {
             throw GuardedInput.ChangedFirst(error, scrolled);
         }
@@ -228,7 +229,7 @@ public partial class ClickTool : ToolBase
 
         var processId = request.ProcessId;
         var opensDialog = physical && EndsWithEllipsis(elementName) && processId != 0;
-        var before = opensDialog ? Win32Desktop.GetTopLevelWindows(processId) : [];
+        var before = opensDialog ? InputDesktop.Current.TopLevelWindows(processId) : [];
         input.Click(element, mouseButton);
         if (!opensDialog)
         {
@@ -243,7 +244,7 @@ public partial class ClickTool : ToolBase
         // A physical click returns before its dialog exists; report the window so agents don't list too early.
         for (var waited = 0; waited < 2000; waited += 100)
         {
-            if (NewWindowTitle(before, Win32Desktop.GetTopLevelWindows(processId)) is { } title)
+            if (NewWindowTitle(before, InputDesktop.Current.TopLevelWindows(processId)) is { } title)
             {
                 return TextResult(
                     $"Clicked {elementName}; window \"{title}\" opened. Get its handle from windows_list_windows."
@@ -348,7 +349,7 @@ public partial class ClickTool : ToolBase
             _ => false,
         };
 
-    private McpToolResult RunPattern(
+    internal McpToolResult RunPattern(
         AutomationElement element,
         string action,
         int processId,
@@ -366,39 +367,90 @@ public partial class ClickTool : ToolBase
         };
 
         var toggleBefore = action == "toggle" ? ReadToggle(element) : null;
-        // Pattern mutations share the input lease so they cannot interleave with physical input.
-        using var lease = GuardedInput.AcquireLease();
-        var result = ModalAwareInvoker.Execute(
+        // The guarded call takes the input lease, so it cannot interleave with physical input, and runs the
+        // integrity check: Windows drops a pattern call into a higher-integrity app as it drops input.
+        var result = GuardedDesktop.CallPattern(
             processId,
             $"{verb} on '{elementName}'",
-            () => MutationGuard.Execute(validate, () => InputDesktop.Current.CallPattern(call)),
-            _invokeTracker
+            call,
+            _invokeTracker,
+            validate
         );
-        // Providers may update toggle state asynchronously, so wait briefly for it to move.
-        ToggleState? toggleAfter = null;
-        if (action == "toggle" && result.Outcome == PatternCallOutcome.Completed)
+        if (result.Outcome != PatternCallOutcome.Completed)
         {
-            Settled(
-                () =>
-                {
-                    toggleAfter = ReadToggle(element);
-                    return toggleAfter != toggleBefore;
-                },
-                500
+            return PatternResult(
+                result,
+                action == "toggle" ? $"Sent toggle request to {elementName}" : Done(action, elementName)
             );
         }
 
-        var message = action switch
+        // Read the state back: providers may update it asynchronously, so wait briefly for it to move.
+        return action switch
         {
-            "toggle" => result.Outcome == PatternCallOutcome.Completed
-                ? ToggleOutcome(elementName, toggleBefore, toggleAfter)
-                : $"Sent toggle request to {elementName}",
+            "toggle" => CheckedPatternResult(
+                result,
+                ToggleVerdict(elementName, toggleBefore, SettledToggle(element, toggleBefore)),
+                "Toggle",
+                $"not {toggleBefore}"
+            ),
+            "expand" => CheckedPatternResult(
+                result,
+                ExpandVerdict(elementName, action, SettledExpand(element, ExpandCollapseState.Expanded)),
+                "ExpandCollapse",
+                nameof(ExpandCollapseState.Expanded)
+            ),
+            "collapse" => CheckedPatternResult(
+                result,
+                ExpandVerdict(elementName, action, SettledExpand(element, ExpandCollapseState.Collapsed)),
+                "ExpandCollapse",
+                nameof(ExpandCollapseState.Collapsed)
+            ),
+            _ => CheckedPatternResult(result, Done(action, elementName), null),
+        };
+    }
+
+    private static string Done(string action, string elementName) =>
+        action switch
+        {
             "invoke" => $"Invoked {elementName}",
             "select" => $"Selected {elementName}",
             "expand" => $"Expanded {elementName}",
             _ => $"Collapsed {elementName}",
         };
-        return PatternResult(result, message);
+
+    private static ToggleState? SettledToggle(AutomationElement element, ToggleState? before)
+    {
+        ToggleState? after = null;
+        Settled(
+            () =>
+            {
+                after = ReadToggle(element);
+                return after != before;
+            },
+            500
+        );
+        return after;
+    }
+
+    private static ExpandCollapseState? ReadExpand(AutomationElement element) =>
+        element.Patterns.ExpandCollapse.TryGetPattern(out var pattern)
+        && pattern.ExpandCollapseState.TryGetValue(out var state)
+            ? state
+            : null;
+
+    private static ExpandCollapseState? SettledExpand(AutomationElement element, ExpandCollapseState expected)
+    {
+        ExpandCollapseState? after = null;
+        Settled(
+            () =>
+            {
+                after = ReadExpand(element);
+                return after == expected
+                    || expected == ExpandCollapseState.Expanded && after == ExpandCollapseState.PartiallyExpanded;
+            },
+            500
+        );
+        return after;
     }
 
     /// <summary>
@@ -412,29 +464,5 @@ public partial class ClickTool : ToolBase
     {
         var trimmed = name?.TrimEnd() ?? "";
         return trimmed.EndsWith("...") || trimmed.EndsWith('…');
-    }
-
-    /// <summary>
-    /// Map a modal-aware pattern call result to a tool result.
-    /// </summary>
-    internal static McpToolResult PatternResult(PatternCallResult result, string completedMessage)
-    {
-        var response = result.Outcome switch
-        {
-            PatternCallOutcome.Completed => TextResult(completedMessage),
-            PatternCallOutcome.ModalDetected => TextResult(
-                $"{completedMessage}; a modal dialog \"{result.ModalTitle}\" opened and blocks UI Automation on this app until it closes. "
-                    + "Find it with windows_list_windows, then use windows_screenshot or windows_send_keys (no ref) with its handle."
-            ),
-            _ when !result.Dispatched => TextResult(
-                "Not sent yet: the request is still waiting on the app, whose UI Automation provider has not answered. "
-                    + "Check windows_operation_status or take a screenshot by handle before continuing; do not repeat the click."
-            ),
-            _ => TextResult(
-                $"{completedMessage}; the app's handler is still running. Check windows_operation_status or take a screenshot "
-                    + "by handle before continuing; do not repeat the click."
-            ),
-        };
-        return response with { Outcome = ToolOutcome.FromPattern(result) };
     }
 }

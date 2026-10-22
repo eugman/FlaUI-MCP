@@ -18,7 +18,7 @@ public static partial class Win32Desktop
     }
 
     /// <summary>ShowWindow for the state (twice for normal from minimized-maximized). ShowWindow returns the previous visibility, not success.</summary>
-    public static void SetWindowState(nint hwnd, string requested)
+    internal static void SetWindowState(nint hwnd, string requested)
     {
         var command = requested switch
         {

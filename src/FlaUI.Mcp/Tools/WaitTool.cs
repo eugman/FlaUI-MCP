@@ -9,6 +9,8 @@ public sealed class WaitTool(ElementQuery query) : ToolBase
 {
     public override string Name => "windows_wait";
 
+    protected override bool Observation => true;
+
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
     public override string Description =>
         "Wait for scoped UIA presence, settled absence, or one control's value/selected/toggle state. Does not send input. Incomplete searches cannot prove absence; rootOnly excludes descendants.";
@@ -16,6 +18,7 @@ public sealed class WaitTool(ElementQuery query) : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new { type = "string" },

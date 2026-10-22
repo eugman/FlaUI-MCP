@@ -63,7 +63,7 @@ public static partial class Win32Desktop
         }
     }
 
-    public static TextClipboardLease PreserveAndSetClipboardText(string text)
+    internal static TextClipboardLease PreserveAndSetClipboardText(string text)
     {
         var owner = CreateWindowEx(0, "STATIC", null, 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0);
         if (owner == 0)

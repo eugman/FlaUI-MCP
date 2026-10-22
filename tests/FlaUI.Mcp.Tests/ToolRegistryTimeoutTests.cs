@@ -46,16 +46,21 @@ public class ToolRegistryTimeoutTests
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(50));
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromSeconds(30), time: clock);
         registry.RegisterTool(new BlockingTool(entered, release, finished));
 
-        // The 50 ms tool timeout is what is under test. The generous waits around it only guard
-        // against a starved thread pool on a busy machine or CI runner.
+        // The clock moves only once the tool body runs, so the timeout cannot strand the call before it starts
+        // (which a 50 ms wall-clock timeout did on a starved thread pool). The waits only bound a hung test.
         var allowance = TimeSpan.FromSeconds(10);
         try
         {
             var execution = registry.ExecuteToolAsync("blocking", arguments: null);
             Assert.True(entered.Wait(allowance), "The synchronous tool body did not start.");
+            Assert.False(execution.IsCompleted);
+            clock.Advance(TimeSpan.FromSeconds(29));
+            Assert.False(execution.IsCompleted);
+            clock.Advance(TimeSpan.FromSeconds(1));
             var result = await execution.WaitAsync(allowance);
 
             Assert.True(result.IsError);

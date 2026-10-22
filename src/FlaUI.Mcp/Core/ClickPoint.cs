@@ -8,7 +8,9 @@ namespace FlaUI.Mcp.Core;
 /// <param name="IsOffscreen">UI Automation's IsOffscreen.</param>
 /// <param name="Clickable">The provider's clickable point, or null when it has none.</param>
 /// <param name="Bounds">The element's bounding rectangle in screen pixels.</param>
-/// <param name="ScrollableAncestors">Bounds of every ancestor that scrolls, up to its window.</param>
+/// <param name="ScrollableAncestors">
+/// The viewport of every ancestor that scrolls, up to its window: its bounds without its own scrollbars and headers.
+/// </param>
 public sealed record ClickGeometry(
     bool IsOffscreen,
     Point? Clickable,
@@ -43,21 +45,9 @@ public sealed record ClickGeometry(
     )
     {
         OperationContext.Check();
-        using var lease = GuardedInput.AcquireLease();
         var before = bounds();
-        var result = ModalAwareInvoker.Execute(
-            processId,
-            "ScrollIntoView",
-            () =>
-            {
-                OperationContext.Check();
-                validate();
-                OperationContext.Check();
-                MutationGuard.CheckPermission();
-                InputDesktop.Current.CallPattern(scroll);
-            },
-            pending
-        );
+        // The guarded pattern call (lease, validation, integrity, permission), counted below only when it moved.
+        var result = WindowMutation.Uia(processId, "ScrollIntoView", scroll, pending, validate, counted: false);
         if (result.Outcome != PatternCallOutcome.Completed)
         {
             // The tracker still holds the call, so the registry marks the outcome's provider pending.
@@ -76,17 +66,101 @@ public sealed record ClickGeometry(
         return "the view was scrolled";
     }
 
+    /// <summary>
+    /// The provider's clickable point when it is a real one. UI Automation can report success with the
+    /// (int.MinValue, int.MinValue) "no point" sentinel (a WPF slider does), and a point outside the element's
+    /// own bounds belongs to something else; both count as no clickable point.
+    /// </summary>
+    internal static Point? UsableClickable(bool reported, Point point, Rectangle bounds) =>
+        reported && !IsSentinel(point) && bounds.Contains(point) ? point : null;
+
+    private static bool IsSentinel(Point point) => point.X == int.MinValue || point.Y == int.MinValue;
+
+    // A scroller's bounds include its own scrollbars and column headers, which take a press meant for content.
+    // An element that is the bar or lies in its subtree (a column header, a scrollbar thumb) keeps it.
+    private static Rectangle Viewport(AutomationElement scroller, AutomationElement element, Rectangle bounds) =>
+        Viewport(
+            scroller.BoundingRectangle,
+            scroller
+                .FindAllChildren(cf => cf.ByControlType(ControlType.ScrollBar).Or(cf.ByControlType(ControlType.Header)))
+                .Select(chrome => (chrome.BoundingRectangle, InSubtree(element, chrome, scroller))),
+            bounds
+        );
+
+    /// <summary>Whether <paramref name="element"/> is <paramref name="bar"/> or under it, below <paramref name="scroller"/>.</summary>
+    private static bool InSubtree(AutomationElement element, AutomationElement bar, AutomationElement scroller)
+    {
+        var desktop = InputDesktop.Current;
+        AutomationElement? current = element;
+        for (var depth = 0; current != null && depth < MaxAncestors; depth++)
+        {
+            if (desktop.SameElement(current, bar))
+            {
+                return true;
+            }
+
+            if (desktop.SameElement(current, scroller))
+            {
+                return false;
+            }
+
+            current = desktop.ParentOf(current);
+        }
+
+        return false;
+    }
+
+    internal static Rectangle Viewport(Rectangle bounds, IEnumerable<Rectangle> chrome, Rectangle? element = null) =>
+        Viewport(bounds, chrome.Select(bar => (bar, false)), element);
+
+    /// <summary>
+    /// <paramref name="bounds"/> without the scrollbars and headers in <paramref name="chrome"/>: each is cut off the
+    /// edge it lies along (a wide one off the top or bottom, a tall one off the left or right). Empty when nothing
+    /// is left. The cut is for content: a bar is kept when <paramref name="element"/> is that bar or in its subtree
+    /// (HoldsElement, a column header or a resize handle) or lies fully inside its bounds. A row merely half under a
+    /// scrollbar still loses the bar.
+    /// </summary>
+    internal static Rectangle Viewport(
+        Rectangle bounds,
+        IEnumerable<(Rectangle Bounds, bool HoldsElement)> chrome,
+        Rectangle? element = null
+    )
+    {
+        var (left, top, right, bottom) = (bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+        var cut = chrome
+            .Where(bar => !bar.HoldsElement && !(element is { } e && bar.Bounds.Contains(e)))
+            .Select(bar => bar.Bounds);
+        foreach (var bar in cut.Where(bar => bar.IntersectsWith(bounds)))
+        {
+            if (bar.Width >= bar.Height)
+            {
+                (top, bottom) = CutAlong(top, bottom, bar.Top, bar.Bottom);
+            }
+            else
+            {
+                (left, right) = CutAlong(left, right, bar.Left, bar.Right);
+            }
+        }
+
+        return right > left && bottom > top ? Rectangle.FromLTRB(left, top, right, bottom) : Rectangle.Empty;
+    }
+
+    /// <summary>Cut a bar off the near end of a span, or off its far end when the bar's middle is past the span's.</summary>
+    private static (int Start, int End) CutAlong(int start, int end, int barStart, int barEnd) =>
+        barStart + barEnd > start + end ? (start, Math.Min(end, barStart)) : (Math.Max(start, barEnd), end);
+
     /// <summary>Read the element's geometry. It does not scroll; see <see cref="ScrollIntoView"/>.</summary>
     public static ClickGeometry Read(AutomationElement element)
     {
         OperationContext.Check();
+        var bounds = element.BoundingRectangle;
         var scrollers = new List<Rectangle>();
         var ancestor = element.Parent;
         for (var depth = 0; ancestor != null && depth < MaxAncestors; depth++)
         {
             if (ancestor.Patterns.Scroll.IsSupported)
             {
-                scrollers.Add(ancestor.BoundingRectangle);
+                scrollers.Add(Viewport(ancestor, element, bounds));
             }
 
             if (ancestor.Properties.ControlType.ValueOrDefault == ControlType.Window)
@@ -97,8 +171,8 @@ public sealed record ClickGeometry(
             ancestor = ancestor.Parent;
         }
 
-        Point? clickable = element.TryGetClickablePoint(out var point) ? point : null;
-        return new(element.Properties.IsOffscreen.ValueOrDefault, clickable, element.BoundingRectangle, scrollers);
+        var clickable = UsableClickable(element.TryGetClickablePoint(out var point), point, bounds);
+        return new(element.Properties.IsOffscreen.ValueOrDefault, clickable, bounds, scrollers);
     }
 }
 
@@ -107,7 +181,9 @@ public static class ClickPoint
 {
     /// <summary>
     /// The element's clickable point, or <paramref name="requested"/> (such as an edge), checked to lie inside
-    /// the element and every scrolling ancestor. Never guesses the centre of an element it cannot see.
+    /// the element and every scrolling ancestor. Without a clickable point it uses the centre of the bounds,
+    /// but only for an element that is not offscreen and has bounds: the centre of an empty rectangle is (0,0),
+    /// a maximized window's caption. The viewport check below still applies to the centre.
     /// </summary>
     public static Point Choose(ClickGeometry geometry, Point? requested = null)
     {
@@ -121,19 +197,39 @@ public static class ClickPoint
             throw Refuse("The element has no on-screen bounds");
         }
 
-        var point = requested ?? geometry.Clickable ?? throw Refuse("The element reports no clickable point");
+        var bounds = geometry.Bounds;
+        var point =
+            requested ?? geometry.Clickable ?? new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
         if (!geometry.Bounds.Contains(point))
         {
             throw Refuse($"The point ({point.X},{point.Y}) is outside the element's bounds");
         }
 
-        if (geometry.ScrollableAncestors.Any(viewport => !viewport.Contains(point)))
+        if (geometry.ScrollableAncestors.All(viewport => viewport.Contains(point)))
         {
-            throw Refuse($"The point ({point.X},{point.Y}) is scrolled out of view of a containing list or pane");
+            return point;
         }
 
-        return point;
+        // The element's own point is hidden (under a scrollbar, say): press the middle of what is visible of it.
+        // A requested point, such as an edge, means exactly that point, so it is never moved.
+        if (requested == null && VisiblePart(geometry) is { Width: >= MinVisible, Height: >= MinVisible } visible)
+        {
+            return new Point(visible.X + visible.Width / 2, visible.Y + visible.Height / 2);
+        }
+
+        throw Refuse($"The point ({point.X},{point.Y}) is scrolled out of view of a containing list or pane");
     }
+
+    private const int MinVisible = 4;
+
+    private static Rectangle VisiblePart(ClickGeometry geometry) =>
+        geometry.ScrollableAncestors.Aggregate(geometry.Bounds, Rectangle.Intersect);
+
+    /// <summary>
+    /// Hit-test <paramref name="point"/> just before input; see <see cref="ClickHitTest.Verify"/>. Returns how the
+    /// point was proven to be on the element: "target", "descendant" or "ancestor".
+    /// </summary>
+    public static string Verify(Point point, AutomationElement target) => ClickHitTest.Verify(point, target);
 
     private static InputRefusedException Refuse(string reason) =>
         InputRefusedException.Record(

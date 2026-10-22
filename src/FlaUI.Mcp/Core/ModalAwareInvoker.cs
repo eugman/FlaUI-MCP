@@ -32,7 +32,17 @@ public sealed record PatternCallResult(
     string? ModalTitle = null,
     string? PendingPatternId = null,
     bool Dispatched = true
-);
+)
+{
+    /// <summary>The last failed read of the app's windows while waiting, when the call is still pending.</summary>
+    public string? WaitError { get; init; }
+
+    /// <summary>The sentence a pending reply adds for <see cref="WaitError"/>, or empty.</summary>
+    internal string WaitNote =>
+        WaitError == null
+            ? ""
+            : $" While waiting, reading the app's windows failed ({WaitError}), so a modal dialog may have gone undetected.";
+}
 
 /// <summary>
 /// Executes UI Automation pattern calls (Invoke, Toggle, Select, ...) so that a
@@ -65,7 +75,7 @@ public static class ModalAwareInvoker
     /// <param name="gracePeriod">Max time to wait for completion; defaults to <see cref="DefaultGracePeriod"/>.</param>
     /// <param name="windowEnumerator">Override for window enumeration (for testing).</param>
     /// <exception cref="Exception">Rethrows any exception from <paramref name="patternCall"/> when it completes within the grace period.</exception>
-    public static PatternCallResult Execute(
+    internal static PatternCallResult Execute(
         int processId,
         string description,
         Action patternCall,
@@ -76,13 +86,10 @@ public static class ModalAwareInvoker
     {
         OperationContext.Check();
         var grace = gracePeriod ?? DefaultGracePeriod;
-        windowEnumerator ??= pid => Win32Desktop.GetTopLevelWindows(pid);
+        var desktop = InputDesktop.Current;
+        windowEnumerator ??= desktop.TopLevelWindows;
 
-        var windowsBefore =
-            processId != 0
-                ? windowEnumerator(processId).ToDictionary(w => w.Hwnd)
-                : new Dictionary<nint, Win32WindowInfo>();
-
+        var baseline = Baseline(windowEnumerator, processId, description);
         var operation = OperationContext.Current.Value;
         var sentBefore = operation?.InputsSent ?? 0;
         var info = tracker.Begin(processId, description);
@@ -91,42 +98,144 @@ public static class ModalAwareInvoker
             OperationContext.Check();
             patternCall();
         });
+        var ending = new LateEnding(operation, description);
 
-        // Ensure the tracker is cleared whenever the call eventually returns,
-        // even if we stop waiting for it below. Also observe any exception so
-        // it does not surface as an unobserved task exception.
+        // Ensure the tracker is cleared whenever the call eventually returns, even if we stop waiting for it
+        // below, and keep a late failure on the operation instead of dropping it.
         _ = task.ContinueWith(
             t =>
             {
-                _ = t.Exception;
+                ending.Finished(t);
                 tracker.Complete(info);
             },
             TaskScheduler.Default
         );
 
-        var result = AwaitResult(task, info, processId, windowsBefore, windowEnumerator, DateTime.UtcNow + grace);
+        var waited = AwaitResult(task, processId, baseline, windowEnumerator, DateTime.UtcNow + grace);
+        if (waited is WaitOutcome<PatternCallResult>.Done done)
+        {
+            return done.Value;
+        }
+
+        ending.ReportedPending(task);
+        if (waited is WaitOutcome<PatternCallResult>.Changed modal)
+        {
+            info.ModalTitle = modal.What;
+            return new PatternCallResult(PatternCallOutcome.ModalDetected, modal.What, info.OperationId);
+        }
+
         // A pattern call must count itself through MutationGuard.Execute (or RecordDispatch) once it is sent;
         // that happens only after validation, which a hung provider can hold up. A call still pending that has
         // not counted itself is reported as not yet sent (timed_out_pending). A modal dialog proves the call
         // reached the app, and without an operation to count against the answer stays that it may have been sent.
-        return result.Outcome != PatternCallOutcome.StillPending || operation == null
-            ? result
-            : result with
-            {
-                Dispatched = operation.InputsSent > sentBefore,
-            };
+        var pending = new PatternCallResult(PatternCallOutcome.StillPending, PendingPatternId: info.OperationId)
+        {
+            WaitError = (waited as WaitOutcome<PatternCallResult>.TimedOut)?.LastError?.Message,
+        };
+        return operation == null ? pending : pending with { Dispatched = operation.InputsSent > sentBefore };
     }
 
-    /// <summary>Wait for the call until it returns, a modal appears, or the deadline passes.</summary>
-    private static PatternCallResult AwaitResult(
-        Task task,
-        PendingInvokeInfo info,
+    /// <summary>
+    /// The windows before the call. A failed read refuses before anything is sent: an empty baseline would turn modal
+    /// detection off for the whole call without saying so.
+    /// </summary>
+    private static WindowBaseline Baseline(
+        Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
         int processId,
-        IReadOnlyDictionary<nint, Win32WindowInfo> windowsBefore,
+        string description
+    )
+    {
+        if (processId == 0)
+        {
+            return WindowBaseline.Empty;
+        }
+
+        var (windows, error) = ReadWindows(windowEnumerator, processId);
+        if (error != null)
+        {
+            throw InputRefusedException.Record(
+                new InputRefusal(
+                    "window-baseline-unreadable",
+                    $"The app's windows could not be read before {description} ({error.Message}), so a modal dialog it opens could not be detected; no input sent."
+                )
+                {
+                    ActionDispatched = false,
+                }
+            );
+        }
+
+        return new WindowBaseline(windows);
+    }
+
+    /// <summary>The process's windows, or the read error: a failed read never ends the wait.</summary>
+    private static (IReadOnlyList<Win32WindowInfo> Windows, Exception? Error) ReadWindows(
+        Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
+        int processId
+    )
+    {
+        try
+        {
+            return (windowEnumerator(processId), null);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return ([], error);
+        }
+    }
+
+    /// <summary>
+    /// Records a pattern call's failure on its operation when the failure comes after the tool already reported
+    /// the call as pending, whichever of the two happens first.
+    /// </summary>
+    private sealed class LateEnding(OperationContext? operation, string description)
+    {
+        private readonly object gate = new();
+        private bool reportedPending;
+
+        public void ReportedPending(Task task)
+        {
+            lock (gate)
+            {
+                reportedPending = true;
+                Record(task);
+            }
+        }
+
+        public void Finished(Task task)
+        {
+            _ = task.Exception;
+            lock (gate)
+            {
+                if (reportedPending)
+                {
+                    Record(task);
+                }
+            }
+        }
+
+        private void Record(Task task)
+        {
+            if (operation != null && task.IsFaulted && task.Exception is { } error)
+            {
+                var reason = (error.InnerException ?? error).Message;
+                operation.LateError = $"{description} failed after it was reported pending: {reason}";
+            }
+        }
+    }
+
+    /// <summary>
+    /// Wait for the call until it returns (Done), a modal appears (Changed, with its title), or the deadline
+    /// passes (TimedOut, with the last window-read error). A call that failed within the wait is rethrown.
+    /// </summary>
+    private static WaitOutcome<PatternCallResult> AwaitResult(
+        Task task,
+        int processId,
+        WindowBaseline baseline,
         Func<int, IReadOnlyList<Win32WindowInfo>> windowEnumerator,
         DateTime deadline
     )
     {
+        Exception? lastError = null;
         while (true)
         {
             // WaitAny (unlike Task.Wait) does not throw for faulted tasks,
@@ -145,60 +254,23 @@ public static class ModalAwareInvoker
                     ExceptionDispatchInfo.Capture(inner).Throw();
                 }
 
-                return new PatternCallResult(PatternCallOutcome.Completed);
+                return new WaitOutcome<PatternCallResult>.Done(new PatternCallResult(PatternCallOutcome.Completed));
             }
 
             if (processId != 0)
             {
-                var modalTitle = DetectModal(windowsBefore, windowEnumerator(processId));
-                if (modalTitle != null)
+                var (windows, error) = ReadWindows(windowEnumerator, processId);
+                lastError = error ?? lastError;
+                if (error == null && baseline.NewModal(windows) is { } modalTitle)
                 {
-                    info.ModalTitle = modalTitle;
-                    return new PatternCallResult(PatternCallOutcome.ModalDetected, modalTitle, info.OperationId);
+                    return new WaitOutcome<PatternCallResult>.Changed(modalTitle);
                 }
             }
 
             if (DateTime.UtcNow >= deadline)
             {
-                return new PatternCallResult(PatternCallOutcome.StillPending, PendingPatternId: info.OperationId);
+                return new WaitOutcome<PatternCallResult>.TimedOut(null, lastError);
             }
         }
-    }
-
-    /// <summary>
-    /// Detect the modal signature: a new top-level window appeared, or a
-    /// previously enabled window became disabled (modal dialogs disable their owner).
-    /// Returns the best available title for the modal, or null if no modal is detected.
-    /// </summary>
-    private static string? DetectModal(
-        IReadOnlyDictionary<nint, Win32WindowInfo> before,
-        IReadOnlyList<Win32WindowInfo> current
-    )
-    {
-        Win32WindowInfo? newWindow = null;
-        var ownerDisabled = false;
-
-        foreach (var window in current)
-        {
-            if (!before.TryGetValue(window.Hwnd, out var previous))
-            {
-                // Prefer a titled new window over an untitled one
-                if (newWindow == null || (newWindow.Title.Length == 0 && window.Title.Length > 0))
-                {
-                    newWindow = window;
-                }
-            }
-            else if (previous.IsEnabled && !window.IsEnabled)
-            {
-                ownerDisabled = true;
-            }
-        }
-
-        if (newWindow != null)
-        {
-            return newWindow.Title.Length > 0 ? newWindow.Title : "(untitled window)";
-        }
-
-        return ownerDisabled ? "(unknown title)" : null;
     }
 }

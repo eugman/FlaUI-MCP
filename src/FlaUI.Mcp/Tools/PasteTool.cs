@@ -27,6 +27,7 @@ public sealed class PasteTool(
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 handle = new
@@ -112,7 +113,7 @@ public sealed class PasteTool(
     }
 
     /// <summary>Put the text on the clipboard, send Ctrl+V through guarded input, and report what arrived.</summary>
-    private McpToolResult Paste(
+    internal McpToolResult Paste(
         GuardedInput input,
         FlaUI.Core.AutomationElements.AutomationElement? element,
         string text,
@@ -121,7 +122,11 @@ public sealed class PasteTool(
     {
         // Clipboard text uses CRLF; edit controls don't break lines on a bare LF.
         var clipboardText = text.ReplaceLineEndings("\r\n");
-        if (!InputDesktop.Current.SetClipboardText(clipboardText))
+        // Replacing the user's clipboard is a change of its own, made before Ctrl+V can be refused, so it is
+        // checked again (permission, foreground) right before the write and counted once written.
+        var written = false;
+        input.Check(() => written = input.SetClipboardText(clipboardText));
+        if (!written)
         {
             const string Busy = "The clipboard is in use by another process, so nothing was pasted.";
             return ErrorResult(
@@ -130,8 +135,7 @@ public sealed class PasteTool(
                     : Busy
             );
         }
-        // Replacing the user's clipboard is a change of its own, made before Ctrl+V can be refused.
-        MutationGuard.RecordDispatch();
+
         try
         {
             return SendPaste(input, element, clipboardText, target);
@@ -155,27 +159,71 @@ public sealed class PasteTool(
         var before = ReadValue(element);
         // Focus as it was when Ctrl+V was dispatched. Reading it afterwards names whatever the
         // paste moved focus to — an autocomplete popup, say — not where the text went.
-        var dispatchFocus = Win32Desktop.GetFocusedControl();
+        var dispatchFocus = InputDesktop.Current.FocusedControl();
         input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
 
         // Ctrl+V is already dispatched. Nothing below may report a failure to paste: a
         // read-back problem is missing evidence, not an unsent keystroke.
         string note;
+        PasteVerdict verdict;
         try
         {
+            verdict = PasteEvidence(element, clipboardText, before);
             note =
                 SendKeysTool.DescribeFocus(dispatchFocus, policy, "focus at dispatch")
                 + ". The clipboard now holds that text."
-                + PasteEvidence(element, clipboardText, before);
+                + verdict.Sentence;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            note =
-                $". The clipboard now holds that text. Not verified: reading back after the "
-                + $"paste failed ({ex.Message}).";
+            verdict = new("unavailable", $" Not verified: reading back after the paste failed ({ex.Message}).");
+            note = ". The clipboard now holds that text." + verdict.Sentence;
         }
 
-        return TextResult($"Sent Ctrl+V for {clipboardText.Length} characters to {target}{note}");
+        return PasteReply(
+            $"Sent Ctrl+V for {clipboardText.Length} characters to {target}{note}",
+            verdict,
+            verdict.Observed,
+            clipboardText
+        );
+    }
+
+    /// <summary>
+    /// The reply with its verdict. A read-back that shows the paste did not apply (unchanged without the text,
+    /// or changed without it) is a failure; Ctrl+V went out, so the dispatch stays completed. An unchanged value
+    /// that already holds the text (identical text re-pasted) is not.
+    /// </summary>
+    internal static McpToolResult PasteReply(
+        string text,
+        PasteVerdict verdict,
+        string? observed = null,
+        string? expected = null
+    ) =>
+        (verdict.Verification is "not-applied" or "mismatch" ? ErrorResult(text) : TextResult(text)) with
+        {
+            // The Value read back after Ctrl+V is independent of the keystroke that pasted. An identical re-paste
+            // (unchanged) is a no-op for the proof, so its status is ok.
+            Outcome = new ToolOutcome("completed", "not-tracked")
+            {
+                Verification = verdict.Verification,
+                Proof = new Proof(
+                    verdict.Verification == "unchanged" ? Proof.NoOp : verdict.Verification,
+                    observed,
+                    expected,
+                    "Value",
+                    Independent: true
+                ),
+            },
+        };
+
+    /// <summary>
+    /// What a paste's read-back establishes, as the outcome's verification (verified, unchanged, mismatch,
+    /// unavailable or not-established) and the sentence the reply gives.
+    /// </summary>
+    internal sealed record PasteVerdict(string Verification, string Sentence)
+    {
+        /// <summary>The value read back, when one was.</summary>
+        public string? Observed { get; init; }
     }
 
     /// <summary>
@@ -185,17 +233,17 @@ public sealed class PasteTool(
     /// </summary>
     /// <param name="element">The pasted-into element, or null for a ref-less paste.</param>
     /// <param name="expected">The text placed on the clipboard.</param>
-    /// <returns>A sentence confirming or questioning the result, or a note that it is unverifiable.</returns>
-    internal static string PasteEvidence(
+    /// <returns>The verdict, with a sentence confirming or questioning the result.</returns>
+    internal static PasteVerdict PasteEvidence(
         FlaUI.Core.AutomationElements.AutomationElement? element,
         string expected,
         string? before,
-        int settleMilliseconds = 500
+        int settleMilliseconds = SettleMilliseconds
     )
     {
         if (element == null)
         {
-            return " Not verified: no ref was given, so there is nothing to read back.";
+            return new("not-established", " Not verified: no ref was given, so there is nothing to read back.");
         }
 
         bool supported;
@@ -205,31 +253,53 @@ public sealed class PasteTool(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return " Not verified: reading the control back failed.";
+            return new("unavailable", " Not verified: reading the control back failed.");
         }
 
         if (!supported)
         {
             // Scintilla and similar editors expose no text at all; windows_get_clipboard plus a
             // select-and-copy is the only way to see what they now contain.
-            return " Not verified: this control exposes no value to read back.";
+            return new("unavailable", " Not verified: this control exposes no value to read back.");
         }
         // Ctrl+V is posted, not processed, so an immediate read almost always still sees the old
         // value. Poll for the change rather than reporting the race as a failed paste.
-        var deadline = Environment.TickCount64 + settleMilliseconds;
-        string? observed;
-        while (true)
-        {
-            observed = ReadValue(element);
-            if (observed != before || Environment.TickCount64 >= deadline)
-            {
-                break;
-            }
+        var observed = SettledValue(
+            () => ReadValue(element),
+            before,
+            () => Environment.TickCount64,
+            () => Thread.Sleep(25),
+            OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None,
+            settleMilliseconds
+        );
+        return Judge(before, observed, expected);
+    }
 
-            Thread.Sleep(25);
+    /// <summary>How long the read-back waits for the value to change after Ctrl+V.</summary>
+    internal const int SettleMilliseconds = 2000;
+
+    /// <summary>
+    /// Read until the value differs from <paramref name="before"/>, <paramref name="settleMilliseconds"/> pass, or the
+    /// operation is cancelled or times out (<paramref name="stop"/>); the last value read.
+    /// </summary>
+    internal static string? SettledValue(
+        Func<string?> read,
+        string? before,
+        Func<long> now,
+        Action wait,
+        CancellationToken stop,
+        int settleMilliseconds = SettleMilliseconds
+    )
+    {
+        var deadline = now() + settleMilliseconds;
+        var observed = read();
+        while (observed == before && now() < deadline && !stop.IsCancellationRequested)
+        {
+            wait();
+            observed = read();
         }
 
-        return DescribeEvidence(before, observed, expected);
+        return observed;
     }
 
     /// <summary>The value a control reports, or null when it exposes none or cannot be read.</summary>
@@ -256,35 +326,64 @@ public sealed class PasteTool(
     /// <param name="observed">The value read after, or null when it could not be read.</param>
     /// <param name="expected">The text placed on the clipboard.</param>
     /// <returns>A sentence stating what the read-back does and does not establish.</returns>
-    internal static string DescribeEvidence(string? before, string? observed, string expected)
+    internal static string DescribeEvidence(string? before, string? observed, string expected) =>
+        Judge(before, observed, expected).Sentence;
+
+    private static string Lines(string text) => text.ReplaceLineEndings("\n");
+
+    /// <summary>The verdict behind <see cref="DescribeEvidence"/>.</summary>
+    internal static PasteVerdict Judge(string? before, string? observed, string expected) =>
+        JudgeValues(before, observed, expected) with
+        {
+            Observed = observed,
+        };
+
+    private static PasteVerdict JudgeValues(string? before, string? observed, string expected)
     {
         if (observed == null)
         {
-            return " Not verified: this control did not report a value.";
+            return new("unavailable", " Not verified: this control did not report a value.");
         }
 
         if (expected.Length == 0)
         {
-            return " Not verified: empty text is indistinguishable from no paste.";
+            return new("not-established", " Not verified: empty text is indistinguishable from no paste.");
         }
 
         if (before == null)
         {
-            return " Not verified: the value before the paste could not be read, so a match here "
-                + "cannot be attributed to the paste.";
+            return new(
+                "not-established",
+                " Not verified: the value before the paste could not be read, so a match here "
+                    + "cannot be attributed to the paste."
+            );
         }
 
+        // Compare without line endings: the clipboard holds CRLF, and a control may report LF.
+        (observed, before, expected) = (Lines(observed), Lines(before), Lines(expected));
         if (observed == before)
         {
-            return " Warning: the control's value did not change, so the paste may not have applied.";
+            // Re-pasting identical selected text leaves the value the same: not evidence, but not a failure.
+            return observed.Contains(expected, StringComparison.Ordinal)
+                ? new(
+                    "unchanged",
+                    " Not verified: the control's value did not change, but it already contains the pasted text (re-pasting identical text changes nothing)."
+                )
+                : new(
+                    "not-applied",
+                    " Warning: the control's value did not change and does not contain the pasted text, so the paste did not apply."
+                );
         }
 
         if (observed.Contains(expected, StringComparison.Ordinal))
         {
-            return " Verified: the value changed and now contains the pasted text.";
+            return new("verified", " Verified: the value changed and now contains the pasted text.");
         }
 
-        return " Warning: the value changed but does not contain the pasted text; the app may have "
-            + "reformatted it, or another paste landed first.";
+        return new(
+            "mismatch",
+            " Warning: the value changed but does not contain the pasted text; the app may have "
+                + "reformatted it, or another paste landed first."
+        );
     }
 }

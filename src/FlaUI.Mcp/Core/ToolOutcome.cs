@@ -28,9 +28,20 @@ public sealed record ToolOutcome(
     [JsonPropertyName("failure"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public InputRefusal? Failure { get; init; }
 
+    /// <summary>How the press point was proven on the element (target, descendant or ancestor), when it was hit-tested.</summary>
+    [JsonPropertyName("hitTest"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? HitTest { get; init; }
+
     /// <summary>The tool's text result, repeated here for clients that only show structuredContent.</summary>
     [JsonPropertyName("message"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Message { get; init; }
+
+    /// <summary>How the tool checked its effect, when it did; status follows its verdict.</summary>
+    [JsonPropertyName("proof"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Proof? Proof { get; init; }
+
+    /// <summary>This outcome with <paramref name="proof"/>, its verdict also given as the verification.</summary>
+    public ToolOutcome WithProof(Proof proof) => this with { Proof = proof, Verification = proof.Verdict };
 
     [JsonIgnore]
     public bool IsPending => Provider == "pending" || Dispatch == "timed_out_pending";

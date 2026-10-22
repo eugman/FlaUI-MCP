@@ -78,11 +78,18 @@ internal sealed class FakeDesktop : InputDesktop
             State = WindowStates.Normal;
         }
 
-        if (ActivationAllowed)
+        if (FocusLandsOn != 0)
+        {
+            ForegroundWindow = FocusLandsOn;
+        }
+        else if (ActivationAllowed)
         {
             ForegroundWindow = hwnd;
         }
     }
+
+    /// <summary>When set, focusing any window brings this one to the foreground instead, as a popup can.</summary>
+    public nint FocusLandsOn { get; set; }
 
     /// <summary>When false, the target is disabled, as while it shows a modal dialog.</summary>
     public bool TargetEnabled { get; set; } = true;
@@ -99,10 +106,26 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override nint LastActivePopup(nint owner) => ModalHwnd == 0 ? owner : ModalHwnd;
 
+    /// <summary>
+    /// Process names the fake knows: this test process under its own name, nothing else. A real read of OtherPid
+    /// would name whatever runs at PID 4240 (Windows ignores a PID's low two bits), which differs per machine.
+    /// </summary>
+    public Dictionary<int, string> ProcessNames { get; } =
+        new() { [TargetPid] = System.Diagnostics.Process.GetCurrentProcess().ProcessName };
+
+    public override string? ProcessNameOf(int processId) => ProcessNames.GetValueOrDefault(processId);
+
     /// <summary>The process that owns the other window.</summary>
     public int OtherProcessId { get; set; } = OtherPid;
 
-    public override int ProcessOf(nint hwnd) => hwnd == OtherHwnd ? OtherProcessId : TargetPid;
+    // Like Windows: no window, no process.
+    public override int ProcessOf(nint hwnd) =>
+        hwnd switch
+        {
+            0 => 0,
+            OtherHwnd => OtherProcessId,
+            _ => TargetPid,
+        };
 
     public override bool BelongsTo(nint hwnd, nint target) => hwnd != 0 && hwnd == target;
 
@@ -116,13 +139,28 @@ internal sealed class FakeDesktop : InputDesktop
     /// <summary>Whether focusing the control gives it keyboard focus.</summary>
     public bool ElementTakesFocus { get; set; } = true;
 
+    private readonly HashSet<AutomationElement> ignoresFocus = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// Make one control ignore focus requests, as a canvas or tree row that never takes keyboard focus does:
+    /// it never reports focus, while the rest of the desktop keeps whatever focus it had.
+    /// </summary>
+    public void IgnoreFocus(AutomationElement element) => ignoresFocus.Add(element);
+
     public override void FocusElement(AutomationElement element)
     {
         ElementFocusRequests++;
-        KeyboardFocus |= ElementTakesFocus;
+        if (!ignoresFocus.Contains(element))
+        {
+            KeyboardFocus |= ElementTakesFocus;
+        }
     }
 
-    public override bool HasKeyboardFocus(AutomationElement element) => KeyboardFocus;
+    /// <summary>After this many inputs every control loses keyboard focus, as when a popup takes it.</summary>
+    public int ElementFocusLostAfter { get; set; } = int.MaxValue;
+
+    public override bool HasKeyboardFocus(AutomationElement element) =>
+        KeyboardFocus && !ignoresFocus.Contains(element) && Dispatched < ElementFocusLostAfter;
 
     public override void Dispatch(Action input) => Interlocked.Increment(ref dispatched);
 
@@ -210,10 +248,118 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override Rectangle? WindowBounds(nint hwnd) => Bounds;
 
+    /// <summary>Where a requested placement lands; exact unless a test clamps it, as DPI or a minimum size can.</summary>
+    public Func<Rectangle, Rectangle> PlaceAs { get; set; } = bounds => bounds;
+
     public override void PlaceWindow(nint hwnd, Rectangle bounds)
     {
         Placements.Add(bounds);
-        Bounds = bounds;
+        Bounds = PlaceAs(bounds);
+    }
+
+    /// <summary>The screens the desktop reports, in physical pixels.</summary>
+    public List<Rectangle> MonitorBounds { get; set; } = [new(0, 0, 1920, 1080)];
+
+    public override IReadOnlyList<Rectangle> Monitors() => MonitorBounds;
+
+    /// <summary>Where the pointer is; a counted pointer move puts it on its point.</summary>
+    public Point Pointer { get; set; }
+
+    public override Point PointerPosition() => Pointer;
+
+    public override void MovePointer(Point point)
+    {
+        Interlocked.Increment(ref dispatched);
+        Pointer = point;
+    }
+
+    /// <summary>The visible top-level windows of a process; none unless a test says otherwise.</summary>
+    public Func<int, IReadOnlyList<Win32WindowInfo>> WindowsOf { get; set; } = _ => [];
+
+    public override IReadOnlyList<Win32WindowInfo> TopLevelWindows(int processId) => WindowsOf(processId);
+
+    /// <summary>The element UI Automation reports under a point; null for the target itself.</summary>
+    public Func<Point, AutomationElement?>? HitTest { get; set; }
+
+    /// <summary>Each element's parent, for the hit test's ancestor walk.</summary>
+    public Dictionary<AutomationElement, AutomationElement> Parents { get; } = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>How a refusal names an element, as "ControlType 'Name'".</summary>
+    public Dictionary<AutomationElement, string> Descriptions { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override AutomationElement? ElementAt(AutomationElement target, Point point) =>
+        HitTest == null ? target : HitTest(point);
+
+    public override AutomationElement? ParentOf(AutomationElement element) =>
+        Parents.TryGetValue(element, out var parent) ? parent : null;
+
+    public override bool SameElement(AutomationElement a, AutomationElement b) => ReferenceEquals(a, b);
+
+    /// <summary>The element UI Automation reports as focused; null for none.</summary>
+    public AutomationElement? FocusedOn { get; set; }
+
+    public override AutomationElement? FocusedElement(AutomationElement reference) => FocusedOn;
+
+    /// <summary>Each element's control type; Custom unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, FlaUI.Core.Definitions.ControlType> ControlTypes { get; } =
+        new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Each element's bounds; empty unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, Rectangle> ElementBounds { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
+        ControlTypes.TryGetValue(element, out var type) ? type : FlaUI.Core.Definitions.ControlType.Custom;
+
+    /// <summary>Each element's AutomationId; empty unless a test says otherwise.</summary>
+    public Dictionary<AutomationElement, string> AutomationIds { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override string AutomationIdOf(AutomationElement element) =>
+        AutomationIds.TryGetValue(element, out var id) ? id : "";
+
+    public override Rectangle BoundsOf(AutomationElement element) =>
+        ElementBounds.TryGetValue(element, out var bounds) ? bounds : Rectangle.Empty;
+
+    /// <summary>Elements that support the Value pattern.</summary>
+    public HashSet<AutomationElement> ValueBearing { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override bool HasValuePattern(AutomationElement element) => ValueBearing.Contains(element);
+
+    /// <summary>Elements UI Automation reports as offscreen.</summary>
+    public HashSet<AutomationElement> Offscreen { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override IReadOnlyList<ChildBox> ChildBoxes(AutomationElement parent) =>
+        Parents
+            .Where(pair => ReferenceEquals(pair.Value, parent))
+            .Select(pair => new ChildBox(
+                pair.Key,
+                // An element with no bounds set reads as unreadable, as an uncached provider property does.
+                ElementBounds.TryGetValue(pair.Key, out var bounds)
+                    ? bounds
+                    : null,
+                Offscreen.Contains(pair.Key)
+            ))
+            .ToList();
+
+    public override string DescribeElement(AutomationElement element) =>
+        Descriptions.TryGetValue(element, out var description) ? description : "Custom ''";
+
+    /// <summary>What rendering a window by handle returns; null for a render that fails.</summary>
+    public byte[]? WindowImage { get; set; } = [];
+
+    /// <summary>When set, a render waits for it, as PrintWindow does on a hung window.</summary>
+    public ManualResetEventSlim? RenderBlock { get; set; }
+
+    /// <summary>The UI Automation tree the fake reports for a window.</summary>
+    public string Tree { get; set; } = "";
+
+    public override string ElementTree(nint hwnd) => Tree;
+
+    public override bool CaptureWindow(nint hwnd, out byte[] image, out string? reason)
+    {
+        RenderBlock?.Wait();
+        image = WindowImage ?? [];
+        reason = WindowImage == null ? "no image (fake)" : null;
+        return WindowImage != null;
     }
 
     private sealed class Uninstall : IDisposable

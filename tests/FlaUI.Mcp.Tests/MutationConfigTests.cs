@@ -17,6 +17,18 @@ public sealed class MutationConfigTests
         "Core/ProcessIntegrity.cs",
         "Core/WindowMutation.cs",
         "Core/ClickPoint.cs",
+        "Core/ClickHitTest.cs",
+        "Core/FocusRule.cs",
+        "Core/Interaction/InteractionGrant.cs",
+        "Core/Interaction/InteractionGrantObserve.cs",
+        "Core/Interaction/InteractionGrantActivation.cs",
+        "Core/Interaction/Heartbeat.cs",
+        "Core/MutationGuard.cs",
+        "Core/ProcessPolicy.cs",
+        "Core/DesktopLease.cs",
+        "Core/AutomationRefusal.cs",
+        "Core/Proof.cs",
+        "Mcp/ToolFacts.cs",
         "Core/InputRefusal.cs",
         "Core/ElementRegistry.cs",
         "Core/PendingInvokeTracker.cs",
@@ -24,6 +36,8 @@ public sealed class MutationConfigTests
         "Mcp/McpServer.cs",
         "Mcp/McpLineTransport.cs",
         "Mcp/ToolRegistry.cs",
+        "Mcp/ToolRegistrySchemas.cs",
+        "Mcp/ToolRegistryStrand.cs",
         "Mcp/ToolBase.cs",
         "Tools/ClickTool.cs",
         "Tools/ClickToolReplies.cs",
@@ -31,8 +45,74 @@ public sealed class MutationConfigTests
         "Tools/PointerActions.cs",
         "Tools/SendKeysTool.cs",
         "Tools/TypeTools.cs",
+        "Tools/PasteTool.cs",
+        "Tools/FillToolReplies.cs",
         "Tools/BatchTool.cs",
+        "Core/WindowBaseline.cs",
+        "Core/WaitOutcome.cs",
+        "Core/Diagnostics.cs",
     ];
+
+    // Source files deliberately not mutated: native Win32 or UI Automation code the offline tests cannot reach,
+    // composition and startup, plain data and wording. A new file must go in GuardFiles or here.
+    private static readonly string[] NotMutated =
+    [
+        "Core/AutomationHost.cs",
+        "Core/BoundedSearch.cs",
+        "Core/CaptureFrame.cs",
+        "Core/ClipboardRestore.cs",
+        "Core/ControlText.cs",
+        "Core/DpiUtility.cs",
+        "Core/ElementQuery.cs",
+        "Core/InputDesktop.cs",
+        "Core/Interaction/IInputObserver.cs",
+        "Core/Interaction/PhysicalInputObserver.cs",
+        "Core/KeepAwake.cs",
+        "Core/ModalAwareInvoker.cs",
+        "Core/NativeWindowCapture.cs",
+        "Core/PointerPlan.cs",
+        "Core/SessionManager.cs",
+        "Core/SnapshotBudget.cs",
+        "Core/SnapshotBuilder.cs",
+        "Core/TextClipboard.cs",
+        "Core/ToolComposition.cs",
+        "Core/ToolOutcome.cs",
+        "Core/Win32Desktop.cs",
+        "Core/Win32WindowReads.cs",
+        "Core/Win32WindowState.cs",
+        "Core/WindowPlacement.cs",
+        "Mcp/Protocol.cs",
+        "Program.cs",
+        "Properties/AssemblyInfo.cs",
+        "Tools/FindTool.cs",
+        "Tools/GetClipboardTool.cs",
+        "Tools/GetTextTool.cs",
+        "Tools/KeyNames.cs",
+        "Tools/LaunchTool.cs",
+        "Tools/OperationStatusTool.cs",
+        "Tools/ScreenshotTool.cs",
+        "Tools/SnapshotTool.cs",
+        "Tools/WaitTool.cs",
+        "Tools/WindowPlacementTool.cs",
+        "Tools/WindowStateTool.cs",
+        "Tools/WindowTools.cs",
+    ];
+
+    [Fact]
+    public void EverySourceFileIsMutatedOrListedAsNotMutated()
+    {
+        var src = Path.GetDirectoryName(RepoFile(Path.Combine("src", "FlaUI.Mcp", "FlaUI.Mcp.csproj")))!;
+        var files = Directory
+            .EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(src, file).Replace('\\', '/'))
+            .Where(file =>
+                !file.StartsWith("obj/", StringComparison.Ordinal) && !file.StartsWith("bin/", StringComparison.Ordinal)
+            )
+            .Order(StringComparer.Ordinal);
+
+        Assert.Empty(files.Where(file => !GuardFiles.Contains(file) && !NotMutated.Contains(file)));
+        Assert.Empty(GuardFiles.Intersect(NotMutated));
+    }
 
     private static string RepoFile(string relative)
     {
@@ -69,6 +149,16 @@ public sealed class MutationConfigTests
         var mutate = Config().GetProperty("mutate").EnumerateArray().Select(p => p.GetString()).ToArray();
 
         Assert.Equal(GuardFiles.Select(file => $"**/{file}").Order(), mutate.Order());
+    }
+
+    [Fact]
+    public void EveryMutatedFileBelongsToAPartOfTheScript()
+    {
+        var script = File.ReadAllText(RepoFile(Path.Combine("scripts", "mutation.ps1")));
+        var parts = script[script.IndexOf("$parts = [ordered]@{", StringComparison.Ordinal)..];
+        parts = parts[..parts.IndexOf('}')];
+
+        Assert.All(GuardFiles, file => Assert.Contains($"'{Path.GetFileNameWithoutExtension(file)}'", parts));
     }
 
     [Fact]

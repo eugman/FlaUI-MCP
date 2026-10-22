@@ -31,16 +31,22 @@ public static class PointerPlan
     }
 
     /// <summary>
-    /// A screen point outside <paramref name="window"/>, so no control of it shows hover state or a
-    /// tooltip. Prefers another monitor, then the margins of the window's own monitor; null when the
-    /// window covers every screen pixel.
+    /// Where to park the pointer for <paramref name="window"/>, always outside it: just beside it on the monitor
+    /// that holds most of it, so the pointer never jumps to another screen; else just beside it on a neighbouring
+    /// screen; else a free corner of its monitor. Null when the window is on no monitor or covers every point
+    /// these offer (a full-screen window on a single screen).
     /// </summary>
     public static Point? ParkPoint(Rectangle window, IReadOnlyList<Rectangle> monitors)
     {
         const int Inset = 8;
-        if (monitors.FirstOrDefault(m => !m.IntersectsWith(window)) is { IsEmpty: false } elsewhere)
+        var holder = monitors
+            .Where(m => m.IntersectsWith(window))
+            .OrderByDescending(m => Area(Rectangle.Intersect(m, window)))
+            .Select(m => (Rectangle?)m)
+            .FirstOrDefault();
+        if (holder is not { } monitor)
         {
-            return new Point(elsewhere.X + Inset, elsewhere.Y + Inset);
+            return null;
         }
 
         // A quarter of the way along a bottom taskbar: clear of a centered Windows 11 icon
@@ -52,9 +58,23 @@ public static class PointerPlan
             new(window.X - Inset, window.Y + window.Height / 2),
             new(window.X + window.Width / 2, window.Y - Inset),
         ];
-        var own = monitors.Where(m => m.IntersectsWith(window)).ToList();
-        return candidates.Where(p => own.Any(m => m.Contains(p))).Select(p => (Point?)p).FirstOrDefault();
+        Point[] corners =
+        [
+            new(monitor.X + Inset, monitor.Bottom - 1 - Inset),
+            new(monitor.Right - 1 - Inset, monitor.Bottom - 1 - Inset),
+            new(monitor.X + Inset, monitor.Y + Inset),
+            new(monitor.Right - 1 - Inset, monitor.Y + Inset),
+        ];
+        return candidates
+            .Where(monitor.Contains)
+            .Concat(candidates.Where(p => monitors.Any(m => m.Contains(p))))
+            .Concat(corners)
+            .Where(p => !window.Contains(p))
+            .Select(p => (Point?)p)
+            .FirstOrDefault();
     }
+
+    private static long Area(Rectangle r) => (long)r.Width * r.Height;
 
     public static readonly string[] Edges = ["center", "left", "right", "top", "bottom"];
 
@@ -106,23 +126,40 @@ public static class PointerParking
     // Long enough for a tooltip to fade and a hot-tracked control to repaint.
     private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    /// Move the pointer to <see cref="PointerPlan.ParkPoint"/>, under the lease and the permission check, after the
+    /// integrity check of the window under that point. Refuses with no input when no point is off the window.
+    /// </summary>
     public static Point Park(Rectangle window)
     {
-        var monitors = System.Windows.Forms.Screen.AllScreens.Select(s => s.Bounds).ToList();
-        var point =
-            PointerPlan.ParkPoint(window, monitors)
-            ?? throw new InvalidOperationException(
-                "The window covers every screen, so the pointer cannot leave it; restore the window or move the pointer to a quiet spot with windows_mouse."
-            );
+        var desktop = InputDesktop.Current;
+        var monitors = desktop.Monitors();
+        var point = PointerPlan.ParkPoint(window, monitors) ?? throw NoParkPoint(window, monitors);
         using (GuardedInput.AcquireLease())
         {
             MutationGuard.Execute(
-                OperationContext.Check,
-                () => InputDesktop.Current.Dispatch(() => FlaUI.Core.Input.Mouse.MoveTo(point))
+                () =>
+                {
+                    OperationContext.Check();
+                    // Windows drops input to a higher-integrity window, the pointer's among it.
+                    var under = desktop.WindowAt(point);
+                    if (under != 0 && desktop.ProcessOf(under) is var pid and not 0)
+                    {
+                        GuardedInput.RequireDrivable(pid, desktop);
+                    }
+                },
+                () => desktop.MovePointer(point)
             );
         }
 
         Thread.Sleep(Settle);
-        return FlaUI.Core.Input.Mouse.Position;
+        return desktop.PointerPosition();
     }
+
+    private static InvalidOperationException NoParkPoint(Rectangle window, IReadOnlyList<Rectangle> monitors) =>
+        new(
+            monitors.Any(m => m.IntersectsWith(window))
+                ? "The window covers its screen, so the pointer could not leave the window; no input sent. Restore or move the window, or capture without parkPointer."
+                : "The window is on no monitor, so there is no screen to park the pointer on; no input sent. Move the window onto a screen first."
+        );
 }

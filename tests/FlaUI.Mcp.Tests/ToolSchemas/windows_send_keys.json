@@ -3,14 +3,23 @@
   "description": "Send key presses or key chords to an element by ref or the focused element. Supports either \u0060chord\u0060 (single chord, e.g., Ctrl\u002BRight) or \u0060keys\u0060 array (sequence, e.g., [\u0022Ctrl\u002BC\u0022,\u0022Ctrl\u002BV\u0022]).",
   "inputSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "handle": {
         "type": "string",
         "description": "Optional explicit window handle; otherwise uses the focused element."
       },
       "verifyFocus": {
-        "type": "boolean",
-        "description": "Require ref and verified keyboard focus on that exact control before the sequence (default false)."
+        "type": [
+          "boolean",
+          "string"
+        ],
+        "enum": [
+          true,
+          false,
+          "self-or-descendant"
+        ],
+        "description": "Require verified keyboard focus before the sequence: true for the ref\u0027s exact control, \u0022self-or-descendant\u0022 for it or a descendant (an editable ComboBox focuses its Edit child), false for no check. Default \u0022self-or-descendant\u0022 when a ref is given, since keys such as Ctrl\u002BA or Delete go wherever focus is."
       },
       "expectFocusClass": {
         "type": "string",
@@ -37,6 +46,7 @@
     "readOnlyHint": false,
     "destructiveHint": true,
     "idempotentHint": false,
-    "openWorldHint": false
+    "openWorldHint": false,
+    "recoveryHint": true
   }
 }

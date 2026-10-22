@@ -3,6 +3,9 @@ using FlaUI.Mcp.Core;
 
 namespace FlaUI.Mcp.Tools;
 
+/// <summary>A pattern call's reply, its verification, and the state read back.</summary>
+internal sealed record PatternVerdict(string Message, string? Verification, string? Observed);
+
 /// <summary>The replies windows_click gives, kept apart from the code that clicks.</summary>
 public partial class ClickTool
 {
@@ -25,6 +28,83 @@ public partial class ClickTool
             var (b, a) => $"{name}: {b} -> {a}",
         };
 
+    /// <summary>A toggle's reply and its verification: verified when the state moved, mismatch when it did not.</summary>
+    internal static PatternVerdict ToggleVerdict(string name, ToggleState? before, ToggleState? after) =>
+        new(
+            ToggleOutcome(name, before, after),
+            (before, after) switch
+            {
+                (null, _) or (_, null) => "unavailable",
+                var (b, a) when b == a => "mismatch",
+                _ => "verified",
+            },
+            after?.ToString()
+        );
+
+    /// <summary>
+    /// An expand or collapse reply from the state read back: verified when it reached the requested state (an
+    /// expand also when partially expanded), mismatch when it did not, unavailable when it could not be read.
+    /// </summary>
+    internal static PatternVerdict ExpandVerdict(string name, string action, ExpandCollapseState? state)
+    {
+        if (state is not { } reached)
+        {
+            return new($"Sent {action} request to {name}; its state could not be read", "unavailable", null);
+        }
+
+        var done =
+            action == "expand"
+                ? reached is ExpandCollapseState.Expanded or ExpandCollapseState.PartiallyExpanded
+                : reached == ExpandCollapseState.Collapsed;
+        if (!done)
+        {
+            return new($"Sent {action} to {name}, but it is still {reached}", "mismatch", reached.ToString());
+        }
+
+        return new(action == "expand" ? $"Expanded {name}" : $"Collapsed {name}", "verified", reached.ToString());
+    }
+
+    /// <summary>
+    /// The reply with its proof: the pattern state read back (from the same provider that acted, so not
+    /// independent) against the state expected.
+    /// </summary>
+    internal static McpToolResult CheckedPatternResult(
+        PatternCallResult result,
+        PatternVerdict verdict,
+        string source,
+        string? expected
+    )
+    {
+        var reply = CheckedPatternResult(result, verdict.Message, verdict.Verification);
+        return verdict.Verification == null
+            ? reply
+            : reply with
+            {
+                Outcome = reply.Outcome!.WithProof(
+                    new Proof(verdict.Verification, verdict.Observed, expected, source, Independent: false)
+                ),
+            };
+    }
+
+    /// <summary>
+    /// A completed pattern call's reply with its read-back verification. A state that did not move is a
+    /// failure; the call went out, so the dispatch stays completed.
+    /// </summary>
+    internal static McpToolResult CheckedPatternResult(PatternCallResult result, string message, string? verification)
+    {
+        var reply = PatternResult(result, message);
+        if (verification == null)
+        {
+            return reply;
+        }
+
+        return reply with
+        {
+            IsError = verification == "mismatch" ? true : reply.IsError,
+            Outcome = reply.Outcome! with { Verification = verification },
+        };
+    }
+
     // An empty reason invites a blind retry; name the exception and any dialog that seems to block input.
     internal static string ClickFailure(
         string message,
@@ -40,9 +120,8 @@ public partial class ClickTool
             reason = GuardedInput.NoteFocusChange(reason, "Select was sent");
         }
 
-        var modal = windows.Any(w => !w.IsEnabled && !w.IsToolWindow)
-            ? windows.FirstOrDefault(w => w.IsEnabled && !w.IsToolWindow && !w.IsCloaked && w.Title.Length > 0)
-            : null;
+        // A dialog owned by a disabled window, never just the first enabled window while any is disabled.
+        var modal = WindowBaseline.BlockingDialog(windows);
         return modal == null
             ? reason
             : $"{reason.TrimEnd('.')}. Window \"{modal.Title}\" appears to be a modal dialog blocking input; handle it first (see windows_list_windows).";
@@ -64,9 +143,39 @@ public partial class ClickTool
         }
     }
 
-    internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after)
+    /// <summary>The title of a dialog the click opened: new, titled, and not a tooltip, menu or tool window.</summary>
+    internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after) =>
+        new WindowBaseline(before).Opened(after).FirstOrDefault(w => w.Title.Length > 0)?.Title;
+
+    /// <summary>
+    /// Map a modal-aware pattern call result to a tool result.
+    /// </summary>
+    internal static McpToolResult PatternResult(PatternCallResult result, string completedMessage)
     {
-        var known = before.Select(w => w.Hwnd).ToHashSet();
-        return after.FirstOrDefault(w => !known.Contains(w.Hwnd) && w.Title.Length > 0)?.Title;
+        var response = result.Outcome switch
+        {
+            PatternCallOutcome.Completed => TextResult(completedMessage),
+            PatternCallOutcome.ModalDetected => TextResult(
+                $"{completedMessage}; a modal dialog \"{result.ModalTitle}\" opened and blocks UI Automation on this app until it closes. "
+                    + "Find it with windows_list_windows, then use windows_screenshot or windows_send_keys (no ref) with its handle."
+            ),
+            _ when !result.Dispatched => TextResult(
+                "Not sent yet: the request is still waiting on the app, whose UI Automation provider has not answered. "
+                    + "Check windows_operation_status or take a screenshot by handle before continuing; do not repeat the click."
+            ),
+            _ => TextResult(
+                $"{completedMessage}; the app's handler is still running. Check windows_operation_status or take a screenshot "
+                    + "by handle before continuing; do not repeat the click."
+            ),
+        };
+        if (result.WaitNote.Length > 0)
+        {
+            response = TextResult(response.Content[0].Text + result.WaitNote);
+        }
+
+        return response with
+        {
+            Outcome = ToolOutcome.FromPattern(result),
+        };
     }
 }

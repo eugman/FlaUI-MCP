@@ -30,6 +30,12 @@ public class ScreenshotTool : ToolBase
 
     public override string Name => "windows_screenshot";
 
+    protected override bool Observation => true;
+
+    protected override bool Recovery => true;
+
+    protected override IReadOnlyList<string> MutatingWhenArgument => ["parkPointer"];
+
     // Not read-only: parkPointer moves the pointer off the window before capturing, and that is counted.
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false, idempotent: true);
 
@@ -40,6 +46,7 @@ public class ScreenshotTool : ToolBase
         new
         {
             type = "object",
+            additionalProperties = false,
             properties = new
             {
                 frame = new
@@ -146,7 +153,12 @@ public class ScreenshotTool : ToolBase
                 _elementRegistry.ResolveRef(refId, handle);
             }
             catch (Exception ex)
-                when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+                when (ex
+                        is ArgumentException
+                            or InvalidOperationException
+                            or AutomationRefusal
+                            or System.ComponentModel.Win32Exception
+                )
             {
                 return Task.FromResult(ErrorResult(ex.Message));
             }
@@ -217,8 +229,14 @@ public class ScreenshotTool : ToolBase
             return Task.FromResult(ErrorResult(pathError));
         }
 
-        // Park only once the call is known to be valid, so a refused call never moves the real mouse.
-        if (GetBoolArgument(arguments, "parkPointer", false) && ParkPointer(handle, refId) is { } parkError)
+        // Park only once the call is known to be valid, so a refused call never moves the real mouse. A park the
+        // guards refuse (a revoked grant, a busy lease) still captures, with a warning: the image is the evidence.
+        string? parkWarning = null;
+        Proof? parkProof = null;
+        if (
+            GetBoolArgument(arguments, "parkPointer", false)
+            && ParkPointer(handle, refId, out parkWarning, out parkProof) is { } parkError
+        )
         {
             return Task.FromResult(ErrorResult(parkError));
         }
@@ -248,7 +266,7 @@ public class ScreenshotTool : ToolBase
                 // the captured region is the target in that case.
                 if (guardTarget == 0 && sourceBounds is { } region && ReadsScreenPixels(method))
                 {
-                    guardTarget = Win32Desktop.WindowAt(
+                    guardTarget = InputDesktop.Current.WindowAt(
                         new System.Drawing.Point(region.Left + region.Width / 2, region.Top + region.Height / 2)
                     );
                 }
@@ -258,7 +276,7 @@ public class ScreenshotTool : ToolBase
                     occlusion = Win32Desktop.FindObstructions(
                         Win32Desktop.ObserveZOrder(),
                         guardTarget,
-                        Win32Desktop.GetProcessId(guardTarget),
+                        InputDesktop.Current.ProcessOf(guardTarget),
                         GuardRect(captured, frame)
                     );
                 }
@@ -274,6 +292,11 @@ public class ScreenshotTool : ToolBase
                 if (verdict.Refusal is { } refusal)
                 {
                     return ErrorResult(refusal);
+                }
+
+                if (parkWarning != null)
+                {
+                    verdict = verdict with { Warnings = [parkWarning, .. verdict.Warnings] };
                 }
 
                 List<LocatedElement>? located = null;
@@ -336,6 +359,14 @@ public class ScreenshotTool : ToolBase
                 if (result.IsError == true)
                 {
                     return result;
+                }
+
+                if (parkProof != null)
+                {
+                    result = result with
+                    {
+                        Outcome = (result.Outcome ?? new ToolOutcome("completed", "not-tracked")).WithProof(parkProof),
+                    };
                 }
                 // Warnings do not depend on includeMetadata: a warning the caller has to opt into is
                 // not a warning, and the default call is the one that produced a mis-scaled capture.
@@ -455,7 +486,7 @@ public class ScreenshotTool : ToolBase
                     }
 
                     targetHwnd = element.Properties.NativeWindowHandle.ValueOrDefault;
-                    sourceBounds = Win32Desktop.GetWindowBounds(targetHwnd);
+                    sourceBounds = InputDesktop.Current.WindowBounds(targetHwnd);
                     method = "native-window";
                     return Task.FromResult(Finish(image));
                 }
@@ -491,7 +522,7 @@ public class ScreenshotTool : ToolBase
                     }
 
                     var hwnd = _sessionManager.GetWindowHwnd(handle);
-                    var bounds = hwnd != 0 ? Win32Desktop.GetWindowBounds(hwnd) : null;
+                    var bounds = hwnd != 0 ? InputDesktop.Current.WindowBounds(hwnd) : null;
                     if (bounds == null)
                     {
                         return Task.FromResult(
@@ -530,7 +561,7 @@ public class ScreenshotTool : ToolBase
                     {
                         if (NativeWindowCapture.TryCaptureHwnd(targetHwnd, out var backgroundImage, out var reason))
                         {
-                            sourceBounds = Win32Desktop.GetWindowBounds(targetHwnd);
+                            sourceBounds = InputDesktop.Current.WindowBounds(targetHwnd);
                             method = "native-window";
                             return Task.FromResult(Finish(backgroundImage));
                         }
@@ -562,7 +593,7 @@ public class ScreenshotTool : ToolBase
 
                     if (elementCapture == null)
                     {
-                        var bounds = targetHwnd != 0 ? Win32Desktop.GetWindowBounds(targetHwnd) : null;
+                        var bounds = targetHwnd != 0 ? InputDesktop.Current.WindowBounds(targetHwnd) : null;
                         if (bounds == null)
                         {
                             return Task.FromResult(
@@ -584,7 +615,7 @@ public class ScreenshotTool : ToolBase
             {
                 // Resolve the foreground window through Win32 and authorize its process before
                 // reading its provider; a focused-element walk can hang on unrelated apps.
-                var foreground = Win32Desktop.GetForegroundWindow();
+                var foreground = InputDesktop.Current.Foreground();
                 if (foreground == 0)
                 {
                     return Task.FromResult(ErrorResult("No foreground window found"));
@@ -594,7 +625,7 @@ public class ScreenshotTool : ToolBase
                 try
                 {
                     foregroundWindow = CaptureForeground(
-                        Win32Desktop.GetProcessId(foreground),
+                        InputDesktop.Current.ProcessOf(foreground),
                         _processPolicy,
                         () => _sessionManager.Automation.FromHandle(foreground)?.AsWindow()
                     );
@@ -630,39 +661,61 @@ public class ScreenshotTool : ToolBase
         }
     }
 
-    private string? ParkPointer(string? handle, string? refId)
+    /// <summary>The warning for a park the guards refused; the capture goes ahead without it.</summary>
+    internal static string ParkRefused(Exception error) =>
+        $"parkPointer was refused, so the pointer was not moved: {error.Message} "
+        + "The capture was taken anyway; a hover state or tooltip may show in it.";
+
+    /// <summary>Whether the pointer ended outside the window, read back after the park; unavailable when refused.</summary>
+    internal static Proof ParkProof(System.Drawing.Rectangle window, System.Drawing.Point? landed)
     {
+        var expected = $"outside {window.X},{window.Y} {window.Width}x{window.Height}";
+        if (landed is not { } point)
+        {
+            return new(Proof.Unavailable, null, expected, "pointer", Independent: true);
+        }
+
+        var verdict = window.Contains(point) ? Proof.Mismatch : Proof.Verified;
+        return new(verdict, $"{point.X},{point.Y}", expected, "pointer", Independent: true);
+    }
+
+    private string? ParkPointer(string? handle, string? refId, out string? warning, out Proof? proof)
+    {
+        warning = null;
+        proof = null;
         var window = handle ?? (refId == null ? null : _elementRegistry.WindowForRef(refId));
-        var hwnd = window == null ? Win32Desktop.GetForegroundWindow() : _sessionManager.GetWindowHwnd(window);
+        var hwnd = window == null ? InputDesktop.Current.Foreground() : _sessionManager.GetWindowHwnd(window);
         if (window != null && WindowIsGone(hwnd))
         {
             return ClosedWindowMessage(window);
         }
 
-        if (!_processPolicy.IsProcessAllowed(Win32Desktop.GetProcessId(hwnd)))
+        if (!_processPolicy.IsProcessAllowed(InputDesktop.Current.ProcessOf(hwnd)))
         {
             return _processPolicy.DescribeDenied("parkPointer target");
         }
 
-        if (Win32Desktop.GetWindowBounds(hwnd) is not { } bounds)
+        if (InputDesktop.Current.WindowBounds(hwnd) is not { } bounds)
         {
             return "parkPointer: window bounds unavailable; no screenshot was taken.";
         }
 
         try
         {
-            PointerParking.Park(bounds);
-            return null;
+            proof = ParkProof(bounds, PointerParking.Park(bounds));
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or AutomationRefusal)
         {
-            return $"parkPointer: {ex.Message} No screenshot was taken.";
+            warning = ParkRefused(ex);
+            proof = ParkProof(bounds, null);
         }
+
+        return null;
     }
 
     // A cached handle can outlive its window (a dialog that closed, an app that exited). Report that,
     // not the allowlist refusal its dead process would otherwise produce.
-    internal static bool WindowIsGone(nint hwnd) => hwnd != 0 && Win32Desktop.GetProcessId(hwnd) == 0;
+    internal static bool WindowIsGone(nint hwnd) => hwnd != 0 && InputDesktop.Current.ProcessOf(hwnd) == 0;
 
     internal static string ClosedWindowMessage(string handle) =>
         $"Window {handle} has closed. Get a current handle from windows_list_windows; no screenshot was taken.";
