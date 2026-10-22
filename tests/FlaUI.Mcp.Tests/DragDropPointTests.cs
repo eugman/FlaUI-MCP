@@ -237,7 +237,7 @@ public sealed class DragDropPointTests
     {
         // The live seed: the first visible row of a tree; a drag resting on it scrolled the tree six rows.
         var tree = new Rectangle(427, 214, 467, 400);
-        var geometry = new ClickGeometry(false, null, Row, [tree]);
+        var geometry = new ClickGeometry(false, null, Row, [tree], [tree]);
 
         var error = Assert.Throws<InputRefusedException>(() =>
             ClickPoint.RequireOutsideScrollBand(new Point(435, 225), geometry)
@@ -259,7 +259,7 @@ public sealed class DragDropPointTests
     public void TheBandIsOneRowAtEitherEnd(int y, string edge)
     {
         var tree = new Rectangle(427, 214, 467, 400);
-        var geometry = new ClickGeometry(false, null, Row, [tree]);
+        var geometry = new ClickGeometry(false, null, Row, [tree], [tree]);
 
         var error = Assert.Throws<InputRefusedException>(() =>
             ClickPoint.RequireOutsideScrollBand(new Point(435, y), geometry)
@@ -276,7 +276,7 @@ public sealed class DragDropPointTests
     {
         var tree = new Rectangle(427, 214, 467, 400);
 
-        ClickPoint.RequireOutsideScrollBand(new Point(435, y), new ClickGeometry(false, null, Row, [tree]));
+        ClickPoint.RequireOutsideScrollBand(new Point(435, y), new ClickGeometry(false, null, Row, [tree], [tree]));
     }
 
     [Fact]
@@ -284,8 +284,48 @@ public sealed class DragDropPointTests
     {
         var shortList = new Rectangle(427, 214, 467, 65);
 
-        ClickPoint.RequireOutsideScrollBand(new Point(435, 225), new ClickGeometry(false, null, Row, [shortList]));
+        ClickPoint.RequireOutsideScrollBand(
+            new Point(435, 225),
+            new ClickGeometry(false, null, Row, [shortList], [shortList])
+        );
         ClickPoint.RequireOutsideScrollBand(new Point(435, 225), new ClickGeometry(false, null, Row, []));
+    }
+
+    [Fact]
+    public void AListThatHoldsAllItsRowsHasNoBand()
+    {
+        // It scrolls in principle (Scroll pattern), but nothing is beyond the viewport, so a resting drag moves nothing.
+        var tree = new Rectangle(427, 214, 467, 400);
+
+        ClickPoint.RequireOutsideScrollBand(new Point(435, 225), new ClickGeometry(false, null, Row, [tree]));
+        ClickPoint.RequireOutsideScrollBand(new Point(435, 225), new ClickGeometry(false, null, Row, [tree], []));
+    }
+
+    [Fact]
+    public async Task ADragOntoTheFirstRowOfAListThatDoesNotScrollIsSent()
+    {
+        var row = Element();
+        var desktop = new FakeDesktop();
+        desktop.ElementBounds[row] = Row;
+        desktop.Viewports[row] = [new Rectangle(427, 214, 467, 400)];
+        using var installed = desktop.Install();
+        var (refs, sessions, handle) = Window();
+        using var _ = sessions;
+        var reference = refs.Register(handle, row);
+
+        var result = await Run(
+            new MouseTool(refs, new PendingInvokeTracker(), sessions),
+            new
+            {
+                action = "drag",
+                @ref = reference,
+                toRef = reference,
+                toEdge = "bottom",
+            }
+        );
+
+        Assert.True(result.IsError != true, result.Content[0].Text);
+        Assert.Equal(15, desktop.Dispatched);
     }
 
     [Fact]
@@ -295,6 +335,7 @@ public sealed class DragDropPointTests
         var desktop = new FakeDesktop();
         desktop.ElementBounds[row] = Row;
         desktop.Viewports[row] = [new Rectangle(427, 214, 467, 400)];
+        desktop.ScrollsVertically.Add(row);
         using var installed = desktop.Install();
         var (refs, sessions, handle) = Window();
         using var _ = sessions;

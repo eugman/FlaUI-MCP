@@ -371,6 +371,9 @@ internal sealed class FakeDesktop : InputDesktop
     public Dictionary<AutomationElement, IReadOnlyList<Rectangle>> Viewports { get; } =
         new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>Elements whose scrolling ancestors' content extends beyond their viewports vertically.</summary>
+    public HashSet<AutomationElement> ScrollsVertically { get; } = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>What a geometry read returns instead of the tables, when set; read again at every read.</summary>
     public Func<AutomationElement, ClickGeometry>? OnGeometry { get; set; }
 
@@ -381,7 +384,8 @@ internal sealed class FakeDesktop : InputDesktop
             Offscreen.Contains(element),
             null,
             BoundsOf(element),
-            Viewports.TryGetValue(element, out var viewports) ? viewports : []
+            Viewports.TryGetValue(element, out var viewports) ? viewports : [],
+            ScrollsVertically.Contains(element) ? viewports : []
         );
 
     /// <summary>What a scroll into view reports ("the view was scrolled"), or null: nothing here scrolls.</summary>
