@@ -407,8 +407,10 @@ public sealed class CompanionTests
             }
         );
 
-        var reply = JsonDocument.Parse(result.Content.Single().Text!).RootElement;
-        Assert.Equal(23, reply.GetProperty("walk").GetProperty("rowsRead").GetInt32());
-        Assert.Equal("rows", reply.GetProperty("walk").GetProperty("strategy").GetString());
+        // The walk is a top-level structuredContent field (Core's ToolOutcome.Details), no longer inside the text.
+        var structured = JsonSerializer.SerializeToElement(result.Outcome, McpProtocol.JsonOptions);
+        Assert.Equal(23, structured.GetProperty("walk").GetProperty("rowsRead").GetInt32());
+        Assert.Equal("rows", structured.GetProperty("walk").GetProperty("strategy").GetString());
+        Assert.False(JsonDocument.Parse(result.Content.Single().Text!).RootElement.TryGetProperty("walk", out _));
     }
 }

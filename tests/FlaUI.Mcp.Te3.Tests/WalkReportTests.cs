@@ -37,4 +37,20 @@ public sealed class WalkReportTests
         );
         Assert.Equal("rows-by-table", Json(WalkAccount.Rows(byTable, request)).GetProperty("strategy").GetString());
     }
+
+    [Fact]
+    public void ASuccessfulWalkIsATopLevelFieldBesideTheProof()
+    {
+        var reply = LayoutProof.Attach(
+            CoreResults.Text("arrived"),
+            FlaUI.Mcp.Core.Proof.Compare("a", "a", "read", true)
+        );
+
+        var walked = WalkAccount.Attach(reply, new { strategy = "rows", rowsRead = 5 });
+        var structured = JsonSerializer.SerializeToElement(walked.Outcome, FlaUI.Mcp.McpProtocol.JsonOptions);
+
+        Assert.Equal(5, structured.GetProperty("walk").GetProperty("rowsRead").GetInt32());
+        Assert.Equal("verified", structured.GetProperty("proof").GetProperty("verdict").GetString());
+        Assert.Same(reply, WalkAccount.Attach(reply, null));
+    }
 }

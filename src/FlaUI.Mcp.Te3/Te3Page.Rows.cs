@@ -9,8 +9,11 @@ using FlaUI.Mcp.Core;
 public sealed partial class Te3Page
 {
     /// <summary>A navigation's reply with its proof (see <see cref="NavigationProof"/>).</summary>
-    internal Task<McpToolResult> WithArrivalProof(McpToolResult reply, string destination, JsonElement a) =>
-        NavigationProof.Attach(reply, this, destination, a);
+    internal async Task<McpToolResult> WithArrivalProof(McpToolResult reply, string destination, JsonElement a) =>
+        WalkAccount.Attach(
+            await NavigationProof.Attach(reply, this, destination, a),
+            destination == "object" ? WalkReport : null
+        );
 
     /// <summary>The proof of an object navigation: the selection TE3 names now against the request.</summary>
     internal async Task<FlaUI.Mcp.Core.Proof> ObjectProof(string table, string name, string? type) =>

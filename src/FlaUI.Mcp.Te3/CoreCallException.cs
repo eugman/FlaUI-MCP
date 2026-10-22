@@ -109,7 +109,8 @@ internal static class CoreFailure
     /// shows as provider pending, with the pending call's id and modal. It carries the refusal that stopped it, when
     /// guarded input refused.
     /// </summary>
-    internal static ToolOutcome Reply(Exception error, int inputsSent)
+    /// <param name="walk">An object navigation's walk account, carried as the outcome's top-level <c>walk</c>.</param>
+    internal static ToolOutcome Reply(Exception error, int inputsSent, object? walk = null)
     {
         var failing = Outcome(error);
         var dispatch =
@@ -127,6 +128,7 @@ internal static class CoreFailure
             Status = "failed",
             InputsSent = inputsSent,
             Failure = failing?.Failure is { } refusal ? refusal with { ActionDispatched = inputsSent > 0 } : null,
+            Details = WalkAccount.Details(walk, null),
         };
     }
 

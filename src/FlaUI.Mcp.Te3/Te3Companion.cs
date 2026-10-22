@@ -190,7 +190,6 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     destination = destination.Id,
                     phase = step.Phase,
                     lastStep = step.Last,
-                    walk = destination.Id == "object" ? page.WalkReport : null,
                 }
             ),
             destination.Id,
@@ -301,7 +300,7 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     + "Stop if the session is locked, disconnected or unattended.",
             _ => "Inspect state before continuing; no uncertain input is automatically replayed.",
         };
-        // How much input went out is in the outcome (structuredContent), not repeated in the text.
+        // How much input went out is in the outcome (structuredContent), not repeated in the text; so is the walk.
         return ErrorResult(
             JsonSerializer.Serialize(
                 new
@@ -312,13 +311,12 @@ public sealed class Te3Companion(AutomationHost host, string name, Te3Interactio
                     error = error.Message,
                     blocker,
                     next,
-                    walk,
                 },
                 McpProtocol.JsonOptions
             )
         ) with
         {
-            Outcome = CoreFailure.Reply(error, inputsSent),
+            Outcome = CoreFailure.Reply(error, inputsSent, walk),
         };
     }
 
