@@ -38,6 +38,12 @@ internal sealed record MouseToolArguments
     [ToolDoc("drag: grab this edge of ref instead of its centre (e.g. right for a column header's divider).")]
     public string? FromEdge { get; init; }
 
+    [ToolDoc("drag with a raw from point: refuse before input unless the point is on this element ref.")]
+    public string? FromMustHit { get; init; }
+
+    [ToolDoc("drag with a raw to point: require this element ref before input and recheck it before release.")]
+    public string? ToMustHit { get; init; }
+
     [ToolDoc("drag: release on this element instead of a `to` point.")]
     public string? ToRef { get; init; }
 

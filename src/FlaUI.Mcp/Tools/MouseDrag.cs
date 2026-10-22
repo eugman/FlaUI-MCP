@@ -14,7 +14,12 @@ internal sealed record DragRequest(
     string ToEdge,
     string[] FromMustNotHit,
     int Steps
-);
+)
+{
+    public string? FromMustHit { get; init; }
+
+    public string? ToMustHit { get; init; }
+}
 
 /// <summary>
 /// What a drag runs: its points, resolved under the lease, the drop target's own re-check before the release
@@ -54,11 +59,24 @@ internal sealed class DragPlanner(RefPoints points)
 {
     public DragPlan Plan(DragRequest request, ref string? scrolled)
     {
+        if (
+            request.FromMustHit != null
+            && (request.From == null || request.FromEdge != null || request.ResizeTo != null)
+        )
+        {
+            throw new ArgumentException("fromMustHit needs a raw from point");
+        }
+
+        if (request.ToMustHit != null && (request.To == null || request.ToRef != null || request.ResizeTo != null))
+        {
+            throw new ArgumentException("toMustHit needs a raw to point");
+        }
+
         var plan = FromRequest(request, ref scrolled);
         return plan with
         {
             Resolve = AvoidingStart(request.FromMustNotHit, plan.Resolve),
-            DroppedOn = DroppedOn(request.Reference ?? request.ToRef),
+            DroppedOn = DroppedOn(request.Reference ?? request.ToRef ?? request.ToMustHit),
         };
     }
 
@@ -152,14 +170,19 @@ internal sealed class DragPlanner(RefPoints points)
         return new(() => (start.Choose(), drop.Choose()), drop.Moved, _ => null);
     }
 
-    private Press StartPoint(DragRequest request, ref string? scrolled) =>
-        request.From is { } from
-            ? Press.Fixed(from)
-            : points.Pressable(
-                request.Reference ?? throw new ArgumentException("from point or ref required"),
-                geometry => ClickPoint.Choose(geometry),
-                ref scrolled
-            );
+    private Press StartPoint(DragRequest request, ref string? scrolled)
+    {
+        if (request.From is { } from)
+        {
+            return request.FromMustHit is { } guard ? points.AtPoint(guard, from) : Press.Fixed(from);
+        }
+
+        return points.Pressable(
+            request.Reference ?? throw new ArgumentException("from point or ref required"),
+            geometry => ClickPoint.Choose(geometry),
+            ref scrolled
+        );
+    }
 
     private Press DropPoint(DragRequest request, ref string? scrolled)
     {
@@ -168,7 +191,8 @@ internal sealed class DragPlanner(RefPoints points)
             return EdgeOf(request.ToRef, request.ToEdge, ref scrolled);
         }
 
-        return Press.Fixed(request.To ?? throw new ArgumentException("to point or ref required"));
+        var to = request.To ?? throw new ArgumentException("to point or ref required");
+        return request.ToMustHit is { } guard ? points.AtPoint(guard, to) : Press.Fixed(to);
     }
 
     // The drop point is hit-tested like a press: releasing over an overlay or a sibling drops on that instead. It

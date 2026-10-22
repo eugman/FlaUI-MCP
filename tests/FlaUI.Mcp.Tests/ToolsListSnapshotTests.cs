@@ -51,11 +51,18 @@ public sealed class ToolsListSnapshotTests
     }
 
     [Fact]
-    public void ToolsListDiffersFromTheBaselineOnlyByAddedArgumentDescriptions()
+    public void ToolsListDiffersFromTheBaselineOnlyByDescriptionsAndRawDragGuards()
     {
         var baseline = JsonNode.Parse(Read("tools-list.baseline.json"))!;
         var live = JsonNode.Parse(ToolsList())!;
         var kept = new List<string>();
+        var mouse = live.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_mouse")!;
+        var properties = mouse["inputSchema"]!["properties"]!.AsObject();
+        foreach (var guard in new[] { "fromMustHit", "toMustHit" })
+        {
+            Assert.Equal("string", properties[guard]!["type"]!.GetValue<string>());
+            Assert.True(properties.Remove(guard));
+        }
 
         Assert.Equal(Strip(baseline, "", kept).ToJsonString(), Strip(live, "", []).ToJsonString());
         // Every description the baseline had is still there, word for word.

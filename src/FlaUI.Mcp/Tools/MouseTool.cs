@@ -138,7 +138,11 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
             GetStringArgument(arguments, "toEdge") ?? "center",
             GetArgument<string[]>(arguments, "fromMustNotHit") ?? [],
             GetArgument<int?>(arguments, "steps") ?? PointerPlan.DefaultDragSteps
-        );
+        )
+        {
+            FromMustHit = GetStringArgument(arguments, "fromMustHit"),
+            ToMustHit = GetStringArgument(arguments, "toMustHit"),
+        };
         var plan = new DragPlanner(points).Plan(request, ref scrolled);
         try
         {

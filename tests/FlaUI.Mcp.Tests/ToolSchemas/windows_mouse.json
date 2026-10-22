@@ -80,6 +80,14 @@
         ],
         "description": "drag: grab this edge of ref instead of its centre (e.g. right for a column header\u0027s divider)."
       },
+      "fromMustHit": {
+        "type": "string",
+        "description": "drag with a raw from point: refuse before input unless the point is on this element ref."
+      },
+      "toMustHit": {
+        "type": "string",
+        "description": "drag with a raw to point: require this element ref before input and recheck it before release."
+      },
       "toRef": {
         "type": "string",
         "description": "drag: release on this element instead of a \u0060to\u0060 point."
