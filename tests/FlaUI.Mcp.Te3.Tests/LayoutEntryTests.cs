@@ -59,6 +59,21 @@ public sealed class LayoutEntryTests : IDisposable
     }
 
     [Fact]
+    public async Task KeepPreservesAnUnmappedDebuggerPaneThatCannotBeReopened()
+    {
+        var result = await Tool(inputs => new FakeSurface(inputs, "AI Assistant", "DAX Debugger", "TOM Explorer"))
+            .ExecuteAsync(Args(new { action = "keep", titles = new[] { "TOM Explorer" } }));
+
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal(["Close AI Assistant"], surface!.Presses);
+        var reply = JsonDocument.Parse(result.Content.Single().Text!).RootElement;
+        Assert.Contains(
+            "DAX Debugger",
+            reply.GetProperty("preservedUnmapped").EnumerateArray().Select(x => x.GetString())
+        );
+    }
+
+    [Fact]
     public async Task AMaximizeThatChangedNothingFailsAfterItsOneInput()
     {
         var tool = Tool(inputs => new FakeSurface(inputs, "Properties") { ButtonsFlip = false });

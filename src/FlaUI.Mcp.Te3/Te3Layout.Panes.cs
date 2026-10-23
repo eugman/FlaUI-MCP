@@ -29,8 +29,7 @@ public sealed partial class Te3Layout
     }
 
     // Floating panes only (title and AutomationId, LayoutChecks); a dialog is never listed as one.
-    // Floating panes the call closes: named in close, or not kept in keep. Each goes through its window's own Close and
-    // counts as closed only once the window is gone.
+    // Floating panes are known to have a View reopen entry. Close each through its own window and read back absence.
     private static async Task<List<object>> CloseFloating(ILayoutSurface surface, string[] titles, bool keep)
     {
         var closed = new List<object>();
@@ -188,6 +187,9 @@ public sealed partial class Te3Layout
         var floatingClosed = await CloseFloating(surface, titles, keep);
         closed.AddRange(floatingClosed);
         var remaining = surface.Parts().Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
+        var preservedUnmapped = keep
+            ? remaining.Where(t => !titles.Any(wanted => TitleMatches(t, wanted)) && !PaneReopen.IsMapped(t)).ToList()
+            : [];
         var floating = FloatingTitles(surface);
         var unresolved = titles
             .Where(t =>
@@ -199,13 +201,17 @@ public sealed partial class Te3Layout
             closed,
             remaining,
             unresolved,
+            preservedUnmapped,
             floating,
             floatingClosedWith = floatingClosed.Count > 0 ? "windows_close on the floating window's own handle" : null,
         };
     }
 
+    // keep preserves a pane with no verified View reopen entry; closing such a pane may persist across TE3 restarts.
     private static bool ShouldClose(LayoutPart part, string[] titles, bool keep) =>
-        CanCloseKind(part.Kind) && titles.Any(t => TitleMatches(part.Title, t)) != keep;
+        CanCloseKind(part.Kind)
+        && (!keep || PaneReopen.IsMapped(part.Title))
+        && titles.Any(t => TitleMatches(part.Title, t)) != keep;
 
     // A docked pane shows Maximize; once maximized the same button is named Restore (observed on 3.27.1).
     private static async Task<object> PaneButton(ILayoutSurface surface, string title, string button)

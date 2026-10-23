@@ -139,6 +139,8 @@ Observed 3.27.1 (2026-10-21) on `localhost/sp-demo-mcp`, main window maximized o
 
 Not open in this layout, so not observed: DAX query, Messages, Macros, Data preview panes.
 
+`te3_layout keep` preserves unmapped panes (including debugger panes) and returns them in `preservedUnmapped`; closing an unmapped pane could persist across restarts. Explicit `close` remains available.
+
 Reopening a pane: hide it, click MenuItem `View` with `physical: true`, find Button `<pane title>` with `includeOwned: true`, click it with `physical: true`. Verified for Properties, AI Assistant and TOM Explorer; each came back at its previous bounds.
 
 `te3_layout reopen-pane` verified live on 3.27.1 for Properties (2026-10-21): `hide-pane` took 1 input, `reopen-pane` 3, and Properties came back at its previous bounds (TOM Explorer shrank back to its old height). A second `reopen-pane` on the visible pane sent no input and returned `changed: false`. A document title (`Expression Editor`) is refused before input as a document, not a dockable pane in the View menu map.
