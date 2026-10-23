@@ -25,6 +25,10 @@ internal sealed record MouseToolArguments
     [ToolDoc("Target in window pixels: move/hover/scroll/click point, or drag end.")]
     public MousePoint? To { get; init; }
 
+    [ToolEnum("left", "right")]
+    [ToolDoc("click: mouse button (default left).")]
+    public string? Button { get; init; }
+
     [ToolDoc("scroll: wheel ticks, positive is up.")]
     public int? Ticks { get; init; }
 

@@ -6,6 +6,9 @@ namespace FlaUI.Mcp.Core;
 
 public sealed record InputTarget(nint Hwnd, int ProcessId, long StartedTicks, nint HitHwnd = 0)
 {
+    /// <summary>Pointer actions alone may target a same-process popup owned by this captured window.</summary>
+    internal bool AllowOwnedPopup { get; init; }
+
     public void EnsureAlive() => InputDesktop.Current.EnsureAlive(this);
 
     internal void EnsureAliveOnWindows()
@@ -308,12 +311,18 @@ public sealed partial class GuardedInput : IDisposable
             return false;
         }
 
-        return belongsTo(foreground, target.Hwnd) || !enabled(target.Hwnd) && ownedBy(foreground, target.Hwnd);
+        return belongsTo(foreground, target.Hwnd)
+            || ownedBy(foreground, target.Hwnd)
+                && (!enabled(target.Hwnd) || target.AllowOwnedPopup && processOf(foreground) == target.ProcessId);
     }
 
     private bool IsTargetWindow(nint foreground, InputTarget target) =>
         desktop.BelongsTo(foreground, target.Hwnd)
-        || !desktop.IsEnabled(target.Hwnd) && desktop.HasOwner(foreground, target.Hwnd);
+        || desktop.HasOwner(foreground, target.Hwnd)
+            && (
+                !desktop.IsEnabled(target.Hwnd)
+                || target.AllowOwnedPopup && desktop.ProcessOf(foreground) == target.ProcessId
+            );
 
     public void Send(Action input) => Counted(() => desktop.Dispatch(input));
 

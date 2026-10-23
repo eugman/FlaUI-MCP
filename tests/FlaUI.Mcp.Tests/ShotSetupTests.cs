@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Text.Json;
 using FlaUI.Core.Definitions;
+using FlaUI.Core.Input;
 using FlaUI.Mcp.Core;
 using FlaUI.Mcp.Tools;
 using Xunit;
@@ -43,7 +44,9 @@ public sealed class ShotSetupTests
         var schema = JsonSerializer.SerializeToElement(tool.InputSchema);
         var actions = schema.GetProperty("properties").GetProperty("action").GetProperty("enum");
         Assert.Contains(actions.EnumerateArray(), value => value.GetString() == "click");
-        Assert.Contains("left-click", tool.Description);
+        Assert.Contains("right-click", tool.Description);
+        var buttons = schema.GetProperty("properties").GetProperty("button").GetProperty("enum");
+        Assert.Contains(buttons.EnumerateArray(), value => value.GetString() == "right");
     }
 
     [Fact]
@@ -56,6 +59,27 @@ public sealed class ShotSetupTests
         );
         Assert.True(result.IsError);
         Assert.Contains("handle or ref required", result.Content[0].Text);
+    }
+
+    [Fact]
+    public async Task UnknownClickButtonIsRejectedBeforeDesktopInput()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var tool = new MouseTool(new ElementRegistry(), new PendingInvokeTracker(), new SessionManager());
+        var result = await tool.ExecuteAsync(
+            JsonSerializer.SerializeToElement(
+                new
+                {
+                    action = "click",
+                    button = "middle",
+                    to = new { x = 10, y = 20 },
+                }
+            )
+        );
+        Assert.True(result.IsError);
+        Assert.Equal(RefusalCodes.InvalidArguments, result.Outcome?.Failure?.Code);
+        Assert.Equal(0, desktop.Dispatched);
     }
 
     [Theory]
@@ -88,6 +112,49 @@ public sealed class ShotSetupTests
         var target = new InputTarget(42, 1, 1, 43);
         Assert.Null(Record.Exception(() => PointerActions.RequireHit(target, new Point(10, 20), _ => 43)));
     }
+
+    [Fact]
+    public void CoordinateClickAcceptsASameProcessOwnedPopup()
+    {
+        var target = new InputTarget(42, 1, 1);
+        Assert.Null(
+            Record.Exception(() =>
+                PointerActions.RequireHit(
+                    target,
+                    new Point(10, 20),
+                    _ => 44,
+                    (hit, owner) => hit == 44 && owner == 42,
+                    _ => 1
+                )
+            )
+        );
+    }
+
+    [Fact]
+    public void CoordinateClickRejectsAForeignOwnedPopup()
+    {
+        var target = new InputTarget(42, 1, 1);
+        Assert.Throws<InputRefusedException>(() =>
+            PointerActions.RequireHit(
+                target,
+                new Point(10, 20),
+                _ => 44,
+                (hit, owner) => hit == 44 && owner == 42,
+                _ => 2
+            )
+        );
+    }
+
+    [Theory]
+    [InlineData(null, MouseButton.Left)]
+    [InlineData("left", MouseButton.Left)]
+    [InlineData("right", MouseButton.Right)]
+    public void CoordinateClickSelectsRequestedButton(string? requested, MouseButton expected) =>
+        Assert.Equal(expected, MouseTool.ClickButton(requested));
+
+    [Fact]
+    public void CoordinateClickRejectsUnknownButton() =>
+        Assert.Throws<ArgumentException>(() => MouseTool.ClickButton("middle"));
 
     [Fact]
     public void DragPathEndsExactlyOnTarget()

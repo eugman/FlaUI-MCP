@@ -58,6 +58,12 @@ public sealed class ToolsListSnapshotTests
         var kept = new List<string>();
         var mouse = live.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_mouse")!;
         var properties = mouse["inputSchema"]!["properties"]!.AsObject();
+        // The right-button click is an intended new argument and tool description.
+        Assert.Equal("string", properties["button"]!["type"]!.GetValue<string>());
+        Assert.True(properties.Remove("button"));
+        mouse["description"] = baseline.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_mouse")![
+            "description"
+        ]!.DeepClone();
         foreach (var guard in new[] { "fromMustHit", "toMustHit" })
         {
             Assert.Equal("string", properties[guard]!["type"]!.GetValue<string>());

@@ -62,7 +62,7 @@ Then add the server to your MCP client:
 | `windows_send_keys` | Send keys or chords such as `Ctrl+A`. |
 | `windows_get_clipboard` | Read the clipboard, for editors that hide their text from UI Automation. |
 | `windows_screenshot` | Capture a window, element or screen region as PNG. `parkPointer` moves the mouse off the window first. |
-| `windows_mouse` | Park, move, hover, scroll or drag the pointer; drags can start on an element's edge and resize it to a given size. |
+| `windows_mouse` | Park, move, hover, scroll, click with the left or right button, or drag the pointer; drags can start on an element's edge and resize it to a given size. |
 | `windows_batch` | Run several actions in one call. |
 | `windows_operation_status` | Check on an action that is still running (for example, one blocked by a modal dialog). |
 

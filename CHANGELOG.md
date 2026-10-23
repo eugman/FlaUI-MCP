@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `windows_launch` now returns a structured `launch-pending` receipt when the started process is still alive but no unique usable window could be attached. The unverified result includes `processId` and observed title/HWND pairs, so callers can attach without relaunching.
+- `windows_mouse` `click` accepts `button: "right"` as well as the default left button. Raw point hit checks accept a popup only when Win32 reports it owned by the captured target window and in that same process.
+
 ### Changed for product repos
 - Guard refusals are typed: `GuardedInput`, `InputTarget`, the keyboard fill and `SessionManager` throw `InputRefusedException` with a code instead of a plain `InvalidOperationException` or `Exception`, texts unchanged. New codes: `target-stale`, `window-ownership-unknown`, `focus-not-verified`, `process-not-allowed`, `target-changed`, `focus-lost`, `launch-failed` and `window-not-found`. The ones raised after input (`target-changed` after a send, `focus-lost`, a fill whose read-back was interrupted, a launch that started a process) say `actionDispatched: true`. Catch `AutomationRefusal`, not `InvalidOperationException`.
 - A call that sent input without a `proof` reports `status: unverified` (`verification: not-established`) instead of `ok`; a call that sent nothing stays `ok`.
