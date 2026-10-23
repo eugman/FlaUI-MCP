@@ -30,6 +30,20 @@ public partial class ToolRegistry
     /// </summary>
     public Action<string, ToolOutcome>? FailedAfterInput { get; set; }
 
+    /// <summary>A settled, successful zero-input call can inform a host-selected recovery observation.</summary>
+    public Action<string, JsonElement?, ToolOutcome, ProcessIdentity?>? ObservedAfterSuccess { get; set; }
+
+    /// <summary>A host can serialize Core calls with its own UI gate. The scope lives until the tool task settles.</summary>
+    public Func<
+        string,
+        McpToolAnnotations?,
+        CancellationToken,
+        ValueTask<IAsyncDisposable?>
+    >? ExecutionScopeForTool { get; set; }
+
+    /// <summary>Target-aware companion to FailedAfterInput for product grant recovery.</summary>
+    public Action<string, ToolOutcome, ProcessIdentity?>? FailedAfterInputWithTarget { get; set; }
+
     private readonly TimeProvider _time;
 
     /// <param name="time">The clock for tool timeouts; the system clock by default (tests inject one).</param>
@@ -118,7 +132,7 @@ public partial class ToolRegistry
                 return Strand(name, operation, toolTask, settled, whenStranded);
             }
 
-            return CompleteResult(await toolTask, operation);
+            return CompleteAndObserve(name, arguments, operation, await toolTask);
         }
         catch (Exception ex)
         {
@@ -173,6 +187,59 @@ public partial class ToolRegistry
     {
         OperationContext.Current.Value = operation;
         var previousHook = MutationGuard.BeforeMutation.Value;
+        IAsyncDisposable? executionScope = null;
+        try
+        {
+            try
+            {
+                executionScope = await (
+                    ExecutionScopeForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations, operation.Stop.Token)
+                    ?? ValueTask.FromResult<IAsyncDisposable?>(null)
+                );
+            }
+            catch (Exception ex)
+            {
+                if (ex is AutomationRefusal refusal)
+                {
+                    operation.Refusal ??= new InputRefusal(refusal.Code, refusal.Message)
+                    {
+                        ActionDispatched = refusal.ActionDispatched,
+                    };
+                }
+
+                return FinalizeOperation(
+                    tool.Name,
+                    operation,
+                    WithDispatch(ErrorText($"Error: {ex.Message}"), operation.InputsSent, operation.Refusal)
+                );
+            }
+
+            return await ExecuteOperationBody(tool, arguments, operation, previousHook);
+        }
+        finally
+        {
+            try
+            {
+                if (executionScope != null)
+                {
+                    await executionScope.DisposeAsync();
+                }
+            }
+            finally
+            {
+                MutationGuard.BeforeMutation.Value = previousHook;
+                OperationContext.Current.Value = null;
+            }
+        }
+    }
+
+    private async Task<McpToolResult> ExecuteOperationBody(
+        ITool tool,
+        JsonElement? arguments,
+        OperationContext operation,
+        Action? previousHook
+    )
+    {
         McpToolResult result;
         string? warning = null;
         try
@@ -210,12 +277,50 @@ public partial class ToolRegistry
                 ProviderPending(operation)
             );
         }
-        finally
+
+        return FinalizeOperation(tool.Name, operation, result);
+    }
+
+    private McpToolResult CompleteAndObserve(
+        string name,
+        JsonElement? arguments,
+        OperationContext operation,
+        McpToolResult result
+    )
+    {
+        var completed = CompleteResult(result, operation);
+        var observed = completed.Outcome;
+        if (IsSettledObservation(completed, operation))
         {
-            MutationGuard.BeforeMutation.Value = previousHook;
-            OperationContext.Current.Value = null;
+            try
+            {
+                ObservedAfterSuccess?.Invoke(name, arguments, observed, IdentityOf(operation));
+            }
+            catch
+            {
+                // A recovery observer must not change the already-settled tool result.
+            }
         }
 
+        return completed;
+    }
+
+    private bool IsSettledObservation(McpToolResult result, OperationContext operation)
+    {
+        if (result.IsError == true)
+        {
+            return false;
+        }
+
+        var outcome = result.Outcome;
+        return outcome?.Status == "ok"
+            && outcome.InputsSent == 0
+            && outcome.Provider != "pending"
+            && !ProviderPending(operation);
+    }
+
+    private McpToolResult FinalizeOperation(string name, OperationContext operation, McpToolResult result)
+    {
         operation.ResultOutcome = result.Outcome;
         if (result.Outcome!.Status == "failed")
         {
@@ -224,16 +329,33 @@ public partial class ToolRegistry
         }
 
         operation.Finished = true;
-        if (
-            result.Outcome is { Status: "failed" } failed
-            && (failed.InputsSent > 0 || failed.Failure?.ActionDispatched == true)
-        )
-        {
-            FailedAfterInput?.Invoke(tool.Name, failed);
-        }
-
+        NotifyFailedAfterInput(name, operation, result.Outcome);
         return result;
     }
+
+    private void NotifyFailedAfterInput(string name, OperationContext operation, ToolOutcome? outcome)
+    {
+        if (outcome is not { Status: "failed" } failed)
+        {
+            return;
+        }
+
+        if (failed.InputsSent == 0 && failed.Failure?.ActionDispatched != true)
+        {
+            return;
+        }
+
+        if (!operation.TryNotifyFailure())
+        {
+            return;
+        }
+
+        FailedAfterInput?.Invoke(name, failed);
+        FailedAfterInputWithTarget?.Invoke(name, failed, IdentityOf(operation));
+    }
+
+    private static ProcessIdentity? IdentityOf(OperationContext operation) =>
+        operation.ProcessId == 0 ? null : new ProcessIdentity(operation.ProcessId, operation.ProcessStartedTicks);
 
     private static Action ComposeMutationPermission(Action? ambient, Action tool)
     {

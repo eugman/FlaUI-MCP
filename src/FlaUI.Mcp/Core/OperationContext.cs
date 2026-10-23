@@ -37,11 +37,14 @@ public sealed class OperationContext
     /// <summary>The last refusal guarded input raised in this operation.</summary>
     public InputRefusal? Refusal { get; set; }
     private int inputsSent;
+    private int failureNotified;
 
     /// <summary>Inputs and mutations this operation has sent so far, nested steps included.</summary>
     public int InputsSent => Volatile.Read(ref inputsSent);
 
     public void RecordInput() => Interlocked.Increment(ref inputsSent);
+
+    internal bool TryNotifyFailure() => Interlocked.CompareExchange(ref failureNotified, 1, 0) == 0;
 
     public static void Check() => Current.Value?.Stop.Token.ThrowIfCancellationRequested();
 }
