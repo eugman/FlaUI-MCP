@@ -166,6 +166,12 @@ public partial class ToolRegistry
             var target = ResolveTargetForTool is { } resolve
                 ? resolve(tool.Name, arguments)
                 : ResolveTarget?.Invoke(arguments);
+            // A batch can target several processes. Attribute a stranded call to the step currently running.
+            if (target is not null)
+            {
+                parent.ProcessId = target.ProcessId;
+                parent.ProcessStartedTicks = target.StartedTicks;
+            }
             warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
             OperationContext.Check();
             result = WithAdvisory(await tool.ExecuteAsync(arguments), warning);

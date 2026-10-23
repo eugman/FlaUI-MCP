@@ -106,6 +106,85 @@ public sealed class BatchTargetTests
         }
     }
 
+    [Fact]
+    public async Task AStrandedBatchBlocksTheProcessOfItsCurrentStep()
+    {
+        using var installed = new FakeDesktop().Install();
+        using var sessions = new SessionManager(null, ProcessPolicy.AllowAll);
+        var first = sessions.PublishWindow(null, 42, 7, new(42, 7, 9));
+        var second = sessions.PublishWindow(null, 43, 8, new(43, 8, 10));
+        var pending = new PendingInvokeTracker(pid => pid == 7 ? 9 : 10);
+        var elements = new ElementRegistry();
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
+        {
+            ResolveTarget = arguments => sessions.ResolveTarget(arguments, elements),
+            Pending = pending,
+        };
+        var gate = new TaskCompletionSource<McpToolResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var step = new SecondTargetHangs(second, gate.Task);
+        registry.RegisterTool(step);
+        registry.RegisterTool(new BatchTool(registry));
+        try
+        {
+            var call = registry.ExecuteToolAsync(
+                "windows_batch",
+                Args(
+                    new
+                    {
+                        actions = new object[]
+                        {
+                            new
+                            {
+                                action = "type",
+                                handle = first,
+                                text = "first",
+                            },
+                            new
+                            {
+                                action = "type",
+                                handle = second,
+                                text = "second",
+                            },
+                        },
+                    }
+                )
+            );
+            await step.EnteredSecond.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            var result = await call.WaitAsync(Eventually.Bound);
+
+            Assert.Equal("timed_out_pending", result.Outcome!.Dispatch);
+            Assert.True(pending.TryGetPending(8, out var blocked));
+            Assert.Equal("timed-out windows_batch", blocked.Description);
+            Assert.False(pending.TryGetPending(7, out _));
+        }
+        finally
+        {
+            gate.SetResult(new McpToolResult { Content = [] });
+        }
+    }
+
+    private sealed class SecondTargetHangs(string second, Task<McpToolResult> gate) : ToolBase
+    {
+        public override string Name => "windows_type";
+        public override string Description => "no desktop";
+        public override object InputSchema => new { };
+
+        public TaskCompletionSource EnteredSecond { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
+        {
+            if (arguments is { } args && args.GetProperty("handle").GetString() == second)
+            {
+                EnteredSecond.TrySetResult();
+                return gate;
+            }
+
+            return Task.FromResult(new McpToolResult { Content = [] });
+        }
+    }
+
     private sealed class HangingStep(Task<McpToolResult> gate) : ToolBase
     {
         public override string Name => "windows_type";
