@@ -312,17 +312,33 @@ public sealed partial class GuardedInput : IDisposable
         }
 
         return belongsTo(foreground, target.Hwnd)
-            || ownedBy(foreground, target.Hwnd)
-                && (!enabled(target.Hwnd) || target.AllowOwnedPopup && processOf(foreground) == target.ProcessId);
+            || OwnedForegroundAllowed(target, foreground, processOf, enabled, ownedBy);
     }
 
     private bool IsTargetWindow(nint foreground, InputTarget target) =>
         desktop.BelongsTo(foreground, target.Hwnd)
-        || desktop.HasOwner(foreground, target.Hwnd)
-            && (
-                !desktop.IsEnabled(target.Hwnd)
-                || target.AllowOwnedPopup && desktop.ProcessOf(foreground) == target.ProcessId
-            );
+        || OwnedForegroundAllowed(target, foreground, desktop.ProcessOf, desktop.IsEnabled, desktop.HasOwner);
+
+    private static bool OwnedForegroundAllowed(
+        InputTarget target,
+        nint foreground,
+        Func<nint, int> processOf,
+        Func<nint, bool> enabled,
+        Func<nint, nint, bool> ownedBy
+    )
+    {
+        if (!ownedBy(foreground, target.Hwnd))
+        {
+            return false;
+        }
+
+        if (!enabled(target.Hwnd))
+        {
+            return true;
+        }
+
+        return target.AllowOwnedPopup && processOf(foreground) == target.ProcessId;
+    }
 
     public void Send(Action input) => Counted(() => desktop.Dispatch(input));
 
