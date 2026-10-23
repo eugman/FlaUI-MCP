@@ -29,7 +29,7 @@
     />
   </ItemGroup>
 
-  <ItemGroup Condition="Exists('$(LocalTests)')">
+  <ItemGroup Condition="'$(IncludeLocalRecipes)' != 'false' And Exists('$(LocalTests)')">
     <Compile Include="$(LocalTests)**/*.cs" Link="local/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

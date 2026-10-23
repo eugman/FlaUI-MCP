@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <!-- Your own recipes and their inputs live in the gitignored local/ folder. See automation/README.md. -->
-  <ItemGroup Condition="Exists('$(LocalRoot)recipes')">
+  <ItemGroup Condition="'$(IncludeLocalRecipes)' != 'false' And Exists('$(LocalRoot)recipes')">
     <Compile
       Include="$(LocalRoot)recipes/**/*.cs"
       Link="local/recipes/%(RecursiveDir)%(Filename)%(Extension)"
