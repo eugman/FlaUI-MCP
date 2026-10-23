@@ -152,8 +152,8 @@ public sealed partial class Te3Page
     public Task OpenTom() =>
         TomPaneOpen.Ensure(
             () => TargetVisible(TomTreeTarget()),
-            () => TargetExists(TomTabTarget()),
-            () => Click(TomTabTarget()),
+            FindTomTab,
+            title => Click(TomTabTarget(title)),
             async () =>
             {
                 reportStep?.Invoke("Reopen TOM Explorer from View menu");
@@ -167,6 +167,10 @@ public sealed partial class Te3Page
                 );
             }
         );
+
+    // The Show changes filter retitles the inactive tab as "TOM Explorer (Changed)" (3.27.1).
+    // Try both exact UIA names before treating the pane as closed and opening View.
+    private Task<string?> FindTomTab() => TomPaneOpen.FindTab(title => TargetExists(TomTabTarget(title)));
 
     private async Task<bool> TargetVisible(Target target) =>
         await TargetExists(target) && await IsOnScreen(target) == true;

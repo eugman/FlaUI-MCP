@@ -139,7 +139,7 @@ Observed 3.27.1 (2026-10-21) on `localhost/sp-demo-mcp`, main window maximized o
 
 Not open in this layout, so not observed: DAX query, Messages, Macros, Data preview panes.
 
-`te3_navigate tom-explorer` now checks whether the tree is visible, selects its existing tab when another tab is active, or reopens a closed pane through the mapped View menu, then reads back the tree. This route is offline-tested but awaits live verification on 3.27.1.
+`te3_navigate tom-explorer` now checks whether the tree is visible, selects its existing `TOM Explorer` or `TOM Explorer (Changed)` tab when another tab is active, or reopens a closed pane through the mapped View menu, then reads back the tree. This route is offline-tested but awaits live verification on 3.27.1.
 
 `te3_layout keep` preserves unmapped panes (including debugger panes) and returns them in `preservedUnmapped`; closing an unmapped pane could persist across restarts. Explicit `close` remains available.
 

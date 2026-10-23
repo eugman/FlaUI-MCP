@@ -107,7 +107,8 @@ public sealed partial class Te3Page
     public static Target CollapseTomTarget() =>
         new(new(Name: "Collapse all", ControlType: "Button"), new(AutomationId: "TabularExplorerView"), false);
 
-    public static Target TomTabTarget() => new(new(Name: "TOM Explorer", ControlType: "TabItem"), null, false);
+    public static Target TomTabTarget(string title = "TOM Explorer") =>
+        new(new(Name: title, ControlType: "TabItem"), null, false);
 
     // The tree inside TOM Explorer's view, which exists whether TOM Explorer is a tab or a docked pane
     // (observed on 3.27.1: Pane "TOM Explorer" > TabularExplorerView > treeList).

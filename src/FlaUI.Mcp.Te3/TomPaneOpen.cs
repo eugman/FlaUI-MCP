@@ -1,10 +1,23 @@
 /// <summary>The three observed TOM Explorer states: visible, another tab selected, or the pane closed.</summary>
 internal static class TomPaneOpen
 {
+    public static async Task<string?> FindTab(Func<string, Task<bool>> exists)
+    {
+        foreach (var title in new[] { "TOM Explorer", "TOM Explorer (Changed)" })
+        {
+            if (await exists(title))
+            {
+                return title;
+            }
+        }
+
+        return null;
+    }
+
     public static async Task Ensure(
         Func<Task<bool>> treeVisible,
-        Func<Task<bool>> tabExists,
-        Func<Task> selectTab,
+        Func<Task<string?>> findTab,
+        Func<string, Task> selectTab,
         Func<Task> reopenPane
     )
     {
@@ -13,9 +26,9 @@ internal static class TomPaneOpen
             return;
         }
 
-        if (await tabExists())
+        if (await findTab() is { } tabTitle)
         {
-            await selectTab();
+            await selectTab(tabTitle);
         }
         else
         {
