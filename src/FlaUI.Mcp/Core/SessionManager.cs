@@ -72,6 +72,44 @@ public class SessionManager : IDisposable
         }
     }
 
+    internal ProcessIdentity? ResolveForegroundTarget()
+    {
+        var (hwnd, pid) = InputTarget.ForegroundOwner();
+        return ResolveNativeTarget(hwnd, pid);
+    }
+
+    /// <summary>Resolve a native window before a provider read begins.</summary>
+    internal ProcessIdentity? ResolveNativeTarget(nint hwnd, int pid)
+    {
+        if (hwnd == 0 || pid == 0)
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            if (
+                _hwndToHandle.TryGetValue(hwnd, out var handle)
+                && _identities.TryGetValue(handle, out var identity)
+                && identity.ProcessId == pid
+            )
+            {
+                return new(pid, identity.StartedTicks);
+            }
+        }
+
+        // The foreground window may not have been registered yet. Its PID still identifies
+        // which provider must remain blocked if the ensuing snapshot strands.
+        try
+        {
+            return new(pid, InputTarget.Capture(hwnd, pid).StartedTicks);
+        }
+        catch
+        {
+            return new(pid, 0);
+        }
+    }
+
     public SessionManager(ProcessPolicy? processPolicy = null)
         : this(new UIA3Automation(), processPolicy ?? ProcessPolicy.AllowAll) { }
 

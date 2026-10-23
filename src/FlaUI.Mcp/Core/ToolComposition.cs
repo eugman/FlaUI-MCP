@@ -28,7 +28,7 @@ internal static class ToolComposition
         {
             if (name.StartsWith("windows_", StringComparison.Ordinal))
             {
-                return CoreTarget(arguments);
+                return CoreTargetForTool(name, arguments, sessions, elements);
             }
 
             return productToolResolver?.Invoke(name, arguments)
@@ -76,5 +76,31 @@ internal static class ToolComposition
             registry.RegisterTool(new CloseWindowTool(sessions, pending));
             registry.RegisterTool(new BatchTool(registry));
         }
+    }
+
+    private static ProcessIdentity? CoreTargetForTool(
+        string name,
+        System.Text.Json.JsonElement? arguments,
+        SessionManager sessions,
+        ElementRegistry elements
+    )
+    {
+        var target = sessions.ResolveTarget(arguments, elements);
+        if (target != null || name != "windows_snapshot")
+        {
+            return target;
+        }
+
+        if (
+            arguments is { ValueKind: System.Text.Json.JsonValueKind.Object } args
+            && args.TryGetProperty("handle", out var handle)
+            && handle.ValueKind == System.Text.Json.JsonValueKind.String
+            && !string.IsNullOrEmpty(handle.GetString())
+        )
+        {
+            return null;
+        }
+
+        return sessions.ResolveForegroundTarget();
     }
 }

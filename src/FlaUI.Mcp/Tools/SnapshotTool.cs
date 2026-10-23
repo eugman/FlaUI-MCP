@@ -84,6 +84,16 @@ public class SnapshotTool : ToolBase
             {
                 // Resolve the foreground window through Win32; a focused-element walk can hang on unrelated apps.
                 var foreground = InputDesktop.Current.Foreground();
+                if (OperationContext.Current.Value is { } operation)
+                {
+                    var target = _sessionManager.ResolveNativeTarget(
+                        foreground,
+                        InputDesktop.Current.ProcessOf(foreground)
+                    );
+                    operation.ProcessId = target?.ProcessId ?? 0;
+                    operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
+                }
+
                 window = foreground == 0 ? null : _sessionManager.Automation.FromHandle(foreground)?.AsWindow();
                 if (window == null)
                 {
