@@ -27,6 +27,12 @@ public sealed record InputTarget(nint Hwnd, int ProcessId, long StartedTicks, ni
     /// <summary>A stale-identity refusal the caller dealt with: it no longer stands as the operation's refusal.</summary>
     internal static void Handled(Exception error) => InputRefusedException.Handled(error);
 
+    internal static (nint Hwnd, int ProcessId) ForegroundOwner()
+    {
+        var hwnd = InputDesktop.Current.Foreground();
+        return (hwnd, InputDesktop.Current.ProcessOf(hwnd));
+    }
+
     public static InputTarget Capture(nint hwnd, int pid)
     {
         if (hwnd == 0 || pid == 0 || InputDesktop.Current.ProcessOf(hwnd) != pid)

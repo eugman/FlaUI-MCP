@@ -165,6 +165,80 @@ public sealed class BatchTargetTests
         }
     }
 
+    [Fact]
+    public async Task AStrandedForegroundSnapshotBlocksItsActualProcess()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd, OtherProcessId = 8 };
+        using var installed = desktop.Install();
+        using var sessions = new SessionManager(null, ProcessPolicy.AllowAll);
+        var first = sessions.PublishWindow(null, 42, 7, new(42, 7, 9));
+        sessions.PublishWindow(null, FakeDesktop.OtherHwnd, 8, new(FakeDesktop.OtherHwnd, 8, 10));
+        var pending = new PendingInvokeTracker(pid => pid == 7 ? 9 : 10);
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock);
+        ToolComposition.Register(registry, sessions, new ElementRegistry(), pending, ProcessPolicy.AllowAll, true);
+        registry.RegisterTool(new ImmediateTypeStep());
+        var gate = new TaskCompletionSource<McpToolResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var snapshot = new ForegroundSnapshotHangs(gate.Task);
+        registry.RegisterTool(snapshot);
+        try
+        {
+            var call = registry.ExecuteToolAsync(
+                "windows_batch",
+                Args(
+                    new
+                    {
+                        actions = new object[]
+                        {
+                            new
+                            {
+                                action = "type",
+                                handle = first,
+                                text = "first",
+                            },
+                            new { action = "snapshot" },
+                        },
+                    }
+                )
+            );
+            await snapshot.Entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            var result = await call.WaitAsync(Eventually.Bound);
+
+            Assert.Equal("timed_out_pending", result.Outcome!.Dispatch);
+            Assert.True(pending.TryGetPending(8, out _));
+            Assert.False(pending.TryGetPending(7, out _));
+        }
+        finally
+        {
+            gate.SetResult(new McpToolResult { Content = [] });
+        }
+    }
+
+    private sealed class ImmediateTypeStep : ToolBase
+    {
+        public override string Name => "windows_type";
+        public override string Description => "no desktop";
+        public override object InputSchema => new { };
+
+        public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
+            Task.FromResult(new McpToolResult { Content = [] });
+    }
+
+    private sealed class ForegroundSnapshotHangs(Task<McpToolResult> gate) : ToolBase
+    {
+        public override string Name => "windows_snapshot";
+        public override string Description => "no desktop";
+        public override object InputSchema => new { };
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
+        {
+            Entered.TrySetResult();
+            return gate;
+        }
+    }
+
     private sealed class SecondTargetHangs(string second, Task<McpToolResult> gate) : ToolBase
     {
         public override string Name => "windows_type";
