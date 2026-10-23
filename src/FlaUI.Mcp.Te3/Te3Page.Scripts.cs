@@ -149,16 +149,39 @@ public sealed partial class Te3Page
         await Click(CollapseTomTarget(), false);
     }
 
-    public async Task OpenTom()
-    {
-        // A docked TOM Explorer pane has no tab to click; its tree being on screen is enough.
-        if (await IsOnScreen(TomTreeTarget()) == true)
-        {
-            return;
-        }
+    public Task OpenTom() =>
+        TomPaneOpen.Ensure(
+            () => TargetVisible(TomTreeTarget()),
+            () => TargetExists(TomTabTarget()),
+            () => Click(TomTabTarget()),
+            async () =>
+            {
+                reportStep?.Invoke("Reopen TOM Explorer from View menu");
+                await LayoutSteps.Reopen(
+                    host,
+                    handle,
+                    host.Sessions.GetWindow(handle)
+                        ?? throw new InvalidOperationException("TE3 window not readable for TOM Explorer reopen."),
+                    Inputs,
+                    "TOM Explorer"
+                );
+            }
+        );
 
-        await Click(TomTabTarget());
-    }
+    private async Task<bool> TargetVisible(Target target) =>
+        await TargetExists(target) && await IsOnScreen(target) == true;
+
+    private async Task<bool> TargetExists(Target target) =>
+        await Task.Run(() =>
+                query.IsPresent(
+                    handle,
+                    target.Selector,
+                    target.Within,
+                    target.IncludeOwned,
+                    new SearchBudget(3000, TimeSpan.FromSeconds(2))
+                )
+            )
+            .WaitAsync(TimeSpan.FromSeconds(5));
 
     public async Task SetProperty(string property, string value)
     {
