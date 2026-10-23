@@ -74,6 +74,16 @@ public sealed class LayoutEntryTests : IDisposable
     }
 
     [Fact]
+    public async Task KeepCanCloseAMappedPaneWithTheChangedSuffix()
+    {
+        var result = await Tool(inputs => new FakeSurface(inputs, "Properties", "TOM Explorer (Changed)"))
+            .ExecuteAsync(Args(new { action = "keep", titles = new[] { "Properties" } }));
+
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal(["Close TOM Explorer (Changed)"], surface!.Presses);
+    }
+
+    [Fact]
     public async Task AMaximizeThatChangedNothingFailsAfterItsOneInput()
     {
         var tool = Tool(inputs => new FakeSurface(inputs, "Properties") { ButtonsFlip = false });

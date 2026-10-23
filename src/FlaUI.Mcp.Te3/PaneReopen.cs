@@ -35,7 +35,10 @@ internal static class PaneReopen
         "Properties",
     ];
 
-    public static bool IsMapped(string title) => ViewMenuPanes.Contains(title);
+    public static bool IsMapped(string title) => MenuTitle(title) != null;
+
+    private static string? MenuTitle(string title) =>
+        ViewMenuPanes.FirstOrDefault(entry => Te3Layout.TitleMatches(entry, title));
 
     /// <summary>View popup entries observed on TE3 3.27.1 that open a document, not a docked pane.</summary>
     internal static readonly string[] ViewMenuDocuments = ["Expression Editor"];
@@ -100,7 +103,7 @@ internal static class PaneReopen
         await menu.OpenViewMenu();
         try
         {
-            await menu.ClickEntry(title);
+            await menu.ClickEntry(MenuTitle(title)!);
         }
         catch (Exception ex) when (ex is InvalidOperationException or AutomationRefusal)
         {
