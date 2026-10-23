@@ -14,6 +14,25 @@ internal static class TomPaneOpen
         return null;
     }
 
+    public static async Task Verify(
+        Func<Task<bool?>> treeVisible,
+        Func<Task<string?>> findTab,
+        Func<string, Task> verifySelected
+    )
+    {
+        if (await treeVisible() == true)
+        {
+            return;
+        }
+
+        var title =
+            await findTab()
+            ?? throw new InvalidOperationException(
+                "TOM Explorer tree visibility is unknown and no TOM Explorer tab is exposed."
+            );
+        await verifySelected(title);
+    }
+
     public static async Task Ensure(
         Func<Task<bool>> treeVisible,
         Func<Task<string?>> findTab,

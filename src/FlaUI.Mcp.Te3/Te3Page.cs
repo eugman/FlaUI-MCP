@@ -201,11 +201,12 @@ public sealed partial class Te3Page(
                 await VerifyObjectArrival();
                 break;
             case { Id: "tom-explorer" }:
-                // Unknown is not on screen: the tab must then be shown selected.
-                if (await IsOnScreen(TomTreeTarget()) != true)
-                {
-                    await RequireSelectedTab(TomTabTarget());
-                }
+                // Unknown tree visibility needs a selected TOM tab; it may carry the Changed suffix.
+                await TomPaneOpen.Verify(
+                    () => IsOnScreen(TomTreeTarget()),
+                    FindTomTab,
+                    title => RequireSelectedTab(TomTabTarget(title))
+                );
 
                 break;
             case { Id: "native-mcp-server" }:
