@@ -128,4 +128,30 @@ public class ProcessPolicyTests
         Assert.Contains("notepad", message);
         Assert.Contains(ProcessPolicy.EnvironmentVariable, message);
     }
+
+    [Fact]
+    public void AdvisoryPolicy_AllowsEveryProcessButIdentifiesNonPreferredApps()
+    {
+        var policy = new ProcessPolicy(new[] { "TabularEditor", "WindowsTerminal.exe" }, advisory: true);
+
+        Assert.False(policy.IsRestricted);
+        Assert.True(policy.IsAdvisory);
+        Assert.True(policy.IsNameAllowed("explorer"));
+        Assert.True(policy.IsExecutableAllowed("cmd.exe"));
+        Assert.True(policy.IsProcessAllowed(0));
+        Assert.True(policy.IsPreferredName("WindowsTerminal"));
+        Assert.False(policy.IsPreferredName("explorer"));
+        Assert.Null(policy.DescribeAdvisory("WindowsTerminal.exe"));
+        Assert.Contains("explorer", policy.DescribeAdvisory("explorer"));
+        Assert.Contains("TabularEditor", policy.DescribeAdvisory("explorer"));
+    }
+
+    [Fact]
+    public void EmptyAdvisoryPolicy_HasNoWarning()
+    {
+        var policy = new ProcessPolicy(Array.Empty<string>(), advisory: true);
+
+        Assert.False(policy.IsAdvisory);
+        Assert.Null(policy.DescribeAdvisory("explorer"));
+    }
 }
