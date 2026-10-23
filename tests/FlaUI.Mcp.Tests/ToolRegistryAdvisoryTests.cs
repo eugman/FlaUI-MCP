@@ -37,6 +37,20 @@ public sealed class ToolRegistryAdvisoryTests
         Assert.Contains("probe done", result.StructuredContent!.Message);
     }
 
+    [Fact]
+    public async Task RegistryKeepsAdvisoryWarningWhenToolThrows()
+    {
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new ProbeTool(() => throw new InvalidOperationException("probe failed")));
+        registry.AdvisoryWarning = (_, _, _) => "Outside preferred app";
+
+        var result = await registry.ExecuteToolAsync("probe", null);
+
+        Assert.True(result.IsError);
+        Assert.StartsWith("Warning: Outside preferred app", result.Content[0].Text);
+        Assert.Contains("probe failed", result.StructuredContent!.Message);
+    }
+
     private sealed class ProbeTool(Action run) : ToolBase
     {
         public override string Name => "probe";
