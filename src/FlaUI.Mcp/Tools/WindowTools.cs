@@ -167,17 +167,30 @@ public class FocusWindowTool : ToolBase
         }
 
         var desktop = InputDesktop.Current;
-        if (desktop.BelongsTo(desktop.Foreground(), hwnd))
+        var foreground = desktop.Foreground();
+        if (desktop.BelongsTo(foreground, hwnd))
         {
             return TextResult($"Focused window {handle}") with
             {
                 Outcome = new ToolOutcome("completed", "not-tracked").WithProof(
-                    new Proof(Proof.Verified, $"{desktop.Foreground()}", $"{hwnd}", "foreground", Independent: true)
+                    new Proof(Proof.Verified, $"{foreground}", $"{hwnd}", "foreground", Independent: true)
                 ),
             };
         }
 
-        return ErrorResult($"Focus requested for {handle}, but another window is in front: {Unobserved}");
+        var pid = desktop.ProcessOf(foreground);
+        var owner = $"HWND {foreground}";
+        if (pid != 0)
+        {
+            var name = desktop.ProcessNameOf(pid);
+            owner = $"PID {pid}";
+            if (name != null)
+            {
+                owner += $" ({name})";
+            }
+        }
+
+        return ErrorResult($"Focus requested for {handle}, but another window is in front ({owner}): {Unobserved}");
     }
 }
 

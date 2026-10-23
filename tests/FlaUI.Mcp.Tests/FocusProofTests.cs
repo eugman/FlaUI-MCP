@@ -41,17 +41,17 @@ public sealed class FocusProofTests
     [Fact]
     public async Task FocusThatLeavesAnotherWindowInFrontFails()
     {
-        using var installed = new FakeDesktop
-        {
-            ForegroundWindow = FakeDesktop.OtherHwnd,
-            ActivationAllowed = false,
-        }.Install();
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd, ActivationAllowed = false };
+        desktop.ProcessNames[FakeDesktop.OtherPid] = "ForegroundApp";
+        using var installed = desktop.Install();
         var result = await Focus();
 
         Assert.True(result.IsError);
         Assert.Equal("failed", result.Outcome!.Status);
         Assert.Equal("not-dispatched", result.Outcome.Dispatch);
         Assert.Contains("not observed", result.Content[0].Text);
+        Assert.Contains("ForegroundApp", result.Content[0].Text);
+        Assert.Contains($"PID {FakeDesktop.OtherPid}", result.Content[0].Text);
     }
 
     [Fact]
