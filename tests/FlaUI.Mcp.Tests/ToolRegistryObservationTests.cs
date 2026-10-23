@@ -201,6 +201,83 @@ public sealed class ToolRegistryObservationTests
         Assert.Equal(1, observed);
     }
 
+    [Fact]
+    public async Task DispatchAfterPendingResponseStillPausesBeforeScopeRelease()
+    {
+        var proceed = new TaskCompletionSource();
+        var entered = new TaskCompletionSource();
+        var settled = new TaskCompletionSource();
+        var clock = new ManualTimeProvider();
+        var events = new List<string>();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
+        {
+            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ExecutionScopeForTool = (_, _, _) =>
+                ValueTask.FromResult<IAsyncDisposable?>(
+                    new ProbeScope(() =>
+                    {
+                        events.Add("released");
+                        settled.SetResult();
+                    })
+                ),
+            FailedAfterInputWithTarget = (_, outcome, _) =>
+            {
+                Assert.Equal(1, outcome.InputsSent);
+                events.Add("paused");
+            },
+        };
+        registry.RegisterTool(
+            new ReadProbeTool(async () =>
+            {
+                entered.SetResult();
+                await proceed.Task;
+                MutationGuard.RecordDispatch();
+                return new McpToolResult();
+            })
+        );
+
+        var call = registry.ExecuteToolAsync("read_probe", null);
+        await entered.Task.WaitAsync(Eventually.Bound);
+        clock.Advance(TimeSpan.FromMilliseconds(100));
+        var pending = await call.WaitAsync(Eventually.Bound);
+        Assert.True(pending.IsError);
+        Assert.Empty(events);
+
+        proceed.SetResult();
+        await settled.Task.WaitAsync(Eventually.Bound);
+        Assert.Equal(["paused", "released"], events);
+    }
+
+    [Fact]
+    public async Task ThrowingLegacyFailureObserverCannotSkipTargetAwarePause()
+    {
+        var paused = 0;
+        var registry = new ToolRegistry
+        {
+            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            FailedAfterInput = (_, _) => throw new InvalidOperationException("legacy observer failed"),
+            FailedAfterInputWithTarget = (_, outcome, target) =>
+            {
+                Assert.Equal(123, target?.ProcessId);
+                Assert.Equal(1, outcome.InputsSent);
+                paused++;
+            },
+        };
+        registry.RegisterTool(
+            new ReadProbeTool(() =>
+            {
+                MutationGuard.RecordDispatch();
+                return Task.FromResult(new McpToolResult { IsError = true });
+            })
+        );
+
+        var result = await registry.ExecuteToolAsync("read_probe", null);
+
+        Assert.True(result.IsError);
+        Assert.Equal("failed", result.Outcome?.Status);
+        Assert.Equal(1, paused);
+    }
+
     private sealed class ScreenshotProbeTool : ToolBase
     {
         public override string Name => "screenshot_probe";

@@ -40,6 +40,7 @@ public sealed class MutationConfigTests
         "Mcp/ToolRegistry.cs",
         "Mcp/ToolRegistrySchemas.cs",
         "Mcp/ToolRegistryStrand.cs",
+        "Mcp/ToolRegistryObservers.cs",
         "Mcp/ToolBase.cs",
         "Tools/ClickTool.cs",
         "Tools/ClickToolReplies.cs",
