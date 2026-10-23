@@ -2,7 +2,8 @@ namespace FlaUI.Mcp.Core;
 
 /// <summary>
 /// Optional allowlist restricting which applications the MCP tools may automate.
-/// A programmatic advisory policy names preferred apps while allowing all apps.
+/// The environment variable always creates a hard allowlist. Only callers that explicitly
+/// construct a policy with advisory: true get preferred-app warnings without denial.
 ///
 /// Configured via the FLAUI_MCP_ALLOWED_APPS environment variable: a semicolon-
 /// or comma-separated list of process names, matched case-insensitively and with

@@ -138,6 +138,7 @@ public partial class ToolRegistry
         var refusalBefore = parent.Refusal;
         var previousHook = MutationGuard.BeforeMutation.Value;
         McpToolResult result;
+        string? warning = null;
         try
         {
             var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
@@ -147,13 +148,13 @@ public partial class ToolRegistry
             }
 
             var target = ResolveTarget?.Invoke(arguments);
-            var warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
+            warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
             OperationContext.Check();
             result = WithAdvisory(await tool.ExecuteAsync(arguments), warning);
         }
         catch (Exception ex)
         {
-            result = ErrorText($"Error: {ex.Message}");
+            result = WithAdvisory(ErrorText($"Error: {ex.Message}"), warning);
         }
         finally
         {
@@ -169,6 +170,7 @@ public partial class ToolRegistry
         OperationContext.Current.Value = operation;
         var previousHook = MutationGuard.BeforeMutation.Value;
         McpToolResult result;
+        string? warning = null;
         try
         {
             // Metadata collection is inside the timeout. Target validation
@@ -180,7 +182,7 @@ public partial class ToolRegistry
                 MutationGuard.BeforeMutation.Value = hook;
             }
 
-            var warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
+            warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
             operation.ProcessId = target?.ProcessId ?? 0;
             operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
             OperationContext.Check();
@@ -195,7 +197,7 @@ public partial class ToolRegistry
         {
             // A tool that throws still reports how much of its input went out first.
             result = WithDispatch(
-                ErrorText($"Error: {ex.Message}"),
+                WithAdvisory(ErrorText($"Error: {ex.Message}"), warning),
                 operation.InputsSent,
                 operation.Refusal,
                 ProviderPending(operation)
