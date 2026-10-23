@@ -16,6 +16,12 @@ public partial class ToolRegistry
     public Func<JsonElement?, ProcessIdentity?>? ResolveTarget { get; set; }
     public PendingInvokeTracker? Pending { get; set; }
 
+    /// <summary>Optional per-call permission check installed at each guarded mutation.</summary>
+    public Func<string, McpToolAnnotations?, Action?>? MutationPermissionForTool { get; set; }
+
+    /// <summary>Optional warning prepended to results for a nonpreferred app; it never blocks the call.</summary>
+    public Func<string, JsonElement?, ProcessIdentity?, string?>? AdvisoryWarning { get; set; }
+
     /// <summary>
     /// Called when a top-level call failed after sending input (inputsSent above 0, or a refusal that says input went
     /// out), with the tool's name and outcome, so a host can pause its grant until the app has been observed.
@@ -126,19 +132,32 @@ public partial class ToolRegistry
     }
 
     /// <summary>A step of a composite tool shares its parent's operation but reports only its own input.</summary>
-    private static async Task<McpToolResult> RunNested(ITool tool, JsonElement? arguments, OperationContext parent)
+    private async Task<McpToolResult> RunNested(ITool tool, JsonElement? arguments, OperationContext parent)
     {
         var sentBefore = parent.InputsSent;
         var refusalBefore = parent.Refusal;
+        var previousHook = MutationGuard.BeforeMutation.Value;
         McpToolResult result;
         try
         {
+            var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
+            if (hook != null)
+            {
+                MutationGuard.BeforeMutation.Value = hook;
+            }
+
+            var target = ResolveTarget?.Invoke(arguments);
+            var warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
             OperationContext.Check();
-            result = await tool.ExecuteAsync(arguments);
+            result = WithAdvisory(await tool.ExecuteAsync(arguments), warning);
         }
         catch (Exception ex)
         {
             result = ErrorText($"Error: {ex.Message}");
+        }
+        finally
+        {
+            MutationGuard.BeforeMutation.Value = previousHook;
         }
 
         var refusal = ReferenceEquals(parent.Refusal, refusalBefore) ? null : parent.Refusal;
@@ -148,17 +167,28 @@ public partial class ToolRegistry
     private async Task<McpToolResult> RunOperation(ITool tool, JsonElement? arguments, OperationContext operation)
     {
         OperationContext.Current.Value = operation;
+        var previousHook = MutationGuard.BeforeMutation.Value;
         McpToolResult result;
         try
         {
             // Metadata collection is inside the timeout. Target validation
             // belongs to the tool, preserving its specific error contract.
             var target = ResolveTarget?.Invoke(arguments);
+            var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
+            if (hook != null)
+            {
+                MutationGuard.BeforeMutation.Value = hook;
+            }
+
+            var warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
             operation.ProcessId = target?.ProcessId ?? 0;
             operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
             OperationContext.Check();
             var returned = await tool.ExecuteAsync(arguments);
-            result = WithDispatch(returned, operation.InputsSent, operation.Refusal, ProviderPending(operation));
+            result = WithAdvisory(
+                WithDispatch(returned, operation.InputsSent, operation.Refusal, ProviderPending(operation)),
+                warning
+            );
             result = result with { Outcome = result.Outcome! with { HitTest = operation.HitTest } };
         }
         catch (Exception ex)
@@ -173,6 +203,7 @@ public partial class ToolRegistry
         }
         finally
         {
+            MutationGuard.BeforeMutation.Value = previousHook;
             OperationContext.Current.Value = null;
         }
 
@@ -193,6 +224,21 @@ public partial class ToolRegistry
         }
 
         return result;
+    }
+
+    private static McpToolResult WithAdvisory(McpToolResult result, string? warning)
+    {
+        if (string.IsNullOrWhiteSpace(warning))
+        {
+            return result;
+        }
+
+        var content = new List<McpContent>
+        {
+            new() { Type = "text", Text = $"Warning: {warning}" },
+        };
+        content.AddRange(result.Content);
+        return result with { Content = content };
     }
 
     /// <summary>

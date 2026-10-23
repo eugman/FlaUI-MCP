@@ -2,6 +2,7 @@ namespace FlaUI.Mcp.Core;
 
 /// <summary>
 /// Optional allowlist restricting which applications the MCP tools may automate.
+/// A programmatic advisory policy names preferred apps while allowing all apps.
 ///
 /// Configured via the FLAUI_MCP_ALLOWED_APPS environment variable: a semicolon-
 /// or comma-separated list of process names, matched case-insensitively and with
@@ -19,12 +20,14 @@ public sealed class ProcessPolicy
     public const string EnvironmentVariable = "FLAUI_MCP_ALLOWED_APPS";
 
     private readonly HashSet<string> _allowedNames;
+    private readonly bool _advisory;
 
     /// <summary>A policy that allows every application (no allowlist configured).</summary>
     public static ProcessPolicy AllowAll { get; } = new(Array.Empty<string>());
 
-    public ProcessPolicy(IEnumerable<string> allowedApps)
+    public ProcessPolicy(IEnumerable<string> allowedApps, bool advisory = false)
     {
+        _advisory = advisory;
         _allowedNames = allowedApps
             .Select(Normalize)
             .Where(name => name.Length > 0)
@@ -45,7 +48,20 @@ public sealed class ProcessPolicy
     }
 
     /// <summary>True when an allowlist is configured; false means allow everything.</summary>
-    public bool IsRestricted => _allowedNames.Count > 0;
+    public bool IsRestricted => _allowedNames.Count > 0 && !_advisory;
+
+    /// <summary>Preferred app names are advisory; all apps remain controllable.</summary>
+    public bool IsAdvisory => _allowedNames.Count > 0 && _advisory;
+
+    /// <summary>Whether a process is among the preferred apps, regardless of enforcement mode.</summary>
+    public bool IsPreferredName(string? processName) =>
+        !string.IsNullOrWhiteSpace(processName) && _allowedNames.Contains(Normalize(processName));
+
+    /// <summary>A warning for a nonpreferred app in advisory mode, or null.</summary>
+    public string? DescribeAdvisory(string? processName) =>
+        IsAdvisory && !IsPreferredName(processName)
+            ? $"Process '{processName ?? "unknown"}' is outside the preferred apps: {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}. The operation remains allowed; verify this is the intended app."
+            : null;
 
     public bool IsNameAllowed(string? processName)
     {
@@ -95,10 +111,20 @@ public sealed class ProcessPolicy
             + $"(configured via the {EnvironmentVariable} environment variable).";
     }
 
-    public string DescribeAllowed() =>
-        IsRestricted
-            ? $"app allowlist active: {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}"
-            : "no app allowlist";
+    public string DescribeAllowed()
+    {
+        if (IsRestricted)
+        {
+            return $"app allowlist active: {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}";
+        }
+
+        if (IsAdvisory)
+        {
+            return $"preferred apps (advisory): {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}";
+        }
+
+        return "no app allowlist";
+    }
 
     /// <summary>The refusal for a process or window off the allowlist; nothing was sent.</summary>
     public static Exception NotAllowed(string message) => Refusal(RefusalCodes.ProcessNotAllowed, message, false);
