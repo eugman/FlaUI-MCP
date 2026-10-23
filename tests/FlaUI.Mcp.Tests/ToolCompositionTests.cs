@@ -104,4 +104,20 @@ public sealed class ToolCompositionTests
         Assert.NotEqual(true, result.IsError);
         Assert.Equal(1, activity);
     }
+
+    [Fact]
+    public void ProductRegistryCanReuseAllCoreTools()
+    {
+        using var host = new AutomationHost(new ProcessPolicy(["test-app"]));
+        var product = new ToolRegistry();
+
+        host.RegisterAllToolsInto(product);
+
+        var names = product.GetToolDefinitions().Select(tool => tool.Name).ToHashSet();
+        Assert.Contains("windows_launch", names);
+        Assert.Contains("windows_send_keys", names);
+        Assert.Contains("windows_batch", names);
+        Assert.NotNull(product.ResolveTarget);
+        Assert.Same(host.Pending, product.Pending);
+    }
 }

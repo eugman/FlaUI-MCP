@@ -111,12 +111,20 @@ public sealed class ProcessPolicy
             + $"(configured via the {EnvironmentVariable} environment variable).";
     }
 
-    public string DescribeAllowed() =>
-        IsRestricted
-            ? $"app allowlist active: {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}"
-        : IsAdvisory
-            ? $"preferred apps (advisory): {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}"
-        : "no app allowlist";
+    public string DescribeAllowed()
+    {
+        if (IsRestricted)
+        {
+            return $"app allowlist active: {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}";
+        }
+
+        if (IsAdvisory)
+        {
+            return $"preferred apps (advisory): {string.Join(", ", _allowedNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}";
+        }
+
+        return "no app allowlist";
+    }
 
     /// <summary>The refusal for a process or window off the allowlist; nothing was sent.</summary>
     public static Exception NotAllowed(string message) => Refusal(RefusalCodes.ProcessNotAllowed, message, false);
