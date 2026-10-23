@@ -61,9 +61,33 @@ public class LaunchTool : ToolBase
             var (handle, window) = _sessionManager.LaunchApp(app, args, waitSeconds);
             return Task.FromResult(TextResult($"Launched {app}\nWindow handle: {handle}\nTitle: {window.Title}"));
         }
+        catch (LaunchPendingException pending)
+        {
+            return Task.FromResult(PendingResult(pending));
+        }
         catch (Exception ex)
         {
             return Task.FromResult(ErrorResult($"Failed to launch {app}: {ex.Message}"));
         }
     }
+
+    internal static McpToolResult PendingResult(LaunchPendingException pending) =>
+        TextResult(pending.Message) with
+        {
+            Outcome = new ToolOutcome("partial", "not-tracked")
+            {
+                Status = "unverified",
+                Verification = "not-established",
+                Failure = new InputRefusal("launch-pending", pending.Message) { ActionDispatched = true },
+                Details = new Dictionary<string, JsonElement>
+                {
+                    ["processId"] = JsonSerializer.SerializeToElement(pending.ProcessId),
+                    ["observedWindows"] = JsonSerializer.SerializeToElement(
+                        pending
+                            .ObservedWindows.Select(window => new { hwnd = (long)window.Hwnd, title = window.Title })
+                            .ToArray()
+                    ),
+                },
+            },
+        };
 }

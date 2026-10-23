@@ -74,6 +74,7 @@ public sealed class MutationConfigTests
         "Core/Interaction/IInputObserver.cs",
         "Core/Interaction/PhysicalInputObserver.cs",
         "Core/KeepAwake.cs",
+        "Core/LaunchPendingException.cs",
         "Core/ModalAwareInvoker.cs",
         "Core/NativeWindowCapture.cs",
         "Core/PointerPlan.cs",
