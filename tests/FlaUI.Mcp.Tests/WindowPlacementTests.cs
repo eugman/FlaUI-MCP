@@ -76,4 +76,29 @@ public sealed class WindowPlacementTests
     [InlineData(0, int.MinValue, 700, 400)]
     public void RejectsInvalidGeometryBeforeNativeAccess(int x, int y, int width, int height) =>
         Assert.Throws<ArgumentException>(() => new WindowPlacement(x, y, width, height).Validate());
+
+    [Fact]
+    public async Task OffMonitorPlacementReportsTypedZeroDispatchRefusal()
+    {
+        var desktop = new FakeDesktop();
+        using var offlineDesktop = desktop.Install();
+        using var sessions = new SessionManager(null, ProcessPolicy.AllowAll);
+        var handle = sessions.PublishWindow(null, FakeDesktop.TargetHwnd, FakeDesktop.TargetPid, FakeDesktop.Target);
+        var registry = new ToolRegistry();
+        registry.RegisterTool(new WindowPlacementTool(new ElementRegistry(), new PendingInvokeTracker(), sessions));
+
+        var result = await registry.ExecuteToolAsync(
+            "windows_place_window",
+            System.Text.Json.JsonSerializer.SerializeToElement(
+                new { handle, placement = new WindowPlacement(90000, 0, 700, 400) }
+            )
+        );
+
+        Assert.True(result.IsError);
+        Assert.Equal("not-dispatched", result.Outcome!.Dispatch);
+        Assert.Equal(0, result.Outcome.InputsSent);
+        Assert.Equal(RefusalCodes.InvalidArguments, result.Outcome.Failure?.Code);
+        Assert.False(result.Outcome.Failure?.ActionDispatched);
+        Assert.Empty(desktop.Placements);
+    }
 }

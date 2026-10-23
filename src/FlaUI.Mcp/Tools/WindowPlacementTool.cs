@@ -124,7 +124,16 @@ public sealed class WindowPlacementTool(
                 );
             }
 
-            placement.RequireVisible(System.Windows.Forms.Screen.AllScreens.Select(s => s.WorkingArea));
+            try
+            {
+                placement.RequireVisible(System.Windows.Forms.Screen.AllScreens.Select(s => s.WorkingArea));
+            }
+            catch (InvalidOperationException invalid)
+            {
+                throw InputRefusedException.Record(
+                    new InputRefusal(RefusalCodes.InvalidArguments, invalid.Message) { ActionDispatched = false }
+                );
+            }
         }
 
         var before =
