@@ -18,6 +18,7 @@ public partial class ToolRegistry
         Action<Task>? whenStranded
     )
     {
+        operation.Stranded = true;
         operation.Stop.Cancel();
         if (settled != null)
         {

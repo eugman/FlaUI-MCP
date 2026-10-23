@@ -21,6 +21,7 @@ public sealed class OperationContext
     internal long Sequence { get; init; }
     public CancellationTokenSource Stop { get; } = new();
     public volatile bool Finished;
+    public volatile bool Stranded;
     public string? Error { get; set; }
     public string? AdvisoryWarning;
     public ToolOutcome? ResultOutcome { get; set; }
