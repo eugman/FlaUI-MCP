@@ -301,8 +301,31 @@ public static class ArtifactFiles
             await RequireCleanTracked(root, destination);
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        File.Copy(source, destination, overwrite);
+        CopyVerified(source, destination, captured, overwrite);
+    }
+
+    internal static void CopyVerified(string source, string destination, string? captured, bool overwrite)
+    {
+        var folder = Path.GetDirectoryName(destination)!;
+        Directory.CreateDirectory(folder);
+        var staged = Path.Combine(folder, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.Copy(source, staged);
+            if (captured is not null && Sha256(staged) != captured)
+            {
+                throw new IOException("Checkpoint PNG changed since capture; refusing promotion");
+            }
+
+            File.Move(staged, destination, overwrite);
+        }
+        finally
+        {
+            if (File.Exists(staged))
+            {
+                File.Delete(staged);
+            }
+        }
     }
 
     private static async Task RequireCleanTracked(string root, string path)

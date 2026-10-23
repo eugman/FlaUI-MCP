@@ -301,6 +301,22 @@ public sealed class RunnerTests : IDisposable
     }
 
     [Fact]
+    public void PromotionStagesAndVerifiesBytesBeforeReplacingDestination()
+    {
+        var source = Path.Combine(root, "checkpoint.png");
+        var destination = Path.Combine(root, "out.png");
+        File.WriteAllBytes(source, [1, 2, 3]);
+        var captured = ArtifactFiles.Sha256(source);
+        File.WriteAllBytes(destination, [9, 8, 7]);
+
+        // The source changes after the earlier manifest check and before promotion copies it.
+        File.WriteAllBytes(source, [4, 5, 6]);
+        Assert.Throws<IOException>(() => ArtifactFiles.CopyVerified(source, destination, captured, overwrite: true));
+        Assert.Equal(new byte[] { 9, 8, 7 }, File.ReadAllBytes(destination));
+        Assert.Equal([source, destination], Directory.GetFiles(root).OrderBy(path => path));
+    }
+
+    [Fact]
     public async Task RecoverRequiresExactlyOneBackupDirectory() =>
         Assert.Equal(2, await RunnerCommands.Execute(["recover"]));
 
