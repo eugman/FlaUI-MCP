@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FlaUI.Mcp.Core;
 
 public static class RunSafety
 {
@@ -65,6 +66,10 @@ public static class RunSafety
         }
     }
 
+    // Direct process operations are desktop mutations too. The runner grant can be revoked while
+    // a recipe is active, including just before cleanup in the finally block.
+    internal static void GuardedProcessMutation(Action mutation) => MutationGuard.Execute(static () => { }, mutation);
+
     public static async Task CloseOwned(int pid, long startedTicks, string executable, string? journal = null)
     {
         if (pid == 0)
@@ -89,7 +94,12 @@ public static class RunSafety
                 return;
             }
 
-            await RunJournal.Input(journal, "te3_close_main_window", new { pid }, () => process.CloseMainWindow());
+            await RunJournal.Input(
+                journal,
+                "te3_close_main_window",
+                new { pid },
+                () => GuardedProcessMutation(() => process.CloseMainWindow())
+            );
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try
             {
@@ -102,7 +112,7 @@ public static class RunSafety
                     return;
                 }
 
-                process.Kill();
+                GuardedProcessMutation(() => process.Kill());
                 using var killed = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 await process.WaitForExitAsync(killed.Token);
             }

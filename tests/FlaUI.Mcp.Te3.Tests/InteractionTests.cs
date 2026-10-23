@@ -84,6 +84,27 @@ public sealed class InteractionTests : IDisposable
     }
 
     [Fact]
+    public void RunCleanupRefusesProcessMutationAfterPhysicalInputRevokesGrant()
+    {
+        using var interaction = Grant();
+        interaction.Begin("Close owned TE3", userApproved: true);
+        var dispatched = false;
+        using (interaction.Guard())
+        {
+            RunSafety.GuardedProcessMutation(() => dispatched = true);
+            Assert.True(dispatched);
+
+            dispatched = false;
+            input++;
+            var refusal = Assert.Throws<InputRefusedException>(() =>
+                RunSafety.GuardedProcessMutation(() => dispatched = true)
+            );
+            Assert.False(dispatched);
+            Assert.False(refusal.Refusal.ActionDispatched);
+        }
+    }
+
+    [Fact]
     public async Task NavigateRefusesBeforeAttachingWithoutAGrant()
     {
         var result = await new Te3Companion(null!, Te3Companion.Navigate, Grant()).ExecuteAsync(
