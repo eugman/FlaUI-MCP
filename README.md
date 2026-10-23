@@ -40,7 +40,7 @@ Add the server to your MCP client:
 }
 ```
 
-It only touches TE3: the app allowlist is built in.
+The TE3-specific tools still target TE3. Shared `windows_*` tools prefer TE3 and warn in the result when a call targets another app, such as Windows Terminal. Mutating tools require `te3_interaction_begin`, and physical user input revokes the grant. Set `FLAUI_MCP_ALLOWED_APPS` to enforce a strict allowlist when needed.
 
 ## Documentation
 

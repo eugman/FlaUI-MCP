@@ -8,9 +8,11 @@ internal static class Te3McpServer
         DpiUtility.EnablePerMonitorV2();
         // One server for everything: the generic windows_* tools (with the window-management
         // extensions) and the TE3 tools share one registry, so refs and handles carry across.
-        using var host = new AutomationHost(new ProcessPolicy(["TabularEditor3"]), includeDesktopTools: true);
+        var policy = Te3CrossAppPolicy.PreferredPolicy();
+        using var host = new AutomationHost(policy, includeDesktopTools: true);
         using var interaction = new Te3Interaction();
         Install(host, interaction);
+        Te3CrossAppPolicy.Install(host.Tools, policy);
         await new FlaUI.Mcp.McpServer(host.Tools).RunAsync();
     }
 
