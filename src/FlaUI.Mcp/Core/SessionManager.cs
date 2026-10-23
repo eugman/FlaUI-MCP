@@ -158,12 +158,14 @@ public class SessionManager : IDisposable
         if (window == null)
         {
             var exited = process.HasExited;
-            var titles =
-                exited || !_processPolicy.IsProcessAllowed(process.Id)
-                    ? Array.Empty<string>()
-                    : Candidates().Select(w => w.Title).Where(t => t.Length > 0).ToArray();
+            if (!exited)
+            {
+                var observed = _processPolicy.IsProcessAllowed(process.Id) ? Candidates() : [];
+                throw new LaunchPendingException(appPath, process.Id, observed, timeouts > 0);
+            }
+
             throw ProcessPolicy.LaunchFailed(
-                LaunchFailure(appPath, process.Id, exited, titles, timeouts > 0),
+                LaunchFailure(appPath, process.Id, exited, [], timeouts > 0),
                 started: true
             );
         }

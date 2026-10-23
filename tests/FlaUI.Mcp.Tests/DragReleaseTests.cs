@@ -89,6 +89,23 @@ public sealed partial class DragReleaseTests
     }
 
     [Fact]
+    public void ADragMayEndOnASameProcessOwnedPopup()
+    {
+        const nint popup = 300;
+        var desktop = new FakeDesktop
+        {
+            ModalHwnd = popup,
+            WindowUnder = point => point == To ? popup : FakeDesktop.TargetHwnd,
+        };
+        using var installed = desktop.Install();
+
+        var landed = PointerActions.Drag(FakeDesktop.Target, () => (From, To), 4);
+
+        Assert.Equal(To, landed);
+        Assert.Equal(7, desktop.Dispatched);
+    }
+
+    [Fact]
     public void AWindowThatCoveredTheDropPointDuringTheDragCancelsIt()
     {
         // Checked for every drag, a raw `to` point included: another window may have come up over the drop point.

@@ -15,7 +15,7 @@ internal static class PointerActions
 
     internal static Point Move(InputTarget target, Func<Point> resolve, int hoverMs)
     {
-        using var input = new GuardedInput(target);
+        using var input = new GuardedInput(target with { AllowOwnedPopup = true });
         var point = default(Point);
         input.Check(() => RequireHit(target, point = resolve()));
         input.MoveTo(point);
@@ -29,7 +29,7 @@ internal static class PointerActions
 
     internal static Point Scroll(InputTarget target, Func<Point> resolve, int ticks)
     {
-        using var input = new GuardedInput(target);
+        using var input = new GuardedInput(target with { AllowOwnedPopup = true });
         var point = default(Point);
         input.Check(() => RequireHit(target, point = resolve()));
         input.MoveTo(point);
@@ -37,12 +37,10 @@ internal static class PointerActions
         return InputDesktop.Current.PointerPosition();
     }
 
-    internal static Point Click(InputTarget target, Func<Point> resolve)
+    internal static Point Click(InputTarget target, Func<Point> resolve, MouseButton button = MouseButton.Left)
     {
-        using var input = new GuardedInput(target);
-        input.Check(() =>
-            ClickGuarded(target, resolve(), clicked => input.Send(() => Mouse.Click(clicked, MouseButton.Left)))
-        );
+        using var input = new GuardedInput(target with { AllowOwnedPopup = true });
+        input.Check(() => ClickGuarded(target, resolve(), clicked => input.Send(() => Mouse.Click(clicked, button))));
         return InputDesktop.Current.PointerPosition();
     }
 
@@ -78,7 +76,7 @@ internal static class PointerActions
     {
         // Validate the step count before any focus change.
         PointerPlan.DragPath(Point.Empty, Point.Empty, steps);
-        using var input = new GuardedInput(target);
+        using var input = new GuardedInput(target with { AllowOwnedPopup = true });
         var (from, to) = (Point.Empty, Point.Empty);
         input.Check(() => (from, to) = resolve());
         var path = PointerPlan.DragPath(from, to, steps);
@@ -136,7 +134,9 @@ internal static class PointerActions
     private static string? DropMoved(InputTarget target, Point to, Func<Point, string?>? dropMoved)
     {
         var root = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
-        if (InputDesktop.Current.WindowAt(to) != root)
+        var desktop = InputDesktop.Current;
+        var under = desktop.WindowAt(to);
+        if (under != root && !SameProcessOwnedPopup(target, under, desktop.HasOwner, desktop.ProcessOf))
         {
             return $"the drop point ({to.X},{to.Y}) is no longer on the target window";
         }
@@ -210,11 +210,21 @@ internal static class PointerActions
         return failure is OperationCanceledException ? failure : recorded;
     }
 
-    internal static void RequireHit(InputTarget target, Point point, Func<Point, nint>? windowAt = null)
+    internal static void RequireHit(
+        InputTarget target,
+        Point point,
+        Func<Point, nint>? windowAt = null,
+        Func<nint, nint, bool>? hasOwner = null,
+        Func<nint, int>? processOf = null
+    )
     {
         var root = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
-        var under = (windowAt ?? InputDesktop.Current.WindowAt)(point);
-        if (under != root)
+        var desktop = InputDesktop.Current;
+        var under = (windowAt ?? desktop.WindowAt)(point);
+        if (
+            under != root
+            && !SameProcessOwnedPopup(target, under, hasOwner ?? desktop.HasOwner, processOf ?? desktop.ProcessOf)
+        )
         {
             throw GuardedInput.NotOnTarget(
                 target,
@@ -223,4 +233,11 @@ internal static class PointerActions
             );
         }
     }
+
+    internal static bool SameProcessOwnedPopup(
+        InputTarget target,
+        nint under,
+        Func<nint, nint, bool> hasOwner,
+        Func<nint, int> processOf
+    ) => under != 0 && hasOwner(under, target.Hwnd) && processOf(under) == target.ProcessId;
 }

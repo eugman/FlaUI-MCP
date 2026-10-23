@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Text.Json;
+using FlaUI.Core.Input;
 using FlaUI.Mcp.Core;
 
 namespace FlaUI.Mcp.Tools;
@@ -20,7 +21,7 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
     public override string Description =>
         "Move the pointer or click a captured window point. park: move it off the window so no tooltip or hover state "
         + "lands in a screenshot. move/hover: to a point or ref. scroll: wheel ticks over a point or ref "
-        + "(positive scrolls up). click: left-click at a point or ref. drag: press at `from` (or ref, or ref's fromEdge), move in steps, release at `to`, toRef/toEdge, "
+        + "(positive scrolls up). click: left- or right-click at a point or ref (`button` defaults to left). drag: press at `from` (or ref, or ref's fromEdge), move in steps, release at `to`, toRef/toEdge, "
         + "or wherever resizeTo makes ref that size (a column header: ref + fromEdge right + resizeTo 250). Use it for "
         + "splitters and other targets UI Automation does not expose. Points are pixels in a windows_screenshot "
         + "of the same window (handle), so read them straight off a capture.";
@@ -28,6 +29,18 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
     {
         var action = GetStringArgument(arguments, "action") ?? throw new ArgumentException("action required");
+        if (action == "click")
+        {
+            try
+            {
+                ClickButton(GetStringArgument(arguments, "button"));
+            }
+            catch (ArgumentException error)
+            {
+                return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, error.Message));
+            }
+        }
+
         var reference = GetStringArgument(arguments, "ref");
         var handle =
             GetStringArgument(arguments, "handle") ?? (reference == null ? null : refs.WindowForRef(reference));
@@ -114,7 +127,11 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
                     ResolvePoint(arguments, "to", reference, origin, ref scrolled),
                     Ticks(arguments)
                 ),
-                "click" => PointerActions.Click(target, ResolvePoint(arguments, "to", reference, origin, ref scrolled)),
+                "click" => PointerActions.Click(
+                    target,
+                    ResolvePoint(arguments, "to", reference, origin, ref scrolled),
+                    ClickButton(GetStringArgument(arguments, "button"))
+                ),
                 "drag" => Drag(arguments, target, reference, handle, origin, ref scrolled, out drag),
                 _ => throw new ArgumentException("action must be park, move, hover, scroll, click or drag"),
             };
@@ -207,6 +224,14 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
 
         return points.Centre(reference, ref scrolled);
     }
+
+    internal static MouseButton ClickButton(string? button) =>
+        button switch
+        {
+            null or "left" => MouseButton.Left,
+            "right" => MouseButton.Right,
+            _ => throw new ArgumentException("button must be left or right"),
+        };
 
     private int HoverMs(JsonElement? arguments) =>
         Math.Clamp(GetArgument<int?>(arguments, "durationMs") ?? DefaultHoverMs, 0, MaxHoverMs);
