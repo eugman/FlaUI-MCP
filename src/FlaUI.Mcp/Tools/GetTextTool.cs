@@ -24,8 +24,8 @@ public class GetTextTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.ReadOnly;
 
     public override string Description =>
-        "Get the text content of an element. Returns the element's Name property, "
-        + "or for text inputs, the current value.";
+        "Get an element's accessible text. Prefer its Text or Value pattern for content, "
+        + "then fall back to selection, legacy value, or Name. Password content is unavailable.";
 
     public override object InputSchema => ToolSchema.For<Arguments>();
 
@@ -53,13 +53,13 @@ public class GetTextTool : ToolBase
         try
         {
             var element = _elementRegistry.ResolveRef(refId);
-            string? text = null;
-
-            // Try Value pattern first (for text inputs)
-            if (element.Patterns.Value.IsSupported)
+            if (element.Properties.IsPassword.ValueOrDefault)
             {
-                text = element.Patterns.Value.Pattern.Value.ValueOrDefault;
+                return Task.FromResult(TextResult("Password content is unavailable."));
             }
+
+            // A control's Name can label a document without containing its text.
+            var text = ControlText.Read(element).Text;
 
             if (string.IsNullOrEmpty(text) && element.Patterns.Selection.IsSupported)
             {
@@ -79,12 +79,6 @@ public class GetTextTool : ToolBase
             if (string.IsNullOrEmpty(text))
             {
                 text = element.Properties.Name.ValueOrDefault;
-            }
-
-            // Try Text pattern
-            if (string.IsNullOrEmpty(text) && element.Patterns.Text.IsSupported)
-            {
-                text = element.Patterns.Text.Pattern.DocumentRange.GetText(-1);
             }
 
             return Task.FromResult(TextResult(text ?? ""));

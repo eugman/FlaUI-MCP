@@ -371,7 +371,7 @@
   },
   {
     "name": "windows_get_text",
-    "description": "Get the text content of an element. Returns the element\u0027s Name property, or for text inputs, the current value.",
+    "description": "Get an element\u0027s accessible text. Prefer its Text or Value pattern for content, then fall back to selection, legacy value, or Name. Password content is unavailable.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
