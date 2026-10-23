@@ -84,14 +84,21 @@ public sealed class OperationCoordinator(TimeProvider? time = null)
     /// <summary>Whether a request with this key ran, or still runs, as an operation that is still retained.</summary>
     public bool Ran(string requestKey) => operations.Values.Any(o => o.RequestKey == requestKey);
 
-    public object Status(string? id = null, PendingInvokeTracker? pending = null, string? requestKey = null) =>
+    public object Status(
+        string? id = null,
+        PendingInvokeTracker? pending = null,
+        string? requestKey = null,
+        PendingInvokeTracker? secondaryPending = null
+    ) =>
         operations
             .Values.Where(o => (id == null || o.Id == id) && (requestKey == null || o.RequestKey == requestKey))
             .OrderByDescending(o => o.Sequence)
             .Select(o =>
             {
                 var dispatch = o.ResultOutcome?.Dispatch ?? DispatchSoFar(o);
-                var patterns = pending?.ForOperation(o.Id) ?? [];
+                var patterns = (pending?.ForOperation(o.Id) ?? [])
+                    .Concat(secondaryPending != pending ? secondaryPending?.ForOperation(o.Id) ?? [] : [])
+                    .ToArray();
                 // A returned dispatch whose pattern call still holds the provider is not done for the caller.
                 return new
                 {
@@ -106,7 +113,7 @@ public sealed class OperationCoordinator(TimeProvider? time = null)
                     status = StatusOf(o),
                     dispatch,
                     inputsSent = o.InputsSent,
-                    provider = pending == null ? "not-tracked"
+                    provider = pending == null && secondaryPending == null ? "not-tracked"
                     : patterns.Length > 0 ? "pending"
                     : "idle",
                     pendingPatternIds = patterns,

@@ -215,7 +215,11 @@ public class McpServer
         {
             requestKey = key,
             notDispatched = key != null && notDispatched.ContainsKey(key),
-            operations = _toolRegistry.Operations.Status(pending: _toolRegistry.Pending, requestKey: key),
+            operations = _toolRegistry.Operations.Status(
+                pending: _toolRegistry.Pending,
+                requestKey: key,
+                secondaryPending: _toolRegistry.SecondaryPending
+            ),
         };
     }
 

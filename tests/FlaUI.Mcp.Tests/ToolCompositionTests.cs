@@ -152,9 +152,79 @@ public sealed class ToolCompositionTests
 
         host.RegisterAllToolsInto(product);
 
-        var coreTarget = product.ResolveTarget!(JsonSerializer.SerializeToElement(new { handle }));
+        var coreTarget = product.ResolveTargetForTool!(
+            "windows_focus",
+            JsonSerializer.SerializeToElement(new { handle })
+        );
         Assert.Equal(FakeDesktop.TargetPid, coreTarget!.ProcessId);
-        var productTarget = product.ResolveTarget!(JsonSerializer.SerializeToElement(new { handle = "product1" }));
+        var productTarget = product.ResolveTargetForTool!(
+            "product_probe",
+            JsonSerializer.SerializeToElement(new { handle = "product1" })
+        );
         Assert.Equal(2468, productTarget!.ProcessId);
+    }
+
+    [Fact]
+    public async Task ProductHandleCollisionUsesProductResolverForProductTool()
+    {
+        using var host = new AutomationHost(new ProcessPolicy(["test-app"]));
+        var registry = new ToolRegistry();
+        registry.ResolveTarget = _ => new ProcessIdentity(2468, 1357);
+        var handle = host.Sessions.PublishWindow(
+            null,
+            FakeDesktop.TargetHwnd,
+            FakeDesktop.TargetPid,
+            FakeDesktop.Target
+        );
+        registry.RegisterTool(new ProductProbeTool());
+        host.RegisterAllToolsInto(registry);
+
+        var result = await registry.ExecuteToolAsync(
+            "product_probe",
+            JsonSerializer.SerializeToElement(new { handle })
+        );
+        var status = JsonSerializer.SerializeToElement(registry.Operations.Status(result.Outcome!.OperationId))[0];
+
+        Assert.Equal(2468, status.GetProperty("ProcessId").GetInt32());
+    }
+
+    [Fact]
+    public async Task SharedOperationStatusIncludesProductAndCorePendingCalls()
+    {
+        using var host = new AutomationHost(new ProcessPolicy(["test-app"]));
+        var product = new ToolRegistry();
+        var productPending = new PendingInvokeTracker(_ => 1);
+        product.Pending = productPending;
+        host.RegisterAllToolsInto(product);
+        var productCall = productPending.Begin(FakeDesktop.TargetPid, "product call");
+        var coreCall = host.Pending.Begin(FakeDesktop.TargetPid, "core call");
+        try
+        {
+            var result = await product.ExecuteToolAsync("windows_operation_status", null);
+            var status = JsonSerializer.Deserialize<JsonElement>(result.Content[0].Text!);
+            var descriptions = status
+                .GetProperty("pendingPatterns")
+                .EnumerateArray()
+                .Select(pattern => pattern.GetProperty("Description").GetString())
+                .ToArray();
+
+            Assert.Contains("product call", descriptions);
+            Assert.Contains("core call", descriptions);
+        }
+        finally
+        {
+            productPending.Complete(productCall);
+            host.Pending.Complete(coreCall);
+        }
+    }
+
+    private sealed class ProductProbeTool : ToolBase
+    {
+        public override string Name => "product_probe";
+        public override string Description => "Product probe";
+        public override object InputSchema => new { type = "object" };
+
+        public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
+            Task.FromResult(new McpToolResult());
     }
 }
