@@ -42,7 +42,7 @@ public partial class ToolRegistry
             TaskContinuationOptions.OnlyOnFaulted
         );
 
-        return WithAdvisory(
+        var result = WithAdvisory(
             new McpToolResult
             {
                 Content = new List<McpContent>
@@ -65,6 +65,8 @@ public partial class ToolRegistry
             },
             Volatile.Read(ref operation.AdvisoryWarning)
         );
+        NotifyFailedAfterInput(name, operation, result.Outcome);
+        return result;
     }
 
     private static void TrackStranded(
