@@ -215,6 +215,32 @@ public sealed class BatchTargetTests
         }
     }
 
+    [Fact]
+    public async Task ForegroundSnapshotTracksTheWindowItActuallyReads()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.TargetHwnd, OtherProcessId = 8 };
+        using var installed = desktop.Install();
+        using var sessions = new SessionManager(null, ProcessPolicy.AllowAll);
+        sessions.PublishWindow(null, FakeDesktop.OtherHwnd, 8, new(FakeDesktop.OtherHwnd, 8, 10));
+        var first = sessions.ResolveForegroundTarget()!;
+        var operation = new OperationContext { ProcessId = first.ProcessId, ProcessStartedTicks = first.StartedTicks };
+        var previous = OperationContext.Current.Value;
+        OperationContext.Current.Value = operation;
+        try
+        {
+            desktop.ForegroundWindow = FakeDesktop.OtherHwnd;
+            var snapshot = new SnapshotTool(sessions, new ElementRegistry());
+            await snapshot.ExecuteAsync(null);
+
+            Assert.Equal(8, operation.ProcessId);
+            Assert.Equal(10, operation.ProcessStartedTicks);
+        }
+        finally
+        {
+            OperationContext.Current.Value = previous;
+        }
+    }
+
     private sealed class ImmediateTypeStep : ToolBase
     {
         public override string Name => "windows_type";
