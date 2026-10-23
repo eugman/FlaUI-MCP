@@ -3,7 +3,11 @@ using FlaUI.Mcp.Core;
 
 namespace FlaUI.Mcp.Tools;
 
-public sealed class OperationStatusTool(OperationCoordinator operations, PendingInvokeTracker pending) : ToolBase
+public sealed class OperationStatusTool(
+    OperationCoordinator operations,
+    PendingInvokeTracker pending,
+    PendingInvokeTracker? secondaryPending = null
+) : ToolBase
 {
     /// <summary>Read-only and never blocked: it is how a client inspects the calls that are.</summary>
     public const string ToolName = "windows_operation_status";
@@ -26,14 +30,35 @@ public sealed class OperationStatusTool(OperationCoordinator operations, Pending
             string? OperationId = null
     );
 
+    private JsonElement[] PendingPatterns()
+    {
+        var first = JsonSerializer
+            .SerializeToElement(pending.Status())
+            .EnumerateArray()
+            .Select(pattern => pattern.Clone());
+        var second =
+            secondaryPending == null || secondaryPending == pending
+                ? []
+                : JsonSerializer
+                    .SerializeToElement(secondaryPending.Status())
+                    .EnumerateArray()
+                    .Select(pattern => pattern.Clone())
+                    .ToArray();
+        return first.Concat(second).ToArray();
+    }
+
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments) =>
         Task.FromResult(
             TextResult(
                 JsonSerializer.Serialize(
                     new
                     {
-                        operations = operations.Status(GetStringArgument(arguments, "operationId"), pending),
-                        pendingPatterns = pending.Status(),
+                        operations = operations.Status(
+                            GetStringArgument(arguments, "operationId"),
+                            pending,
+                            secondaryPending: secondaryPending
+                        ),
+                        pendingPatterns = PendingPatterns(),
                     }
                 )
             )

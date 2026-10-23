@@ -20,8 +20,21 @@ internal static class ToolComposition
         }
 
         var productResolver = registry.ResolveTarget;
-        registry.ResolveTarget = arguments =>
-            sessions.ResolveTarget(arguments, elements) ?? productResolver?.Invoke(arguments);
+        var productToolResolver = registry.ResolveTargetForTool;
+        ProcessIdentity? CoreTarget(System.Text.Json.JsonElement? arguments) =>
+            sessions.ResolveTarget(arguments, elements);
+        registry.ResolveTarget = arguments => productResolver?.Invoke(arguments) ?? CoreTarget(arguments);
+        registry.ResolveTargetForTool = (name, arguments) =>
+        {
+            if (name.StartsWith("windows_", StringComparison.Ordinal))
+            {
+                return CoreTarget(arguments);
+            }
+
+            return productToolResolver?.Invoke(name, arguments)
+                ?? productResolver?.Invoke(arguments)
+                ?? CoreTarget(arguments);
+        };
         if (registry.Pending == null)
         {
             registry.Pending = pending;
@@ -32,7 +45,13 @@ internal static class ToolComposition
         }
 
         var query = new ElementQuery(sessions, elements, pending);
-        registry.RegisterTool(new OperationStatusTool(registry.Operations, pending));
+        registry.RegisterTool(
+            new OperationStatusTool(
+                registry.Operations,
+                pending,
+                registry.Pending != pending ? registry.Pending : registry.SecondaryPending
+            )
+        );
         registry.RegisterTool(new FindTool(query));
         registry.RegisterTool(new WaitTool(query));
         registry.RegisterTool(new SnapshotTool(sessions, elements, pending));

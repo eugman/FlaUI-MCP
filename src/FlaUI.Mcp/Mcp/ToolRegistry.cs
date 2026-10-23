@@ -14,6 +14,7 @@ public partial class ToolRegistry
     private readonly Action? _onToolActivity;
     public OperationCoordinator Operations { get; } = new();
     public Func<JsonElement?, ProcessIdentity?>? ResolveTarget { get; set; }
+    public Func<string, JsonElement?, ProcessIdentity?>? ResolveTargetForTool { get; set; }
     public PendingInvokeTracker? Pending { get; set; }
     public PendingInvokeTracker? SecondaryPending { get; set; }
 
@@ -148,7 +149,9 @@ public partial class ToolRegistry
                 MutationGuard.BeforeMutation.Value = ComposeMutationPermission(previousHook, hook);
             }
 
-            var target = ResolveTarget?.Invoke(arguments);
+            var target = ResolveTargetForTool is { } resolve
+                ? resolve(tool.Name, arguments)
+                : ResolveTarget?.Invoke(arguments);
             warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
             OperationContext.Check();
             result = WithAdvisory(await tool.ExecuteAsync(arguments), warning);
@@ -176,7 +179,9 @@ public partial class ToolRegistry
         {
             // Metadata collection is inside the timeout. Target validation
             // belongs to the tool, preserving its specific error contract.
-            var target = ResolveTarget?.Invoke(arguments);
+            var target = ResolveTargetForTool is { } resolve
+                ? resolve(tool.Name, arguments)
+                : ResolveTarget?.Invoke(arguments);
             var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
             if (hook != null)
             {
