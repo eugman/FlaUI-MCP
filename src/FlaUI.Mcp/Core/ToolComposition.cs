@@ -14,8 +14,23 @@ internal static class ToolComposition
         bool includeDesktopTools
     )
     {
-        registry.ResolveTarget = arguments => sessions.ResolveTarget(arguments, elements);
-        registry.Pending = pending;
+        if (registry.SecondaryPending != null && registry.SecondaryPending != pending)
+        {
+            throw new ArgumentException("Registry already has a secondary pending tracker.", nameof(registry));
+        }
+
+        var productResolver = registry.ResolveTarget;
+        registry.ResolveTarget = arguments =>
+            sessions.ResolveTarget(arguments, elements) ?? productResolver?.Invoke(arguments);
+        if (registry.Pending == null)
+        {
+            registry.Pending = pending;
+        }
+        else if (registry.Pending != pending)
+        {
+            registry.SecondaryPending = pending;
+        }
+
         var query = new ElementQuery(sessions, elements, pending);
         registry.RegisterTool(new OperationStatusTool(registry.Operations, pending));
         registry.RegisterTool(new FindTool(query));

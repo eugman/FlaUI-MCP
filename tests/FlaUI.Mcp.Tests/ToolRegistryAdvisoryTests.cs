@@ -51,6 +51,28 @@ public sealed class ToolRegistryAdvisoryTests
         Assert.Contains("probe failed", result.StructuredContent!.Message);
     }
 
+    [Fact]
+    public async Task PerToolGrantCannotReplaceAnAmbientDenial()
+    {
+        var registry = new ToolRegistry();
+        var mutations = 0;
+        registry.RegisterTool(new ProbeTool(() => MutationGuard.Execute(() => { }, () => mutations++)));
+        registry.MutationPermissionForTool = (_, _) => () => { };
+        var prior = MutationGuard.BeforeMutation.Value;
+        MutationGuard.BeforeMutation.Value = () => throw new InvalidOperationException("ambient grant denied");
+        try
+        {
+            var result = await registry.ExecuteToolAsync("probe", null);
+            Assert.True(result.IsError);
+            Assert.Contains("ambient grant denied", result.Content[0].Text);
+            Assert.Equal(0, mutations);
+        }
+        finally
+        {
+            MutationGuard.BeforeMutation.Value = prior;
+        }
+    }
+
     private sealed class ProbeTool(Action run) : ToolBase
     {
         public override string Name => "probe";

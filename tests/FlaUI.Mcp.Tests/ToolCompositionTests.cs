@@ -120,4 +120,41 @@ public sealed class ToolCompositionTests
         Assert.NotNull(product.ResolveTarget);
         Assert.Same(host.Pending, product.Pending);
     }
+
+    [Fact]
+    public void ProductRegistryKeepsItsTargetResolverAndPendingTracker()
+    {
+        using var host = new AutomationHost(new ProcessPolicy(["test-app"]));
+        var product = new ToolRegistry();
+        var productPending = new PendingInvokeTracker();
+        product.Pending = productPending;
+        product.ResolveTarget = _ => new ProcessIdentity(2468, 1357);
+
+        host.RegisterAllToolsInto(product);
+
+        Assert.Same(productPending, product.Pending);
+        Assert.Same(host.Pending, product.SecondaryPending);
+        Assert.Equal(2468, product.ResolveTarget!(null)!.ProcessId);
+    }
+
+    [Fact]
+    public void CoreResolverTakesItsOwnHandleAndFallsBackToProduct()
+    {
+        using var host = new AutomationHost(new ProcessPolicy(["test-app"]));
+        var product = new ToolRegistry();
+        product.ResolveTarget = _ => new ProcessIdentity(2468, 1357);
+        var handle = host.Sessions.PublishWindow(
+            null,
+            FakeDesktop.TargetHwnd,
+            FakeDesktop.TargetPid,
+            FakeDesktop.Target
+        );
+
+        host.RegisterAllToolsInto(product);
+
+        var coreTarget = product.ResolveTarget!(JsonSerializer.SerializeToElement(new { handle }));
+        Assert.Equal(FakeDesktop.TargetPid, coreTarget!.ProcessId);
+        var productTarget = product.ResolveTarget!(JsonSerializer.SerializeToElement(new { handle = "product1" }));
+        Assert.Equal(2468, productTarget!.ProcessId);
+    }
 }

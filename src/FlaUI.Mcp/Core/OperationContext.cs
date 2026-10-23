@@ -22,6 +22,7 @@ public sealed class OperationContext
     public CancellationTokenSource Stop { get; } = new();
     public volatile bool Finished;
     public string? Error { get; set; }
+    public string? AdvisoryWarning;
     public ToolOutcome? ResultOutcome { get; set; }
 
     /// <summary>

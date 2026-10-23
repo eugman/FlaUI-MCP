@@ -45,6 +45,66 @@ public sealed class StrandedCallMutationTests
     }
 
     [Fact]
+    public async Task TimedOutCallKeepsResolvedAppWarning()
+    {
+        var gate = new TaskCompletionSource();
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
+        {
+            AdvisoryWarning = (_, _, _) => "Outside preferred app",
+        };
+        var gated = new Gated(gate.Task);
+        registry.RegisterTool(gated);
+        try
+        {
+            var call = registry.ExecuteToolAsync("gated", null);
+            await gated.Entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            var result = await call.WaitAsync(Eventually.Bound);
+
+            Assert.True(result.IsError);
+            Assert.StartsWith("Warning: Outside preferred app", result.Content[0].Text);
+            Assert.Contains("timed out", result.StructuredContent!.Message);
+        }
+        finally
+        {
+            gate.SetResult();
+        }
+    }
+
+    [Fact]
+    public async Task TimedOutCallTracksBothComposedProviders()
+    {
+        var gate = new TaskCompletionSource();
+        var clock = new ManualTimeProvider();
+        var productPending = new PendingInvokeTracker(_ => 456);
+        var corePending = new PendingInvokeTracker(_ => 456);
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
+        {
+            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            Pending = productPending,
+            SecondaryPending = corePending,
+        };
+        var gated = new Gated(gate.Task);
+        registry.RegisterTool(gated);
+        try
+        {
+            var call = registry.ExecuteToolAsync("gated", null);
+            await gated.Entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+            var result = await call.WaitAsync(Eventually.Bound);
+
+            Assert.True(result.IsError);
+            Assert.True(productPending.TryGetPending(123, out _));
+            Assert.True(corePending.TryGetPending(123, out _));
+        }
+        finally
+        {
+            gate.SetResult();
+        }
+    }
+
+    [Fact]
     public async Task ACancelledCallSaysCancellationWasRequested()
     {
         var gate = new TaskCompletionSource();

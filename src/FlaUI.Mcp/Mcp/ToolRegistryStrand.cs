@@ -25,13 +25,13 @@ public partial class ToolRegistry
         }
 
         // A stranded call can still hold this app's UIA provider. Fail later ref tools fast until it returns.
-        if (Pending != null && operation.ProcessId != 0)
+        if (operation.ProcessId != 0)
         {
-            var stranded = Pending.Begin(
-                operation.ProcessId,
-                settled != null ? $"cancelled {name}" : $"timed-out {name}"
-            );
-            _ = toolTask.ContinueWith(_ => Pending.Complete(stranded), TaskScheduler.Default);
+            TrackStranded(Pending, name, operation.ProcessId, settled != null, toolTask);
+            if (SecondaryPending != Pending)
+            {
+                TrackStranded(SecondaryPending, name, operation.ProcessId, settled != null, toolTask);
+            }
         }
 
         _ = toolTask.ContinueWith(
@@ -42,26 +42,46 @@ public partial class ToolRegistry
             TaskContinuationOptions.OnlyOnFaulted
         );
 
-        return new McpToolResult
+        return WithAdvisory(
+            new McpToolResult
+            {
+                Content = new List<McpContent>
+                {
+                    new() { Type = "text", Text = PendingMessage(name, settled != null) },
+                },
+                // Failed like any error result, and carrying a refusal the call recorded before it stranded.
+                Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id)
+                {
+                    InputsSent = operation.InputsSent,
+                    Status = "failed",
+                    Failure = operation.Refusal is { } refusal
+                        ? refusal with
+                        {
+                            ActionDispatched = refusal.ActionDispatched == true || operation.InputsSent > 0,
+                        }
+                        : null,
+                },
+                IsError = true,
+            },
+            Volatile.Read(ref operation.AdvisoryWarning)
+        );
+    }
+
+    private static void TrackStranded(
+        PendingInvokeTracker? tracker,
+        string name,
+        int processId,
+        bool cancelled,
+        Task<McpToolResult> toolTask
+    )
+    {
+        if (tracker == null)
         {
-            Content = new List<McpContent>
-            {
-                new() { Type = "text", Text = PendingMessage(name, settled != null) },
-            },
-            // Failed like any error result, and carrying a refusal the call recorded before it stranded.
-            Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id)
-            {
-                InputsSent = operation.InputsSent,
-                Status = "failed",
-                Failure = operation.Refusal is { } refusal
-                    ? refusal with
-                    {
-                        ActionDispatched = refusal.ActionDispatched == true || operation.InputsSent > 0,
-                    }
-                    : null,
-            },
-            IsError = true,
-        };
+            return;
+        }
+
+        var stranded = tracker.Begin(processId, cancelled ? $"cancelled {name}" : $"timed-out {name}");
+        _ = toolTask.ContinueWith(_ => tracker.Complete(stranded), TaskScheduler.Default);
     }
 
     /// <summary>Completes when the tool returns, or when its timeout would have expired had it not been cancelled.</summary>

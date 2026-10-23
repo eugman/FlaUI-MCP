@@ -15,6 +15,7 @@ public partial class ToolRegistry
     public OperationCoordinator Operations { get; } = new();
     public Func<JsonElement?, ProcessIdentity?>? ResolveTarget { get; set; }
     public PendingInvokeTracker? Pending { get; set; }
+    public PendingInvokeTracker? SecondaryPending { get; set; }
 
     /// <summary>Optional per-call permission check installed at each guarded mutation.</summary>
     public Func<string, McpToolAnnotations?, Action?>? MutationPermissionForTool { get; set; }
@@ -144,7 +145,7 @@ public partial class ToolRegistry
             var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
             if (hook != null)
             {
-                MutationGuard.BeforeMutation.Value = hook;
+                MutationGuard.BeforeMutation.Value = ComposeMutationPermission(previousHook, hook);
             }
 
             var target = ResolveTarget?.Invoke(arguments);
@@ -179,10 +180,11 @@ public partial class ToolRegistry
             var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
             if (hook != null)
             {
-                MutationGuard.BeforeMutation.Value = hook;
+                MutationGuard.BeforeMutation.Value = ComposeMutationPermission(previousHook, hook);
             }
 
             warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
+            operation.AdvisoryWarning = warning;
             operation.ProcessId = target?.ProcessId ?? 0;
             operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
             OperationContext.Check();
@@ -228,6 +230,20 @@ public partial class ToolRegistry
         return result;
     }
 
+    private static Action ComposeMutationPermission(Action? ambient, Action tool)
+    {
+        if (ambient == null || ambient == tool)
+        {
+            return tool;
+        }
+
+        return () =>
+        {
+            ambient();
+            tool();
+        };
+    }
+
     private static McpToolResult WithAdvisory(McpToolResult result, string? warning)
     {
         if (string.IsNullOrWhiteSpace(warning))
@@ -249,7 +265,8 @@ public partial class ToolRegistry
     /// refusal guarded input raised during it, so clients read its fields instead of parsing the text.
     /// </summary>
     /// <summary>Whether a pattern call this operation started still holds the app's provider.</summary>
-    private bool ProviderPending(OperationContext operation) => Pending?.ForOperation(operation.Id).Length > 0;
+    private bool ProviderPending(OperationContext operation) =>
+        Pending?.ForOperation(operation.Id).Length > 0 || SecondaryPending?.ForOperation(operation.Id).Length > 0;
 
     internal static McpToolResult WithDispatch(
         McpToolResult result,
