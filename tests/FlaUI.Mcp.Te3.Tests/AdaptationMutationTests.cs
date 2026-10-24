@@ -32,13 +32,10 @@ public sealed class AdaptationMutationTests
     }
 
     [Theory]
-    [InlineData("completed", "pending")]
-    [InlineData("timed_out_pending", "unknown")]
-    public void AFailingCallThatMayStillGoOutIsTimedOutPending(string dispatch, string provider) =>
-        Assert.Equal(
-            "timed_out_pending",
-            CoreFailure.Reply(Failed(dispatch, "Failed.", provider: provider), 0).Dispatch
-        );
+    [InlineData("completed", "pending", "partial")]
+    [InlineData("timed_out_pending", "unknown", "timed_out_pending")]
+    public void AFailingCallPreservesKnownDispatchOrPendingState(string dispatch, string provider, string expected) =>
+        Assert.Equal(expected, CoreFailure.Reply(Failed(dispatch, "Failed.", provider: provider), 0).Dispatch);
 
     [Fact]
     public void ARefusalBeforeAnyInputSaysNoActionWasDispatched()

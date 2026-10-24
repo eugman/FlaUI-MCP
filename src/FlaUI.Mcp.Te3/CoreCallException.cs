@@ -118,7 +118,10 @@ internal static class CoreFailure
     /// the caller's own guards changed before it (activation, focus) is in its tally, not here.
     /// </summary>
     internal static bool NotDispatched(Exception error) =>
-        error is CoreCallException { Outcome.Dispatch: "not-dispatched" };
+        error is CoreCallException call
+        && call.Outcome.Dispatch == "not-dispatched"
+        && call.Outcome.InputsSent == 0
+        && call.Outcome.Failure?.ActionDispatched != true;
 
     /// <summary>
     /// Whether the failing call itself may still reach the app: it timed out pending, or it went out and its
@@ -137,10 +140,16 @@ internal static class CoreFailure
     internal static ToolOutcome Reply(Exception error, int inputsSent, object? walk = null)
     {
         var failing = Outcome(error);
-        var dispatch =
-            MayStillGoOut(failing) && inputsSent == 0
-                ? "timed_out_pending"
-                : ToolOutcome.DispatchFor(failed: true, inputsSent);
+        var dispatched =
+            inputsSent > 0
+            || failing?.Failure?.ActionDispatched == true
+            || failing?.Dispatch is "partial" or "completed";
+        var dispatch = ToolOutcome.DispatchFor(failed: true, dispatched ? Math.Max(inputsSent, 1) : 0);
+        if (MayStillGoOut(failing) && !dispatched)
+        {
+            dispatch = "timed_out_pending";
+        }
+
         return new ToolOutcome(
             dispatch,
             failing?.IsPending == true ? "pending" : "not-tracked",
@@ -165,7 +174,16 @@ internal static class CoreFailure
             return BeforeInput(error, inputsSent);
         }
 
-        return failing.Failure is { } refusal ? refusal with { ActionDispatched = inputsSent > 0 } : null;
+        if (failing.Failure is { } refusal)
+        {
+            return refusal with { ActionDispatched = inputsSent > 0 || refusal.ActionDispatched == true };
+        }
+
+        // A settled Core failure explicitly marked not-dispatched is safe to classify as no input, even when
+        // an older Core tool supplied no finer refusal code. Pending and completed calls remain uncertain.
+        return failing.Dispatch == "not-dispatched" && failing.Provider != "pending" && inputsSent == 0
+            ? new InputRefusal(CoreCallException.ToolFailed, error.Message) { ActionDispatched = false }
+            : null;
     }
 
     /// <summary>

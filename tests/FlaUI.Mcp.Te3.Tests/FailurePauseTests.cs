@@ -30,6 +30,51 @@ public sealed class FailurePauseTests
     }
 
     [Fact]
+    public void AFailureWithUncountedDispatchEvidencePauses()
+    {
+        using var interaction = Approved();
+
+        FailurePause.After(
+            interaction,
+            Result(
+                new ToolOutcome("partial", "not-tracked")
+                {
+                    InputsSent = 0,
+                    Failure = new InputRefusal("target-changed", "Input may have reached TE3")
+                    {
+                        ActionDispatched = true,
+                    },
+                }
+            ),
+            observation: false
+        );
+
+        Assert.Equal(
+            Te3Interaction.PausedAfterFailure,
+            Assert.Throws<InputRefusedException>(interaction.Require).Refusal.Code
+        );
+    }
+
+    [Theory]
+    [InlineData("partial")]
+    [InlineData("completed")]
+    public void AFailureWithUncountedDispatchDispositionPauses(string dispatch)
+    {
+        using var interaction = Approved();
+
+        FailurePause.After(
+            interaction,
+            Result(new ToolOutcome(dispatch, "not-tracked") { InputsSent = 0 }),
+            observation: false
+        );
+
+        Assert.Equal(
+            Te3Interaction.PausedAfterFailure,
+            Assert.Throws<InputRefusedException>(interaction.Require).Refusal.Code
+        );
+    }
+
+    [Fact]
     public void AFailureThatSentNothingDoesNotPause()
     {
         using var interaction = Approved();

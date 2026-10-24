@@ -64,7 +64,7 @@ public sealed class PreInputRefusalTests
         Assert.Null(CoreFailure.Reply(new InvalidOperationException("not found"), inputsSent: 2).Failure);
 
     [Fact]
-    public void ACoreOutcomeWithoutARefusalIsLeftAsCoreSaidIt()
+    public void ASettledCoreFailureWithoutARefusalIsTypedAsNoInput()
     {
         var failed = new CoreCallException(
             "windows_click",
@@ -76,7 +76,57 @@ public sealed class PreInputRefusalTests
             }
         );
 
-        Assert.Null(CoreFailure.Reply(failed, inputsSent: 0).Failure);
+        var reply = CoreFailure.Reply(failed, inputsSent: 0);
+        Assert.Equal(CoreCallException.ToolFailed, reply.Failure?.Code);
+        Assert.False(reply.Failure?.ActionDispatched);
+        Assert.Equal("not-dispatched", reply.Dispatch);
+    }
+
+    [Fact]
+    public void ACoreFailureKnownToHaveDispatchedKeepsThatEvidenceAcrossAnOuterZeroTally()
+    {
+        var failed = new CoreCallException(
+            "windows_click",
+            new FlaUI.Mcp.McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Type = "text", Text = "Effect may have occurred" }],
+                Outcome = new ToolOutcome("partial", "not-tracked")
+                {
+                    InputsSent = 0,
+                    Status = "failed",
+                    Failure = new InputRefusal("target-changed", "Effect may have occurred")
+                    {
+                        ActionDispatched = true,
+                    },
+                },
+            }
+        );
+
+        var reply = CoreFailure.Reply(failed, inputsSent: 0);
+        Assert.Equal("partial", reply.Dispatch);
+        Assert.Equal(0, reply.InputsSent);
+        Assert.True(reply.Failure?.ActionDispatched);
+    }
+
+    [Theory]
+    [InlineData("partial")]
+    [InlineData("completed")]
+    public void ACoreDispatchWithoutARefusalIsNotReclassifiedAsNoInput(string dispatch)
+    {
+        var failed = new CoreCallException(
+            "windows_click",
+            new FlaUI.Mcp.McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Type = "text", Text = "The action failed" }],
+                Outcome = new ToolOutcome(dispatch, "not-tracked") { InputsSent = 0, Status = "failed" },
+            }
+        );
+
+        var reply = CoreFailure.Reply(failed, inputsSent: 0);
+        Assert.Equal("partial", reply.Dispatch);
+        Assert.Null(reply.Failure);
     }
 
     [Fact]

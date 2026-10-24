@@ -122,6 +122,31 @@ public sealed class NavigationRetryTests
     }
 
     [Fact]
+    public async Task AContradictoryNoInputDispatchWithRecordedActionIsNotRetried()
+    {
+        var attempts = 0;
+        var failure = Thrown(
+            new ToolOutcome("not-dispatched", "not-tracked")
+            {
+                InputsSent = 0,
+                Status = "failed",
+                Failure = new InputRefusal("target-changed", "Input reached TE3") { ActionDispatched = true },
+            }
+        );
+
+        await Assert.ThrowsAsync<CoreCallException>(() =>
+            Retry(() =>
+            {
+                attempts++;
+                throw failure;
+            })
+        );
+
+        Assert.Equal(1, attempts);
+        Assert.False(CoreFailure.NotDispatched(failure));
+    }
+
+    [Fact]
     public async Task AnAttemptThatSentInputBeforeItsRefusalIsNotRetried()
     {
         // The walk typed the search and pressed Down; only its last step was refused before input.

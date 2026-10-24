@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- A settled Core call that failed before any input without its own refusal now becomes a typed `tool-failed` TE3 result with `actionDispatched: false`. Wrapping an inner failure preserves `actionDispatched: true` even if the outer TE3 input tally is zero, and that evidence pauses the interaction grant until observation. A Core `partial` or `completed` failure with no counted input also stays dispatched and cannot be retried; a Core call is retryable only with an explicit zero input count, `not-dispatched`, and no contrary failure evidence.
 - Keys sent to the Scintilla editors (the query editor's F5) ask Core for `verifyFocus: "self-or-descendant"` explicitly instead of relying on Core's default.
 - The run's click prompt is ended with `activation-denied` whenever the wait for the click fails (timeout, cancellation, TE3 exiting, a second TE3, no window bounds), before the run's capture and cleanup.
 - The waits in `Absence` and the object walk's `AwaitMove` stop on a poll count as well as the clock, so a clock that does not move cannot hold them; the popup captures poll for the popup (`SettlePoll`) instead of one read after a fixed 500 ms.
