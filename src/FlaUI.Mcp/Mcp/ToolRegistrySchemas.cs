@@ -64,7 +64,15 @@ public partial class ToolRegistry
         var known = declared.Length == 0 ? "none" : string.Join(", ", declared);
         return ErrorText($"Unknown argument '{unknown}' for {name}; no input sent. Declared arguments: {known}.") with
         {
-            Outcome = new ToolOutcome("not-dispatched", "not-tracked") { Status = "failed", InputsSent = 0 },
+            Outcome = new ToolOutcome("not-dispatched", "not-tracked")
+            {
+                Status = "failed",
+                InputsSent = 0,
+                Failure = new InputRefusal(RefusalCodes.InvalidArguments, $"Unknown argument '{unknown}' for {name}")
+                {
+                    ActionDispatched = false,
+                },
+            },
         };
     }
 }

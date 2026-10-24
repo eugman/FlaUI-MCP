@@ -203,9 +203,9 @@ public sealed class BatchTool : ToolBase
         /// A batch stopped at a pending step after earlier steps sent input is partial, with the pending marker
         /// kept. Reporting the pending step's own "not-dispatched" would invite a replay of input already sent.
         /// </summary>
-        private static ToolOutcome PendingOutcome(ToolOutcome pending, int sent, bool stoppedEarly)
+        private static ToolOutcome PendingOutcome(ToolOutcome pending, bool dispatched, bool stoppedEarly)
         {
-            if (sent == 0 || pending.Dispatch == "completed" && !stoppedEarly)
+            if (!dispatched || pending.Dispatch == "completed" && !stoppedEarly)
             {
                 return pending;
             }
@@ -237,9 +237,19 @@ public sealed class BatchTool : ToolBase
         {
             var failed = steps.Any(s => s.IsError);
             var sent = steps.Sum(s => s.Outcome?.InputsSent ?? 0);
+            var dispatched =
+                sent > 0
+                || steps.Any(step =>
+                    (step.Action is "click" or "type" or "fill")
+                    && (
+                        step.Outcome?.Dispatch is "partial" or "completed"
+                        || step.Outcome?.Failure?.ActionDispatched == true
+                    )
+                );
+            var dispatchCount = dispatched ? Math.Max(sent, 1) : 0;
             var outcome = pending is null
-                ? new(ToolOutcome.DispatchFor(failed, sent), "returned")
-                : PendingOutcome(pending, sent, pendingNumber < rowCount);
+                ? new(ToolOutcome.DispatchFor(failed, dispatchCount), "returned")
+                : PendingOutcome(pending, dispatched, pendingNumber < rowCount);
             return TextResult(string.Join("\n", trace)) with
             {
                 IsError = failed ? true : null,

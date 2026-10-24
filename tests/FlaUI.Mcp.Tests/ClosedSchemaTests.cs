@@ -50,6 +50,8 @@ public sealed class ClosedSchemaTests
             result.Content[0].Text
         );
         Assert.Equal("not-dispatched", result.Outcome!.Dispatch);
+        Assert.Equal("invalid-arguments", result.Outcome.Failure?.Code);
+        Assert.False(result.Outcome.Failure?.ActionDispatched);
         Assert.Equal(0, probe.Runs);
     }
 

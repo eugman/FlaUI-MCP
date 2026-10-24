@@ -182,6 +182,92 @@ public sealed class DispatchOutcomeTests
         AssertDispatch(result, "not-dispatched", 0);
         Assert.Equal("failed", Outcome(result).GetProperty("status").GetString());
         Assert.False(string.IsNullOrEmpty(result.Outcome!.OperationId));
+        Assert.Equal(RefusalCodes.OperationFailed, result.Outcome.Failure?.Code);
+        Assert.False(result.Outcome.Failure?.ActionDispatched);
+    }
+
+    [Fact]
+    public async Task ASettledReturnedErrorBeforeInputHasATypedNoInputFailure()
+    {
+        var registry = new ToolRegistry();
+        registry.RegisterTool(
+            new DelegateTool(
+                "fails",
+                () =>
+                    new McpToolResult
+                    {
+                        IsError = true,
+                        Content = [new() { Type = "text", Text = "No window matched" }],
+                    }
+            )
+        );
+
+        var result = await registry.ExecuteToolAsync("fails", null);
+
+        Assert.Equal("not-dispatched", result.Outcome?.Dispatch);
+        Assert.Equal(0, result.Outcome?.InputsSent);
+        Assert.Equal(RefusalCodes.OperationFailed, result.Outcome?.Failure?.Code);
+        Assert.False(result.Outcome?.Failure?.ActionDispatched);
+    }
+
+    [Fact]
+    public void PendingFailureIsNotMisclassifiedAsSafeToRetry()
+    {
+        var result = ToolRegistry.WithDispatch(
+            new McpToolResult
+            {
+                IsError = true,
+                Content = [new() { Type = "text", Text = "Provider has not returned" }],
+                Outcome = new ToolOutcome("timed_out_pending", "pending"),
+            },
+            inputsSent: 0,
+            providerPending: true
+        );
+
+        Assert.Equal("timed_out_pending", result.Outcome?.Dispatch);
+        Assert.Null(result.Outcome?.Failure);
+    }
+
+    [Fact]
+    public void ARecordedRefusalAfterInputKeepsItsEvidenceWithNoInputTally()
+    {
+        var result = ToolRegistry.WithDispatch(
+            new McpToolResult { IsError = true, Content = [new() { Type = "text", Text = "Interrupted" }] },
+            inputsSent: 0,
+            refusal: new InputRefusal("target-changed", "Interrupted") { ActionDispatched = true }
+        );
+
+        Assert.True(result.Outcome?.Failure?.ActionDispatched);
+        Assert.Equal("target-changed", result.Outcome?.Failure?.Code);
+        Assert.Equal("partial", result.Outcome?.Dispatch);
+    }
+
+    [Theory]
+    [InlineData("partial")]
+    [InlineData("completed")]
+    public async Task UncountedDispatchedFailureNotifiesTheGrant(string dispatch)
+    {
+        var registry = new ToolRegistry();
+        var notified = false;
+        registry.FailedAfterInput = (_, _) => notified = true;
+        registry.RegisterTool(
+            new DelegateTool(
+                "fails",
+                () =>
+                    new McpToolResult
+                    {
+                        IsError = true,
+                        Content = [new() { Type = "text", Text = "Dispatched" }],
+                        Outcome = new ToolOutcome(dispatch, "not-tracked") { InputsSent = 0, Status = "failed" },
+                    }
+            )
+        );
+
+        var result = await registry.ExecuteToolAsync("fails", null);
+
+        Assert.True(notified);
+        Assert.NotEqual("not-dispatched", result.Outcome?.Dispatch);
+        Assert.Null(result.Outcome?.Failure);
     }
 
     [Fact]

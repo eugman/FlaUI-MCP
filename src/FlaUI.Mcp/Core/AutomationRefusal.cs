@@ -67,6 +67,9 @@ public static class RefusalCodes
 
     /// <summary>A required argument is missing or the arguments contradict each other; refused before any input.</summary>
     public const string InvalidArguments = "invalid-arguments";
+
+    /// <summary>A settled tool failed before any recorded input and gave no more specific refusal.</summary>
+    public const string OperationFailed = "operation-failed";
     public const string ElementNotFound = "element-not-found";
     public const string ProviderBlocked = "provider-blocked";
     public const string PlacementMismatch = "placement-mismatch";
