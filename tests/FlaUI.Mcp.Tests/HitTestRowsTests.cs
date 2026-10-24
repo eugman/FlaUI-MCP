@@ -90,6 +90,25 @@ public sealed class HitTestRowsTests
     }
 
     [Fact]
+    public void AnOffsetDataItemInsideTheSameSizedTreeRowStillCovers()
+    {
+        // The point is inside both rows, but their vertical edges differ by more than the 2 px same-row tolerance.
+        var row = Element();
+        var child = Element();
+        var desktop = new FakeDesktop { HitTest = _ => child };
+        desktop.ControlTypes[row] = ControlType.TreeItem;
+        desktop.ControlTypes[child] = ControlType.DataItem;
+        desktop.Parents[child] = row;
+        desktop.ElementBounds[row] = new Rectangle(433, 214, 435, 22);
+        desktop.ElementBounds[child] = new Rectangle(480, 218, 388, 22);
+        using var installed = desktop.Install();
+
+        var refusal = Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(new Point(500, 225), row));
+        Assert.Equal("click-point-covered", refusal.Refusal.Code);
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
     public void ADataItemAtTheTopOfAnExpandedParentStillCovers()
     {
         var parent = Element();
