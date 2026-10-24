@@ -249,11 +249,16 @@ public static class ClickHitTest
     /// <summary>
     /// A descendant answered. A row inside the target (the child row of an expanded tree item, whose bounds include
     /// its children's) takes the press itself, so it covers; any other descendant proves the point. The MSAA proxy
-    /// reports a grid's rows and cells both as DataItem, so a DataItem inside a DataItem is a cell inside its row.
+    /// reports a grid's rows and cells both as DataItem. A tree or list item's same-height DataItem can likewise be
+    /// its label, but an offset or taller child is another row and must still refuse the press.
     /// </summary>
     private static string Inside(InputDesktop desktop, AutomationElement target, AutomationElement hit, Point point)
     {
-        if (IsRow(desktop, hit) && !(IsDataItem(desktop, hit) && IsDataItem(desktop, target)))
+        if (
+            IsRow(desktop, hit)
+            && !(IsDataItem(desktop, hit) && IsDataItem(desktop, target))
+            && !IsSameRowLabel(desktop, target, hit, point)
+        )
         {
             throw Covered(
                 $"The point ({point.X},{point.Y}) is on {desktop.DescribeElement(hit)}, a row inside the element"
@@ -261,6 +266,38 @@ public static class ClickHitTest
         }
 
         return "descendant";
+    }
+
+    private static bool IsSameRowLabel(
+        InputDesktop desktop,
+        AutomationElement target,
+        AutomationElement hit,
+        Point point
+    )
+    {
+        if (
+            !IsDataItem(desktop, hit)
+            || desktop.ControlTypeOf(target) is not (ControlType.TreeItem or ControlType.ListItem)
+        )
+        {
+            return false;
+        }
+
+        var targetBounds = desktop.BoundsOf(target);
+        var hitBounds = desktop.BoundsOf(hit);
+        const int slack = 2;
+        if (
+            targetBounds.Height <= 0
+            || hitBounds.Height <= 0
+            || !targetBounds.Contains(point)
+            || !hitBounds.Contains(point)
+        )
+        {
+            return false;
+        }
+
+        return Math.Abs(targetBounds.Top - hitBounds.Top) <= slack
+            && Math.Abs(targetBounds.Bottom - hitBounds.Bottom) <= slack;
     }
 
     private static bool IsRow(InputDesktop desktop, AutomationElement element) =>
