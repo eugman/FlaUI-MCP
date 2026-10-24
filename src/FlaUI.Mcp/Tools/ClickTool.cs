@@ -187,7 +187,13 @@ public partial class ClickTool : ToolBase
         }
 
         // Scrolling the row into view changes the app, so it goes through the guards before the click's lease.
-        var scrolled = ClickGeometry.ScrollIntoView(element, request.ProcessId, _invokeTracker, Validate);
+        var scrolled = ClickGeometry.ScrollIntoView(
+            element,
+            request.ProcessId,
+            _invokeTracker,
+            Validate,
+            _elementRegistry.InputForRef(request.RefId)
+        );
         try
         {
             return MouseClick(request, element, elementName, physical, selectionFallback);

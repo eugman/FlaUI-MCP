@@ -13,7 +13,11 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
     private const int MaxHoverMs = 5000;
     private const int MaxScrollTicks = 50;
 
-    private readonly RefPoints points = new(refs, pending);
+    private readonly RefPoints points = new(
+        refs,
+        pending,
+        reference => sessions.GetInputTarget(refs.WindowForRef(reference))
+    );
 
     public override string Name => "windows_mouse";
 

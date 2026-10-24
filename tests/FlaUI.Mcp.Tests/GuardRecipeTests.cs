@@ -74,6 +74,90 @@ public sealed class GuardRecipeTests
     }
 
     [Fact]
+    public void DeniedActivationPreventsScrollBeforeAnyInput()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd, ActivationAllowed = false };
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        var scrolled = false;
+        try
+        {
+            var error = Assert.Throws<InputRefusedException>(() =>
+                ClickGeometry.Scroll(
+                    FakeDesktop.TargetPid,
+                    new PendingInvokeTracker(),
+                    () => { },
+                    () => scrolled = true,
+                    () => Rectangle.Empty,
+                    target: FakeDesktop.Target
+                )
+            );
+
+            Assert.Equal(RefusalCodes.ActivationDenied, error.Refusal.Code);
+            Assert.False(scrolled);
+            Assert.Equal(0, operation.InputsSent);
+            Assert.Equal(0, desktop.PatternCalls);
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
+    [Fact]
+    public void ForegroundDriftAfterPreflightPreventsScrollInsideTheLease()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var scrolled = false;
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            ClickGeometry.Scroll(
+                FakeDesktop.TargetPid,
+                new PendingInvokeTracker(),
+                () => desktop.ForegroundWindow = FakeDesktop.OtherHwnd,
+                () => scrolled = true,
+                () => Rectangle.Empty,
+                target: FakeDesktop.Target
+            )
+        );
+
+        Assert.Equal(RefusalCodes.ActivationDenied, error.Refusal.Code);
+        Assert.False(scrolled);
+        Assert.Equal(0, desktop.PatternCalls);
+    }
+
+    [Fact]
+    public void SuccessfulActivationIsCountedBeforeScroll()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd };
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        var bounds = Rectangle.Empty;
+        try
+        {
+            var note = ClickGeometry.Scroll(
+                FakeDesktop.TargetPid,
+                new PendingInvokeTracker(),
+                () => { },
+                () => bounds = new Rectangle(1, 1, 10, 10),
+                () => bounds,
+                target: FakeDesktop.Target
+            );
+
+            Assert.Equal("the view was scrolled", note);
+            Assert.Equal(2, operation.InputsSent);
+            Assert.Equal(FakeDesktop.TargetHwnd, desktop.Foreground());
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
+    [Fact]
     public void APermissionTripAfterTheGuardIsBuiltLeavesTheClipboardAlone()
     {
         var desktop = new FakeDesktop();

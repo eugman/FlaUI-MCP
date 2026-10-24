@@ -35,10 +35,11 @@ public sealed record ClickGeometry(
         AutomationElement element,
         int processId,
         PendingInvokeTracker pending,
-        Action validate
+        Action validate,
+        InputTarget? target = null
     ) =>
         element.Patterns.ScrollItem.TryGetPattern(out var scrollItem)
-            ? Scroll(processId, pending, validate, scrollItem.ScrollIntoView, () => element.BoundingRectangle)
+            ? Scroll(processId, pending, validate, scrollItem.ScrollIntoView, () => element.BoundingRectangle, target)
             : null;
 
     internal static string Scroll(
@@ -46,13 +47,39 @@ public sealed record ClickGeometry(
         PendingInvokeTracker pending,
         Action validate,
         Action scroll,
-        Func<Rectangle> bounds
+        Func<Rectangle> bounds,
+        InputTarget? target = null
     )
     {
         OperationContext.Check();
+        // Activate before scrolling: if Windows keeps another app in front, leave the target untouched.
+        // Release this lease before WindowMutation.Uia acquires its own (the desktop lease is not reentrant).
+        string? activated = null;
+        if (target != null)
+        {
+            using var preflight = new GuardedInput(target);
+            activated = preflight.Changed;
+        }
+
         var before = bounds();
-        // The guarded pattern call (lease, validation, integrity, permission), counted below only when it moved.
-        var result = WindowMutation.Uia(processId, "ScrollIntoView", scroll, pending, validate, counted: false);
+        PatternCallResult result;
+        try
+        {
+            // The guarded pattern call (lease, validation, integrity, permission), counted below only when it moved.
+            result = WindowMutation.Uia(
+                processId,
+                "ScrollIntoView",
+                scroll,
+                pending,
+                validate,
+                options: new(false, target)
+            );
+        }
+        catch (Exception error) when (activated != null && GuardedInput.IsRefusal(error))
+        {
+            throw GuardedInput.ChangedFirst(error, activated);
+        }
+
         if (result.Outcome != PatternCallOutcome.Completed)
         {
             // The tracker still holds the call, so the registry marks the outcome's provider pending.

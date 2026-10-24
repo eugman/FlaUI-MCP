@@ -184,6 +184,33 @@ public sealed class DragDropPointTests
     }
 
     [Fact]
+    public async Task RefScrollRefusesDeniedActivationWithoutScrollingOrClicking()
+    {
+        var row = Element();
+        var desktop = new FakeDesktop
+        {
+            ForegroundWindow = FakeDesktop.OtherHwnd,
+            ActivationAllowed = false,
+            ScrollNote = "the view was scrolled",
+        };
+        desktop.ElementBounds[row] = Row;
+        using var installed = desktop.Install();
+        var (refs, sessions, handle) = Window();
+        using var _ = sessions;
+        var reference = refs.Register(handle, row);
+
+        var result = await Run(
+            new MouseTool(refs, new PendingInvokeTracker(), sessions),
+            new { action = "click", @ref = reference }
+        );
+
+        Assert.True(result.IsError);
+        Assert.Equal(0, desktop.ScrollRequests);
+        Assert.Equal(0, result.Outcome!.InputsSent);
+        Assert.Equal("not-dispatched", result.Outcome.Dispatch);
+    }
+
+    [Fact]
     public async Task TheReplySaysWhenTheToolScrolledTheViewFirst()
     {
         // Scrolling ref and toRef into view are the tool's own changes before the press; the row may sit

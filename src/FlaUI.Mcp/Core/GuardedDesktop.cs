@@ -28,6 +28,16 @@ public static class GuardedDesktop
         TimeSpan? gracePeriod = null
     ) => WindowMutation.Uia(processId, description, call, pending, validate, gracePeriod);
 
+    /// <summary>Make a UI Automation change only while the target window remains in the foreground.</summary>
+    public static PatternCallResult CallPattern(
+        InputTarget target,
+        string description,
+        Action call,
+        PendingInvokeTracker pending,
+        Action? validate = null,
+        TimeSpan? gracePeriod = null
+    ) => WindowMutation.Uia(target.ProcessId, description, call, pending, validate, gracePeriod, new(true, target));
+
     /// <summary>Replace the clipboard with text; counted when written, false when another process holds it.</summary>
     public static bool SetClipboardText(string text)
     {

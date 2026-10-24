@@ -165,8 +165,9 @@ internal class InputDesktop
         AutomationElement element,
         int processId,
         PendingInvokeTracker pending,
-        Action validate
-    ) => ClickGeometry.ScrollIntoView(element, processId, pending, validate);
+        Action validate,
+        InputTarget? target = null
+    ) => ClickGeometry.ScrollIntoView(element, processId, pending, validate, target);
 
     public virtual FlaUI.Core.Definitions.ControlType ControlTypeOf(AutomationElement element) =>
         element.Properties.ControlType.ValueOrDefault;

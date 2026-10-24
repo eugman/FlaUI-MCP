@@ -32,6 +32,31 @@ public sealed partial class GuardedInput
         return captured;
     }
 
+    /// <summary>Recheck a target immediately before a UIA mutation already holding the input lease.</summary>
+    internal static void RequireForeground(InputTarget target)
+    {
+        var desktop = InputDesktop.Current;
+        var foreground = desktop.Foreground();
+        if (
+            ForegroundAcceptable(
+                target,
+                foreground,
+                desktop.ProcessOf,
+                desktop.BelongsTo,
+                desktop.IsEnabled,
+                desktop.HasOwner
+            )
+        )
+        {
+            return;
+        }
+
+        var pid = foreground == 0 ? 0 : desktop.ProcessOf(foreground);
+        throw InputRefusedException.Record(
+            DescribeActivationFailure(target.ProcessId, foreground, pid, desktop.ProcessNameOf(pid))
+        );
+    }
+
     // Windows can refuse SetForegroundWindow (foreground lock) and retrying cannot override it.
     // Only a user click or an uncontested interactive session can, so name the blocker.
     internal static InputRefusal DescribeActivationFailure(
