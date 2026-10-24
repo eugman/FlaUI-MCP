@@ -127,6 +127,73 @@ public sealed class GuardedDesktopTests
         Assert.Equal(0, desktop.PatternCalls);
     }
 
+    [Fact]
+    public void TargetAwarePatternRefusesForeignForegroundBeforeDispatch()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd };
+        using var installed = desktop.Install();
+        var called = false;
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            GuardedDesktop.CallPattern(
+                FakeDesktop.Target,
+                "scroll timeline",
+                () => called = true,
+                new PendingInvokeTracker()
+            )
+        );
+
+        Assert.Equal(RefusalCodes.ActivationDenied, error.Refusal.Code);
+        Assert.False(called);
+        Assert.Equal(0, desktop.PatternCalls);
+    }
+
+    [Fact]
+    public void TargetAwarePatternRechecksForegroundAfterValidation()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var called = false;
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            GuardedDesktop.CallPattern(
+                FakeDesktop.Target,
+                "scroll timeline",
+                () => called = true,
+                new PendingInvokeTracker(),
+                () => desktop.ForegroundWindow = FakeDesktop.OtherHwnd
+            )
+        );
+
+        Assert.Equal(RefusalCodes.ActivationDenied, error.Refusal.Code);
+        Assert.False(called);
+        Assert.Equal(0, desktop.PatternCalls);
+    }
+
+    [Fact]
+    public void TargetAwarePatternAcceptsModalDialogOfDisabledOwner()
+    {
+        var desktop = new FakeDesktop
+        {
+            ForegroundWindow = (nint)300,
+            ModalHwnd = (nint)300,
+            TargetEnabled = false,
+        };
+        using var installed = desktop.Install();
+        var called = false;
+
+        var result = GuardedDesktop.CallPattern(
+            FakeDesktop.Target,
+            "scroll timeline",
+            () => called = true,
+            new PendingInvokeTracker()
+        );
+
+        Assert.Equal(PatternCallOutcome.Completed, result.Outcome);
+        Assert.True(called);
+        Assert.Equal(1, desktop.PatternCalls);
+    }
+
     [Theory]
     [InlineData(false, true, 1)]
     [InlineData(true, false, 0)]

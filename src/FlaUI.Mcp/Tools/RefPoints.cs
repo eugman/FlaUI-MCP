@@ -15,7 +15,11 @@ internal sealed record Press(Func<Point> Choose, Func<Point, string?> Moved)
 }
 
 /// <summary>Points on refs for windows_mouse: scrolled into view through the guards, then read under the lease.</summary>
-internal sealed class RefPoints(ElementRegistry refs, PendingInvokeTracker pending)
+internal sealed class RefPoints(
+    ElementRegistry refs,
+    PendingInvokeTracker pending,
+    Func<string, InputTarget>? targetForRef = null
+)
 {
     public AutomationElement Resolve(string reference) => refs.ResolveRef(reference);
 
@@ -34,7 +38,8 @@ internal sealed class RefPoints(ElementRegistry refs, PendingInvokeTracker pendi
                 element,
                 refs.GetProcessIdForRef(reference),
                 pending,
-                () => refs.ValidateReference(reference)
+                () => refs.ValidateReference(reference),
+                targetForRef?.Invoke(reference)
             ) ?? scrolled;
         return (element, () => desktop.Geometry(element));
     }

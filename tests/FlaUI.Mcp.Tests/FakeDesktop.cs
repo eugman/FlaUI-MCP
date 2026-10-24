@@ -405,9 +405,16 @@ internal sealed class FakeDesktop : InputDesktop
         AutomationElement element,
         int processId,
         PendingInvokeTracker pending,
-        Action validate
+        Action validate,
+        InputTarget? target = null
     )
     {
+        if (target != null)
+        {
+            using var preflight = new GuardedInput(target);
+            GuardedInput.RequireForeground(target);
+        }
+
         ScrollRequests++;
         return ScrollNote;
     }

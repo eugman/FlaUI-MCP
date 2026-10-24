@@ -102,15 +102,23 @@ internal static class WindowMutation
         PendingInvokeTracker? pending,
         Action? validate = null,
         TimeSpan? gracePeriod = null,
-        bool counted = true
+        UiaOptions? options = null
     )
     {
+        var counted = options?.Counted ?? true;
+        var target = options?.Target;
         RefuseIfBlocked(processId, pending);
         using var lease = GuardedInput.AcquireLease();
         var gate = new SendGate(description);
         void Validate()
         {
             validate?.Invoke();
+            if (target != null)
+            {
+                target.EnsureAlive();
+                GuardedInput.RequireForeground(target);
+            }
+
             GuardedInput.RequireDrivable(processId, InputDesktop.Current);
         }
 
@@ -147,6 +155,8 @@ internal static class WindowMutation
             }
             : result;
     }
+
+    internal sealed record UiaOptions(bool Counted, InputTarget? Target);
 
     /// <summary>Lets a pattern call through to its send only while the tool that started it still waits.</summary>
     private sealed class SendGate(string description)
