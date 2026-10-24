@@ -20,7 +20,16 @@ internal static class WindowMutation
                 var before = desktop.Foreground();
                 var stateBefore = desktop.WindowState(hwnd);
                 desktop.Focus(hwnd);
-                return desktop.Foreground() != before || desktop.WindowState(hwnd) != stateBefore;
+                try
+                {
+                    return desktop.Foreground() != before || desktop.WindowState(hwnd) != stateBefore;
+                }
+                catch
+                {
+                    // Focus returned; a failing read-back cannot prove that nothing changed.
+                    MutationGuard.RecordDispatch();
+                    throw;
+                }
             }
         );
 
