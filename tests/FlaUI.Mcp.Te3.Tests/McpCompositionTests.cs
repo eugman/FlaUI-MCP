@@ -33,4 +33,20 @@ public sealed class McpCompositionTests
             )
         );
     }
+
+    [Fact]
+    public void SharedClipboardReadWarnsWhenItsSourceCannotBeAttributed()
+    {
+        var policy = new ProcessPolicy(["TabularEditor3"], advisory: true);
+
+        var warning = Te3CrossAppPolicy.Warning(
+            policy,
+            "windows_get_clipboard",
+            JsonSerializer.SerializeToElement(new { }),
+            null
+        );
+
+        Assert.Contains("unknown", warning);
+        Assert.Contains("outside the preferred apps", warning);
+    }
 }

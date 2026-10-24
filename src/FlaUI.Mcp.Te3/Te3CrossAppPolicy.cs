@@ -24,6 +24,13 @@ public static class Te3CrossAppPolicy
             return null;
         }
 
+        // The clipboard is shared across processes. The focused window does not prove
+        // which app placed the current text there, even when that window is TE3.
+        if (name == "windows_get_clipboard")
+        {
+            return policy.DescribeAdvisory(null);
+        }
+
         if (
             name == "windows_launch"
             && args is { ValueKind: JsonValueKind.Object } launch
