@@ -158,6 +158,67 @@ public sealed class GuardRecipeTests
     }
 
     [Fact]
+    public void FailedBoundsReadAfterActivationPreservesTheFocusChange()
+    {
+        var desktop = new FakeDesktop { ForegroundWindow = FakeDesktop.OtherHwnd };
+        using var installed = desktop.Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        var scrolled = false;
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                ClickGeometry.Scroll(
+                    FakeDesktop.TargetPid,
+                    new PendingInvokeTracker(),
+                    () => { },
+                    () => scrolled = true,
+                    () => throw new InvalidOperationException("bounds unreadable"),
+                    target: FakeDesktop.Target
+                )
+            );
+
+            Assert.Contains("bounds unreadable", error.Message);
+            Assert.Contains("Before this", error.Message);
+            Assert.False(scrolled);
+            Assert.Equal(1, operation.InputsSent);
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
+    [Fact]
+    public void FailedBoundsReadAfterSentScrollCountsTheDispatch()
+    {
+        using var installed = new FakeDesktop().Install();
+        var operation = new OperationContext();
+        OperationContext.Current.Value = operation;
+        var reads = 0;
+        var scrolled = false;
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                ClickGeometry.Scroll(
+                    FakeDesktop.TargetPid,
+                    new PendingInvokeTracker(),
+                    () => { },
+                    () => scrolled = true,
+                    () => ++reads == 1 ? Rectangle.Empty : throw new InvalidOperationException("bounds unreadable")
+                )
+            );
+
+            Assert.True(scrolled);
+            Assert.Equal(1, operation.InputsSent);
+        }
+        finally
+        {
+            OperationContext.Current.Value = null;
+        }
+    }
+
+    [Fact]
     public void APermissionTripAfterTheGuardIsBuiltLeavesTheClipboardAlone()
     {
         var desktop = new FakeDesktop();

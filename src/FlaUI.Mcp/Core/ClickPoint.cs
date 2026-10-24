@@ -61,7 +61,16 @@ public sealed record ClickGeometry(
             activated = preflight.Changed;
         }
 
-        var before = bounds();
+        Rectangle before;
+        try
+        {
+            before = bounds();
+        }
+        catch (Exception error) when (activated != null && GuardedInput.IsRefusal(error))
+        {
+            throw GuardedInput.ChangedFirst(error, activated);
+        }
+
         PatternCallResult result;
         try
         {
@@ -89,7 +98,22 @@ public sealed record ClickGeometry(
             );
         }
 
-        if (bounds() == before)
+        Rectangle after;
+        try
+        {
+            after = bounds();
+        }
+        catch (Exception error)
+        {
+            // The pattern returned before this read failed. Its effect is unknown, but it was dispatched.
+            MutationGuard.RecordDispatch();
+            throw new InvalidOperationException(
+                "ScrollIntoView was sent, but the target bounds could not be read afterwards; the view may have changed.",
+                error
+            );
+        }
+
+        if (after == before)
         {
             return "a scroll into view was requested";
         }

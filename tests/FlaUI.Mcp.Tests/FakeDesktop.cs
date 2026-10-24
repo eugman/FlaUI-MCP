@@ -73,7 +73,19 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override void EnsureAlive(InputTarget target) => OnEnsureAlive?.Invoke();
 
-    public override nint Foreground() => Dispatched >= FocusLostAfter ? OtherHwnd : ForegroundWindow;
+    public bool FailForegroundAfterFocus { get; set; }
+    public bool FailWindowStateAfterFocus { get; set; }
+    public bool FailKeyboardFocusAfterRequest { get; set; }
+
+    public override nint Foreground()
+    {
+        if (FailForegroundAfterFocus && FocusAttempts > 0)
+        {
+            throw new InvalidOperationException("foreground unreadable");
+        }
+
+        return Dispatched >= FocusLostAfter ? OtherHwnd : ForegroundWindow;
+    }
 
     public override void Focus(nint hwnd)
     {
@@ -192,8 +204,15 @@ internal sealed class FakeDesktop : InputDesktop
     /// <summary>After this many inputs every control loses keyboard focus, as when a popup takes it.</summary>
     public int ElementFocusLostAfter { get; set; } = int.MaxValue;
 
-    public override bool HasKeyboardFocus(AutomationElement element) =>
-        KeyboardFocus && !ignoresFocus.Contains(element) && Dispatched < ElementFocusLostAfter;
+    public override bool HasKeyboardFocus(AutomationElement element)
+    {
+        if (FailKeyboardFocusAfterRequest && ElementFocusRequests > 0)
+        {
+            throw new InvalidOperationException("keyboard focus unreadable");
+        }
+
+        return KeyboardFocus && !ignoresFocus.Contains(element) && Dispatched < ElementFocusLostAfter;
+    }
 
     /// <summary>Runs with the count of each input as it is sent; throw from it for an input that fails to go out.</summary>
     public Action<int>? OnDispatch { get; set; }
@@ -255,7 +274,10 @@ internal sealed class FakeDesktop : InputDesktop
         return PostCloseResult;
     }
 
-    public override string WindowState(nint hwnd) => State;
+    public override string WindowState(nint hwnd) =>
+        FailWindowStateAfterFocus && FocusAttempts > 0
+            ? throw new InvalidOperationException("window state unreadable")
+            : State;
 
     public override void SetWindowState(nint hwnd, string state) => StateRequests.Add(state);
 

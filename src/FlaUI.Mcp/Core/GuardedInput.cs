@@ -131,8 +131,25 @@ public sealed partial class GuardedInput : IDisposable
         // Focusing a minimized window restores it even when Windows then refuses to activate it.
         var stateBefore = desktop.WindowState(window);
         desktop.Focus(window);
-        var after = desktop.Foreground();
-        var restored = desktop.WindowState(window) != stateBefore;
+        nint after;
+        bool restored;
+        try
+        {
+            after = desktop.Foreground();
+            restored = desktop.WindowState(window) != stateBefore;
+        }
+        catch (Exception error)
+        {
+            // Focus returned, but its read-back failed: the target may already have changed.
+            MutationGuard.RecordDispatch();
+            if (IsRefusal(error))
+            {
+                throw ChangedFirst(error, "the target window was asked to activate; its result could not be verified");
+            }
+
+            throw;
+        }
+
         if (after == before && !restored)
         {
             return null;
@@ -152,7 +169,23 @@ public sealed partial class GuardedInput : IDisposable
     {
         var hadFocus = desktop.HasKeyboardFocus(element);
         desktop.FocusElement(element);
-        if (hadFocus || !desktop.HasKeyboardFocus(element))
+        bool hasFocus;
+        try
+        {
+            hasFocus = hadFocus || desktop.HasKeyboardFocus(element);
+        }
+        catch (Exception error)
+        {
+            MutationGuard.RecordDispatch();
+            if (IsRefusal(error))
+            {
+                throw ChangedFirst(error, "the control was asked to focus; its result could not be verified");
+            }
+
+            throw;
+        }
+
+        if (hadFocus || !hasFocus)
         {
             return false;
         }
