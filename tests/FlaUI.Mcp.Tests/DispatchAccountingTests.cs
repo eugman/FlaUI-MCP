@@ -296,8 +296,9 @@ public sealed class DispatchAccountingTests
 
         var steps = result.Outcome!.Steps!;
         Assert.Equal("activation-denied", steps[0].Outcome!.Failure!.Code);
-        Assert.Null(steps[1].Outcome!.Failure);
-        Assert.Null(result.Outcome.Failure);
+        Assert.Equal(RefusalCodes.OperationFailed, steps[1].Outcome!.Failure?.Code);
+        Assert.False(steps[1].Outcome.Failure?.ActionDispatched);
+        Assert.Equal(RefusalCodes.OperationFailed, result.Outcome.Failure?.Code);
     }
 
     [Fact]

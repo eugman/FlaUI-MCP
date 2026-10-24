@@ -73,7 +73,11 @@ public partial class ToolRegistry
             return;
         }
 
-        if (failed.InputsSent == 0 && failed.Failure?.ActionDispatched != true)
+        if (
+            failed.InputsSent == 0
+            && failed.Failure?.ActionDispatched != true
+            && failed.Dispatch is not ("partial" or "completed")
+        )
         {
             return;
         }

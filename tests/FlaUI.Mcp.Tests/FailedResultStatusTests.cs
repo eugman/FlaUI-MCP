@@ -43,6 +43,53 @@ public sealed class FailedResultStatusTests
         Assert.Equal(1, result.Outcome.InputsSent);
     }
 
+    [Theory]
+    [InlineData("partial")]
+    [InlineData("completed")]
+    public async Task ABatchRetainsUncountedDispatchedStepEvidence(string dispatch)
+    {
+        var result = await BatchTool.ExecuteRows(
+            Rows("""[{"action":"click","ref":"first"}]"""),
+            (_, _) =>
+                Task.FromResult(
+                    new McpToolResult
+                    {
+                        IsError = true,
+                        Content = [new() { Type = "text", Text = "Dispatched but failed" }],
+                        Outcome = new ToolOutcome(dispatch, "not-tracked") { InputsSent = 0, Status = "failed" },
+                    }
+                )
+        );
+
+        Assert.Equal("partial", result.Outcome?.Dispatch);
+        Assert.Null(result.Outcome?.Failure);
+        Assert.Equal(0, result.Outcome?.InputsSent);
+    }
+
+    [Fact]
+    public async Task AReadOnlyWaitBeforeAZeroInputFailureDoesNotClaimDispatch()
+    {
+        var result = await BatchTool.ExecuteRows(
+            Rows("""[{"action":"wait","ms":0},{"action":"click","ref":"first"}]"""),
+            (_, _) =>
+                Task.FromResult(
+                    new McpToolResult
+                    {
+                        IsError = true,
+                        Content = [new() { Type = "text", Text = "Refused before input" }],
+                        Outcome = new ToolOutcome("not-dispatched", "not-tracked")
+                        {
+                            InputsSent = 0,
+                            Status = "failed",
+                        },
+                    }
+                )
+        );
+
+        Assert.Equal("not-dispatched", result.Outcome?.Dispatch);
+        Assert.Equal(0, result.Outcome?.InputsSent);
+    }
+
     [Fact]
     public async Task ABatchWithNoFailedStepIsNotAnError()
     {

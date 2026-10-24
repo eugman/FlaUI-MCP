@@ -344,24 +344,25 @@ public partial class ToolRegistry
             {
                 Verification = "not-established",
             };
+        var failure = FailureFor(result, outcome, refusal, inputsSent, providerPending, failed);
+        var dispatch = outcome.Dispatch;
+        if (failed && dispatch == "not-dispatched" && (inputsSent > 0 || failure?.ActionDispatched == true))
+        {
+            dispatch = "partial";
+        }
+
         return result with
         {
             Outcome = outcome with
             {
+                Dispatch = dispatch,
                 Status = StatusOf(failed, outcome, inputsSent),
                 // Unverified because nothing checked the input's effect: say so, as the registry's own outcome does.
                 Verification =
                     outcome.Verification
                     ?? (!failed && outcome.Proof == null && inputsSent > 0 ? "not-established" : null),
                 InputsSent = inputsSent,
-                Failure =
-                    // A refusal recorded as coming after input (a counted Select, say) keeps that, whatever this call counted.
-                    failed && refusal != null
-                        ? refusal with
-                        {
-                            ActionDispatched = refusal.ActionDispatched == true || inputsSent > 0,
-                        }
-                        : outcome.Failure,
+                Failure = failure,
             },
         };
     }
