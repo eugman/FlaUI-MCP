@@ -46,7 +46,8 @@ public sealed class McpCompositionTests
             null
         );
 
-        Assert.Contains("unknown", warning);
-        Assert.Contains("outside the preferred apps", warning);
+        Assert.Contains("cannot be attributed", warning);
+        Assert.DoesNotContain("outside the preferred apps", warning);
+        Assert.Contains("remains allowed", warning);
     }
 }

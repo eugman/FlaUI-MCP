@@ -28,7 +28,8 @@ public static class Te3CrossAppPolicy
         // which app placed the current text there, even when that window is TE3.
         if (name == "windows_get_clipboard")
         {
-            return policy.DescribeAdvisory(null);
+            return "The Windows clipboard source cannot be attributed to an application. "
+                + "The operation remains allowed; verify the text came from the intended app.";
         }
 
         if (
