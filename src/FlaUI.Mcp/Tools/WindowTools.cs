@@ -179,10 +179,10 @@ public class FocusWindowTool : ToolBase
         }
 
         var pid = desktop.ProcessOf(foreground);
+        var name = pid == 0 ? null : desktop.ProcessNameOf(pid);
         var owner = $"HWND {foreground}";
         if (pid != 0)
         {
-            var name = desktop.ProcessNameOf(pid);
             owner = $"PID {pid}";
             if (name != null)
             {
@@ -190,7 +190,17 @@ public class FocusWindowTool : ToolBase
             }
         }
 
-        return ErrorResult($"Focus requested for {handle}, but another window is in front ({owner}): {Unobserved}");
+        var message = $"Focus requested for {handle}, but another window is in front ({owner}): {Unobserved}";
+        var targetPid = desktop.ProcessOf(hwnd);
+        if (targetPid != 0)
+        {
+            // The registry uses the recorded refusal and its dispatch count to distinguish a denied
+            // activation from a focus request that already restored or moved another window.
+            var refusal = GuardedInput.DescribeActivationFailure(targetPid, foreground, pid, name);
+            _ = InputRefusedException.Record(refusal with { Message = message });
+        }
+
+        return ErrorResult(message);
     }
 }
 

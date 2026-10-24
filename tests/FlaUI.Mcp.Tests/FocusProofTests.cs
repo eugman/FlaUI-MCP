@@ -52,6 +52,10 @@ public sealed class FocusProofTests
         Assert.Contains("not observed", result.Content[0].Text);
         Assert.Contains("ForegroundApp", result.Content[0].Text);
         Assert.Contains($"PID {FakeDesktop.OtherPid}", result.Content[0].Text);
+        Assert.Equal("activation-denied", result.Outcome.Failure?.Code);
+        Assert.Equal(FakeDesktop.OtherPid, result.Outcome.Failure?.ForegroundProcess?.Pid);
+        Assert.Equal(FakeDesktop.TargetPid, result.Outcome.Failure?.Target?.Pid);
+        Assert.False(result.Outcome.Failure?.ActionDispatched);
     }
 
     [Fact]
@@ -67,6 +71,9 @@ public sealed class FocusProofTests
         Assert.True(result.IsError);
         Assert.Equal("partial", result.Outcome!.Dispatch);
         Assert.Equal(1, result.Outcome.InputsSent);
+        Assert.Equal("activation-denied", result.Outcome.Failure?.Code);
+        Assert.Equal(FakeDesktop.TargetPid, result.Outcome.Failure?.Target?.Pid);
+        Assert.True(result.Outcome.Failure?.ActionDispatched);
     }
 
     [Fact]
