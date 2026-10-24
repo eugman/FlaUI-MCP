@@ -60,7 +60,8 @@ internal sealed partial class FakeDesktop
         AutomationElement element,
         int processId,
         PendingInvokeTracker pending,
-        Action validate
+        Action validate,
+        InputTarget? target = null
     ) => null;
 
     public override Rectangle BoundsOf(AutomationElement element) => new(100, 100, 800, 600);
