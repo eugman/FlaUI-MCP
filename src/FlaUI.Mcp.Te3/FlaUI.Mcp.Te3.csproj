@@ -19,7 +19,7 @@
       Link="local/recipes/%(RecursiveDir)%(Filename)%(Extension)"
     />
   </ItemGroup>
-  <ItemGroup Condition="Exists('$(LocalRoot)replica-inputs')">
+  <ItemGroup Condition="'$(IncludeLocalRecipes)' != 'false' And Exists('$(LocalRoot)replica-inputs')">
     <Content
       Include="$(LocalRoot)replica-inputs/**/*"
       Link="replica-inputs/%(RecursiveDir)%(Filename)%(Extension)"
