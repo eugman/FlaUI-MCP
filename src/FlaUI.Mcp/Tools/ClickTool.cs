@@ -202,33 +202,6 @@ public partial class ClickTool : ToolBase
         return ScrollAndMouseClick(request, element, elementName, physical, false, Validate);
     }
 
-    private McpToolResult ScrollAndMouseClick(
-        ClickRequest request,
-        AutomationElement element,
-        string elementName,
-        bool physical,
-        bool selectionFallback,
-        Action validate
-    )
-    {
-        // Scrolling the row into view changes the app, so it goes through the guards before the click's lease.
-        var scrolled = ClickGeometry.ScrollIntoView(
-            element,
-            request.ProcessId,
-            _invokeTracker,
-            validate,
-            _elementRegistry.InputForRef(request.RefId)
-        );
-        try
-        {
-            return MouseClick(request, element, elementName, physical, selectionFallback);
-        }
-        catch (Exception error) when (scrolled != null && GuardedInput.IsRefusal(error))
-        {
-            throw GuardedInput.ChangedFirst(error, scrolled);
-        }
-    }
-
     /// <summary>Fall back to a guarded mouse click, and report a dialog it opens.</summary>
     private McpToolResult MouseClick(
         ClickRequest request,
