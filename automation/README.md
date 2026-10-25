@@ -178,7 +178,7 @@ None of this is done by the host: these are manual steps for the person who owns
 
 1. **Policies** (read when TE3 starts): under `HKCU` or `HKLM` `Software\Policies\Tabular Editor ApS\TE3`, DWORD values such as `DisableUpdates`, `DisableTelemetry`, `DisableErrorReports`, `DisableAiChat` (or `DisableAi`), and on Enterprise only `McpPort`, `DisableMcpServer`, `RequireMcpAccessToken`. Enterprise-only keys on another licence stop the MCP server and AI Assistant from starting. On 2026-10-21 neither key existed on the test machine.
 2. **Workspace prompt**: put a `.tmuo` file beside the model with `UseWorkspace` (and `WorkspaceConnection`, `WorkspaceDatabase` when it is true). Without `UseWorkspace` TE3 asks on every load.
-3. **Layout and window state**: TE3 rewrites `%LocalAppData%\TabularEditor3\Layouts.json`, `UiPreferences.json` and `Preferences.json` on close. Take `te3_layout snapshot` before a run and `te3_layout restore` after it, with TE3 closed.
+3. **Layout and window state**: TE3 rewrites `%LocalAppData%\TabularEditor3\Layouts.json` and `UiPreferences.json` on close. Take `te3_layout snapshot` before a run and `te3_layout restore` after it, with TE3 closed. Layout snapshots exclude `Preferences.json` because it can contain MCP and AI provider credentials. Older snapshots that include it are private and cannot be restored by this tool.
 4. **MCP server**: `Preferences.json` `Mcp` holds `Enabled`, `Port` (42100) and `AutoStart` (false on the test machine). The host never starts the server; starting it is the user's decision.
 
 The host refuses before any input when a known prompt is open (Get Started, External changes detected, a workspace prompt), and says how to clear it; it never answers one.
