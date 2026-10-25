@@ -51,7 +51,7 @@ The TE3-specific tools still target TE3. Shared `windows_*` tools prefer TE3 and
 
 ## Your own files
 
-Put personal recipes, configs and notes in `local/` at the repo root. Git ignores it, and the runner compiles `local/recipes/*.cs` when it exists. For a reproducible source-only build when personal recipes are stale, pass `-p:IncludeLocalRecipes=false` to `dotnet build` and `dotnet test`. The same property can be set as the `IncludeLocalRecipes=false` environment variable for the pre-push gate; ordinary builds still compile personal recipes.
+Put personal recipes, configs and notes in `local/` at the repo root. Git ignores it, and ordinary builds compile `local/recipes/*.cs` when it exists. The pre-push and CI gate (`pwsh scripts/check.ps1`) always excludes personal recipes so it checks the same tracked sources on every machine. Run `pwsh scripts/check.ps1 -IncludeLocalRecipes` to check your recipes too. For an individual source-only build or test, pass `-p:IncludeLocalRecipes=false` to `dotnet build` or `dotnet test`.
 
 ## Repository layout
 
