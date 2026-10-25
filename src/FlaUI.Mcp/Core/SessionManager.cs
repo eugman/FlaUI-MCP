@@ -181,11 +181,13 @@ public class SessionManager : IDisposable
         : waitSeconds is >= 1 and <= 90 ? waitSeconds.Value * 2
         : throw new ArgumentException("waitSeconds must be between 1 and 90", nameof(waitSeconds));
 
+    internal static int LaunchSettlePolls(int maxPolls) => maxPolls < 4 ? maxPolls : 4;
+
     // A title or an unregistered window is not proof of launch ownership.
     // Brokered/single-instance launches must be attached explicitly by the caller.
-    // Some apps show no window, or two, for several seconds while they start; wait up to the requested bound. Requiring
-    // the same single window on two polls (500ms apart) only filters a window that is briefly alone; a
-    // splash screen that stays alone longer is still taken, so attach explicitly when that matters.
+    // Some apps show no window, or two, for several seconds while they start. A longer settle avoids returning
+    // a brief splash, but cannot prove that a stable candidate is the final main window. windows_launch labels
+    // its handle provisional; callers must confirm the intended window before sending input.
     private (Window? window, int timeouts) WaitForLaunchWindow(
         System.Diagnostics.Process process,
         Func<IReadOnlyList<Win32WindowInfo>> candidatesOf,
@@ -195,6 +197,7 @@ public class SessionManager : IDisposable
         Window? window = null;
         var timeouts = 0;
         nint previous = 0;
+        var consecutive = 0;
         for (var attempt = 0; attempt < maxPolls && window == null && timeouts < 2; attempt++)
         {
             OperationContext.Check();
@@ -204,8 +207,7 @@ public class SessionManager : IDisposable
             }
 
             var candidates = candidatesOf();
-            var stable = StableLaunchWindow(previous, candidates);
-            previous = candidates.Count == 1 ? candidates[0].Hwnd : 0;
+            var stable = ObserveLaunchWindow(ref previous, ref consecutive, candidates, LaunchSettlePolls(maxPolls));
             if (stable is { } hwnd)
             {
                 // A provider still starting up can time out; each timeout already waited, so stop after two.
@@ -230,12 +232,26 @@ public class SessionManager : IDisposable
         return (window, timeouts);
     }
 
-    /// <summary>
-    /// The launched app's window once it is the only candidate on two polls in a row, so a splash that is
-    /// briefly alone is not taken for the main window.
-    /// </summary>
-    internal static nint? StableLaunchWindow(nint previous, IReadOnlyList<Win32WindowInfo> candidates) =>
-        candidates.Count == 1 && candidates[0].Hwnd == previous ? candidates[0].Hwnd : null;
+    /// <summary>Wait for one owned window across the bounded settle polls, resetting on replacement or ambiguity.</summary>
+    internal static nint? ObserveLaunchWindow(
+        ref nint previous,
+        ref int consecutive,
+        IReadOnlyList<Win32WindowInfo> candidates,
+        int requiredPolls = 4
+    )
+    {
+        if (candidates.Count != 1)
+        {
+            previous = 0;
+            consecutive = 0;
+            return null;
+        }
+
+        var current = candidates[0].Hwnd;
+        consecutive = current == previous ? consecutive + 1 : 1;
+        previous = current;
+        return consecutive >= requiredPolls ? current : null;
+    }
 
     internal static string LaunchFailure(
         string appPath,

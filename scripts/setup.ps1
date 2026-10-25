@@ -1,7 +1,7 @@
 # One-time setup after cloning: install the formatter, turn on the git hooks and, in a product repo,
 # add the shared core as a fetch-only `core` remote.
 $ErrorActionPreference = 'Stop'
-Set-Location (git rev-parse --show-toplevel)
+Set-Location (Split-Path -Parent $PSScriptRoot)
 dotnet tool restore
 git config core.hooksPath .githooks
 # Each repo lists its own formatting commits; git blame fails if the configured file is missing.

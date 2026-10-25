@@ -411,18 +411,34 @@ public sealed class ShotSetupTests
         new(hwnd, "Main window", 1, IsEnabled: true, IsToolWindow: false, IsCloaked: false);
 
     [Fact]
-    public void LaunchWaitsForTheSameWindowOnTwoPolls()
+    public void LaunchDoesNotSettleSplashThatGivesWayToMainWindow()
     {
-        Assert.Null(SessionManager.StableLaunchWindow(0, [Top(7)]));
-        Assert.Equal((nint)7, SessionManager.StableLaunchWindow(7, [Top(7)]));
+        nint previous = 0;
+        var consecutive = 0;
+        var splash = Top(7) with { Title = "Splash" };
+        var main = Top(8);
+
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [splash]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [splash]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [main]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [main]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [main]));
+        Assert.Equal((nint)8, SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [main]));
     }
 
     [Fact]
-    public void LaunchIgnoresNoWindowOrSeveral()
+    public void LaunchAmbiguityResetsSettling()
     {
-        Assert.Null(SessionManager.StableLaunchWindow(7, []));
-        Assert.Null(SessionManager.StableLaunchWindow(7, [Top(7), Top(8)]));
-        Assert.Null(SessionManager.StableLaunchWindow(7, [Top(8)]));
+        nint previous = 0;
+        var consecutive = 0;
+
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [Top(7)]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [Top(7)]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [Top(7), Top(8)]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [Top(7)]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [Top(7)]));
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [Top(7)]));
+        Assert.Equal((nint)7, SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [Top(7)]));
     }
 
     [Fact]

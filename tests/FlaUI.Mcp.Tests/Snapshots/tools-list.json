@@ -395,7 +395,7 @@
   },
   {
     "name": "windows_launch",
-    "description": "Launch a Windows application. Returns a window handle for use with other tools.",
+    "description": "Start a Windows application and return a provisional window handle. Use windows_list_windows to identify the final app-specific window by title, process, and expected controls before input; a startup splash can be stable before the main window appears.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,

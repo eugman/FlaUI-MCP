@@ -1,7 +1,7 @@
 # Fast checks on what is being committed; the full gate runs on push (scripts/check.ps1).
 # Checks the staged copy of each C# file, not the working copy, so what is committed is what is checked.
 $ErrorActionPreference = 'Stop'
-Set-Location (git rev-parse --show-toplevel)
+Set-Location (Split-Path -Parent $PSScriptRoot)
 # Source files are UTF-8; the console code page would mangle non-ASCII text piped through the formatter.
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8
