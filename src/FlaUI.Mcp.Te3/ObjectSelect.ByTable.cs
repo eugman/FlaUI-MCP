@@ -178,8 +178,8 @@ internal static partial class ObjectSelect
         rows?.FirstOrDefault(r => r.Index == index + 1)?.Depth > TableDepth;
 
     // The pick in the rows below the table, then, with no candidate, its display folders opened in turn: the folder
-    // path's segments when one was asked for, else each row directly under the table, selected first and opened only
-    // when TE3 does not type it as an object (Partitions never holds one and is skipped by name).
+    // path's segments when one was asked for, else rows at any depth below the table in tree order. The latter lets
+    // a folderless request descend through nested display folders; each row is typed before it can be opened.
     private static async Task<SelectResult> UnderTable(
         IRowTree tree,
         WalkRequest request,
@@ -191,12 +191,14 @@ internal static partial class ObjectSelect
         var picked = await Pick(tree, read, request, outOfTime, anchor);
         var opened = new List<string>();
         var selected = new List<string>();
+        var probed = new HashSet<int>();
         while (
             MayOpen(picked, opened.Count, selected.Count, outOfTime)
-            && NextToOpen(read.Rows, request, anchor.Index, selected) is { } row
+            && NextToOpen(read.Rows, request, anchor.Index, selected.Count, probed) is { } row
         )
         {
             selected.Add(row.Value ?? "");
+            probed.Add(row.Index);
             if (!await OpenIfFolder(tree, row, request))
             {
                 // An explicit folder path cannot continue below a segment TE3 did not identify as a folder.
@@ -275,12 +277,14 @@ internal static partial class ObjectSelect
     }
 
     // The next row to open under the table: the folder path's next segment at its exact depth, or the first row
-    // directly under the table not selected yet that is neither the object itself nor the Partitions group.
+    // below the table not selected yet that is neither the object itself nor in the Partitions subtree. TreeItem indices
+    // of rows already probed remain stable as this forward walk opens later rows; names need not be unique.
     private static TreeRow? NextToOpen(
         IReadOnlyList<TreeRow>? rows,
         WalkRequest request,
         int anchor,
-        List<string> selected
+        int selectedCount,
+        HashSet<int> probed
     )
     {
         if (rows == null)
@@ -295,18 +299,31 @@ internal static partial class ObjectSelect
         );
         if (segments.Length > 0)
         {
-            var next = selected.Count;
+            var next = selectedCount;
             return next < segments.Length
                 ? under.FirstOrDefault(r => r.Depth == TableDepth + 1 + next && r.Value == segments[next])
                 : null;
         }
 
-        return under.FirstOrDefault(r =>
-            r.Depth == TableDepth + 1
-            && r.Value != request.ObjectName
-            && r.Value != PartitionsGroup
-            && !selected.Contains(r.Value ?? "")
-        );
+        return ProbeRows(under).FirstOrDefault(r => r.Value != request.ObjectName && !probed.Contains(r.Index));
+    }
+
+    // The Partitions group and its children never contain display folders of columns or measures.
+    private static IEnumerable<TreeRow> ProbeRows(IEnumerable<TreeRow> under)
+    {
+        var partitions = false;
+        foreach (var row in under)
+        {
+            if (row.Depth == TableDepth + 1)
+            {
+                partitions = row.Value == PartitionsGroup;
+            }
+
+            if (!partitions)
+            {
+                yield return row;
+            }
+        }
     }
 
     // The rows below the table's row that belong to it: until the next row at its depth or above, or of unknown depth.

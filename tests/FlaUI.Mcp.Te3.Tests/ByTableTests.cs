@@ -251,6 +251,49 @@ public sealed class ByTableTests
         Assert.DoesNotContain("Nested", tree.Opened);
     }
 
+    [Fact]
+    public async Task FolderlessMeasureSearchOpensNestedDisplayFoldersUnderTheConfirmedTable()
+    {
+        static IReadOnlyList<(string, int?, string)> Rows(string search, IReadOnlySet<string> open)
+        {
+            List<(string, int?, string)> rows = [SpaceParts, Tables, ("Invoices", 2, "Table")];
+            if (search == "")
+            {
+                rows.Add(("Partitions", 3, "Group"));
+                rows.Add(("1. Value", 3, "Folder"));
+            }
+
+            if (search == "" && open.Contains("1. Value"))
+            {
+                rows.Add(("a. Gross Sales Actuals", 4, "Folder"));
+            }
+
+            if (search == "" && open.Contains("a. Gross Sales Actuals"))
+            {
+                rows.Add(("I. Total", 5, "Folder"));
+            }
+
+            if (search == "" && open.Contains("I. Total"))
+            {
+                rows.Add(("Gross Sales", 6, "Measure"));
+            }
+
+            return rows;
+        }
+
+        var tree = new SearchedTree(Rows, "Gross Sales", ["Invoices"]);
+
+        var result = await ObjectSelect.ByTable(
+            tree,
+            new WalkRequest("Invoices", "Gross Sales", "Measure"),
+            () => false
+        );
+
+        Assert.True(result.Found, result.Reason);
+        Assert.Equal("Invoices", result.Table);
+        Assert.Equal(["1. Value", "a. Gross Sales Actuals", "I. Total"], tree.Opened);
+    }
+
     // A calc group (te3b-28): TE3's filter shows nothing for the hyphenated name; its first token shows the table.
     private static IReadOnlyList<(string, int?, string)> CalcGroup(string search, IReadOnlySet<string> open)
     {
