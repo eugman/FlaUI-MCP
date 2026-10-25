@@ -11,7 +11,7 @@ In the TE3 server, every tool that changes the desktop needs an active `te3_inte
 2. Call `te3_interaction_begin` with that description and `userApproved: true`. `userApproved` is the caller's own statement. When a machine-grant broker approves the run, its approval stands for the user's, and the broker owns that decision.
 3. Do the batch, then call `te3_interaction_end`.
 
-Any keyboard or mouse input from the user ends the grant, and a refused call says so. Ask the user again before resuming. Never begin a new batch without asking.
+Any keyboard or mouse input from the user ends the grant, and a refused call says so. Ask the user again before resuming. An active machine-grant broker approval covers subsequent described batches until revocation; check its state before input.
 
 - Open a menu with one click, then confirm it with a plain screenshot or windows_find with includeOwned:true before clicking again; match entries by name only, since they may be Buttons.
 
