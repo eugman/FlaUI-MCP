@@ -19,10 +19,10 @@ public interface IInputEventSource
     InputEventInfo? LastEvent { get; }
 }
 
-/// <summary>The input sequence at grant approval and, when user input ended it, at revocation.</summary>
+/// <summary>The input sequence at grant approval and a later revocation snapshot, which may include newer events.</summary>
 public readonly record struct GrantInputEvidence(
     long ApprovedSequence,
-    long? RevokedSequence,
+    long? SnapshotSequence,
     InputEventInfo? LastEvent
 );
 

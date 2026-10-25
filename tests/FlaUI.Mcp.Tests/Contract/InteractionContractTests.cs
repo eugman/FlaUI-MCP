@@ -27,20 +27,20 @@ public sealed class InteractionContractTests
         using var grant = new InteractionGrant(() => (1, 2), createObserver: () => observer);
         grant.Begin("demo", userApproved: true, monitorChanges: false);
         Assert.Equal(7, grant.InputEvidence.ApprovedSequence);
-        Assert.Null(grant.InputEvidence.RevokedSequence);
+        Assert.Null(grant.InputEvidence.SnapshotSequence);
 
         var at = new DateTimeOffset(2026, 10, 25, 22, 20, 55, TimeSpan.Zero);
         observer.Sequence = 8;
         observer.LastEvent = new InputEventInfo(8, at, "keyboard");
         Assert.Equal(InteractionGrant.FocusRevoked, Assert.Throws<InputRefusedException>(grant.Require).Refusal.Code);
 
-        Assert.Equal(8, grant.InputEvidence.RevokedSequence);
+        Assert.Equal(8, grant.InputEvidence.SnapshotSequence);
         Assert.Equal(observer.LastEvent, grant.InputEvidence.LastEvent);
         Assert.StartsWith("Non-injected keyboard or mouse input observed", grant.Reason);
         Assert.Contains("keyboard", grant.Reason);
         Assert.Contains("2026-10-25T22:20:55", grant.Reason);
         Assert.Contains("approved sequence 7", grant.Reason);
-        Assert.Contains("revoked sequence 8", grant.Reason);
+        Assert.Contains("revocation snapshot sequence 8", grant.Reason);
         Assert.DoesNotContain("vkCode", grant.Reason);
     }
 
@@ -56,10 +56,27 @@ public sealed class InteractionContractTests
 
         grant.Observe();
 
-        Assert.Equal(8, grant.InputEvidence.RevokedSequence);
+        Assert.Equal(8, grant.InputEvidence.SnapshotSequence);
         Assert.Null(grant.InputEvidence.LastEvent);
         Assert.StartsWith("Non-injected keyboard or mouse input observed", grant.Reason);
         Assert.DoesNotContain("1970", grant.Reason);
+    }
+
+    [Fact]
+    public void EventKindFromAnInjectedObserverCannotAddFreeTextToReasonOrEvidence()
+    {
+        var observer = new DiagnosticObserver();
+        using var grant = new InteractionGrant(() => (1, 2), createObserver: () => observer);
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+        observer.Sequence = 8;
+        observer.LastEvent = new InputEventInfo(8, DateTimeOffset.UnixEpoch, "keyboard; secret=123");
+
+        grant.Observe();
+
+        Assert.Equal("unknown", grant.InputEvidence.LastEvent?.Kind);
+        Assert.Contains("unknown", grant.Reason);
+        Assert.DoesNotContain("secret", grant.Reason);
+        Assert.Contains("revocation snapshot sequence 8", grant.Reason);
     }
 
     [Theory]

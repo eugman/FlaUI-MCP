@@ -142,7 +142,8 @@ public sealed partial class InteractionGrant
         {
             revokedInputSequence = InputSequence();
             var last = (inputObserver as IInputEventSource)?.LastEvent;
-            lastInputAtRevoke = last?.Sequence == revokedInputSequence ? last : null;
+            var kind = last?.Kind is "keyboard" or "mouse" ? last.Kind : "unknown";
+            lastInputAtRevoke = last?.Sequence == revokedInputSequence ? last with { Kind = kind } : null;
         }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
@@ -158,7 +159,9 @@ public sealed partial class InteractionGrant
             return string.Empty;
         }
 
-        var eventText = lastInputAtRevoke is { } last ? $"; last {last.Kind} event {last.Utc:O}" : string.Empty;
-        return $" (approved sequence {inputAtApproval}, revoked sequence {revoked}{eventText})";
+        var eventText = lastInputAtRevoke is { } last
+            ? $"; last observed {last.Kind} event {last.Utc:O}"
+            : string.Empty;
+        return $" (approved sequence {inputAtApproval}, revocation snapshot sequence {revoked}{eventText})";
     }
 }
