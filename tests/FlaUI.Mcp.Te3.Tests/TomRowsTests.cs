@@ -249,11 +249,37 @@ public sealed class TomRowsTests
         var reads = 0;
 
         var scale = await TomRows.WaitForRootScale(
-            () => Task.FromResult<IReadOnlyList<ElementInfo>>(++reads == 7 ? ready : []),
+            () => Task.FromResult<IReadOnlyList<ElementInfo>>(++reads == 13 ? ready : []),
             _ => Task.CompletedTask
         );
 
         Assert.Null(scale);
+    }
+
+    [Fact]
+    public async Task TwoOrdinaryHalfSecondTreeReadsCanSettleWithinTheRootBudget()
+    {
+        ElementInfo[] ready =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", 1161, 100),
+            Item("DataItem", "Name row 0", "SpaceParts", 1209, 100),
+            Item("TreeItem", "Node1", "Data Sources", 1161, 122),
+            Item("DataItem", "Name row 1", "Data Sources", 1233, 122),
+        ];
+        var reads = 0;
+
+        var scale = await TomRows.WaitForRootScale(
+            async () =>
+            {
+                reads++;
+                await Task.Delay(500);
+                return ready;
+            },
+            Task.Delay
+        );
+
+        Assert.Equal(Live125, scale);
+        Assert.Equal(2, reads);
     }
 
     [Fact]
