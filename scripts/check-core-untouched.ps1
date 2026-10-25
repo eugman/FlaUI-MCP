@@ -6,6 +6,7 @@ if (-not $CoreRevision) { $CoreRevision = "core/main" }
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+Set-Location $root
 
 # A product repo has a host project next to the core one: src/FlaUI.Mcp.<Product>.
 $isProduct = [bool](Get-ChildItem (Join-Path $root 'src') -Directory | Where-Object Name -like 'FlaUI.Mcp.?*')
