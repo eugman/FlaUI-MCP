@@ -14,7 +14,7 @@ namespace FlaUI.Mcp.Core;
 /// silently) shows as a missed beat, and the observer stays unavailable from then on. The pulse is a plain thread,
 /// not WM_TIMER, which Windows may throttle for a background process.
 /// </remarks>
-public sealed class PhysicalInputObserver : IInputObserver
+public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
 {
     private const int HeartbeatMs = 250;
     private const uint BeatMessage = 0x8001; // WM_APP + 1
@@ -29,6 +29,10 @@ public sealed class PhysicalInputObserver : IInputObserver
     private readonly Hook mouse;
     private Exception? failure;
     private long sequence;
+    private long lastEventSequence;
+    private long lastEventUtcTicks;
+    private int lastEventKind;
+    private int lastEventVersion;
     private long keys;
     private long buttonDowns;
     private long lastButtonDown = long.MinValue;
@@ -88,6 +92,33 @@ public sealed class PhysicalInputObserver : IInputObserver
         }
     }
 
+    public InputEventInfo? LastEvent
+    {
+        get
+        {
+            // The hook writes primitives only. A version check prevents a torn diagnostic snapshot.
+            var before = Volatile.Read(ref lastEventVersion);
+            if ((before & 1) != 0)
+            {
+                return null;
+            }
+
+            var eventSequence = Volatile.Read(ref lastEventSequence);
+            var ticks = Volatile.Read(ref lastEventUtcTicks);
+            var kind = Volatile.Read(ref lastEventKind);
+            if (before != Volatile.Read(ref lastEventVersion) || eventSequence == 0 || ticks == 0)
+            {
+                return null;
+            }
+
+            return new InputEventInfo(
+                eventSequence,
+                new DateTimeOffset(new DateTime(ticks, DateTimeKind.Utc)),
+                kind == 1 ? "keyboard" : "mouse"
+            );
+        }
+    }
+
     public InputCounts Counts
     {
         get
@@ -124,7 +155,12 @@ public sealed class PhysicalInputObserver : IInputObserver
             var flags = unchecked((uint)Marshal.ReadInt32(data, isKeyboard ? 8 : 12));
             if (IsPhysical(isKeyboard, flags))
             {
-                Interlocked.Increment(ref sequence);
+                Interlocked.Increment(ref lastEventVersion); // writer active
+                var next = Interlocked.Increment(ref sequence);
+                Volatile.Write(ref lastEventUtcTicks, DateTime.UtcNow.Ticks);
+                Volatile.Write(ref lastEventKind, isKeyboard ? 1 : 2);
+                Volatile.Write(ref lastEventSequence, next);
+                Interlocked.Increment(ref lastEventVersion); // stable snapshot
                 Count(isKeyboard, message, data);
             }
         }

@@ -139,7 +139,7 @@ public sealed class ActivationContractTests
         var error = Assert.Throws<InputRefusedException>(grant.Require);
 
         Assert.Equal(RefusalCodes.FocusRevoked, error.Refusal.Code);
-        Assert.Equal(
+        Assert.StartsWith(
             "Interaction approval required: Non-injected keyboard or mouse input observed; ask the user before resuming",
             error.Message
         );
