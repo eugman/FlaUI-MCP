@@ -9,6 +9,16 @@ namespace FlaUI.Mcp.Te3.Tests;
 /// </summary>
 public sealed class TomRowsTests
 {
+    [Fact]
+    public void TheTreeFirstNodeShortcutTargetsTheFirstNodeRatherThanTheCurrentCell()
+    {
+        var args = Te3Page.KeysArguments("w1", "w1e5", TomRows.FirstNodeChord, Te3Page.TomExplorerTarget());
+
+        Assert.Equal("Ctrl+Home", args["chord"]);
+        Assert.Equal("w1e5", args["ref"]);
+        Assert.Equal("Node0", Te3Page.FirstTomRowTarget().Selector.Name);
+    }
+
     private static int next;
 
     private static ElementInfo Item(

@@ -57,7 +57,11 @@ public sealed partial class Te3Page
         // If either anchor is absent, depth stays unknown and the row strategy retains its conservative miss.
         var outOfTime = WalkClock.OutOfTime(elapsed);
         await WalkClock.BeforeInput(outOfTime, ClearTomSearchTyped, "clear TOM Explorer search");
-        await WalkClock.BeforeInput(outOfTime, () => Keys("Home", TomExplorerTarget()), "Home for indent calibration");
+        await WalkClock.BeforeInput(
+            outOfTime,
+            () => Keys(TomRows.FirstNodeChord, TomExplorerTarget()),
+            "first TOM Explorer node for indent calibration"
+        );
         depthScale = await TomRows.WaitForRootScale(async () => (await ReadTree()).Elements, Task.Delay, outOfTime);
         await SearchTomTyped(objectName, clearFirst: false, outOfTime);
         var request = new WalkRequest(table, objectName, objectType, folder);
@@ -139,7 +143,7 @@ public sealed partial class Te3Page
         }
 
         reportStep?.Invoke($"Row read could not place the object ({picked.Reason}); walking the tree with keys");
-        await Keys("Home", TomExplorerTarget());
+        await SelectFirstTomRow(WalkClock.OutOfTime(elapsed));
         var walk = await ObjectWalk.Find(
             cursor,
             request,

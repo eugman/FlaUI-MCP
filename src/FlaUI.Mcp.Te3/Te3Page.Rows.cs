@@ -82,7 +82,11 @@ public sealed partial class Te3Page
         }
         catch (ElementNotFoundException)
         {
-            await KeyBudget.Press(outOfTime, () => Keys("Home", TomExplorerTarget()), "Home to bring the row back");
+            await KeyBudget.Press(
+                outOfTime,
+                () => Keys(TomRows.FirstNodeChord, TomExplorerTarget()),
+                "first TOM Explorer node to bring the row back"
+            );
             for (var page = 0; page < row.Page; page++)
             {
                 await KeyBudget.Press(
@@ -98,6 +102,32 @@ public sealed partial class Te3Page
         reportStep?.Invoke($"Select TOM Explorer row {row.Index} '{row.Value}'");
         await invoke("windows_click", new { @ref = reference, action = "select" });
     }
+
+    // Ctrl+Home scrolls/focuses the first DevExpress TreeList node but deliberately preserves the old selection.
+    // The keyboard walkers read selection, so explicitly select and verify Node0 before they begin.
+    private async Task SelectFirstTomRow(Func<bool>? outOfTime = null)
+    {
+        await KeyBudget.Press(
+            outOfTime,
+            () => Keys(TomRows.FirstNodeChord, TomExplorerTarget()),
+            "first TOM Explorer node"
+        );
+        var reference = await Reference(FirstTomRowTarget());
+        await KeyBudget.Press(
+            outOfTime,
+            () => invoke("windows_click", new { @ref = reference, action = "select" }),
+            "select first TOM Explorer node"
+        );
+        if (RowTree.SelectedIndex(await ReadTree()) != 0)
+        {
+            throw new InvalidOperationException(
+                "First TOM Explorer row did not become selected; no keyboard walk started."
+            );
+        }
+    }
+
+    internal static Target FirstTomRowTarget() =>
+        new(new(Name: "Node0", ControlType: "TreeItem"), TomExplorerTarget().Selector, false);
 
     // The raw readings of the selection: the status bar's slot and the Properties rows (Name, ObjectType, the
     // display folder).
@@ -125,7 +155,11 @@ public sealed partial class Te3Page
         // before; then every realized row, paging down while the tree scrolls (treeList has no Scroll pattern).
         public async Task<RowRead> Read()
         {
-            await KeyBudget.Press(outOfTime, () => page.Keys("Home", TomExplorerTarget()), "Home before the row read");
+            await KeyBudget.Press(
+                outOfTime,
+                () => page.Keys(TomRows.FirstNodeChord, TomExplorerTarget()),
+                "first TOM Explorer node before the row read"
+            );
             await Rendered();
             var truncated = false;
             var paged = await RowPager.ReadAll(

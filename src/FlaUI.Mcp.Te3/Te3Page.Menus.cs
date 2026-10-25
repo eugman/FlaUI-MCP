@@ -244,7 +244,7 @@ public sealed partial class Te3Page
     private async Task SelectFirstRow(string value)
     {
         reportStep?.Invoke($"Select first TOM Explorer row with value {value}");
-        await Keys("Home", TomExplorerTarget());
+        await SelectFirstTomRow();
         var walk = await PathWalker.FindRow(new TomCursor(this), value);
         if (!walk.Found)
         {

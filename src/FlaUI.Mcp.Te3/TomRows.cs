@@ -7,6 +7,10 @@ using FlaUI.Mcp.Core;
 /// </summary>
 internal static class TomRows
 {
+    // DevExpress WinForms TreeList: Home moves within the focused node; Ctrl+Home focuses the first node.
+    // https://docs.devexpress.com/WindowsForms/998/controls-and-libraries/tree-list/end-user-capabilities/navigating-through-nodes-and-cells
+    public const string FirstNodeChord = "Ctrl+Home";
+
     private const double Slack = 2;
 
     /// <summary>
