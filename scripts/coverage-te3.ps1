@@ -6,8 +6,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = git rev-parse --show-toplevel
+$root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+# The offline gate must not compile untracked personal recipes.
+$env:IncludeLocalRecipes = 'false'
 $out = Join-Path $root 'local/build-background'
 $tests = 'tests/FlaUI.Mcp.Te3.Tests'
 
