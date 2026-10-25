@@ -30,11 +30,16 @@ Locators and behaviour observed in TE3 3.26.3, 3.27.0 and 3.27.1. Treat every la
 | BPA | `treeBpa` in `BestPracticeAnalyzerView` | Refresh first; match the exact rule Value. |
 | Open File | owned Window `Open File` | Filename is Edit `1148`. A ComboBox shares that ID, so keep the Edit constraint. |
 | Preferences | Native window `Preferences` | `searchPreferences`, `treePreferences`. The UIA root lookup timed out in 3.27.1; register the native window and query controls on that handle. |
+| File > Open > Model from DB | Button `Model from DB...` in the main toolbar, or File > Open submenu | Opens the owned `Load Semantic Model from Database` window. Identify the dialog by its title before reading controls; opening it does not connect. |
+| Database connection dialog | ComboBox `Server:` (`cmbServer`), `Local instance:` (`cmbLocalInstance`), `Mode:` (`cmbMode`); Buttons `OK`, `Cancel` | `Server:` contains an Edit and a separate child Button `Open`. Use `windows_find` with ancestry to distinguish this arrow from the other `Open` buttons. `Cancel` closes without connecting. The default Mode observed was `Read/Write`, so never use `OK` merely to inspect recents. |
+| Preferences > User Interface | ComboBox `Model source detail` | Observed 3.27.1 with Value `Full path`. Preferences UIA can enumerate controls on inactive pages, so first navigate to User Interface and confirm the visible page before changing this value. |
 
 | AI Assistant > AI Provider | Pane `AI Assistant.AI Provider` | Observed 3.27.1: ComboBoxes `Choose provider` and `Model name`. Do not capture or print API key controls. |
 | AI Assistant > Preferences | Pane `AI Assistant.Preferences` | Observed 3.27.1: CheckBoxes `Allow AI assistant to run C# scripts directly` and `Preview changes`. |
 | AI Features > MCP Server | Pane `AI Features.MCP Server` | Observed 3.27.1: CheckBoxes `Enable MCP Server`, `Start MCP server automatically`, `Require access token`; Spinner `Port`. |
 | AI Features > Permissions | Pane `AI Features.Permissions` | Observed 3.27.1: ComboBoxes `Model metadata:`, `Model data:`, `Best Practice Analyzer:`, `Documents:`, `Macros:`. |
+
+On 2026-10-25, the database dialog's Server dropdown exposed a recent server as a `ListItem`. Selecting it sent `SelectionItem.Select`, but the subsequent fallback click was refused because the reported point overlapped the Local instance ComboBox. The host paused further input. Observe `te3_layout_read list`, reconcile the broker's partial operation without replay, and inspect the dialog before continuing. The pin/unpin context menu remains unmapped; this observation does not prove a pin operation. On the 175% left display, this TE3 process reported window DPI 120 and monitor DPI 168. A `screen-uia-bounds` screenshot showed the dialog correctly; native captures and UIA-to-image geometry require separate verification at that scaling.
 
 ## Menus
 
