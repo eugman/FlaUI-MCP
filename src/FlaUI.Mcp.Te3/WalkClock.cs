@@ -34,6 +34,17 @@ internal static class WalkClock
     /// <summary>True once <paramref name="elapsed"/> (since the tool started) passes <see cref="WalkStop"/>.</summary>
     public static Func<bool> OutOfTime(Func<TimeSpan> elapsed) => () => elapsed() > WalkStop;
 
+    /// <summary>Refuse a new input immediately before dispatch, including after a slow UIA read.</summary>
+    public static async Task BeforeInput(Func<bool>? outOfTime, Func<Task> input, string action)
+    {
+        if (outOfTime?.Invoke() == true)
+        {
+            throw new TimeoutException($"Stopped before {action}: the object-navigation deadline passed.");
+        }
+
+        await input();
+    }
+
     /// <summary>
     /// Waits after a key press for the observation to change from <paramref name="before"/> and settle (a second read
     /// agrees). The wait is measured on <paramref name="elapsed"/>, so slow reads count. Null when nothing moved in time.

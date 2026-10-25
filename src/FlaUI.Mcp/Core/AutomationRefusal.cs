@@ -98,6 +98,9 @@ public static class RefusalCodes
     /// <summary>No top-level window has the title asked for.</summary>
     public const string WindowNotFound = "window-not-found";
 
+    /// <summary>More than one visible top-level window has the requested exact title.</summary>
+    public const string WindowTitleAmbiguous = "window-title-ambiguous";
+
     /// <summary>A code in the canonical form: lower case, words joined by hyphens.</summary>
     public static string Canonical(string code) => code.Replace('_', '-').ToLowerInvariant();
 }

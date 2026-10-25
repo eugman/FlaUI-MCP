@@ -55,7 +55,36 @@ public sealed class ArtifactFailureTests : IDisposable
         Assert.Contains("was terminated", error.Message);
         Assert.True(File.Exists(childFile), "The fake Git process must start its child before the deadline.");
         var childPid = int.Parse(File.ReadAllText(childFile));
-        Assert.Throws<ArgumentException>(() => Process.GetProcessById(childPid));
+        // WaitForExitAsync above observes the parent only. Kill(entireProcessTree: true) may finish terminating
+        // descendants after it returns, especially on a busy CI runner.
+        Assert.True(
+            await ChildExited(childPid, TimeSpan.FromSeconds(10)),
+            $"Owned child PID {childPid} was still running 10 seconds after the parent exited."
+        );
+    }
+
+    private static async Task<bool> ChildExited(int pid, TimeSpan limit)
+    {
+        var elapsed = Stopwatch.StartNew();
+        do
+        {
+            try
+            {
+                using var child = Process.GetProcessById(pid);
+                if (child.HasExited)
+                {
+                    return true;
+                }
+            }
+            catch (ArgumentException)
+            {
+                return true;
+            }
+
+            await Task.Delay(100);
+        } while (elapsed.Elapsed < limit);
+
+        return false;
     }
 
     private static ProcessStartInfo Start(string executable, params string[] arguments)

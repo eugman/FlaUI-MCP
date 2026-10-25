@@ -9,6 +9,35 @@ namespace FlaUI.Mcp.Te3.Tests;
 /// </summary>
 public sealed class TomRowsTests
 {
+    [Fact]
+    public void TheTreeFirstNodeShortcutTargetsTheFirstNodeRatherThanTheCurrentCell()
+    {
+        var args = Te3Page.KeysArguments("w1", "w1e5", TomRows.FirstNodeChord, Te3Page.TomExplorerTarget());
+
+        Assert.Equal("Ctrl+Home", args["chord"]);
+        Assert.Equal("w1e5", args["ref"]);
+    }
+
+    [Fact]
+    public void FilteredFirstNodeKeepsItsOriginalIndexAndTheOldSelection()
+    {
+        ElementInfo[] filtered =
+        [
+            Item("TreeItem", "Node8", "Tables", 1161, 100) with
+            {
+                KeyboardFocus = true,
+            },
+            Item("TreeItem", "Node9", "Invoices", 1161, 122),
+            Item("TreeItem", "Node189", "Invoices", 1161, 144, selected: true),
+        ];
+
+        Assert.Equal(8, TomRows.FirstFocusedRowIndex(filtered));
+        Assert.Null(TomRows.FirstFocusedRowIndex(filtered.Select(e => e with { KeyboardFocus = false }).ToArray()));
+        Assert.Null(
+            TomRows.FirstFocusedRowIndex(filtered.Select(e => e with { KeyboardFocus = e.Name == "Node9" }).ToArray())
+        );
+    }
+
     private static int next;
 
     private static ElementInfo Item(
@@ -140,6 +169,146 @@ public sealed class TomRowsTests
         Assert.Null(TomRows.Calibrate(elements));
         Assert.Null(TomRows.Selected(elements, null).Depth);
         Assert.Null(TomRows.Depth(1445, 1589, null));
+    }
+
+    [Fact]
+    public void AScaleMeasuredBeforeFilteringPlacesRowsWithoutTheRootButNeverInventsOne()
+    {
+        ElementInfo[] unfiltered =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", 1161, 100),
+            Item("DataItem", "Name row 0", "SpaceParts", 1209, 100),
+            Item("TreeItem", "Node1", "Data Sources", 1161, 122),
+            Item("DataItem", "Name row 1", "Data Sources", 1233, 122),
+        ];
+        ElementInfo[] filtered =
+        [
+            Item("TreeItem", "Node189", "Invoices", 1161, 200, selected: true),
+            Item("DataItem", "Name row 189", "Invoices", 1281, 200),
+        ];
+
+        Assert.Null(TomRows.Calibrate(filtered));
+        var trusted = TomRows.Calibrate(unfiltered);
+        Assert.Equal(3, Assert.Single(TomRows.Rows(filtered, TomRows.FilteredScale(filtered, trusted))).Depth);
+        Assert.Null(TomRows.FilteredScale(filtered, null));
+    }
+
+    [Fact]
+    public void AFilteredTableAndSameNamedCalculationItemStayInDifferentBranches()
+    {
+        ElementInfo[] filtered =
+        [
+            Item("TreeItem", "Node8", "Tables", 1161, 100),
+            Item("DataItem", "Name row 8", "Tables", 1233, 100),
+            Item("TreeItem", "Node9", "Invoices", 1161, 122),
+            Item("DataItem", "Name row 9", "Invoices", 1257, 122),
+            Item("TreeItem", "Node10", "Gross Sales", 1161, 144),
+            Item("DataItem", "Name row 10", "Gross Sales", 1281, 144),
+            Item("TreeItem", "Node187", "Z01CG4 - Lines", 1161, 166),
+            Item("DataItem", "Name row 187", "Z01CG4 - Lines", 1257, 166),
+            Item("TreeItem", "Node188", "Quantity", 1161, 188),
+            Item("DataItem", "Name row 188", "Quantity", 1281, 188),
+            Item("TreeItem", "Node189", "Invoices", 1161, 210, selected: true),
+            Item("DataItem", "Name row 189", "Invoices", 1281, 210),
+        ];
+
+        var rows = TomRows.Rows(filtered, TomRows.FilteredScale(filtered, Live125));
+        Assert.Equal("Invoices", SearchPick.TableOf(rows, 10));
+        Assert.Equal("Z01CG4 - Lines", SearchPick.TableOf(rows, 189));
+        Assert.Equal(
+            [10],
+            SearchPick
+                .Candidates(rows, new WalkRequest("Invoices", "Gross Sales", "Measure"))
+                .Candidates.Select(row => row.Index)
+        );
+        Assert.Empty(SearchPick.Candidates(rows, new WalkRequest("Invoices", "Invoices", "Measure")).Candidates);
+    }
+
+    [Fact]
+    public void AFilteredRootMeasurementReplacesAnOldScale()
+    {
+        ElementInfo[] rootAtNewScale =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", 1393, 100),
+            Item("DataItem", "Name row 0", "SpaceParts", 1451, 100),
+            Item("TreeItem", "Node1", "Data Sources", 1393, 122),
+            Item("DataItem", "Name row 1", "Data Sources", 1480, 122),
+        ];
+
+        Assert.Equal(TomRows.Calibrate(rootAtNewScale), TomRows.FilteredScale(rootAtNewScale, Live125));
+    }
+
+    [Fact]
+    public async Task UnfilteredRootCalibrationWaitsForTheVirtualizedAnchorsToAppearAndSettle()
+    {
+        ElementInfo[] ready =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", 1161, 100),
+            Item("DataItem", "Name row 0", "SpaceParts", 1209, 100),
+            Item("TreeItem", "Node1", "Data Sources", 1161, 122),
+            Item("DataItem", "Name row 1", "Data Sources", 1233, 122),
+        ];
+        var reads = 0;
+        var waits = 0;
+
+        var scale = await TomRows.WaitForRootScale(
+            () => Task.FromResult<IReadOnlyList<ElementInfo>>(++reads < 3 ? [] : ready),
+            _ =>
+            {
+                waits++;
+                return Task.CompletedTask;
+            }
+        );
+
+        Assert.Equal(Live125, scale);
+        Assert.True(reads >= 4);
+        Assert.True(waits >= 3);
+    }
+
+    [Fact]
+    public async Task OneLateRootReadingDoesNotEstablishTheScale()
+    {
+        ElementInfo[] ready =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", 1161, 100),
+            Item("DataItem", "Name row 0", "SpaceParts", 1209, 100),
+            Item("TreeItem", "Node1", "Data Sources", 1161, 122),
+            Item("DataItem", "Name row 1", "Data Sources", 1233, 122),
+        ];
+        var reads = 0;
+
+        var scale = await TomRows.WaitForRootScale(
+            () => Task.FromResult<IReadOnlyList<ElementInfo>>(++reads == 13 ? ready : []),
+            _ => Task.CompletedTask
+        );
+
+        Assert.Null(scale);
+    }
+
+    [Fact]
+    public async Task TwoOrdinaryHalfSecondTreeReadsCanSettleWithinTheRootBudget()
+    {
+        ElementInfo[] ready =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", 1161, 100),
+            Item("DataItem", "Name row 0", "SpaceParts", 1209, 100),
+            Item("TreeItem", "Node1", "Data Sources", 1161, 122),
+            Item("DataItem", "Name row 1", "Data Sources", 1233, 122),
+        ];
+        var reads = 0;
+
+        var scale = await TomRows.WaitForRootScale(
+            async () =>
+            {
+                reads++;
+                await Task.Delay(500);
+                return ready;
+            },
+            Task.Delay
+        );
+
+        Assert.Equal(Live125, scale);
+        Assert.Equal(2, reads);
     }
 
     [Fact]

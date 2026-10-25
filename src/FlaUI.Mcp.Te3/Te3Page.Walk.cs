@@ -52,8 +52,18 @@ public sealed partial class Te3Page
             reportStep?.Invoke("Turned TOM Explorer Show changes off before walking the tree");
         }
 
-        await SearchTomTyped(objectName);
-        depthScale = null;
+        // A filtered tree may omit Node0 and Node1, the only independent anchors for row depth. Measure them from
+        // the unfiltered tree while it is at its first node; the same TOM Explorer control keeps that indent while filtered.
+        // If either anchor is absent, depth stays unknown and the row strategy retains its conservative miss.
+        var outOfTime = WalkClock.OutOfTime(elapsed);
+        await WalkClock.BeforeInput(outOfTime, ClearTomSearchTyped, "clear TOM Explorer search");
+        await WalkClock.BeforeInput(
+            outOfTime,
+            () => Keys(TomRows.FirstNodeChord, TomExplorerTarget()),
+            "first TOM Explorer node for indent calibration"
+        );
+        depthScale = await TomRows.WaitForRootScale(async () => (await ReadTree()).Elements, Task.Delay, outOfTime);
+        await SearchTomTyped(objectName, clearFirst: false, outOfTime);
         var request = new WalkRequest(table, objectName, objectType, folder);
         var cursor = new TomCursor(this, ObjectWalk.Interesting(request));
         // The last arrival counts for this walk only; a walk that fails leaves none behind.
@@ -133,7 +143,7 @@ public sealed partial class Te3Page
         }
 
         reportStep?.Invoke($"Row read could not place the object ({picked.Reason}); walking the tree with keys");
-        await Keys("Home", TomExplorerTarget());
+        await SelectFirstTomRow(WalkClock.OutOfTime(elapsed));
         var walk = await ObjectWalk.Find(
             cursor,
             request,
@@ -168,12 +178,20 @@ public sealed partial class Te3Page
     }
 
     /// <summary>Types into the TOM Explorer search box; setting its value does not apply TE3's filter.</summary>
-    private async Task SearchTomTyped(string text)
+    private async Task SearchTomTyped(string text, bool clearFirst = true, Func<bool>? outOfTime = null)
     {
-        await ClearTomSearchTyped();
+        if (clearFirst)
+        {
+            await WalkClock.BeforeInput(outOfTime, ClearTomSearchTyped, "clear TOM Explorer search");
+        }
+
         var reference = await Reference(SearchTarget());
         reportStep?.Invoke($"Type TOM Explorer search {text}");
-        await invoke("windows_type", new { @ref = reference, text });
+        await WalkClock.BeforeInput(
+            outOfTime,
+            () => invoke("windows_type", new { @ref = reference, text }),
+            $"type TOM Explorer search '{text}'"
+        );
         await Task.Delay(800);
     }
 

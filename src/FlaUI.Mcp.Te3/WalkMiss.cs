@@ -20,7 +20,7 @@ internal static class WalkMiss
 
     /// <summary>
     /// Where the selection is once the search has cleared, from the status bar's slot, against the row the walk
-    /// ended on (<paramref name="endedOn"/>; null when that read failed). The walk's own Home and PageDowns leave the
+    /// ended on (<paramref name="endedOn"/>; null when that read failed). The walk's own Ctrl+Home and PageDowns leave the
     /// selection on another row than before it (te3-eb2ed6a: a folder miss ended on Products' row, 0 selects, and the
     /// bar read Table "Products" after the clear), so the reply names where it is and that no select put it there.
     /// </summary>

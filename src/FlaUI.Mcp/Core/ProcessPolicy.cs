@@ -141,6 +141,10 @@ public sealed class ProcessPolicy
     /// <summary>The refusal for a window title that matches no top-level window.</summary>
     public static Exception WindowNotFound(string message) => Refusal(RefusalCodes.WindowNotFound, message, false);
 
+    /// <summary>Refuse an exact title that identifies more than one visible window.</summary>
+    public static Exception WindowTitleAmbiguous(string message) =>
+        Refusal(RefusalCodes.WindowTitleAmbiguous, message, false);
+
     private static Exception Refusal(string code, string message, bool dispatched) =>
         InputRefusedException.Record(new InputRefusal(code, message) { ActionDispatched = dispatched });
 

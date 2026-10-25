@@ -7,6 +7,26 @@ using FlaUI.Mcp.Core;
 /// </summary>
 internal static class TomRows
 {
+    // DevExpress WinForms TreeList: Home moves within the focused node; Ctrl+Home focuses the first node.
+    // https://docs.devexpress.com/WindowsForms/998/controls-and-libraries/tree-list/end-user-capabilities/navigating-through-nodes-and-cells
+    public const string FirstNodeChord = "Ctrl+Home";
+
+    // Filtering retains original NodeN indexes. After Ctrl+Home, require the first realized TreeItem to hold focus;
+    // the old selected TreeItem may still be much later in the tree.
+    public static int? FirstFocusedRowIndex(IReadOnlyList<ElementInfo> elements)
+    {
+        var rows = elements
+            .Where(e => e.ControlType == "TreeItem" && e.Offscreen == false)
+            .Select(e => new { e.KeyboardFocus, Index = RowIndex(e.Name) })
+            .Where(e => e.Index != null)
+            .ToArray();
+        var focused = rows.Where(e => e.KeyboardFocus == true).ToArray();
+        return focused.Length == 1 && focused[0].Index == rows.Min(e => e.Index) ? focused[0].Index : null;
+    }
+
+    private static int? RowIndex(string name) =>
+        name.StartsWith("Node", StringComparison.Ordinal) && int.TryParse(name[4..], out var index) ? index : null;
+
     private const double Slack = 2;
 
     /// <summary>
@@ -21,6 +41,20 @@ internal static class TomRows
     /// display folder can have that name too. Callers with a confirmed anchor may use CalibrateFrom.
     /// </summary>
     public static Scale? Calibrate(IReadOnlyList<ElementInfo> elements) => CalibrateFrom(elements, 0, 0);
+
+    /// <summary>
+    /// Keep a scale measured from the unfiltered tree during this navigation when a filter hides its root. If the
+    /// filtered tree still realizes the root and its first child, their fresh measurement takes precedence.
+    /// </summary>
+    public static Scale? FilteredScale(IReadOnlyList<ElementInfo> elements, Scale? unfiltered) =>
+        Calibrate(elements) ?? unfiltered;
+
+    /// <summary>After Home, wait briefly for the virtualized root and first child to be realized twice.</summary>
+    public static async Task<Scale?> WaitForRootScale(
+        Func<Task<IReadOnlyList<ElementInfo>>> read,
+        Func<int, Task> delay,
+        Func<bool>? outOfTime = null
+    ) => await RowSettle.WaitStable(async () => Calibrate(await read()), delay, budgetMs: 1800, pollMs: 150, outOfTime);
 
     /// <summary>
     /// The scale from the realized row <paramref name="index"/> of known <paramref name="depth"/> (the model root at
