@@ -196,7 +196,11 @@ public sealed partial class Te3Page
         // A new filter may hide the root; retain the scale measured before the first filter in this navigation.
         public async Task Search(string text)
         {
-            await KeyBudget.Press(outOfTime, () => page.SearchTomTyped(text), $"the search for '{text}'");
+            await KeyBudget.Press(
+                outOfTime,
+                () => page.SearchTomTyped(text, outOfTime: outOfTime),
+                $"the search for '{text}'"
+            );
         }
 
         public async Task Expand()

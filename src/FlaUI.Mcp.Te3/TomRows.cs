@@ -29,6 +29,12 @@ internal static class TomRows
     public static Scale? FilteredScale(IReadOnlyList<ElementInfo> elements, Scale? unfiltered) =>
         Calibrate(elements) ?? unfiltered;
 
+    /// <summary>After Home, wait briefly for the virtualized root and first child to be realized twice.</summary>
+    public static async Task<Scale?> WaitForRootScale(
+        Func<Task<IReadOnlyList<ElementInfo>>> read,
+        Func<int, Task> delay
+    ) => await RowSettle.WaitStable(async () => Calibrate(await read()), delay, budgetMs: 900, pollMs: 150);
+
     /// <summary>
     /// The scale from the realized row <paramref name="index"/> of known <paramref name="depth"/> (the model root at
     /// 0, a selected table at 2) and the row right below it, taken as its first child one level deeper; null when a

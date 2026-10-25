@@ -3,6 +3,26 @@ using Xunit;
 /// <summary>The object walk's time limits over a fake clock; no desktop access.</summary>
 public sealed class WalkClockTests
 {
+    [Fact]
+    public async Task DeadlineRefusesInputAfterAReadCrossesTheWalkStop()
+    {
+        var inputs = 0;
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            WalkClock.BeforeInput(
+                WalkClock.OutOfTime(() => TimeSpan.FromSeconds(18.1)),
+                () =>
+                {
+                    inputs++;
+                    return Task.CompletedTask;
+                },
+                "type TOM Explorer search"
+            )
+        );
+
+        Assert.Equal(0, inputs);
+    }
+
     private sealed class SlowTree(Action onDown, params RowObservation[] rows) : ITreeCursor
     {
         private int at;

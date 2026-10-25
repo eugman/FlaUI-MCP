@@ -210,6 +210,53 @@ public sealed class TomRowsTests
     }
 
     [Fact]
+    public async Task UnfilteredRootCalibrationWaitsForTheVirtualizedAnchorsToAppearAndSettle()
+    {
+        ElementInfo[] ready =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", 1161, 100),
+            Item("DataItem", "Name row 0", "SpaceParts", 1209, 100),
+            Item("TreeItem", "Node1", "Data Sources", 1161, 122),
+            Item("DataItem", "Name row 1", "Data Sources", 1233, 122),
+        ];
+        var reads = 0;
+        var waits = 0;
+
+        var scale = await TomRows.WaitForRootScale(
+            () => Task.FromResult<IReadOnlyList<ElementInfo>>(++reads < 3 ? [] : ready),
+            _ =>
+            {
+                waits++;
+                return Task.CompletedTask;
+            }
+        );
+
+        Assert.Equal(Live125, scale);
+        Assert.True(reads >= 4);
+        Assert.True(waits >= 3);
+    }
+
+    [Fact]
+    public async Task OneLateRootReadingDoesNotEstablishTheScale()
+    {
+        ElementInfo[] ready =
+        [
+            Item("TreeItem", "Node0", "SpaceParts", 1161, 100),
+            Item("DataItem", "Name row 0", "SpaceParts", 1209, 100),
+            Item("TreeItem", "Node1", "Data Sources", 1161, 122),
+            Item("DataItem", "Name row 1", "Data Sources", 1233, 122),
+        ];
+        var reads = 0;
+
+        var scale = await TomRows.WaitForRootScale(
+            () => Task.FromResult<IReadOnlyList<ElementInfo>>(++reads == 7 ? ready : []),
+            _ => Task.CompletedTask
+        );
+
+        Assert.Null(scale);
+    }
+
+    [Fact]
     public void TheSelectedTreeItemPairsWithItsDataItemByRowIndex()
     {
         ElementInfo[] elements =
