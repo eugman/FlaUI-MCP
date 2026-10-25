@@ -48,6 +48,23 @@ internal static class NavigationProof
     }
 
     /// <summary>
+    /// The current selection's table must come from the fresh tree read. A prior walk's table helps explain how
+    /// navigation got here, but cannot prove where the selection is now when its table row is out of view.
+    /// </summary>
+    public static Proof ObjectFromRead(
+        string table,
+        string name,
+        string? type,
+        SelectionView now,
+        SelectionPlace current,
+        string? priorWalkTable
+    )
+    {
+        _ = priorWalkTable;
+        return Object(table, name, type, now, current.Table);
+    }
+
+    /// <summary>
     /// The reply of a navigation whose arrival check passed, with its proof: the object's selection, else the check.
     /// </summary>
     public static async Task<FlaUI.Mcp.McpToolResult> Attach(

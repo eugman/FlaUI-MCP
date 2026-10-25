@@ -58,6 +58,24 @@ public sealed class NavigationProofTests
     }
 
     [Fact]
+    public void APreviousWalksTableCannotProveTheCurrentSelection()
+    {
+        // The current tree can be scrolled past the table row while a same-named object is selected elsewhere.
+        // Historical walk state must never turn that incomplete read into an independent proof.
+        var proof = NavigationProof.ObjectFromRead(
+            "Invoices",
+            "Gross Sales (Quantity)",
+            "Measure",
+            new("Measure \"Gross Sales (Quantity)\"", null, null, null),
+            new SelectionPlace(null, false),
+            "Invoices"
+        );
+
+        Assert.Equal(Proof.Unavailable, proof.Verdict);
+        Assert.DoesNotContain("in Invoices", proof.Observed);
+    }
+
+    [Fact]
     public void AnUntypedRequestTakesTheTypeTe3NamesAndACalculatedColumnIsAColumn()
     {
         Assert.Equal(
