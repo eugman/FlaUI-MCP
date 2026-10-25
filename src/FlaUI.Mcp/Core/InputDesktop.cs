@@ -149,6 +149,12 @@ internal class InputDesktop
     public virtual string AutomationIdOf(AutomationElement element) =>
         element.Properties.AutomationId.ValueOrDefault ?? "";
 
+    /// <summary>The control's accessible value, when available and not a password.</summary>
+    public virtual string? ValueOf(AutomationElement element) =>
+        !element.Properties.IsPassword.ValueOrDefault && element.Patterns.Value.IsSupported
+            ? element.Patterns.Value.Pattern.Value.ValueOrDefault
+            : null;
+
     public virtual Rectangle BoundsOf(AutomationElement element) => element.BoundingRectangle;
 
     /// <summary>The element's window class as UI Automation reports it ("#32770" for a common dialog), or "".</summary>

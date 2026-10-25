@@ -125,6 +125,50 @@ public sealed class HitTestRowsTests
         Assert.Equal("click-point-covered", refusal.Refusal.Code);
     }
 
+    [Fact]
+    public void AMatchingNameCellOnTheTargetsFirstRowProvesAnUnequalHeightTreeItem()
+    {
+        // Some providers give the TreeItem extra pixels while its direct DataItem is the same row's label.
+        var row = Element();
+        var label = Element();
+        var desktop = new FakeDesktop { HitTest = _ => label };
+        desktop.ControlTypes[row] = ControlType.TreeItem;
+        desktop.ControlTypes[label] = ControlType.DataItem;
+        desktop.Parents[label] = row;
+        desktop.ElementBounds[row] = new Rectangle(433, 214, 435, 26);
+        desktop.ElementBounds[label] = new Rectangle(480, 214, 388, 22);
+        desktop.Values[row] = "Invoices";
+        desktop.Values[label] = "Invoices";
+        using var installed = desktop.Install();
+
+        Assert.Equal("descendant", ClickPoint.Verify(new Point(500, 225), row));
+        desktop.Values[label] = "Other row";
+        Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(new Point(500, 225), row));
+    }
+
+    [Fact]
+    public void AMatchingValueOnANestedOrOffsetRowDoesNotProveTheTarget()
+    {
+        var row = Element();
+        var child = Element();
+        var label = Element();
+        var desktop = new FakeDesktop { HitTest = _ => label };
+        desktop.ControlTypes[row] = ControlType.TreeItem;
+        desktop.ControlTypes[label] = ControlType.DataItem;
+        desktop.Parents[label] = child;
+        desktop.Parents[child] = row;
+        desktop.ElementBounds[row] = new Rectangle(433, 214, 435, 44);
+        desktop.ElementBounds[label] = new Rectangle(480, 214, 388, 22);
+        desktop.Values[row] = "Invoices";
+        desktop.Values[label] = "Invoices";
+        using var installed = desktop.Install();
+
+        Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(new Point(500, 225), row));
+        desktop.Parents[label] = row;
+        desktop.ElementBounds[label] = new Rectangle(480, 218, 388, 22);
+        Assert.Throws<InputRefusedException>(() => ClickPoint.Verify(new Point(500, 225), row));
+    }
+
     [Theory]
     [InlineData(ControlType.TreeItem)]
     [InlineData(ControlType.ListItem)]
