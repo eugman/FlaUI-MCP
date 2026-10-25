@@ -1,6 +1,6 @@
 /// <summary>
-/// Adds a derived checkpoint PNG to a finished run: render to a temporary file, record it in the manifest,
-/// then move it into place. A crash at any point leaves state a rerun of the same spec completes.
+/// Adds a derived checkpoint PNG to a finished run: render, install and verify it before recording it.
+/// A crash at any point leaves state a rerun of the same spec completes.
 /// </summary>
 internal static class CheckpointOutput
 {
@@ -44,23 +44,27 @@ internal static class CheckpointOutput
                 render(file);
             }
 
-            var hash = ArtifactFiles.Sha256(temporary);
-            if (File.Exists(output) && ArtifactFiles.Sha256(output) != hash)
+            var renderedHash = ArtifactFiles.Sha256(temporary);
+            var previouslyRecorded = AlreadyRecorded(manifest, checkpoint, output, renderedHash);
+            if (!File.Exists(output))
+            {
+                File.Move(temporary, output);
+            }
+
+            // Hold the final file against writes and replacement while its bytes are verified and recorded.
+            using var installed = new FileStream(output, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(installed));
+            if (hash != renderedHash)
             {
                 throw new IOException($"{output} already exists with other content; {checkpoint} was not written.");
             }
 
-            if (!AlreadyRecorded(manifest, checkpoint, output, hash))
+            if (!previouslyRecorded)
             {
                 manifest.Screenshots.Add(checkpoint, output);
                 manifest.ScreenshotHashes.Add(checkpoint, hash);
                 record();
                 AtomicJournal.Write(manifestPath, manifest, RunConfig.Json);
-            }
-
-            if (!File.Exists(output))
-            {
-                File.Move(temporary, output);
             }
         }
         finally

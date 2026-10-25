@@ -71,15 +71,12 @@ public static class CaptureComposition
                 }
 
                 path = ArtifactFiles.ContainedPath(path, runDirectory);
-                if (
-                    manifest.ScreenshotHashes.TryGetValue(panel.Checkpoint, out var captured)
-                    && ArtifactFiles.Sha256(path) != captured
-                )
-                {
-                    throw new IOException("Checkpoint PNG changed since capture; refusing composition");
-                }
-
-                using var bitmap = new Bitmap(path);
+                manifest.ScreenshotHashes.TryGetValue(panel.Checkpoint, out var captured);
+                using var bitmap = VerifiedImage.Read(
+                    path,
+                    captured,
+                    "Checkpoint PNG changed since capture; refusing composition"
+                );
                 if (bitmap.Width != panel.ExpectedWidth || bitmap.Height != panel.ExpectedHeight)
                 {
                     throw new ArgumentException("Source geometry changed");

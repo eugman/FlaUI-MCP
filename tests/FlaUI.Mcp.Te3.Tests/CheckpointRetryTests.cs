@@ -168,4 +168,35 @@ public sealed class CheckpointRetryTests : IDisposable
 
         Assert.DoesNotContain("Another command", error.Message);
     }
+
+    [Fact]
+    public void CheckpointExistsWithItsRecordedBytesBeforeManifestIsPublished()
+    {
+        var manifest = ArtifactFiles.ReadManifest(manifestPath);
+        var recorded = false;
+
+        CheckpointOutput.Publish(
+            manifestPath,
+            manifest,
+            "derived",
+            Path.Combine(root, "derived.png"),
+            stream => stream.Write([1, 2, 3]),
+            () =>
+            {
+                recorded = true;
+                Assert.True(File.Exists(Path.Combine(root, "derived.png")));
+                Assert.False(File.Exists(Path.Combine(root, "derived.png.partial")));
+                Assert.Equal(
+                    ArtifactFiles.Sha256(Path.Combine(root, "derived.png")),
+                    manifest.ScreenshotHashes["derived"]
+                );
+            }
+        );
+
+        Assert.True(recorded);
+        Assert.Equal(
+            ArtifactFiles.Sha256(Path.Combine(root, "derived.png")),
+            ArtifactFiles.ReadManifest(manifestPath).ScreenshotHashes["derived"]
+        );
+    }
 }

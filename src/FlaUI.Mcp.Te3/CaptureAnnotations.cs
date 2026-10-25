@@ -193,15 +193,8 @@ public static class CaptureAnnotations
 
         var runDirectory = Path.GetDirectoryName(Path.GetFullPath(manifestPath))!;
         sourcePath = ArtifactFiles.ContainedPath(sourcePath, runDirectory);
-        if (
-            manifest.ScreenshotHashes.TryGetValue(spec.Source, out var captured)
-            && ArtifactFiles.Sha256(sourcePath) != captured
-        )
-        {
-            throw new IOException("Clean checkpoint changed since capture");
-        }
-
-        using var source = new Bitmap(sourcePath);
+        manifest.ScreenshotHashes.TryGetValue(spec.Source, out var captured);
+        using var source = VerifiedImage.Read(sourcePath, captured, "Clean checkpoint changed since capture");
         using var annotated = Render(source, spec);
         CheckpointOutput.Publish(
             manifestPath,
