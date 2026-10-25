@@ -24,6 +24,34 @@ try {
     }
     $hook = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'pre-commit.ps1')
     if ($hook -notmatch 'Write-StagedBlob') { throw 'Pre-commit no longer checks the staged bytes.' }
+
+    # The brackets are a Git pathspec expression. The hook must still discover that this exact
+    # filename is partly staged, and check its unformatted staged copy instead of its clean worktree.
+    [IO.File]::WriteAllText($source, "unformatted`n")
+    git -C $repo add -- "O'Hare [draft].cs"
+    [IO.File]::WriteAllText($source, "formatted`n")
+    $scripts = Join-Path $repo 'scripts'
+    New-Item -ItemType Directory -Path $scripts | Out-Null
+    foreach ($name in @('pre-commit.ps1', 'staged-blob.ps1', 'quote-powershell-literal.ps1',
+            'check-core-untouched.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scripts
+    }
+    $runner = Join-Path $repo 'run-hook.ps1'
+    [IO.File]::WriteAllText($runner, @'
+function dotnet {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    $text = Get-Content -Raw -LiteralPath $Arguments[-1]
+    $global:LASTEXITCODE = if ($text -match 'unformatted') { 1 } else { 0 }
+}
+& ./scripts/pre-commit.ps1
+exit $LASTEXITCODE
+'@)
+    Push-Location $repo
+    try { $hookOutput = & pwsh -NoProfile -File $runner 2>&1; $hookExit = $LASTEXITCODE }
+    finally { Pop-Location }
+    if ($hookExit -ne 1) {
+        throw "The hook missed an unformatted partial stage with brackets in its path (exit $hookExit): $hookOutput"
+    }
 }
 finally {
     $resolved = [IO.Path]::GetFullPath($repo)
