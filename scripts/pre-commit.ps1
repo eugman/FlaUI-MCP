@@ -6,6 +6,7 @@ Set-Location (Split-Path -Parent $PSScriptRoot)
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8
 $OutputEncoding = $utf8
+. (Join-Path $PSScriptRoot 'quote-powershell-literal.ps1')
 
 $staged = @((git diff --cached --name-only --diff-filter=ACMR -z -- '*.cs') -split "`0" | Where-Object { $_ })
 if ($staged.Count -eq 0) {
@@ -35,8 +36,8 @@ foreach ($file in $partial) {
 if ($unformatted) {
     Write-Host 'These staged files are not formatted:' -ForegroundColor Red
     $unformatted | ForEach-Object { Write-Host "  $_" }
-    $quoted = ($unformatted | ForEach-Object { "'$_'" }) -join ' '
-    Write-Host "Fix and re-stage: pwsh scripts/format.ps1 $quoted; git add $quoted"
+    $quoted = ($unformatted | ForEach-Object { Quote-PowerShellLiteral $_ }) -join ' '
+    Write-Host "Fix and re-stage: pwsh scripts/format.ps1 $quoted; git add -- $quoted"
     exit 1
 }
 
