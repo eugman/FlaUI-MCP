@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Runtime.CompilerServices;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Mcp.Core;
@@ -20,6 +21,36 @@ public sealed class GuardedInputBranchTests
     {
         var target = new InputTarget(100, 1, 1);
         Assert.Equal(expected, InputTarget.SameProcessOwnedPopup(target, hit, (_, _) => owned, _ => processId));
+    }
+
+    [Theory]
+    [InlineData(300, true, false)]
+    [InlineData(300, false, true)]
+    [InlineData(900, true, true)]
+    public void ClickDispatchesOnlyOnTargetOwnedPopup(int hit, bool owned, bool refused)
+    {
+        var desktop = new FakeDesktop
+        {
+            ModalHwnd = owned ? (nint)hit : 0,
+            WindowUnder = _ => hit,
+            OtherProcessId = hit == FakeDesktop.OtherHwnd ? FakeDesktop.OtherPid : FakeDesktop.TargetPid,
+        };
+        var element = Element();
+        desktop.ElementBounds[element] = new Rectangle(10, 10, 20, 20);
+        using var installed = desktop.Install();
+        using var input = new GuardedInput(FakeDesktop.Target);
+
+        if (refused)
+        {
+            var error = Assert.Throws<InputRefusedException>(() => input.Click(element));
+            Assert.Equal("point-not-on-target", error.Refusal.Code);
+            Assert.Equal(0, desktop.Dispatched);
+        }
+        else
+        {
+            input.Click(element);
+            Assert.Equal(1, desktop.Dispatched);
+        }
     }
 
     private static AutomationElement Element() =>

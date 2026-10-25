@@ -459,7 +459,7 @@ public sealed partial class GuardedInput : IDisposable
         var point = default(System.Drawing.Point);
         Check(() =>
         {
-            var geometry = ClickGeometry.Read(element);
+            var geometry = desktop.Geometry(element);
             point = ClickPoint.Choose(geometry);
             // A scrollbar, header or overlay inside the target window would take the click.
             ClickPoint.Verify(point, element);
