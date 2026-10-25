@@ -20,7 +20,7 @@ public class LaunchTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false);
 
     public override string Description =>
-        "Start a Windows application and return a provisional window handle. Confirm the intended window with windows_list_windows before sending input; a startup splash can be stable before the main window appears.";
+        "Start a Windows application and return a provisional window handle. Use windows_list_windows to identify the final app-specific window by title, process, and expected controls before input; a startup splash can be stable before the main window appears.";
 
     public override object InputSchema => ToolSchema.For<Arguments>();
 
@@ -75,7 +75,7 @@ public class LaunchTool : ToolBase
     internal static McpToolResult ProvisionalResult(string app, string handle, int processId, string title) =>
         TextResult(
             $"Started {app} (PID {processId}). Provisional window handle: {handle}\nTitle: {title}\n"
-                + "Confirm the intended window with windows_list_windows before sending input; this may be a splash."
+                + "Use windows_list_windows, then check the app-specific title and expected controls before input; this may be a splash."
         ) with
         {
             Outcome = new ToolOutcome("completed", "not-tracked")

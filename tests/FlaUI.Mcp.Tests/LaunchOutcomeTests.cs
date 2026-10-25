@@ -17,6 +17,22 @@ public sealed class LaunchOutcomeTests
         Assert.Equal("unverified", result.Outcome?.Status);
         Assert.Equal("launch-provisional", result.Outcome?.Failure?.Code);
         Assert.Contains("provisional", result.Content[0].Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("expected controls", result.Content[0].Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OneSecondLaunchBudgetCanReturnAProvisionalWindow()
+    {
+        nint previous = 0;
+        var consecutive = 0;
+        var polls = SessionManager.LaunchPollCount(1);
+        var settlePolls = SessionManager.LaunchSettlePolls(polls);
+        var window = new Win32WindowInfo(7, "Main", 1, true, false, false);
+
+        Assert.Equal(2, polls);
+        Assert.Equal(2, settlePolls);
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [window], settlePolls));
+        Assert.Equal((nint)7, SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, [window], settlePolls));
     }
 
     [Fact]

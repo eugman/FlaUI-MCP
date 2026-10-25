@@ -181,6 +181,8 @@ public class SessionManager : IDisposable
         : waitSeconds is >= 1 and <= 90 ? waitSeconds.Value * 2
         : throw new ArgumentException("waitSeconds must be between 1 and 90", nameof(waitSeconds));
 
+    internal static int LaunchSettlePolls(int maxPolls) => maxPolls < 4 ? maxPolls : 4;
+
     // A title or an unregistered window is not proof of launch ownership.
     // Brokered/single-instance launches must be attached explicitly by the caller.
     // Some apps show no window, or two, for several seconds while they start. A longer settle avoids returning
@@ -205,7 +207,7 @@ public class SessionManager : IDisposable
             }
 
             var candidates = candidatesOf();
-            var stable = ObserveLaunchWindow(ref previous, ref consecutive, candidates);
+            var stable = ObserveLaunchWindow(ref previous, ref consecutive, candidates, LaunchSettlePolls(maxPolls));
             if (stable is { } hwnd)
             {
                 // A provider still starting up can time out; each timeout already waited, so stop after two.
@@ -230,11 +232,12 @@ public class SessionManager : IDisposable
         return (window, timeouts);
     }
 
-    /// <summary>Wait for one owned window across four polls (1.5 seconds), resetting on replacement or ambiguity.</summary>
+    /// <summary>Wait for one owned window across the bounded settle polls, resetting on replacement or ambiguity.</summary>
     internal static nint? ObserveLaunchWindow(
         ref nint previous,
         ref int consecutive,
-        IReadOnlyList<Win32WindowInfo> candidates
+        IReadOnlyList<Win32WindowInfo> candidates,
+        int requiredPolls = 4
     )
     {
         if (candidates.Count != 1)
@@ -247,7 +250,7 @@ public class SessionManager : IDisposable
         var current = candidates[0].Hwnd;
         consecutive = current == previous ? consecutive + 1 : 1;
         previous = current;
-        return consecutive >= 4 ? current : null;
+        return consecutive >= requiredPolls ? current : null;
     }
 
     internal static string LaunchFailure(
