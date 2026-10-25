@@ -10,6 +10,8 @@ scripts/setup.ps1
 scripts/format.ps1
 scripts/agent-format.ps1
 scripts/pre-commit.ps1
+scripts/verify-release-tag.ps1
+scripts/test-release-tag.ps1
 global.json
 docs/code-quality.md
 .githooks/
