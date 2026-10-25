@@ -49,6 +49,17 @@ public sealed class DpiMismatchTests
     }
 
     [Fact]
+    public void MismatchExplainsSystemAwareWindowsOnMixedDpiDisplays()
+    {
+        // TE3 3.27.1 reopened on a 168-DPI display and still reported 120 DPI: it is
+        // system-DPI-aware, so a process restart on that display does not change the value.
+        var warning = DpiUtility.DescribeMismatch(120, 168);
+        Assert.NotNull(warning);
+        Assert.Contains("system-DPI-aware", warning);
+        Assert.Contains("primary", warning);
+    }
+
+    [Fact]
     public void MismatchIsDirectionAgnostic()
     {
         Assert.NotNull(DpiUtility.DescribeMismatch(120, 168));
