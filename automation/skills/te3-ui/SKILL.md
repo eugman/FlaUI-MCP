@@ -19,7 +19,7 @@ Any keyboard or mouse input from the user ends the grant, and a refused call say
 
 # TE3 map
 
-Locators from TE3 3.26.3. Read only the topic for your task, plus `capture` for screenshots.
+The steps below were observed on TE3 3.26.3. The [UI map](../../UI-MAP.md) records later 3.27.0 and 3.27.1 observations, including changed menu entries and dialog behavior. Check the installed version and the relevant UI-map section, then confirm each target in the current UI before input. Read only the topic for your task, plus `capture` for screenshots.
 
 | Topic | Use for |
 |---|---|
