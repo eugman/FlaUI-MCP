@@ -394,6 +394,10 @@ internal sealed class FakeDesktop : InputDesktop
     public override string AutomationIdOf(AutomationElement element) =>
         AutomationIds.TryGetValue(element, out var id) ? id : "";
 
+    public Dictionary<AutomationElement, string> Values { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override string? ValueOf(AutomationElement element) => Values.GetValueOrDefault(element);
+
     public override Rectangle BoundsOf(AutomationElement element) =>
         ElementBounds.TryGetValue(element, out var bounds) ? bounds : Rectangle.Empty;
 

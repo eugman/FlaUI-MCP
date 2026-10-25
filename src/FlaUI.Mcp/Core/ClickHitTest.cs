@@ -296,8 +296,35 @@ public static class ClickHitTest
             return false;
         }
 
-        return Math.Abs(targetBounds.Top - hitBounds.Top) <= slack
-            && Math.Abs(targetBounds.Bottom - hitBounds.Bottom) <= slack;
+        if (Math.Abs(targetBounds.Top - hitBounds.Top) > slack)
+        {
+            return false;
+        }
+
+        if (Math.Abs(targetBounds.Bottom - hitBounds.Bottom) <= slack)
+        {
+            return true;
+        }
+
+        // A provider may report the TreeItem taller than its first-row DataItem label. The label must be a direct
+        // child with the same nonempty accessible value; a different row inside an expanded item cannot vouch for it.
+        if (hitBounds.Bottom > targetBounds.Bottom + slack)
+        {
+            return false;
+        }
+
+        try
+        {
+            var targetValue = desktop.ValueOf(target);
+            return desktop.ParentOf(hit) is { } parent
+                && desktop.SameElement(parent, target)
+                && !string.IsNullOrWhiteSpace(targetValue)
+                && string.Equals(targetValue, desktop.ValueOf(hit), StringComparison.Ordinal);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return false;
+        }
     }
 
     private static bool IsRow(InputDesktop desktop, AutomationElement element) =>
