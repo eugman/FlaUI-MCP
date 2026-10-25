@@ -18,8 +18,9 @@ if ($staged.Count -eq 0) {
 
 # Files with no unstaged edits can be checked on disk in one formatter run. Partially staged files
 # are checked from their staged copy, one at a time.
-$partial = (git diff --name-only -z -- $staged) -split "`0" | Where-Object { $_ }
+$unstaged = @((git diff --name-only -z -- '*.cs') -split "`0" | Where-Object { $_ })
 if ($LASTEXITCODE -ne 0) { throw 'Cannot list partially staged C# files.' }
+$partial = @($staged | Where-Object { $unstaged -ccontains $_ })
 $whole = $staged | Where-Object { $_ -notin $partial }
 
 $unformatted = @()
