@@ -39,12 +39,19 @@ public sealed class ArtifactFailureTests : IDisposable
     public async Task TimedOutGitCheckAlsoTerminatesItsOwnedChild()
     {
         var childFile = Path.Combine(root, "child.pid");
+        var childReady = Path.Combine(root, "child.ready");
+        var childScript = Path.Combine(root, "child.ps1");
+        File.WriteAllText(
+            childScript,
+            "[System.IO.File]::WriteAllText('" + childReady.Replace("'", "''") + "', 'ready'); Start-Sleep -Seconds 30"
+        );
         // Start-Process may shell-launch on Windows, losing the parent relationship that this test requires.
         var command =
-            "$start = [System.Diagnostics.ProcessStartInfo]::new('powershell.exe'); "
+            "$ErrorActionPreference = 'Stop'; $start = [System.Diagnostics.ProcessStartInfo]::new('powershell.exe'); "
             + "$start.UseShellExecute = $false; $start.CreateNoWindow = $true; "
-            + "$start.ArgumentList.Add('-NoProfile'); $start.ArgumentList.Add('-NonInteractive'); "
-            + "$start.ArgumentList.Add('-Command'); $start.ArgumentList.Add('Start-Sleep -Seconds 30'); "
+            + "$start.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \""
+            + childScript.Replace("'", "''")
+            + "\"'; "
             + "$child = [System.Diagnostics.Process]::Start($start); "
             + "[System.IO.File]::WriteAllText('"
             + childFile.Replace("'", "''")
@@ -59,6 +66,7 @@ public sealed class ArtifactFailureTests : IDisposable
 
         Assert.Contains("was terminated", error.Message);
         Assert.True(File.Exists(childFile), "The fake Git process must start its child before the deadline.");
+        Assert.True(File.Exists(childReady), "The owned child must run its intended script before the deadline.");
         var childPid = int.Parse(File.ReadAllText(childFile));
         // WaitForExitAsync above observes the parent only. Kill(entireProcessTree: true) may finish terminating
         // descendants after it returns, especially on a busy CI runner.
