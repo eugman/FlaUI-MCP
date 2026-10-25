@@ -1,7 +1,7 @@
 # Line and branch coverage of the no-focus tests, rendered as HTML into local/build-background/coverage.
 # Needs the reportgenerator global tool: dotnet tool install -g dotnet-reportgenerator-globaltool
 $ErrorActionPreference = 'Stop'
-Set-Location (git rev-parse --show-toplevel)
+Set-Location (Split-Path -Parent $PSScriptRoot)
 
 $results = 'local/build-background/TestResults-coverage'
 $report = 'local/build-background/coverage'

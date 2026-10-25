@@ -20,7 +20,7 @@
 # about six hours of desktop, past one part's cap; Stryker writes no report for a run it does not finish.
 param([string]$Part = 'all', [int]$Minutes = 0, [int]$Concurrency = 0)
 $ErrorActionPreference = 'Stop'
-$root = git rev-parse --show-toplevel
+$root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $offlineProject = 'FlaUI.Mcp.Tests.csproj'

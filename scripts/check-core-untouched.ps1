@@ -5,7 +5,7 @@ param([switch]$Staged, [string]$CoreRevision = $env:CORE_REVISION)
 if (-not $CoreRevision) { $CoreRevision = "core/main" }
 
 $ErrorActionPreference = 'Stop'
-$root = git rev-parse --show-toplevel
+$root = Split-Path -Parent $PSScriptRoot
 
 # A product repo has a host project next to the core one: src/FlaUI.Mcp.<Product>.
 $isProduct = [bool](Get-ChildItem (Join-Path $root 'src') -Directory | Where-Object Name -like 'FlaUI.Mcp.?*')

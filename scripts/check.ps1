@@ -4,7 +4,7 @@
 param([switch]$Mutation)
 
 $ErrorActionPreference = 'Stop'
-Set-Location (git rev-parse --show-toplevel)
+Set-Location (Split-Path -Parent $PSScriptRoot)
 
 function Step($name, [scriptblock]$command) {
     Write-Host "== $name" -ForegroundColor Cyan
@@ -64,6 +64,7 @@ function CheckDebt {
 }
 
 Step 'Restore tools' { dotnet tool restore | Out-Null }
+Step 'Direct script entrypoints' { & ./scripts/test-entrypoint-paths.ps1 }
 Step 'Formatting (fix with: pwsh scripts/format.ps1)' { dotnet csharpier check . }
 Step 'Shared core untouched' { & ./scripts/check-core-untouched.ps1 }
 Step 'Known debt does not grow' { CheckDebt }
