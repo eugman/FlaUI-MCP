@@ -286,7 +286,7 @@ public class SessionManager : IDisposable
     {
         OperationContext.Check();
         // Match top-level titles through Win32; a desktop-wide UIA search can hang on unrelated apps.
-        var match = Win32Desktop.GetTopLevelWindows().FirstOrDefault(w => w.Title == title && !w.IsCloaked);
+        var match = UniqueWindowByTitle(Win32Desktop.GetTopLevelWindows(), title);
         var window = match == null ? null : Automation.FromHandle(match.Hwnd)?.AsWindow();
 
         if (window == null)
@@ -296,6 +296,19 @@ public class SessionManager : IDisposable
 
         var handle = RegisterWindow(window);
         return (handle, window);
+    }
+
+    internal static Win32WindowInfo? UniqueWindowByTitle(IReadOnlyList<Win32WindowInfo> windows, string title)
+    {
+        var matches = windows.Where(w => w.Title == title && !w.IsCloaked).Take(2).ToArray();
+        if (matches.Length > 1)
+        {
+            throw ProcessPolicy.WindowTitleAmbiguous(
+                $"More than one visible window is titled {title}. Use windows_list_windows and attach by its handle."
+            );
+        }
+
+        return matches.FirstOrDefault();
     }
 
     public string RegisterWindow(Window window)

@@ -52,6 +52,27 @@ public sealed class SessionRefusalTests
     }
 
     [Fact]
+    public void ARepeatedExactTitleCannotSilentlyAttachToTheFirstWindow()
+    {
+        const string title = "same title";
+        var windows = new[]
+        {
+            new Win32WindowInfo(11, title, 101, true, false, false),
+            new Win32WindowInfo(12, title, 202, true, false, false),
+        };
+
+        var error = Refused(() => SessionManager.UniqueWindowByTitle(windows, title));
+
+        Assert.Equal(RefusalCodes.WindowTitleAmbiguous, error.Code);
+        Assert.Equal(RefusalDisposition.NoInput, error.Disposition);
+        Assert.Contains("windows_list_windows", error.Message);
+        Assert.Equal(
+            windows[0],
+            SessionManager.UniqueWindowByTitle([windows[0], windows[1] with { IsCloaked = true }], title)
+        );
+    }
+
+    [Fact]
     public void ALaunchThatStartedAProcessButFoundNoWindowSaysItWentOut()
     {
         var started = ProcessPolicy.LaunchFailed("no window", started: true);
