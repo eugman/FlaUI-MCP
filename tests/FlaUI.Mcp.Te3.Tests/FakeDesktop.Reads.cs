@@ -52,6 +52,8 @@ internal sealed partial class FakeDesktop
 
     public override string AutomationIdOf(AutomationElement element) => "";
 
+    public override string? ValueOf(AutomationElement element) => null;
+
     public override string ClassNameOf(AutomationElement element) => "";
 
     public override ClickGeometry Geometry(AutomationElement element) => new(false, null, BoundsOf(element), [], []);
