@@ -102,12 +102,14 @@ public static class DpiUtility
         }
 
         var ratio = (double)window / monitor;
-        // Deliberately not prescribing a restart: a DPI-unaware process reports 96 forever and
-        // restarting never changes it, so claiming a fix would be wrong for that whole class.
+        // Deliberately not prescribing a restart: DPI-unaware processes always report 96, and
+        // system-DPI-aware windows can retain the primary display's sign-in DPI on another monitor.
         return $"Window DPI {window} does not match monitor DPI {monitor} (ratio {ratio:0.###}). "
             + "Geometry from this capture is unreliable: a native capture can render at the window's "
             + "scale into a bitmap sized for the monitor's. Common after changing display scaling with "
             + "the app still running, docking or undocking, or moving between mixed-DPI monitors; also "
-            + "permanent for DPI-unaware apps, where it is expected and the screen pixels are correct.";
+            + "expected for system-DPI-aware apps on a monitor that differs from the primary "
+            + "display's sign-in DPI, and permanent for DPI-unaware apps, where the screen pixels "
+            + "are correct.";
     }
 }
