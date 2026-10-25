@@ -11,6 +11,17 @@ public sealed class GuardedInputBranchTests
 {
     private const nint ModalHwnd = 300;
 
+    [Theory]
+    [InlineData(300, true, 1, true)]
+    [InlineData(300, true, 2, false)]
+    [InlineData(300, false, 1, false)]
+    [InlineData(0, true, 1, false)]
+    public void ClickHitAcceptsOnlyASameProcessOwnedPopup(int hit, bool owned, int processId, bool expected)
+    {
+        var target = new InputTarget(100, 1, 1);
+        Assert.Equal(expected, InputTarget.SameProcessOwnedPopup(target, hit, (_, _) => owned, _ => processId));
+    }
+
     private static AutomationElement Element() =>
         (AutomationElement)RuntimeHelpers.GetUninitializedObject(typeof(AutomationElement));
 

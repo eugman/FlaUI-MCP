@@ -136,7 +136,7 @@ internal static class PointerActions
         var root = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
         var desktop = InputDesktop.Current;
         var under = desktop.WindowAt(to);
-        if (under != root && !SameProcessOwnedPopup(target, under, desktop.HasOwner, desktop.ProcessOf))
+        if (under != root && !InputTarget.SameProcessOwnedPopup(target, under, desktop.HasOwner, desktop.ProcessOf))
         {
             return $"the drop point ({to.X},{to.Y}) is no longer on the target window";
         }
@@ -223,7 +223,12 @@ internal static class PointerActions
         var under = (windowAt ?? desktop.WindowAt)(point);
         if (
             under != root
-            && !SameProcessOwnedPopup(target, under, hasOwner ?? desktop.HasOwner, processOf ?? desktop.ProcessOf)
+            && !InputTarget.SameProcessOwnedPopup(
+                target,
+                under,
+                hasOwner ?? desktop.HasOwner,
+                processOf ?? desktop.ProcessOf
+            )
         )
         {
             throw GuardedInput.NotOnTarget(
@@ -233,11 +238,4 @@ internal static class PointerActions
             );
         }
     }
-
-    internal static bool SameProcessOwnedPopup(
-        InputTarget target,
-        nint under,
-        Func<nint, nint, bool> hasOwner,
-        Func<nint, int> processOf
-    ) => under != 0 && hasOwner(under, target.Hwnd) && processOf(under) == target.ProcessId;
 }

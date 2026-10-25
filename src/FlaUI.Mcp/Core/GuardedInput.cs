@@ -48,6 +48,14 @@ public sealed record InputTarget(nint Hwnd, int ProcessId, long StartedTicks, ni
         using var process = Process.GetProcessById(pid);
         return new(hwnd, pid, process.StartTime.ToUniversalTime().Ticks);
     }
+
+    /// <summary>An owned popup may take pointer input only when it belongs to the captured process.</summary>
+    internal static bool SameProcessOwnedPopup(
+        InputTarget target,
+        nint under,
+        Func<nint, nint, bool> hasOwner,
+        Func<nint, int> processOf
+    ) => under != 0 && hasOwner(under, target.Hwnd) && processOf(under) == target.ProcessId;
 }
 
 /// <summary>Physical input is global: serialize it and fail closed on target/focus drift.</summary>
@@ -458,9 +466,15 @@ public sealed partial class GuardedInput : IDisposable
         });
         Verify();
         var clickRoot = target.HitHwnd == 0 ? target.Hwnd : target.HitHwnd;
-        if (desktop.ProcessOf(clickRoot) != target.ProcessId || desktop.WindowAt(point) != clickRoot)
+        var covering = desktop.WindowAt(point);
+        if (
+            desktop.ProcessOf(clickRoot) != target.ProcessId
+            || (
+                covering != clickRoot
+                && !InputTarget.SameProcessOwnedPopup(target, covering, desktop.HasOwner, desktop.ProcessOf)
+            )
+        )
         {
-            var covering = desktop.WindowAt(point);
             Check(() =>
                 throw NotOnTarget(target, covering, "Click point is obscured by another window; no input sent.")
             );
