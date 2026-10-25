@@ -3,6 +3,42 @@ using Xunit;
 /// <summary>Waiting for the filtered tree to render after the search is typed; scripted counts, no desktop.</summary>
 public sealed class RowSettleTests
 {
+    [Fact]
+    public async Task SlowReadConsumesTheStableObservationWallClockBudget()
+    {
+        var reads = 0;
+        var result = await RowSettle.WaitStable(
+            async () =>
+            {
+                reads++;
+                await Task.Delay(60);
+                return "ready";
+            },
+            _ => Task.CompletedTask,
+            budgetMs: 20,
+            pollMs: 5
+        );
+
+        Assert.Null(result);
+        Assert.Equal(1, reads);
+    }
+
+    [Fact]
+    public async Task NavigationDeadlineStopsStableReadsAfterOneObservation()
+    {
+        var reads = 0;
+        var result = await RowSettle.WaitStable(
+            () => Task.FromResult<string?>(++reads == 1 ? "ready" : "late"),
+            _ => Task.CompletedTask,
+            budgetMs: 900,
+            pollMs: 150,
+            outOfTime: () => reads > 0
+        );
+
+        Assert.Null(result);
+        Assert.Equal(1, reads);
+    }
+
     private static Func<Task<int>> Counts(params int[] counts)
     {
         var next = 0;

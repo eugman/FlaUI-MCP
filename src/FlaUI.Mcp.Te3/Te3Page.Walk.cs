@@ -58,7 +58,7 @@ public sealed partial class Te3Page
         var outOfTime = WalkClock.OutOfTime(elapsed);
         await WalkClock.BeforeInput(outOfTime, ClearTomSearchTyped, "clear TOM Explorer search");
         await WalkClock.BeforeInput(outOfTime, () => Keys("Home", TomExplorerTarget()), "Home for indent calibration");
-        depthScale = await TomRows.WaitForRootScale(async () => (await ReadTree()).Elements, Task.Delay);
+        depthScale = await TomRows.WaitForRootScale(async () => (await ReadTree()).Elements, Task.Delay, outOfTime);
         await SearchTomTyped(objectName, clearFirst: false, outOfTime);
         var request = new WalkRequest(table, objectName, objectType, folder);
         var cursor = new TomCursor(this, ObjectWalk.Interesting(request));
