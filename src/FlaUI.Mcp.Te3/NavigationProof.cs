@@ -2,7 +2,7 @@ using FlaUI.Mcp.Core;
 
 /// <summary>
 /// te3_navigate's proof (Core's ToolOutcome.proof). An object navigation compares the selection TE3 names after the
-/// walk, from the status bar or Properties (name and type) and the table the walk reached, with the request; every
+/// walk, from the status bar or Properties (name and type) and the current tree's placement, with the request; every
 /// other destination is proven by its arrival check, an independent read that has already passed.
 /// </summary>
 internal static class NavigationProof
@@ -12,8 +12,8 @@ internal static class NavigationProof
 
     /// <param name="type">The requested type; null or empty takes whatever type TE3 names.</param>
     /// <param name="reachedTable">
-    /// The table the rows place the object under (in view, else before the clear); null when no read measured one,
-    /// which leaves the proof unavailable rather than echoing the requested table.
+    /// The table the current rows place the selected object under, provided it is a candidate for the request;
+    /// null when the fresh read cannot establish that placement, leaving the proof unavailable.
     /// </param>
     public static Proof Object(string table, string name, string? type, SelectionView now, string? reachedTable)
     {
