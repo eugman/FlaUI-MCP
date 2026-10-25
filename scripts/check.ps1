@@ -1,10 +1,14 @@
 # The full local gate, also run by the pre-push hook and CI: formatting, analyzers, no-focus tests.
 # Integration tests are excluded because they launch apps and take desktop focus.
 # -Mutation also runs mutation testing (scripts/mutation.ps1), which can take up to 45 minutes.
-param([switch]$Mutation)
+# -IncludeLocalRecipes opts into compiling personal, gitignored recipes and tests.
+param([switch]$Mutation, [switch]$IncludeLocalRecipes)
 
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
+# The tracked-source gate must give the same result on machines with different
+# personal recipes and inherited MSBuild settings. Opt in to local recipes separately.
+$env:IncludeLocalRecipes = if ($IncludeLocalRecipes) { 'true' } else { 'false' }
 
 function Step($name, [scriptblock]$command) {
     Write-Host "== $name" -ForegroundColor Cyan
