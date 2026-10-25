@@ -39,8 +39,13 @@ public sealed class ArtifactFailureTests : IDisposable
     public async Task TimedOutGitCheckAlsoTerminatesItsOwnedChild()
     {
         var childFile = Path.Combine(root, "child.pid");
+        // Start-Process may shell-launch on Windows, losing the parent relationship that this test requires.
         var command =
-            "$child = Start-Process powershell.exe -ArgumentList '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 30' -WindowStyle Hidden -PassThru; "
+            "$start = [System.Diagnostics.ProcessStartInfo]::new('powershell.exe'); "
+            + "$start.UseShellExecute = $false; $start.CreateNoWindow = $true; "
+            + "$start.ArgumentList.Add('-NoProfile'); $start.ArgumentList.Add('-NonInteractive'); "
+            + "$start.ArgumentList.Add('-Command'); $start.ArgumentList.Add('Start-Sleep -Seconds 30'); "
+            + "$child = [System.Diagnostics.Process]::Start($start); "
             + "[System.IO.File]::WriteAllText('"
             + childFile.Replace("'", "''")
             + "', [string]$child.Id); $child.WaitForExit()";
