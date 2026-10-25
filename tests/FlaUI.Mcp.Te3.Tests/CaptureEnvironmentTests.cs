@@ -49,5 +49,7 @@ public sealed class CaptureEnvironmentTests
         var error = Assert.Throws<InvalidOperationException>(() => observed.RequireScale(expectedDpi));
         Assert.Contains("120", error.Message);
         Assert.Contains("168", error.Message);
+        Assert.Contains("system-DPI-aware", error.Message);
+        Assert.DoesNotContain("Reopen", error.Message);
     }
 }

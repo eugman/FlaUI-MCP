@@ -36,7 +36,7 @@ public sealed record CaptureEnvironment(
         if (MonitorDpi is { } monitorDpi && monitorDpi != MainWindowDpi)
         {
             throw new InvalidOperationException(
-                $"Capture window reports {MainWindowDpi} DPI but its monitor reports {monitorDpi} DPI; image is not a verified checkpoint. Reopen the application after changing display scale."
+                $"Capture window reports {MainWindowDpi} DPI but its monitor reports {monitorDpi} DPI; image is not a verified checkpoint. The application may be system-DPI-aware; check its effective DPI and monitor scale before retrying."
             );
         }
 
