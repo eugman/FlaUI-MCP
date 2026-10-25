@@ -76,6 +76,22 @@ public sealed class NavigationProofTests
     }
 
     [Fact]
+    public void ARowInTheRequestedTableButWrongFolderCannotBeVerified()
+    {
+        var proof = NavigationProof.ObjectFromRead(
+            "Invoices",
+            "Gross Sales (Quantity)",
+            "Measure",
+            new("Measure \"Gross Sales (Quantity)\"", null, null, "Other Folder"),
+            new SelectionPlace("Invoices", false),
+            "Invoices"
+        );
+
+        Assert.NotEqual(Proof.Verified, proof.Verdict);
+        Assert.Equal(Proof.Unavailable, proof.Verdict);
+    }
+
+    [Fact]
     public void AnUntypedRequestTakesTheTypeTe3NamesAndACalculatedColumnIsAColumn()
     {
         Assert.Equal(

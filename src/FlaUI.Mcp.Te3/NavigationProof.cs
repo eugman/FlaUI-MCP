@@ -8,8 +8,7 @@ using FlaUI.Mcp.Core;
 internal static class NavigationProof
 {
     private const string Selection =
-        "TE3 status bar or Properties, read after the walk; the table from the rows in view, else from the rows read "
-        + "before the search cleared";
+        "TE3 status bar or Properties, read after the walk; table and request placement from the current tree rows";
 
     /// <param name="type">The requested type; null or empty takes whatever type TE3 names.</param>
     /// <param name="reachedTable">
@@ -48,8 +47,8 @@ internal static class NavigationProof
     }
 
     /// <summary>
-    /// The current selection's table must come from the fresh tree read. A prior walk's table helps explain how
-    /// navigation got here, but cannot prove where the selection is now when its table row is out of view.
+    /// The current selection's table and placement must come from the fresh tree read. A prior walk's table helps
+    /// explain how navigation got here, but cannot prove where the selection is now when its table row is out of view.
     /// </summary>
     public static Proof ObjectFromRead(
         string table,
@@ -61,7 +60,7 @@ internal static class NavigationProof
     )
     {
         _ = priorWalkTable;
-        return Object(table, name, type, now, current.Table);
+        return Object(table, name, type, now, current.Placed ? current.Table : null);
     }
 
     /// <summary>
