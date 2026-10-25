@@ -156,7 +156,6 @@ public partial class ClickTool : ToolBase
             element.Properties.ControlType.ValueOrDefault,
             pattern => Supports(element, pattern)
         );
-        var selectionFallback = false;
         if (action != null)
         {
             // In some tree controls, clicking a row that is already selected starts inline rename, and the
@@ -171,27 +170,53 @@ public partial class ClickTool : ToolBase
             }
 
             var patternResult = RunPattern(element, action, request.ProcessId, elementName, Validate);
-            if (
-                action != "select"
-                || patternResult.IsError == true
-                || patternResult.Outcome?.IsPending == true
-                || Settled(() => IsSelected(element), 300)
-            )
+            if (action != "select" || patternResult.IsError == true || patternResult.Outcome?.IsPending == true)
             {
                 return patternResult;
             }
 
-            // Some tree providers accept Select() and change nothing; a real click selects.
-            selectionFallback = true;
-            request.PatternSent = true;
+            // A list popup can close or reflow as Select returns. Its old rectangle is unsafe for a
+            // fallback click even when the provider has not yet reported IsSelected.
+            var selected =
+                element.Properties.ControlType.ValueOrDefault == ControlType.ListItem
+                    ? ObserveSelection(() => IsSelected(element)) == true
+                    : Settled(() => IsSelected(element), 300);
+            if (selected)
+            {
+                return patternResult;
+            }
+
+            return AfterUnconfirmedSelect(
+                element.Properties.ControlType.ValueOrDefault,
+                elementName,
+                patternResult,
+                () =>
+                {
+                    // Some tree providers accept Select() and change nothing; a guarded click selects.
+                    request.PatternSent = true;
+                    return ScrollAndMouseClick(request, element, elementName, physical, true, Validate);
+                }
+            );
         }
 
+        return ScrollAndMouseClick(request, element, elementName, physical, false, Validate);
+    }
+
+    private McpToolResult ScrollAndMouseClick(
+        ClickRequest request,
+        AutomationElement element,
+        string elementName,
+        bool physical,
+        bool selectionFallback,
+        Action validate
+    )
+    {
         // Scrolling the row into view changes the app, so it goes through the guards before the click's lease.
         var scrolled = ClickGeometry.ScrollIntoView(
             element,
             request.ProcessId,
             _invokeTracker,
-            Validate,
+            validate,
             _elementRegistry.InputForRef(request.RefId)
         );
         try

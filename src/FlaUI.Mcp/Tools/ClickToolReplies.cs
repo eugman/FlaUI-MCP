@@ -9,6 +9,37 @@ internal sealed record PatternVerdict(string Message, string? Verification, stri
 /// <summary>The replies windows_click gives, kept apart from the code that clicks.</summary>
 public partial class ClickTool
 {
+    /// <summary>Do not use a cached popup row rectangle after Select; tree rows keep their guarded fallback.</summary>
+    internal static McpToolResult AfterUnconfirmedSelect(
+        ControlType type,
+        string name,
+        McpToolResult patternResult,
+        Func<McpToolResult> treeFallback
+    )
+    {
+        if (type != ControlType.ListItem)
+        {
+            return treeFallback();
+        }
+
+        return patternResult with
+        {
+            Content =
+            [
+                new()
+                {
+                    Type = "text",
+                    Text =
+                        $"Select was sent to {name}, but selection could not be confirmed. No pointer click was sent. "
+                        + "Take a fresh snapshot and re-resolve the row before another action; do not retry blindly.",
+                },
+            ],
+            Outcome = patternResult.Outcome?.WithProof(
+                new Proof(Proof.Unavailable, null, "selected", "SelectionItem", Independent: false)
+            ),
+        };
+    }
+
     internal static string SelectionClickOutcome(string name, bool? selected) =>
         selected switch
         {
