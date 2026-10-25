@@ -70,6 +70,8 @@ function CheckDebt {
 Step 'Restore tools' { dotnet tool restore | Out-Null }
 Step 'Direct script entrypoints' { & ./scripts/test-entrypoint-paths.ps1 }
 Step 'Pre-commit hint quoting' { & ./scripts/test-pre-commit-quoting.ps1 }
+Step 'Staged blob fidelity' { & ./scripts/test-staged-blob.ps1 }
+Step 'Push tip identity' { & ./scripts/test-push-tip.ps1 }
 Step 'Formatter literal paths' { & ./scripts/test-format-literal-paths.ps1 }
 Step 'Release tag identity' { & ./scripts/test-release-tag.ps1 }
 Step 'Formatting (fix with: pwsh scripts/format.ps1)' { dotnet csharpier check . }

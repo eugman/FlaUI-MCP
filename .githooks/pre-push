@@ -1,2 +1,2 @@
 #!/bin/sh
-exec pwsh -NoProfile -File scripts/check.ps1
+exec pwsh -NoProfile -File scripts/pre-push.ps1
