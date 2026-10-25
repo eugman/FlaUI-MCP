@@ -4,7 +4,7 @@ Everything here builds on the generic FlaUI MCP server and adds what is specific
 
 | Piece | What it is |
 |---|---|
-| `FlaUI.Mcp.Te3 mcp` | The MCP server: the generic `windows_*` tools plus the TE3 tools `te3_navigate`, `te3_model_state`, `te3_layout`, `te3_layout_read`, `te3_native_preflight`, `te3_env_check` and the `te3_interaction_begin`/`te3_interaction_end` grant, sharing one set of refs and handles. Limited to TE3. |
+| `FlaUI.Mcp.Te3 mcp` | The MCP server: the generic `windows_*` tools plus the TE3 tools `te3_navigate`, `te3_model_state`, `te3_layout`, `te3_layout_read`, `te3_native_preflight`, `te3_env_check` and the `te3_interaction_begin`/`te3_interaction_end` grant, sharing one set of refs and handles. TE3 tools target TE3; generic window tools warn when used on another app. Set `FLAUI_MCP_ALLOWED_APPS` to enforce a strict allowlist. |
 | `FlaUI.Mcp.Te3 run` | A runner that launches its own TE3, stages a disposable model, runs typed C# recipes and saves screenshots. |
 | [skills/te3-ui](skills/te3-ui/SKILL.md) | Agent guidance for driving TE3 with the MCP tools. |
 | [UI-MAP.md](UI-MAP.md) | Locators and behaviour observed in TE3 3.26 and 3.27. |
