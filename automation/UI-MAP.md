@@ -46,7 +46,7 @@ The source-detail dropdown is a separate same-process popup. A physical `windows
 ## Menus
 
 - Open a menu with one physical click, then confirm it opened before clicking again.
-- Popups are separate same-process native windows. Find entries from the popup's handle, not the whole editor.
+- Popups are separate same-process native windows. Find entries from the popup's handle or use `windows_find` on the editor with `includeOwned: true`.
 - UIA Focus on popup items returns without selecting them. Hover selects but adds a tooltip. Keyboard `Home`/`Down` highlights without tooltips; check `HasKeyboardFocus` after each step.
 - Background captures leave open menus out. Capture menus with a plain screenshot.
 - Cold-start menu discovery can take over five seconds.
@@ -61,6 +61,8 @@ The source-detail dropdown is a separate same-process popup. A physical `windows
 - **Window:** layouts (Default, Classic), Theme, Language, Reset Window Layout, Windows....
 - **Help:** About shows the licence holder, installations and session ID. Redact them before publishing.
 - **3.27 adds:** Tools > MCP Server, Help > Get Started, File > Reload from disk.
+
+**Recent-model inspection (3.27.1, 2026-10-25):** File > Recent Tabular Models opens a submenu of local model paths as Buttons. It is a file list, not the recent-server pin control. `windows_find` with `includeOwned: true` exposed the submenu while a main-window snapshot did not. The open File menu covers the toolbar's `Model from DB...` button: a guarded click correctly refused with `click-point-covered`, after sending only the window activation input. The screenshot showed the menu still open, the existing local model loaded, and `(No connection)`; the operation was reconciled without replay. Two focus-verified `Escape` chords closed the submenu then the File menu. A subsequent toolbar click was refused before input when Windows could not confirm the foreground, and the host revoked desktop access. Resume server-pin discovery from a fresh grant and observation; no database dialog or pin state was reached in this pass.
 
 ## Preferences
 
