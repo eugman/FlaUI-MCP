@@ -53,7 +53,7 @@ public sealed partial class Te3Page
         }
 
         // A filtered tree may omit Node0 and Node1, the only independent anchors for row depth. Measure them from
-        // the unfiltered tree while it is at Home; the same TOM Explorer control keeps that indent while filtered.
+        // the unfiltered tree while it is at its first node; the same TOM Explorer control keeps that indent while filtered.
         // If either anchor is absent, depth stays unknown and the row strategy retains its conservative miss.
         var outOfTime = WalkClock.OutOfTime(elapsed);
         await WalkClock.BeforeInput(outOfTime, ClearTomSearchTyped, "clear TOM Explorer search");

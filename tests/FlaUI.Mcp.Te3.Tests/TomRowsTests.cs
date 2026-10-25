@@ -16,7 +16,26 @@ public sealed class TomRowsTests
 
         Assert.Equal("Ctrl+Home", args["chord"]);
         Assert.Equal("w1e5", args["ref"]);
-        Assert.Equal("Node0", Te3Page.FirstTomRowTarget().Selector.Name);
+    }
+
+    [Fact]
+    public void FilteredFirstNodeKeepsItsOriginalIndexAndTheOldSelection()
+    {
+        ElementInfo[] filtered =
+        [
+            Item("TreeItem", "Node8", "Tables", 1161, 100) with
+            {
+                KeyboardFocus = true,
+            },
+            Item("TreeItem", "Node9", "Invoices", 1161, 122),
+            Item("TreeItem", "Node189", "Invoices", 1161, 144, selected: true),
+        ];
+
+        Assert.Equal(8, TomRows.FirstFocusedRowIndex(filtered));
+        Assert.Null(TomRows.FirstFocusedRowIndex(filtered.Select(e => e with { KeyboardFocus = false }).ToArray()));
+        Assert.Null(
+            TomRows.FirstFocusedRowIndex(filtered.Select(e => e with { KeyboardFocus = e.Name == "Node9" }).ToArray())
+        );
     }
 
     private static int next;

@@ -67,7 +67,7 @@ public sealed partial class Te3Page
             .WaitAsync(TimeSpan.FromSeconds(5));
 
     // One guarded select of TreeItem NodeN (Core's windows_click action select; it clicks when Select is ignored). A
-    // row read on a later page is no longer realized once the tree paged on: Home and the same PageDowns bring it back.
+    // row read on a later page is no longer realized once the tree paged on: Ctrl+Home and the same PageDowns bring it back.
     private async Task SelectRow(TreeRow row, Func<bool> outOfTime)
     {
         var target = new Target(
@@ -104,21 +104,32 @@ public sealed partial class Te3Page
     }
 
     // Ctrl+Home scrolls/focuses the first DevExpress TreeList node but deliberately preserves the old selection.
-    // The keyboard walkers read selection, so explicitly select and verify Node0 before they begin.
+    // The keyboard walkers read selection, so explicitly select and verify the focused first row before they begin.
     private async Task SelectFirstTomRow(Func<bool>? outOfTime = null)
     {
+        outOfTime ??= () => false;
+
         await KeyBudget.Press(
             outOfTime,
             () => Keys(TomRows.FirstNodeChord, TomExplorerTarget()),
             "first TOM Explorer node"
         );
-        var reference = await Reference(FirstTomRowTarget());
+        var found = await ReadTree();
+        var first = found.Truncated ? null : TomRows.FirstFocusedRowIndex(found.Elements);
+        if (first == null)
+        {
+            throw new InvalidOperationException(
+                "First filtered TOM Explorer row was not focused; no keyboard walk started."
+            );
+        }
+
+        var reference = await Reference(FirstTomRowTarget(first.Value));
         await KeyBudget.Press(
             outOfTime,
             () => invoke("windows_click", new { @ref = reference, action = "select" }),
             "select first TOM Explorer node"
         );
-        if (RowTree.SelectedIndex(await ReadTree()) != 0)
+        if (RowTree.SelectedIndex(await ReadTree()) != first)
         {
             throw new InvalidOperationException(
                 "First TOM Explorer row did not become selected; no keyboard walk started."
@@ -126,8 +137,8 @@ public sealed partial class Te3Page
         }
     }
 
-    internal static Target FirstTomRowTarget() =>
-        new(new(Name: "Node0", ControlType: "TreeItem"), TomExplorerTarget().Selector, false);
+    private static Target FirstTomRowTarget(int index) =>
+        new(new(Name: "Node" + index, ControlType: "TreeItem"), TomExplorerTarget().Selector, false);
 
     // The raw readings of the selection: the status bar's slot and the Properties rows (Name, ObjectType, the
     // display folder).
@@ -151,7 +162,7 @@ public sealed partial class Te3Page
 
     private sealed class RowTree(Te3Page page, Func<bool> outOfTime) : IRowTree
     {
-        // Home first, so the model root and its first child are in view to measure the indent whatever was selected
+        // Ctrl+Home first, so the model root and its first child are in view to measure the indent whatever was selected
         // before; then every realized row, paging down while the tree scrolls (treeList has no Scroll pattern).
         public async Task<RowRead> Read()
         {
@@ -273,7 +284,7 @@ public sealed partial class Te3Page
             rows != null && anchor is { } index && rows.Any(r => r.Index > index && r.Depth <= TableDepth);
 
         // A miss's text, read before the search is cleared and finished after it: where the selection is then (the
-        // walk's own Home and PageDowns leave it on another row than before the walk), against the row it ended on.
+        // walk's own Ctrl+Home and PageDowns leave it on another row than before the walk), against the row it ended on.
         public async Task<string> MissCleared(WalkRequest request, string? reason, int inputs)
         {
             var (text, endedOn) = await Miss(request, reason, inputs);

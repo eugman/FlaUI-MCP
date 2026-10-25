@@ -11,6 +11,22 @@ internal static class TomRows
     // https://docs.devexpress.com/WindowsForms/998/controls-and-libraries/tree-list/end-user-capabilities/navigating-through-nodes-and-cells
     public const string FirstNodeChord = "Ctrl+Home";
 
+    // Filtering retains original NodeN indexes. After Ctrl+Home, require the first realized TreeItem to hold focus;
+    // the old selected TreeItem may still be much later in the tree.
+    public static int? FirstFocusedRowIndex(IReadOnlyList<ElementInfo> elements)
+    {
+        var rows = elements
+            .Where(e => e.ControlType == "TreeItem" && e.Offscreen == false)
+            .Select(e => new { e.KeyboardFocus, Index = RowIndex(e.Name) })
+            .Where(e => e.Index != null)
+            .ToArray();
+        var focused = rows.Where(e => e.KeyboardFocus == true).ToArray();
+        return focused.Length == 1 && focused[0].Index == rows.Min(e => e.Index) ? focused[0].Index : null;
+    }
+
+    private static int? RowIndex(string name) =>
+        name.StartsWith("Node", StringComparison.Ordinal) && int.TryParse(name[4..], out var index) ? index : null;
+
     private const double Slack = 2;
 
     /// <summary>
