@@ -12,7 +12,7 @@ Run `pwsh scripts/setup.ps1` once after cloning. It installs CSharpier and turns
 |---|---|
 | An agent edits a `.cs` file | Claude Code formats it with CSharpier (`.claude/settings.json`). Other agents should run `pwsh scripts/format.ps1 <files>`. |
 | `git commit` | The staged copy of each C# file must already be formatted, and a product repo must not change files owned by the core. |
-| `git push` and CI | `pwsh scripts/check.ps1`: formatting, core ownership, known debt not growing, the build with analyzers, and the no-focus unit tests. |
+| `git push` and CI | `pwsh scripts/check.ps1`: formatting, core ownership, known debt not growing, the build with analyzers, and the no-focus unit tests. The pre-push hook also requires a clean worktree and a pushed ref resolving to checked-out `HEAD`, so its gate checks the bytes being pushed. Product repos may add a no-focus `scripts/pre-push-extra.ps1` for their hosted Build smoke checks. |
 
 `pwsh scripts/format.ps1` fixes everything a tool can fix: braces, blank lines and layout.
 

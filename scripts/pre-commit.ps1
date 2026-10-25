@@ -7,8 +7,10 @@ $utf8 = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8
 $OutputEncoding = $utf8
 . (Join-Path $PSScriptRoot 'quote-powershell-literal.ps1')
+. (Join-Path $PSScriptRoot 'staged-blob.ps1')
 
 $staged = @((git diff --cached --name-only --diff-filter=ACMR -z -- '*.cs') -split "`0" | Where-Object { $_ })
+if ($LASTEXITCODE -ne 0) { throw 'Cannot list staged C# files.' }
 if ($staged.Count -eq 0) {
     & (Join-Path $PSScriptRoot 'check-core-untouched.ps1') -Staged
     exit $LASTEXITCODE
@@ -17,6 +19,7 @@ if ($staged.Count -eq 0) {
 # Files with no unstaged edits can be checked on disk in one formatter run. Partially staged files
 # are checked from their staged copy, one at a time.
 $partial = (git diff --name-only -z -- $staged) -split "`0" | Where-Object { $_ }
+if ($LASTEXITCODE -ne 0) { throw 'Cannot list partially staged C# files.' }
 $whole = $staged | Where-Object { $_ -notin $partial }
 
 $unformatted = @()
@@ -28,9 +31,15 @@ if ($whole) {
 }
 
 foreach ($file in $partial) {
-    $blob = git show ":$file" | Out-String
-    $formatted = $blob | dotnet csharpier format --write-stdout | Out-String
-    if ($LASTEXITCODE -ne 0 -or $formatted.TrimEnd() -ne $blob.TrimEnd()) { $unformatted += $file }
+    $directory = Split-Path -Parent $file
+    if (-not $directory) { $directory = '.' }
+    $snapshot = Join-Path $directory ".mcp-staged-$([guid]::NewGuid().ToString('N')).cs"
+    try {
+        Write-StagedBlob -Path $file -Destination $snapshot
+        dotnet csharpier check $snapshot *> $null
+        if ($LASTEXITCODE -ne 0) { $unformatted += $file }
+    }
+    finally { Remove-Item -LiteralPath $snapshot -Force -ErrorAction SilentlyContinue }
 }
 
 if ($unformatted) {
