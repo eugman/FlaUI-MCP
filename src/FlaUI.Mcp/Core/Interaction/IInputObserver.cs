@@ -10,6 +10,22 @@ public interface IInputObserver : IDisposable
     InputCounts Counts { get; }
 }
 
+/// <summary>Privacy-safe metadata about one non-injected event. No key, text, or screen position is retained.</summary>
+public sealed record InputEventInfo(long Sequence, DateTimeOffset Utc, string Kind);
+
+/// <summary>Optional diagnostics supplied by the live low-level hook; test observers need not implement it.</summary>
+public interface IInputEventSource
+{
+    InputEventInfo? LastEvent { get; }
+}
+
+/// <summary>The input sequence at grant approval and, when user input ended it, at revocation.</summary>
+public readonly record struct GrantInputEvidence(
+    long ApprovedSequence,
+    long? RevokedSequence,
+    InputEventInfo? LastEvent
+);
+
 /// <summary>The user's own keyboard events and mouse button-downs so far, and where the last button went down.</summary>
 /// <param name="LastButtonDown">The screen point of the last physical button-down, or null before the first.</param>
 public readonly record struct InputCounts(long Keys, long ButtonDowns, System.Drawing.Point? LastButtonDown = null);

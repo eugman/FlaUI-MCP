@@ -41,6 +41,8 @@ public sealed partial class InteractionGrant : IDisposable
     private System.Threading.Timer? monitor;
     private IInputObserver? inputObserver;
     private long inputAtApproval;
+    private long? revokedInputSequence;
+    private InputEventInfo? lastInputAtRevoke;
     private long? missingForegroundSince;
     private CancellationTokenSource lifetime = new();
     private CancellationTokenSource safety = new();
@@ -108,6 +110,18 @@ public sealed partial class InteractionGrant : IDisposable
 
     public string Reason { get; private set; } = "User has not approved an interactive batch";
 
+    /// <summary>Privacy-safe event evidence retained after a user-input revocation.</summary>
+    public GrantInputEvidence InputEvidence
+    {
+        get
+        {
+            lock (sync)
+            {
+                return new(inputAtApproval, revokedInputSequence, lastInputAtRevoke);
+            }
+        }
+    }
+
     /// <summary>The refusal code <see cref="Require"/> would give now (hyphenated).</summary>
     public string Code
     {
@@ -165,6 +179,8 @@ public sealed partial class InteractionGrant : IDisposable
             }
 
             inputAtApproval = InputSequence();
+            revokedInputSequence = null;
+            lastInputAtRevoke = null;
             targets.Clear();
             missingForegroundSince = null;
             paused = null;

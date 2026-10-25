@@ -14,7 +14,7 @@ namespace FlaUI.Mcp.Core;
 /// silently) shows as a missed beat, and the observer stays unavailable from then on. The pulse is a plain thread,
 /// not WM_TIMER, which Windows may throttle for a background process.
 /// </remarks>
-public sealed class PhysicalInputObserver : IInputObserver
+public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
 {
     private const int HeartbeatMs = 250;
     private const uint BeatMessage = 0x8001; // WM_APP + 1
@@ -29,6 +29,7 @@ public sealed class PhysicalInputObserver : IInputObserver
     private readonly Hook mouse;
     private Exception? failure;
     private long sequence;
+    private InputEventInfo? lastEvent;
     private long keys;
     private long buttonDowns;
     private long lastButtonDown = long.MinValue;
@@ -88,6 +89,8 @@ public sealed class PhysicalInputObserver : IInputObserver
         }
     }
 
+    public InputEventInfo? LastEvent => Volatile.Read(ref lastEvent);
+
     public InputCounts Counts
     {
         get
@@ -124,7 +127,11 @@ public sealed class PhysicalInputObserver : IInputObserver
             var flags = unchecked((uint)Marshal.ReadInt32(data, isKeyboard ? 8 : 12));
             if (IsPhysical(isKeyboard, flags))
             {
-                Interlocked.Increment(ref sequence);
+                var next = Interlocked.Increment(ref sequence);
+                Volatile.Write(
+                    ref lastEvent,
+                    new InputEventInfo(next, DateTimeOffset.UtcNow, isKeyboard ? "keyboard" : "mouse")
+                );
                 Count(isKeyboard, message, data);
             }
         }

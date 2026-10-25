@@ -33,7 +33,8 @@ public sealed partial class InteractionGrant
             return null;
         }
 
-        (Reason, code, watching) = (UserInput, FocusRevoked, false);
+        CaptureInputEvidence();
+        (Reason, code, watching) = (UserInput + InputEvidenceSuffix(), FocusRevoked, false);
         monitor?.Dispose();
         monitor = null;
         return safety;
@@ -95,6 +96,12 @@ public sealed partial class InteractionGrant
 
     private CancellationTokenSource RevokeLocked(string reason, string revokeCode, bool safetyEvent)
     {
+        if (reason == UserInput)
+        {
+            CaptureInputEvidence();
+            reason += InputEvidenceSuffix();
+        }
+
         (Batch, Reason, code) = (null, reason, revokeCode);
         if (safetyEvent)
         {
@@ -128,4 +135,30 @@ public sealed partial class InteractionGrant
     }
 
     private long InputSequence() => physicalInput?.Invoke() ?? inputObserver?.Sequence ?? 0;
+
+    private void CaptureInputEvidence()
+    {
+        try
+        {
+            revokedInputSequence = InputSequence();
+            var last = (inputObserver as IInputEventSource)?.LastEvent;
+            lastInputAtRevoke = last?.Sequence == revokedInputSequence ? last : null;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            revokedInputSequence = null;
+            lastInputAtRevoke = null;
+        }
+    }
+
+    private string InputEvidenceSuffix()
+    {
+        if (revokedInputSequence is not { } revoked)
+        {
+            return string.Empty;
+        }
+
+        var eventText = lastInputAtRevoke is { } last ? $"; last {last.Kind} event {last.Utc:O}" : string.Empty;
+        return $" (approved sequence {inputAtApproval}, revoked sequence {revoked}{eventText})";
+    }
 }
