@@ -30,4 +30,24 @@ public sealed class CaptureEnvironmentTests
         Assert.Null(manifest.ExpectedDpi);
         Assert.Empty(manifest.CaptureEnvironments);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(120)]
+    public void MismatchedWindowAndMonitorDpiCannotVerifyCapture(int? expectedDpi)
+    {
+        var observed = new CaptureEnvironment(
+            "DISPLAY2",
+            new Rectangle(0, 0, 1920, 1080),
+            new Rectangle(0, 0, 1920, 1040),
+            new Rectangle(0, 0, 1920, 1080),
+            120,
+            168
+        );
+
+        Assert.True(observed.DpiMismatch);
+        var error = Assert.Throws<InvalidOperationException>(() => observed.RequireScale(expectedDpi));
+        Assert.Contains("120", error.Message);
+        Assert.Contains("168", error.Message);
+    }
 }

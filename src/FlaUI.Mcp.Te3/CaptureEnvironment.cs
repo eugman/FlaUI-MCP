@@ -33,6 +33,13 @@ public sealed record CaptureEnvironment(
 
     public void RequireScale(int? expectedDpi)
     {
+        if (MonitorDpi is { } monitorDpi && monitorDpi != MainWindowDpi)
+        {
+            throw new InvalidOperationException(
+                $"Capture window reports {MainWindowDpi} DPI but its monitor reports {monitorDpi} DPI; image is not a verified checkpoint. Reopen the application after changing display scale."
+            );
+        }
+
         if (expectedDpi is { } expected && expected != MainWindowDpi)
         {
             throw new InvalidOperationException(

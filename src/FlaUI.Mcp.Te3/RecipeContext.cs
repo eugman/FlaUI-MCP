@@ -19,6 +19,7 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
         before.RequireScale(config.ExpectedDpi);
         await capture(path);
         var after = Page.ObserveCaptureEnvironment();
+        after.RequireScale(config.ExpectedDpi);
         if (before != after)
         {
             throw new InvalidOperationException(
