@@ -20,7 +20,7 @@ public class LaunchTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false);
 
     public override string Description =>
-        "Launch a Windows application. Returns a window handle for use with other tools.";
+        "Start a Windows application and return a provisional window handle. Confirm the intended window with windows_list_windows before sending input; a startup splash can be stable before the main window appears.";
 
     public override object InputSchema => ToolSchema.For<Arguments>();
 
@@ -59,7 +59,7 @@ public class LaunchTool : ToolBase
         try
         {
             var (handle, window) = _sessionManager.LaunchApp(app, args, waitSeconds);
-            return Task.FromResult(TextResult($"Launched {app}\nWindow handle: {handle}\nTitle: {window.Title}"));
+            return Task.FromResult(ProvisionalResult(app, handle, window.Properties.ProcessId.Value, window.Title));
         }
         catch (LaunchPendingException pending)
         {
@@ -70,6 +70,29 @@ public class LaunchTool : ToolBase
             return Task.FromResult(ErrorResult($"Failed to launch {app}: {ex.Message}"));
         }
     }
+
+    /// <summary>A stable owned window is still provisional: a splash can later be replaced.</summary>
+    internal static McpToolResult ProvisionalResult(string app, string handle, int processId, string title) =>
+        TextResult(
+            $"Started {app} (PID {processId}). Provisional window handle: {handle}\nTitle: {title}\n"
+                + "Confirm the intended window with windows_list_windows before sending input; this may be a splash."
+        ) with
+        {
+            Outcome = new ToolOutcome("completed", "not-tracked")
+            {
+                Status = "unverified",
+                Verification = "provisional-window",
+                Failure = new InputRefusal("launch-provisional", "Window identity is not yet confirmed")
+                {
+                    ActionDispatched = true,
+                },
+                Details = new Dictionary<string, JsonElement>
+                {
+                    ["processId"] = JsonSerializer.SerializeToElement(processId),
+                    ["windowHandle"] = JsonSerializer.SerializeToElement(handle),
+                },
+            },
+        };
 
     internal static McpToolResult PendingResult(LaunchPendingException pending) =>
         TextResult(pending.Message) with

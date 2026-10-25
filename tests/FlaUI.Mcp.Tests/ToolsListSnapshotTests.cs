@@ -71,6 +71,10 @@ public sealed class ToolsListSnapshotTests
         }
 
         var launch = live.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_launch")!;
+        Assert.Contains("provisional", launch["description"]!.GetValue<string>(), StringComparison.Ordinal);
+        launch["description"] = baseline
+            .AsArray()
+            .Single(tool => tool!["name"]!.GetValue<string>() == "windows_launch")!["description"]!.DeepClone();
         var launchProperties = launch["inputSchema"]!["properties"]!.AsObject();
         Assert.Equal("integer", launchProperties["waitSeconds"]!["type"]!.GetValue<string>());
         Assert.True(launchProperties.Remove("waitSeconds"));
