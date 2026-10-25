@@ -23,6 +23,13 @@ internal static class TomRows
     public static Scale? Calibrate(IReadOnlyList<ElementInfo> elements) => CalibrateFrom(elements, 0, 0);
 
     /// <summary>
+    /// Keep a scale measured from the unfiltered tree during this navigation when a filter hides its root. If the
+    /// filtered tree still realizes the root and its first child, their fresh measurement takes precedence.
+    /// </summary>
+    public static Scale? FilteredScale(IReadOnlyList<ElementInfo> elements, Scale? unfiltered) =>
+        Calibrate(elements) ?? unfiltered;
+
+    /// <summary>
     /// The scale from the realized row <paramref name="index"/> of known <paramref name="depth"/> (the model root at
     /// 0, a selected table at 2) and the row right below it, taken as its first child one level deeper; null when a
     /// label is missing or the row below is not deeper (the row is collapsed, or a leaf).

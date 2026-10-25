@@ -36,7 +36,7 @@ public sealed partial class Te3Page
     internal async Task<SelectionPlace> PlaceOf(WalkRequest request)
     {
         var found = await ReadTree();
-        var scale = depthScale ?? TomRows.Calibrate(found.Elements);
+        var scale = TomRows.FilteredScale(found.Elements, depthScale);
         if (scale == null || RowTree.SelectedIndex(found) is not { } selected)
         {
             return new(null, false);
@@ -133,7 +133,7 @@ public sealed partial class Te3Page
                 {
                     var found = await page.ReadTree();
                     truncated |= found.Truncated;
-                    page.depthScale ??= TomRows.Calibrate(found.Elements);
+                    page.depthScale = TomRows.FilteredScale(found.Elements, page.depthScale);
                     return (TomRows.Rows(found.Elements, page.depthScale), TomRows.Scrolls(found.Elements));
                 },
                 () => KeyBudget.Press(outOfTime, () => page.Keys("PageDown", TomExplorerTarget()), "PageDown"),
@@ -165,7 +165,10 @@ public sealed partial class Te3Page
         {
             await Rendered();
             var found = await page.ReadTree();
-            return (TomRows.Rows(found.Elements, TomRows.Calibrate(found.Elements)), SelectedIndex(found));
+            return (
+                TomRows.Rows(found.Elements, TomRows.FilteredScale(found.Elements, page.depthScale)),
+                SelectedIndex(found)
+            );
         }
 
         internal static int? SelectedIndex(QueryResult found)
@@ -190,11 +193,10 @@ public sealed partial class Te3Page
 
         public Task Select(TreeRow row) => page.SelectRow(row, outOfTime);
 
-        // A new filter: the indent is measured again from the rows it shows.
+        // A new filter may hide the root; retain the scale measured before the first filter in this navigation.
         public async Task Search(string text)
         {
             await KeyBudget.Press(outOfTime, () => page.SearchTomTyped(text), $"the search for '{text}'");
-            page.depthScale = null;
         }
 
         public async Task Expand()
@@ -203,11 +205,10 @@ public sealed partial class Te3Page
             await Task.Delay(WalkClock.CollapseSettleMs);
         }
 
-        // The filter cleared: the indent is measured again from the rows the whole tree shows.
+        // The filter cleared; a fresh root measurement will replace the retained scale when visible.
         public async Task ClearSearch()
         {
             await KeyBudget.Press(outOfTime, page.ClearTomSearchTyped, "the search's clear");
-            page.depthScale = null;
         }
 
         private const int TableDepth = 2;
@@ -221,8 +222,8 @@ public sealed partial class Te3Page
             await Rendered();
             var found = await page.ReadTree();
             var selected = SelectedIndex(found);
-            page.depthScale ??=
-                TomRows.Calibrate(found.Elements)
+            page.depthScale =
+                TomRows.FilteredScale(found.Elements, page.depthScale)
                 ?? (selected is { } index ? TomRows.CalibrateFrom(found.Elements, index, TableDepth) : null);
             var rows = page.depthScale == null ? null : TomRows.Rows(found.Elements, page.depthScale);
             var cut = TomRows.Scrolls(found.Elements) && !Ended(rows, selected);
