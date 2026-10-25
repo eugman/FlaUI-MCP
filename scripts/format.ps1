@@ -5,7 +5,7 @@ param([Parameter(ValueFromRemainingArguments = $true)] [string[]] $Paths)
 
 $ErrorActionPreference = 'Stop'
 # Resolve paths before moving to the repo root, so paths relative to a subfolder still work.
-$Paths = @($Paths | Where-Object { $_ } | ForEach-Object { (Resolve-Path $_).Path })
+$Paths = @($Paths | Where-Object { $_ } | ForEach-Object { (Resolve-Path -LiteralPath $_).Path })
 Set-Location (Split-Path -Parent $PSScriptRoot)
 $rules = 'IDE0011', 'IDE0161', 'IDE2000', 'IDE2001', 'IDE2003'
 
