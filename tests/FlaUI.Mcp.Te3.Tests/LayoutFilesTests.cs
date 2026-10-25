@@ -1,10 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
 /// <summary>
-/// te3_layout snapshot and restore of the three settings files TE3 rewrites on close; temporary folders only, never the
+/// te3_layout snapshot and restore of layout settings; temporary folders only, never the
 /// user's %LocalAppData%\TabularEditor3.
 /// </summary>
 public sealed class LayoutFilesTests : IDisposable
@@ -18,7 +19,10 @@ public sealed class LayoutFilesTests : IDisposable
         Directory.CreateDirectory(settings);
         File.WriteAllText(Path.Combine(settings, "Layouts.json"), """{"Version":2,"Layouts":[]}""");
         File.WriteAllText(Path.Combine(settings, "UiPreferences.json"), """{"MainWindowState":"Normal"}""");
-        File.WriteAllText(Path.Combine(settings, "Preferences.json"), """{"Mcp":{"Port":42100}}""");
+        File.WriteAllText(
+            Path.Combine(settings, "Preferences.json"),
+            """{"Mcp":{"Port":42100,"AccessToken":"synthetic-token"},"AiProvider":{"ApiKey":"synthetic-key"}}"""
+        );
         File.WriteAllText(Path.Combine(settings, "RecentFiles.json"), "[]");
     }
 
@@ -27,13 +31,22 @@ public sealed class LayoutFilesTests : IDisposable
     private string Snapshot => Path.Combine(root, "snapshot");
 
     [Fact]
-    public void ASnapshotCopiesTheThreeFilesAndRecordsTheirHashes()
+    public void ASnapshotCopiesOnlyLayoutFilesAndRecordsTheirHashes()
     {
         var result = JsonSerializer.SerializeToElement(LayoutFiles.Snapshot(settings, Snapshot));
 
-        Assert.Equal(3, Directory.GetFiles(Snapshot, "*.json").Count(f => Path.GetFileName(f) != LayoutFiles.Manifest));
+        Assert.Equal(2, Directory.GetFiles(Snapshot, "*.json").Count(f => Path.GetFileName(f) != LayoutFiles.Manifest));
         Assert.True(File.Exists(Path.Combine(Snapshot, LayoutFiles.Manifest)));
         Assert.False(File.Exists(Path.Combine(Snapshot, "RecentFiles.json")));
+        Assert.False(File.Exists(Path.Combine(Snapshot, "Preferences.json")));
+        Assert.DoesNotContain(
+            "synthetic-token",
+            string.Join("\n", Directory.GetFiles(Snapshot).Select(File.ReadAllText))
+        );
+        Assert.DoesNotContain(
+            "synthetic-key",
+            string.Join("\n", Directory.GetFiles(Snapshot).Select(File.ReadAllText))
+        );
         // The reply carries each file's hash, as the snapshot's own list does.
         Assert.Equal(
             ArtifactFiles.Sha256(Path.Combine(settings, "Layouts.json")),
@@ -54,12 +67,17 @@ public sealed class LayoutFilesTests : IDisposable
     {
         LayoutFiles.Snapshot(settings, Snapshot);
         File.WriteAllText(Path.Combine(settings, "Layouts.json"), """{"Version":2,"Layouts":["preset"]}""");
+        File.WriteAllText(
+            Path.Combine(settings, "Preferences.json"),
+            """{"Mcp":{"AccessToken":"new-synthetic-token"}}"""
+        );
 
         var result = JsonSerializer.SerializeToElement(
             LayoutFiles.Restore(Snapshot, settings, te3Running: false, whileRunning: false)
         );
 
         Assert.Equal("""{"Version":2,"Layouts":[]}""", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
+        Assert.Contains("new-synthetic-token", File.ReadAllText(Path.Combine(settings, "Preferences.json")));
         Assert.True(result.GetProperty("verified").GetBoolean());
     }
 
@@ -83,7 +101,7 @@ public sealed class LayoutFilesTests : IDisposable
     public void ASnapshotChangedSinceItWasTakenIsNotRestored()
     {
         LayoutFiles.Snapshot(settings, Snapshot);
-        File.WriteAllText(Path.Combine(Snapshot, "Preferences.json"), "tampered");
+        File.WriteAllText(Path.Combine(Snapshot, "UiPreferences.json"), "tampered");
         File.WriteAllText(Path.Combine(settings, "Layouts.json"), "current");
 
         Assert.Throws<InvalidOperationException>(() =>
@@ -107,9 +125,27 @@ public sealed class LayoutFilesTests : IDisposable
         Assert.False(File.Exists(Path.Combine(settings, "Layouts.json")));
         Assert.Equal(["Layouts.json"], result.GetProperty("removed").EnumerateArray().Select(e => e.GetString()));
         Assert.Equal(
-            ArtifactFiles.Sha256(Path.Combine(settings, "Preferences.json")),
-            result.GetProperty("restored").GetProperty("Preferences.json").GetString()
+            ArtifactFiles.Sha256(Path.Combine(settings, "UiPreferences.json")),
+            result.GetProperty("restored").GetProperty("UiPreferences.json").GetString()
         );
+        Assert.False(result.GetProperty("restored").TryGetProperty("Preferences.json", out _));
+        Assert.Contains("synthetic-token", File.ReadAllText(Path.Combine(settings, "Preferences.json")));
+    }
+
+    [Fact]
+    public void RestoreRejectsLegacySnapshotThatListsPreferencesBeforeAnyWrite()
+    {
+        LayoutFiles.Snapshot(settings, Snapshot);
+        var manifest = Path.Combine(Snapshot, LayoutFiles.Manifest);
+        var list = JsonNode.Parse(File.ReadAllText(manifest))!.AsObject();
+        list["Files"]!["Preferences.json"] = "UNTRUSTED";
+        File.WriteAllText(manifest, list.ToJsonString());
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "current");
+
+        Assert.Throws<InvalidOperationException>(() =>
+            LayoutFiles.Restore(Snapshot, settings, te3Running: false, whileRunning: false)
+        );
+        Assert.Equal("current", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
     }
 
     private Te3Layout Tool(Te3Interaction interaction, Func<int[]>? running = null) =>

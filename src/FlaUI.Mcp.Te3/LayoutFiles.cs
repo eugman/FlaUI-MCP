@@ -1,8 +1,9 @@
 using System.Text.Json;
 
 /// <summary>
-/// The settings files that carry TE3's layout across launches (observed 3.27.1): TE3 rewrites Layouts.json,
-/// UiPreferences.json and Preferences.json when it closes, so a preset or a crash in one run carries into the next.
+/// The settings files that carry TE3's layout across launches (observed 3.27.1): TE3 rewrites Layouts.json
+/// and UiPreferences.json when it closes, so a preset or a crash in one run carries into the next.
+/// Preferences.json also contains connection and provider credentials and must never enter a layout snapshot.
 /// A snapshot copies them with their hashes; a restore checks the snapshot is unchanged, copies it back and reads it
 /// back.
 /// </summary>
@@ -10,7 +11,7 @@ internal static class LayoutFiles
 {
     public const string Manifest = "layout-snapshot.json";
 
-    public static readonly string[] Names = ["Layouts.json", "UiPreferences.json", "Preferences.json"];
+    public static readonly string[] Names = ["Layouts.json", "UiPreferences.json"];
 
     /// <summary>Where snapshots go unless the host is told otherwise: under the host's own folder, never elsewhere.</summary>
     public static string DefaultRoot =>
