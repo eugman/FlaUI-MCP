@@ -58,6 +58,12 @@ jobs:
         "tag=$tag" >> $env:GITHUB_OUTPUT
         "version=$version" >> $env:GITHUB_OUTPUT
 
+    - name: Verify requested tag matches checkout
+      shell: pwsh
+      env:
+        RELEASE_TAG: ${{ steps.release.outputs.tag }}
+      run: pwsh -NoProfile -File scripts/verify-release-tag.ps1 -Tag $env:RELEASE_TAG -ExpectedCommit $env:GITHUB_SHA
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -137,6 +143,12 @@ jobs:
         echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
         echo "draft=$draft" >> "$GITHUB_OUTPUT"
         echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+    - name: Verify requested tag matches checkout
+      shell: pwsh
+      env:
+        RELEASE_TAG: ${{ steps.release.outputs.tag }}
+      run: pwsh -NoProfile -File scripts/verify-release-tag.ps1 -Tag $env:RELEASE_TAG -ExpectedCommit $env:GITHUB_SHA
 
     - name: Download all artifacts
       uses: actions/download-artifact@v4
