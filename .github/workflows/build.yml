@@ -1,9 +1,18 @@
 name: Build
 
-# On demand and on pull requests only (no push trigger), to save Actions minutes.
-# Lean on purpose: one Windows job that runs the same offline gate as the pre-push hook.
+# Code pushes get a cancellable hosted build; PRs and manual runs get the full offline gate.
+# Documentation-only changes do not spend runner minutes.
 # Release builds happen only in release.yml, on a tag.
 on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'plans/**'
+      - 'manifests/**'
+      - '.gitignore'
+      - 'LICENSE'
   pull_request:
     branches: [ main ]
     paths-ignore:
@@ -29,7 +38,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # the known-debt check compares with DEBT_BASE
+        fetch-depth: ${{ github.event_name == 'push' && 1 || 0 }}  # full history for the PR debt gate
     - uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x  # test runtime
@@ -37,6 +46,10 @@ jobs:
     # Formatting, analyzers (size and complexity limits) and the no-focus unit tests.
     # Integration tests are never run here: check.ps1 runs only its allowlist of offline projects.
     - name: Check
+      if: github.event_name != 'push'
       run: pwsh -NoProfile -File scripts/check.ps1
       env:
         DEBT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+    - name: Push build
+      if: github.event_name == 'push'
+      run: dotnet build src/FlaUI.Mcp/FlaUI.Mcp.csproj -c Release -p:IncludeLocalRecipes=false
