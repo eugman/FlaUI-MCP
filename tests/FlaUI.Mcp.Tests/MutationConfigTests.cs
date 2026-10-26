@@ -26,6 +26,7 @@ public sealed class MutationConfigTests
         "Core/Interaction/Heartbeat.cs",
         "Core/MutationGuard.cs",
         "Core/ProcessPolicy.cs",
+        "Core/WindowsToolAdapter.cs",
         "Core/HostPath.cs",
         "Core/DesktopLease.cs",
         "Core/AutomationRefusal.cs",
