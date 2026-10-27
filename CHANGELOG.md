@@ -106,7 +106,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Status tools are answered at once even when 32 requests are in flight or a stranded call holds the serial slot. A tool opts in with `McpToolAnnotations.Status` (read-only plus `StatusHint`); `windows_operation_status` does, and is also exempt by name.
 - `windows_screenshot` is annotated as a non-destructive, idempotent input tool, because `parkPointer` moves the pointer.
 - UI Automation focus and close report a pending or blocked provider in their outcome. Window state and placement check integrity first. The offline switch also covers process starts, window placement and UI Automation pattern calls, and the product test assemblies can install a fake desktop.
-- Coverage (`scripts/coverage.ps1`) and mutation testing (`scripts/mutation.ps1`, `check.ps1 -Mutation`) run against the offline tests only; see [docs/mutation.md](docs/mutation.md).
+- Coverage (`scripts/coverage.ps1`), `check.ps1 -Mutation`, and the default `scripts/mutation.ps1` parts select the offline tests. Explicit `mutation.ps1 -Part clicks`, `-Part input`, or `-Part pointer-integration` uses integration tests and takes the desktop; see [docs/mutation.md](docs/mutation.md).
 
 ### Added
 - `te3_layout` on the TE3 companion server arranges TE3 for a screenshot. `close` and `keep` hide docked panes by title (document tabs are never closed), and stop at a dialog such as a save prompt. `maximize-pane` and `restore-pane` use the pane's own buttons. `resize` drags the dock splitter until a pane is a given width or height, and reports the size reached. Pane titles match with or without TE3's " (Changed)" suffix. `te3_layout_read` lists docked panes and document tabs with bounds.

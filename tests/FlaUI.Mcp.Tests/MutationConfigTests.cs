@@ -5,8 +5,8 @@ using Xunit;
 namespace FlaUI.Mcp.Tests;
 
 /// <summary>
-/// Mutation testing runs every test once per mutant. It must only ever run this offline project: the
-/// integration tests launch apps and take the desktop from whoever is using the machine.
+/// The default mutation parts select this offline project; explicit pointer-integration parts select
+/// integration tests and take the desktop. These tests check configured safeguards, not runtime isolation.
 /// </summary>
 public sealed class MutationConfigTests
 {
@@ -225,7 +225,9 @@ public sealed class MutationConfigTests
         Assert.Contains("'--test-project', $offlineProject", script);
         Assert.Contains("$offlineProject = 'FlaUI.Mcp.Tests.csproj'", script);
         Assert.Contains("IsSolutionContext: True", script);
-        Assert.Contains("throw \"Mutation testing ($name) aborted before running tests", script);
+        Assert.Contains("tests may already have started", script);
+        Assert.DoesNotContain("aborted before running tests", script);
+        Assert.Contains("WaitForExit(200)", script);
     }
 
     [Fact]
@@ -239,7 +241,7 @@ public sealed class MutationConfigTests
     }
 
     [Fact]
-    public void EveryTestThatRunsAnInputToolInstallsTheFakeDesktop()
+    public void DirectInputToolConstructionAndLocalHelpersRequireFakeInstallation()
     {
         var tool = new Regex(
             @"new (SendKeysTool|TypeTool|FillTool|ClickTool|MouseTool|PasteTool|WindowStateTool|FocusWindowTool|CloseWindowTool|LaunchTool|WindowPlacementTool|BatchTool|ScreenshotTool)\("
