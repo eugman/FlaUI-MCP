@@ -43,8 +43,9 @@ if (-not $Mutation) { return }
 
 # Stryker builds in place, so it runs on an exported copy of HEAD under local/build-background.
 # Commit first: uncommitted changes are not mutated. One test runner, and a hard wall-clock cap.
-# It never runs desktop tests: stryker-guard.ps1 stops it at startup, before any test runs, if it finds another test
-# project, any *IntegrationTests* project, or more tests than the offline run above.
+# The guard checks Stryker's reported startup project and test count before its first test run; it stops
+# on another project, any *IntegrationTests* project, or more tests than the offline run above. This does
+# not prove that every test body in the selected project avoids the desktop.
 . (Join-Path $root 'scripts/stryker-guard.ps1')
 if (-not $offlineTests) { throw 'Could not read the offline test count; not starting Stryker.' }
 $copy = Join-Path $out 'stryker-te3'
