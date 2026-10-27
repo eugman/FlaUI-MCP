@@ -5,7 +5,8 @@ using FlaUI.Mcp.Core;
 namespace FlaUI.Mcp.Tools;
 
 /// <summary>
-/// Paste text through the clipboard. Typed keystrokes go through editor autocomplete; a paste does not.
+/// Paste text through the clipboard. Pasting can avoid per-keystroke autocomplete in code editors,
+/// though the target application may still transform pasted text.
 /// </summary>
 public sealed class PasteTool(
     ElementRegistry elements,

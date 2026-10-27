@@ -505,9 +505,8 @@ public class SessionManager : IDisposable
     }
 
     /// <summary>
-    /// List top-level windows using Win32 enumeration only. This never blocks,
-    /// even when an app's UI Automation provider is busy (e.g., held up by a
-    /// modal dialog opened from a pending Invoke call).
+    /// List top-level windows without waiting on the app's UI Automation provider.
+    /// Native enumeration and process metadata reads can still take time.
     /// </summary>
     public List<(string handle, string title, string? processName)> ListWindows()
     {
@@ -574,7 +573,7 @@ public class SessionManager : IDisposable
     public void FocusWindow(string handle, PendingInvokeTracker? pending = null)
     {
         OperationContext.Check();
-        // Prefer Win32 focus (never blocks); fall back to UIA for windows
+        // Prefer native focus to avoid waiting on the app's UIA provider; fall back to UIA for windows
         // registered before a native handle was captured.
         var hwnd = GetWindowHwnd(handle);
         if (hwnd != 0)
@@ -590,7 +589,7 @@ public class SessionManager : IDisposable
     public void CloseWindow(string handle, PendingInvokeTracker? pending = null)
     {
         OperationContext.Check();
-        // Prefer a Win32 WM_CLOSE (never blocks); fall back to UIA.
+        // Prefer posting Win32 WM_CLOSE without waiting on the app's UIA provider; fall back to UIA.
         var hwnd = GetWindowHwnd(handle);
         if (hwnd == 0)
         {
