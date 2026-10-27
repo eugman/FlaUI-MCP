@@ -229,9 +229,9 @@ public sealed class KeyboardMutationTests
             Args(new { handle, keys = new[] { "Tab", "Tab" } })
         );
 
-        // Where focus went afterwards depends on the live desktop, so only the dispatch note is checked.
+        // Where focus went afterwards depends on the live desktop, so only the pre-send observation is checked.
         Assert.StartsWith(
-            "Sent key sequence [Tab, Tab] to focused element (focus at dispatch: ",
+            "Sent key sequence [Tab, Tab] to focused element (focus before first send: ",
             result.Content[0].Text
         );
     }

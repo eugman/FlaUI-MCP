@@ -156,9 +156,8 @@ public sealed class PasteTool(
         // Read before pasting: "the control contains the text" is not evidence on its own,
         // because a field that already contained it reads the same either way.
         var before = ReadValue(element);
-        // Focus as it was when Ctrl+V was dispatched. Reading it afterwards names whatever the
-        // paste moved focus to — an autocomplete popup, say — not where the text went.
-        var dispatchFocus = InputDesktop.Current.FocusedControl();
+        // Focus sampled before Ctrl+V; it may change before the app processes the paste.
+        var preSendFocus = InputDesktop.Current.FocusedControl();
         input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
 
         // Ctrl+V is already dispatched. Nothing below may report a failure to paste: a
@@ -169,7 +168,7 @@ public sealed class PasteTool(
         {
             verdict = PasteEvidence(element, clipboardText, before);
             note =
-                SendKeysTool.DescribeFocus(dispatchFocus, policy, "focus at dispatch")
+                SendKeysTool.DescribeFocus(preSendFocus, policy, "focus before send")
                 + ". The clipboard now holds that text."
                 + verdict.Sentence;
         }
