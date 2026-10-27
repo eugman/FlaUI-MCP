@@ -442,7 +442,10 @@ public static partial class Win32Desktop
     /// Enumerate visible top-level windows, optionally restricted to a single process.
     /// </summary>
     /// <param name="processId">If set, only windows owned by this process are returned.</param>
-    public static IReadOnlyList<Win32WindowInfo> GetTopLevelWindows(int? processId = null)
+    public static IReadOnlyList<Win32WindowInfo> GetTopLevelWindows(int? processId = null) =>
+        EnumerateTopLevelWindows(processId, keepUnknownOwner: false);
+
+    private static IReadOnlyList<Win32WindowInfo> EnumerateTopLevelWindows(int? processId, bool keepUnknownOwner)
     {
         var result = new List<Win32WindowInfo>();
         EnumWindows(
@@ -453,7 +456,9 @@ public static partial class Win32Desktop
                     return true;
                 }
 
-                if (ReadWindow(hwnd, processId, GetWindowThreadProcessId, GetWindowText) is { } window)
+                if (
+                    ReadWindow(hwnd, processId, GetWindowThreadProcessId, GetWindowText, keepUnknownOwner) is { } window
+                )
                 {
                     result.Add(window);
                 }
@@ -609,12 +614,12 @@ public static partial class Win32Desktop
     /// <see cref="FindObstructions"/>. A window that disappears between enumeration and measurement
     /// is dropped rather than recorded with unknown bounds: transient shell windows come and go
     /// constantly, and treating a window that no longer exists as opaque refuses good captures.
-    /// A window whose process cannot be read is also omitted by <see cref="GetTopLevelWindows"/>.
-    /// That omission does not prove it disappeared; it limits what this observation can establish.
+    /// For occlusion only, a window whose process cannot be read is retained as an unknown
+    /// potential cover. The ordinary window list still omits it because it cannot be allowed by process.
     /// </summary>
     /// <returns>Visible top-level windows, front to back, each with its visible bounds.</returns>
     public static IReadOnlyList<WindowBounds> ObserveZOrder() =>
-        GetTopLevelWindows()
+        EnumerateTopLevelWindows(null, keepUnknownOwner: true)
             .Select(w => new WindowBounds(w, GetVisibleBounds(w.Hwnd), CanCover(w.Hwnd)))
             .Where(entry => entry.Bounds != null || IsWindowVisible(entry.Window.Hwnd))
             .ToArray();

@@ -4,7 +4,7 @@ using Xunit;
 
 namespace FlaUI.Mcp.Tests;
 
-/// <summary>Win32 reads that fail report nothing, so a stale out value or buffer cannot pass a check.</summary>
+/// <summary>Failed Win32 reads never pass stale out values; unknown owners still block occlusion proof.</summary>
 public sealed class Win32ReadFailureTests
 {
     private const uint StaleProcessId = 4242;
@@ -67,6 +67,26 @@ public sealed class Win32ReadFailureTests
     {
         Assert.Null(Win32Desktop.ReadWindow(0, null, FailedOwnerRead, ShortTextRead));
         Assert.Null(Win32Desktop.ReadWindow(0, (int)StaleProcessId, FailedOwnerRead, ShortTextRead));
+    }
+
+    [Fact]
+    public void OcclusionReadKeepsAnUnknownOwnerAsPotentialCover()
+    {
+        var unknown = Win32Desktop.ReadWindow(0, null, FailedOwnerRead, ShortTextRead, keepUnknownOwner: true);
+
+        Assert.NotNull(unknown);
+        Assert.Equal(0, unknown.ProcessId);
+        var target = new Win32WindowInfo(42, "Target", 5151, true, false, false);
+        var observed = new[]
+        {
+            new Win32Desktop.WindowBounds(unknown, new System.Drawing.Rectangle(0, 0, 100, 100)),
+            new Win32Desktop.WindowBounds(target, new System.Drawing.Rectangle(0, 0, 100, 100)),
+        };
+        Assert.False(
+            Win32Desktop
+                .FindObstructions(observed, target.Hwnd, target.ProcessId, new System.Drawing.Rectangle(10, 10, 20, 20))
+                .IsClean
+        );
     }
 
     [Fact]

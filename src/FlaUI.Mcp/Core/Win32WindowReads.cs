@@ -2,7 +2,7 @@ namespace FlaUI.Mcp.Core;
 
 /// <summary>
 /// The Win32 reads that can fail without throwing, behind delegates so offline tests can make them fail.
-/// A failed read gives 0 or null, never a value left over in the out parameter or buffer.
+/// A failed primitive read gives 0 or null, never a value left over in the out parameter or buffer.
 /// </summary>
 public static partial class Win32Desktop
 {
@@ -40,18 +40,20 @@ public static partial class Win32Desktop
     /// <summary>
     /// A visible top-level window as <see cref="GetTopLevelWindows"/> lists it, or null when it is skipped:
     /// another process's window when <paramref name="processId"/> is set, or a window whose owner cannot be
-    /// read. A failed process read does not prove the window was destroyed; it cannot be assigned to a
-    /// process filter or allowlist, so this enumeration omits it. An untitled window keeps an empty title.
+    /// read. A failed process read does not prove the window was destroyed; ordinary enumeration omits it
+    /// because it cannot pass a process allowlist. Occlusion enumeration retains it with PID 0 when
+    /// <paramref name="keepUnknownOwner"/> is true. An untitled window keeps an empty title.
     /// </summary>
     internal static Win32WindowInfo? ReadWindow(
         nint hwnd,
         int? processId,
         ThreadProcessReader owner,
-        WindowTextReader title
+        WindowTextReader title,
+        bool keepUnknownOwner = false
     )
     {
         var pid = OwnerProcessId(hwnd, owner);
-        if (pid == 0 || (processId.HasValue && pid != processId.Value))
+        if ((pid == 0 && !keepUnknownOwner) || (processId.HasValue && pid != processId.Value))
         {
             return null;
         }
