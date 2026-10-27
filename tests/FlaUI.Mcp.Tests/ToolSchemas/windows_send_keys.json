@@ -23,7 +23,7 @@
       },
       "expectFocusClass": {
         "type": "string",
-        "description": "Abort without sending unless the focused control\u0027s window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. Every reply names the focused class, so run once to discover it."
+        "description": "Abort without sending unless the observed focused control\u0027s window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. A mismatch refusal reports the observed class when available."
       },
       "ref": {
         "type": "string",

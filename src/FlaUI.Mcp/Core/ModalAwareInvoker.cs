@@ -10,7 +10,7 @@ public enum PatternCallOutcome
     /// <summary>The pattern call returned within the grace period.</summary>
     Completed,
 
-    /// <summary>A modal dialog opened; the pattern call is still executing in the background.</summary>
+    /// <summary>A modal dialog was observed while the pattern call had not yet returned to the waiter.</summary>
     ModalDetected,
 
     /// <summary>The pattern call did not return within the grace period and no modal was detected.</summary>
@@ -45,18 +45,19 @@ public sealed record PatternCallResult(
 }
 
 /// <summary>
-/// Executes UI Automation pattern calls (Invoke, Toggle, Select, ...) so that a
-/// handler which opens a modal dialog does not hang the calling tool.
+/// Executes UI Automation pattern calls (Invoke, Toggle, Select, ...) on a
+/// background task so a handler that opens a modal can return a pending or
+/// detected-modal outcome without waiting for that dialog to close.
 ///
 /// Background: UIA pattern calls are synchronous cross-process calls. In WinForms
 /// and many other frameworks, a button handler that calls ShowDialog() will not
-/// return until the dialog closes — so the pattern call, and with it the entire
-/// UIA provider of the target process, stays blocked for as long as the dialog
-/// is open. This class runs the call on a background thread and watches the
-/// target process's top-level windows via non-blocking Win32 APIs. When a new
-/// window appears (or an existing window is disabled by a modal), it reports
-/// ModalDetected right away so the caller can interact with the dialog instead
-/// of timing out.
+/// return until the dialog closes. The pattern call can remain pending, and
+/// further UIA reads of that process may also block. This class runs the call
+/// on a background thread and polls the target process's top-level windows
+/// without waiting on that UIA provider. If it observes a modal before the
+/// grace period ends, it reports ModalDetected so the caller can interact
+/// with the dialog. Failed native reads or a modal appearing between polls
+/// can prevent detection.
 /// </summary>
 public static class ModalAwareInvoker
 {

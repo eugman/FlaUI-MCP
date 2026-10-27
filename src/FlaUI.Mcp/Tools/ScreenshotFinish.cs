@@ -71,7 +71,7 @@ public partial class ScreenshotTool
         return result;
     }
 
-    private static ShotJudgement Judge(ShotRequest request, Shot shot)
+    private ShotJudgement Judge(ShotRequest request, Shot shot)
     {
         var windowDpi = DpiUtility.WindowDpi(shot.TargetHwnd);
         var monitorDpi = DpiUtility.MonitorDpi(shot.TargetHwnd);
@@ -107,7 +107,8 @@ public partial class ScreenshotTool
             occlusion,
             dpiWarning,
             request.AllowOccludedPixels,
-            ScreenshotChecks.UncheckedReason(shot.Method, guardTarget, shot.SourceBounds)
+            ScreenshotChecks.UncheckedReason(shot.Method, guardTarget, shot.SourceBounds),
+            _processPolicy
         );
         return new ShotJudgement(verdict, occlusion, windowDpi, monitorDpi, dpiWarning);
     }
@@ -186,7 +187,7 @@ public partial class ScreenshotTool
     }
 
     /// <summary>Add the metadata block: method, bounds, sizes, DPI and occlusion flags, located refs.</summary>
-    private static void Annotate(
+    private void Annotate(
         McpToolResult result,
         ShotRequest request,
         Shot shot,
@@ -222,7 +223,7 @@ public partial class ScreenshotTool
             // Tri-state. Null means the capture could not be checked, which is not the same
             // as checked and clean, and must not read as reassurance either.
             occluded = occlusion is null ? (bool?)null : !occlusion.IsClean,
-            occlusionWarning = ScreenshotChecks.DescribeOcclusion(occlusion),
+            occlusionWarning = ScreenshotChecks.DescribeOcclusion(occlusion, _processPolicy),
             located,
             screenFallback = shot.Method == "screen-fallback",
         };

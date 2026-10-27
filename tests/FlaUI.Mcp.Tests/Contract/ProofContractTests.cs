@@ -98,7 +98,8 @@ public sealed class ProofContractTests
             "Expanded"
         );
 
-        Assert.Equal(new Proof("verified", "Expanded", "Expanded", "ExpandCollapse", false), reply.Outcome!.Proof);
+        Assert.Equal(new Proof("self-reported", "Expanded", "Expanded", "ExpandCollapse", false), reply.Outcome!.Proof);
+        Assert.Equal("unverified", ToolRegistry.WithDispatch(reply, 1).Outcome!.Status);
     }
 
     [Fact]

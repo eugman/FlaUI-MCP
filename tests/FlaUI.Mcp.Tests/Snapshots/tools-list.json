@@ -782,15 +782,15 @@
           "items": {
             "type": "string"
           },
-          "description": "Element refs whose rectangles to measure in the returned image, reported as {ref, x, y, width, height, clipped} in image pixels. Use this instead of converting windows_find bounds yourself: those are screen coordinates from an earlier observation, they go stale when the layout moves, and the offset between the two is not constant across DPI states. Implies includeMetadata. Refused when the capture cannot be trusted to map 1:1."
+          "description": "Element refs whose rectangles to translate into returned-image pixels, reported as {ref, x, y, width, height, clipped}. Bounds are read after the pixels, so movement during capture can still make them stale; inspect the image. Avoid converting older windows_find screen bounds yourself: the offset changes across DPI states. Implies includeMetadata. Refused when the capture cannot map 1:1."
         },
         "parkPointer": {
           "type": "boolean",
-          "description": "Move the pointer off the window first, so no tooltip or hover highlight lands in the image (default false). Use it for any capture that will be published."
+          "description": "Try to move the pointer off the window before capture (default false). A refused or unverified park can leave tooltip or hover state in the image and adds a warning; inspect any capture that will be published."
         },
         "allowOccludedPixels": {
           "type": "boolean",
-          "description": "Capture screen pixels even when another application\u0027s window covers part of the target (default false). Only for deliberately capturing a partly covered window: the image will contain whatever is on top. strictNative is usually the better answer, since it renders the window\u0027s own surface and is unaffected by what is in front of it."
+          "description": "Capture screen pixels even when another application\u0027s window covers part of the target (default false). Use only when deliberately capturing a partly covered window: the image may include whatever is on top. Try strictNative to avoid foreground pixels, but inspect the result because some windows cannot supply a usable native image."
         }
       }
     },
@@ -831,7 +831,7 @@
         },
         "expectFocusClass": {
           "type": "string",
-          "description": "Abort without sending unless the focused control\u0027s window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. Every reply names the focused class, so run once to discover it."
+          "description": "Abort without sending unless the observed focused control\u0027s window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. A mismatch refusal reports the observed class when available."
         },
         "ref": {
           "type": "string",

@@ -125,8 +125,8 @@ public partial class ClickTool
 
     /// <summary>
     /// The reply with its proof: the pattern state read back (from the same provider that acted, so not
-    /// independent) against the state expected. A state that agreed but was followed by a dialog a moment later
-    /// is unsettled, not verified: the dialog may undo or supersede it.
+    /// independent) against the state expected. Agreement is self-reported, not independent proof. A state
+    /// that agreed but was followed by a dialog a moment later is unsettled: the dialog may undo or supersede it.
     /// </summary>
     internal static McpToolResult CheckedPatternResult(
         PatternCallResult result,
@@ -135,11 +135,22 @@ public partial class ClickTool
         string? expected
     )
     {
-        var reply = CheckedPatternResult(result, verdict.Message, verdict.Verification);
-        var kind =
-            verdict.Verification == Proof.Verified && result.ModalTitle != null
-                ? Proof.Unsettled
-                : verdict.Verification;
+        var selfReported = verdict.Verification == Proof.Verified && result.ModalTitle == null;
+        var message = selfReported
+            ? verdict.Message
+                + "; the same UI Automation provider reported this state, so it is not independently verified."
+            : verdict.Message;
+        var reply = CheckedPatternResult(result, message, verdict.Verification);
+        var kind = verdict.Verification;
+        if (verdict.Verification == Proof.Verified && result.ModalTitle != null)
+        {
+            kind = Proof.Unsettled;
+        }
+        else if (selfReported)
+        {
+            kind = Proof.SelfReported;
+        }
+
         return kind == null
             ? reply
             : reply with

@@ -19,7 +19,8 @@ internal static class ScreenshotChecks
 
     /// <summary>
     /// Convert a screen-space element rectangle into the coordinate space of the image actually
-    /// returned, so annotation coordinates come from the same observation as the pixels.
+    /// returned. The caller reads element bounds after capturing pixels, so this translation
+    /// does not prove the element stayed still between those reads.
     /// Deliberately never clamps: an element outside the crop is reported as outside rather than
     /// moved to the edge, because a plausible-looking wrong rectangle is what put annotation boxes
     /// on the wrong control. The title-bar offset this removes is not a constant — it
@@ -134,7 +135,8 @@ internal static class ScreenshotChecks
         Win32Desktop.OcclusionCheck? occlusion,
         string? dpiWarning,
         bool allowOccludedPixels,
-        string? uncheckedReason = null
+        string? uncheckedReason = null,
+        ProcessPolicy? policy = null
     )
     {
         var warnings = new List<string>();
@@ -145,8 +147,8 @@ internal static class ScreenshotChecks
             warnings.Add(uncheckedReason);
         }
         // DPI mismatch never refuses: a screen-pixel capture in that state returns literally what is
-        // on the glass, which for photography is the correct result, and it is permanent for
-        // DPI-unaware apps where no remedy exists.
+        // on the glass, which for photography is the correct result. DPI-unaware apps can
+        // keep a mismatch until their scaling environment changes.
         if (dpiWarning != null)
         {
             warnings.Add(dpiWarning);
@@ -157,7 +159,7 @@ internal static class ScreenshotChecks
             return new(null, warnings);
         }
 
-        var finding = DescribeOcclusion(occlusion)!;
+        var finding = DescribeOcclusion(occlusion, policy)!;
         // The blocked-provider fallback exists precisely because a modal is up; refusing there would
         // leave it no way to capture, and strictNative is already unavailable on that path.
         if (occlusionExempt || allowOccludedPixels || !ReadsScreenPixels(method))
@@ -180,8 +182,9 @@ internal static class ScreenshotChecks
     /// attached both to a refusal and to an image the caller asked for anyway.
     /// </summary>
     /// <param name="occlusion">The observation to describe, or null.</param>
+    /// <param name="policy">Redacts an obstruction whose owner is unknown or outside a hard app allowlist.</param>
     /// <returns>The finding, or null when the capture was clean or unchecked.</returns>
-    internal static string? DescribeOcclusion(Win32Desktop.OcclusionCheck? occlusion)
+    internal static string? DescribeOcclusion(Win32Desktop.OcclusionCheck? occlusion, ProcessPolicy? policy = null)
     {
         if (occlusion is null || occlusion.IsClean)
         {
@@ -194,11 +197,19 @@ internal static class ScreenshotChecks
                 + "shown to be unobstructed.";
         }
 
+        policy ??= ProcessPolicy.AllowAll;
         var named = occlusion.Obstructions.Select(w =>
-            $"\"{(string.IsNullOrEmpty(w.Title) ? "untitled" : w.Title)}\" (HWND {w.Hwnd}, PID {w.ProcessId})"
-        );
-        return "Another application's window covers part of the capture area, so these pixels are not "
-            + $"the target's: {string.Join("; ", named)}.";
+        {
+            if (policy.IsRestricted && (w.ProcessId == 0 || !policy.IsProcessAllowed(w.ProcessId)))
+            {
+                return "window outside the app allowlist (details hidden)";
+            }
+
+            var title = string.IsNullOrEmpty(w.Title) ? "untitled" : w.Title;
+            return $"\"{title}\" (HWND {w.Hwnd}, PID {w.ProcessId})";
+        });
+        return "The capture area is covered or may be covered by another window; screen pixels may not "
+            + $"show only the target: {string.Join("; ", named)}.";
     }
 
     internal static T CaptureForeground<T>(int processId, ProcessPolicy policy, Func<T> capture)

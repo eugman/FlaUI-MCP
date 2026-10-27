@@ -10,8 +10,8 @@ namespace FlaUI.Mcp.Core;
 /// <param name="Hwnd">Native window handle.</param>
 /// <param name="Title">Window title (may be empty).</param>
 /// <param name="ProcessId">Owning process id.</param>
-/// <param name="IsEnabled">Whether the window accepts input (modal dialogs disable their owner).</param>
-/// <param name="IsToolWindow">Whether the window has WS_EX_TOOLWINDOW (excluded from window lists).</param>
+/// <param name="IsEnabled">Whether Win32 reports the window enabled (a modal dialog can disable its owner).</param>
+/// <param name="IsToolWindow">Whether the window has WS_EX_TOOLWINDOW (callers may exclude it from user-facing lists).</param>
 /// <param name="IsCloaked">Whether the window is DWM-cloaked (e.g., suspended UWP apps).</param>
 public sealed record Win32WindowInfo(
     nint Hwnd,
@@ -30,10 +30,10 @@ public sealed record Win32WindowInfo(
 }
 
 /// <summary>
-/// Win32-based desktop window enumeration and manipulation.
-/// All APIs used here read cached window metadata and never block on the target
-/// process's message loop, so they remain usable while a UI Automation provider
-/// is blocked (e.g., by a modal dialog opened from a pending Invoke call).
+/// Win32-based desktop window enumeration and manipulation. Window enumeration
+/// reads native metadata without walking the target's UI Automation tree, so it
+/// remains available when a pending UI Automation call blocks that provider.
+/// Other methods here can change window or clipboard state.
 /// </summary>
 public static partial class Win32Desktop
 {
@@ -133,7 +133,7 @@ public static partial class Win32Desktop
     }
 
     /// <summary>
-    /// Read the clipboard's Unicode text, or null when it holds none or cannot be opened.
+    /// Read clipboard Unicode text into a result whose Text is null when absent or unreadable.
     /// Needed because some editors expose no text to UI Automation at all — a Scintilla-based one
     /// has no Value or Text pattern, so selecting and copying is the only way to read it.
     /// </summary>
@@ -205,9 +205,9 @@ public static partial class Win32Desktop
     }
 
     /// <summary>
-    /// Replace the clipboard with Unicode text, excluded from clipboard history.
+    /// Replace the clipboard with Unicode text, requesting exclusion from clipboard history.
     /// A message-only window owns it, since an ownerless EmptyClipboard makes SetClipboardData fail.
-    /// Returns false when another process keeps the clipboard open.
+    /// Returns false when the clipboard cannot be opened after retries; allocation or write failures throw.
     /// </summary>
     internal static bool SetClipboardText(string text)
     {
@@ -442,7 +442,10 @@ public static partial class Win32Desktop
     /// Enumerate visible top-level windows, optionally restricted to a single process.
     /// </summary>
     /// <param name="processId">If set, only windows owned by this process are returned.</param>
-    public static IReadOnlyList<Win32WindowInfo> GetTopLevelWindows(int? processId = null)
+    public static IReadOnlyList<Win32WindowInfo> GetTopLevelWindows(int? processId = null) =>
+        EnumerateTopLevelWindows(processId, keepUnknownOwner: false);
+
+    private static IReadOnlyList<Win32WindowInfo> EnumerateTopLevelWindows(int? processId, bool keepUnknownOwner)
     {
         var result = new List<Win32WindowInfo>();
         EnumWindows(
@@ -453,7 +456,9 @@ public static partial class Win32Desktop
                     return true;
                 }
 
-                if (ReadWindow(hwnd, processId, GetWindowThreadProcessId, GetWindowText) is { } window)
+                if (
+                    ReadWindow(hwnd, processId, GetWindowThreadProcessId, GetWindowText, keepUnknownOwner) is { } window
+                )
                 {
                     result.Add(window);
                 }
@@ -544,8 +549,8 @@ public static partial class Win32Desktop
 
     /// <summary>
     /// Find the windows covering part of <paramref name="rect"/> at the moment
-    /// <paramref name="zOrder"/> was taken. Screen-pixel capture grabs whatever is on the glass, so
-    /// anything listed here lands in the image. Pure so it can be tested without a
+    /// <paramref name="zOrder"/> was taken. Screen-pixel capture can include front-window pixels,
+    /// so a listed obstruction makes the capture unverified. Pure so it can be tested without a
     /// desktop; callers supply the observation.
     /// </summary>
     /// <param name="zOrder">Visible top-level windows in z-order, front to back.</param>
@@ -609,12 +614,12 @@ public static partial class Win32Desktop
     /// <see cref="FindObstructions"/>. A window that disappears between enumeration and measurement
     /// is dropped rather than recorded with unknown bounds: transient shell windows come and go
     /// constantly, and treating a window that no longer exists as opaque refuses good captures.
-    /// The same holds for a window whose owner cannot be read: <see cref="GetTopLevelWindows"/> leaves it
-    /// out because it was destroyed between enumeration and the read, so it is treated as gone.
+    /// For occlusion only, a window whose process cannot be read is retained as an unknown
+    /// potential cover. The ordinary window list still omits it because it cannot be allowed by process.
     /// </summary>
     /// <returns>Visible top-level windows, front to back, each with its visible bounds.</returns>
     public static IReadOnlyList<WindowBounds> ObserveZOrder() =>
-        GetTopLevelWindows()
+        EnumerateTopLevelWindows(null, keepUnknownOwner: true)
             .Select(w => new WindowBounds(w, GetVisibleBounds(w.Hwnd), CanCover(w.Hwnd)))
             .Where(entry => entry.Bounds != null || IsWindowVisible(entry.Window.Hwnd))
             .ToArray();
@@ -711,8 +716,6 @@ public static partial class Win32Desktop
     /// A window paired with its bounds, as one observation. Bounds are read separately from
     /// enumeration, so null means the read failed and the window must be treated as opaque.
     /// </summary>
-    /// <param name="Window">The window.</param>
-    /// <param name="Bounds">Its screen rectangle, or null when it could not be read.</param>
     /// <param name="Window">The enumerated window.</param>
     /// <param name="Bounds">Its visible rectangle, or null when it could not be measured.</param>
     /// <param name="CanCover">Whether it can actually put pixels over what is beneath it.</param>

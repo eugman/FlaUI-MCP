@@ -6,7 +6,8 @@ namespace FlaUI.Mcp.Core;
 /// How a tool checked its effect: the verdict, what it observed and expected, where it read it (a pattern, the
 /// window rectangle, the foreground), and whether that read is independent of the channel that acted. Status follows
 /// the verdict: ok only for verified or no-op, failed for mismatch or not-applied, unverified otherwise. Hosts build
-/// theirs with <see cref="Compare"/> and must not hard-code verified.
+/// theirs with <see cref="Compare"/> where appropriate; callers must account for whether the read is independent
+/// before reporting a verified effect. This record does not enforce that distinction by itself.
 /// </summary>
 public sealed record Proof(
     [property: JsonPropertyName("verdict")] string Verdict,
@@ -34,7 +35,7 @@ public sealed record Proof(
     /// </summary>
     public const string Unsettled = "unsettled";
 
-    /// <summary>Verified when <paramref name="observed"/> equals <paramref name="expected"/>, unavailable when unread.</summary>
+    /// <summary>Compares values, returning verified when equal or unavailable when unread; it does not downgrade a same-channel read.</summary>
     public static Proof Compare(string? expected, string? observed, string source, bool independent)
     {
         string verdict;

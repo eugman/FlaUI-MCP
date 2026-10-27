@@ -5,7 +5,8 @@ using FlaUI.Mcp.Core;
 namespace FlaUI.Mcp.Tools;
 
 /// <summary>
-/// Paste text through the clipboard. Typed keystrokes go through editor autocomplete; a paste does not.
+/// Paste text through the clipboard. Pasting can avoid per-keystroke autocomplete in code editors,
+/// though the target application may still transform pasted text.
 /// </summary>
 public sealed class PasteTool(
     ElementRegistry elements,
@@ -110,7 +111,7 @@ public sealed class PasteTool(
         }
     }
 
-    /// <summary>Put the text on the clipboard, send Ctrl+V through guarded input, and report what arrived.</summary>
+    /// <summary>Put the text on the clipboard, send Ctrl+V through guarded input, and report the observed read-back.</summary>
     internal McpToolResult Paste(
         GuardedInput input,
         FlaUI.Core.AutomationElements.AutomationElement? element,
@@ -118,7 +119,7 @@ public sealed class PasteTool(
         string target
     )
     {
-        // Clipboard text uses CRLF; edit controls don't break lines on a bare LF.
+        // Clipboard text uses CRLF for controls that do not treat a bare LF as a line break.
         var clipboardText = text.ReplaceLineEndings("\r\n");
         // Replacing the user's clipboard is a change of its own, made before Ctrl+V can be refused, so it is
         // checked again (permission, foreground) right before the write and counted once written.
@@ -144,7 +145,7 @@ public sealed class PasteTool(
         }
     }
 
-    /// <summary>Send Ctrl+V through guarded input and report what arrived.</summary>
+    /// <summary>Send Ctrl+V through guarded input and report the observed read-back.</summary>
     private McpToolResult SendPaste(
         GuardedInput input,
         FlaUI.Core.AutomationElements.AutomationElement? element,
@@ -155,20 +156,19 @@ public sealed class PasteTool(
         // Read before pasting: "the control contains the text" is not evidence on its own,
         // because a field that already contained it reads the same either way.
         var before = ReadValue(element);
-        // Focus as it was when Ctrl+V was dispatched. Reading it afterwards names whatever the
-        // paste moved focus to — an autocomplete popup, say — not where the text went.
-        var dispatchFocus = InputDesktop.Current.FocusedControl();
+        // Focus sampled before Ctrl+V; it may change before the app processes the paste.
+        var preSendFocus = InputDesktop.Current.FocusedControl();
         input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
 
-        // Ctrl+V is already dispatched. Nothing below may report a failure to paste: a
-        // read-back problem is missing evidence, not an unsent keystroke.
+        // Ctrl+V is already dispatched. A later read-back problem cannot claim the keystroke
+        // was unsent; it may report missing evidence or an observed mismatch.
         string note;
         PasteVerdict verdict;
         try
         {
             verdict = PasteEvidence(element, clipboardText, before);
             note =
-                SendKeysTool.DescribeFocus(dispatchFocus, policy, "focus at dispatch")
+                SendKeysTool.DescribeFocus(preSendFocus, policy, "focus before send")
                 + ". The clipboard now holds that text."
                 + verdict.Sentence;
         }
@@ -187,9 +187,9 @@ public sealed class PasteTool(
     }
 
     /// <summary>
-    /// The reply with its verdict. A read-back that shows the paste did not apply (unchanged without the text,
-    /// or changed without it) is a failure; Ctrl+V went out, so the dispatch stays completed. An unchanged value
-    /// that already holds the text (identical text re-pasted) is not.
+    /// The reply with its verdict. An unchanged value without the text is unverified because the app may
+    /// process Ctrl+V later. A changed value without the text is a read-back mismatch. Dispatch stays
+    /// completed after Ctrl+V even when verification is unavailable or mismatched.
     /// </summary>
     internal static McpToolResult PasteReply(
         string text,
@@ -225,9 +225,9 @@ public sealed class PasteTool(
     }
 
     /// <summary>
-    /// Read the target back where it exposes a value, so the reply reports what arrived rather than
-    /// only that Ctrl+V was sent. A read-only editor, or an app that binds Ctrl+V to something else,
-    /// otherwise produces an identical success message.
+    /// Read the target back where it exposes a value, so the reply reports the observed value rather
+    /// than only that Ctrl+V was sent. A read-only editor or an app that binds Ctrl+V to something
+    /// else otherwise produces an identical dispatch message.
     /// </summary>
     /// <param name="element">The pasted-into element, or null for a ref-less paste.</param>
     /// <param name="expected">The text placed on the clipboard.</param>
@@ -256,12 +256,12 @@ public sealed class PasteTool(
 
         if (!supported)
         {
-            // Scintilla and similar editors expose no text at all; windows_get_clipboard plus a
-            // select-and-copy is the only way to see what they now contain.
+            // Scintilla and similar editors may expose no text to UIA; select-and-copy plus
+            // windows_get_clipboard is one way to inspect their contents.
             return new("unavailable", " Not verified: this control exposes no value to read back.");
         }
-        // Ctrl+V is posted, not processed, so an immediate read almost always still sees the old
-        // value. Poll for the change rather than reporting the race as a failed paste.
+        // Ctrl+V is dispatched before the app processes it. Poll for a bounded interval;
+        // an unchanged value at the deadline is not proof that the paste will never apply.
         var observed = SettledValue(
             () => ReadValue(element),
             before,
@@ -368,8 +368,8 @@ public sealed class PasteTool(
                     " Not verified: the control's value did not change, but it already contains the pasted text (re-pasting identical text changes nothing)."
                 )
                 : new(
-                    "not-applied",
-                    " Warning: the control's value did not change and does not contain the pasted text, so the paste did not apply."
+                    "not-established",
+                    " Not verified: the control's value did not change at read-back; the paste may still be processed later. Inspect state before retrying."
                 );
         }
 

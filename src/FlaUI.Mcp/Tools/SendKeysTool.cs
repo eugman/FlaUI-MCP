@@ -80,7 +80,7 @@ public class SendKeysTool : ToolBase
         public object? VerifyFocus { get; init; }
 
         [ToolDoc(
-            "Abort without sending unless the focused control's window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. Every reply names the focused class, so run once to discover it."
+            "Abort without sending unless the observed focused control's window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. A mismatch refusal reports the observed class when available."
         )]
         public string? ExpectFocusClass { get; init; }
 
@@ -157,7 +157,7 @@ public class SendKeysTool : ToolBase
             {
                 _elementRegistry.ResolveRef(refId, handle);
 
-                // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
+                // Fail fast if this app's UIA provider is blocked (element.Focus() may hang).
                 // Tip: calling windows_send_keys without a ref sends pure keyboard input to the
                 // focused element, which works even while the provider is blocked.
                 if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
@@ -185,8 +185,8 @@ public class SendKeysTool : ToolBase
             var targetName = string.IsNullOrWhiteSpace(refId) ? "focused element" : refId;
             var expectFocusClass = GetStringArgument(arguments, "expectFocusClass");
             var focus = InputDesktop.Current.FocusedControl();
-            // Where the first chord went. The loop overwrites `focus` as the sequence moves it.
-            var dispatchFocus = focus;
+            // Focus observed before the first chord. The loop overwrites `focus` as the sequence moves it.
+            var firstPreSendFocus = focus;
             foreach (var step in prepared)
             {
                 // Rechecked every step, not once: the previous chord can move focus, and a sequence
@@ -207,11 +207,11 @@ public class SendKeysTool : ToolBase
                 focus = InputDesktop.Current.FocusedControl();
             }
 
-            // "focus at dispatch" is where the input went; the after-state is reported only when
-            // it differs, because that difference is the thing worth noticing.
+            // These are sampled focus observations, not proof of which control processed the keys.
+            // Report the after-state only when it differs from the first pre-send observation.
             var focusNote =
-                DescribeFocus(dispatchFocus, _processPolicy, "focus at dispatch")
-                + (focus == dispatchFocus ? "" : DescribeFocus(focus, _processPolicy, "focus afterwards"));
+                DescribeFocus(firstPreSendFocus, _processPolicy, "focus before first send")
+                + (focus == firstPreSendFocus ? "" : DescribeFocus(focus, _processPolicy, "focus afterwards"));
             return Task.FromResult(
                 TextResult(
                     hasChord
@@ -236,10 +236,10 @@ public class SendKeysTool : ToolBase
     }
 
     /// <summary>
-    /// Describe where keyboard input actually landed. Ref-less and handle-only input goes to
-    /// whatever holds focus, and reporting only "focused element" is the difference between a
-    /// silent wrong-target send and a self-diagnosing one: two PageDowns aimed at a tree went into
-    /// a code editor holding unsaved changes and the reply gave no way to notice.
+    /// Describe the sampled keyboard focus near an input attempt. Ref-less and handle-only input
+    /// targets the foreground focus; an observed control helps diagnose a wrong-target send, but
+    /// focus can change between observation and input. An earlier two-PageDown attempt aimed at
+    /// a tree landed in a code editor holding unsaved changes without a useful focus note.
     /// </summary>
     /// <param name="focus">Observed focus, or null when none was reported.</param>
     /// <param name="policy">App allowlist; a focused window outside it is not described.</param>
@@ -336,16 +336,15 @@ public class SendKeysTool : ToolBase
     }
 
     /// <summary>
-    /// The Windows key opens UI (Start menu, Win+R, Win+E, ...) that always
-    /// belongs to processes outside any allowlist, so it is rejected while an
-    /// allowlist is active.
+    /// The Windows key can open system UI (Start menu, Win+R, Win+E, ...)
+    /// outside the allowed apps, so it is rejected while an allowlist is active.
     /// </summary>
     private string? CheckKeysAllowed(List<VirtualKeyShort> keys)
     {
         if (_processPolicy.IsRestricted && keys.Any(k => k is VirtualKeyShort.LWIN or VirtualKeyShort.RWIN))
         {
             return "The Windows key is disabled while the app allowlist is active, "
-                + "because it opens system UI outside the allowed apps.";
+                + "because it can open system UI outside the allowed apps.";
         }
 
         return null;

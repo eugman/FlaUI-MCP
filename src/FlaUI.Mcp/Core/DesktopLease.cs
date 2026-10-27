@@ -5,24 +5,25 @@ namespace FlaUI.Mcp.Core;
 
 /// <summary>
 /// Physical input is global, so its lease is machine-wide: a named mutex every FlaUI-MCP host on the machine shares
-/// (<see cref="DefaultName"/>), taken after an in-process gate. Two hosts never interleave input, a recording host
-/// blocks a second one, and a host that exits while holding it abandons the mutex, which the next host takes over.
+/// (<see cref="DefaultName"/>), taken after an in-process gate. Hosts using this lease do not interleave their
+/// guarded input; a host holding it blocks another. A host that exits while holding it abandons the mutex, which
+/// the next host can take over. Input from other programs or unguarded paths is outside this lease.
 /// The mutex is owned by one dedicated thread, so a lease may be released from any thread. Offline tests set
 /// <see cref="NameVariable"/> to a name of their own process, so they neither wait on nor block a real host; the
-/// override counts only with FLAUI_OFFLINE_TESTS=1.
+/// override counts only when FLAUI_OFFLINE_TESTS=1; the offline input seam refuses desktop input.
 /// </summary>
 internal static class DesktopLease
 {
     public const string DefaultName = @"Global\FlaUI-MCP-DesktopInput";
 
-    /// <summary>Overrides the mutex name; only the offline test module initializer sets it.</summary>
+    /// <summary>Overrides the mutex name when the offline test flag is enabled.</summary>
     public const string NameVariable = "FLAUI_LEASE_NAME";
 
     private static readonly SemaphoreSlim InProcess = new(1, 1);
     private static readonly Lazy<MutexOwner> Owner = new(() => new MutexOwner(Name));
     private static int held;
 
-    /// <summary>The mutex name: the override only in an offline test process, so no host can be pointed elsewhere.</summary>
+    /// <summary>The mutex name; an override requires the offline test flag.</summary>
     public static string Name =>
         NameFor(
             Environment.GetEnvironmentVariable(InputDesktop.OfflineVariable),
@@ -98,7 +99,7 @@ internal static class DesktopLease
             thread.Start();
         }
 
-        // Every exception on this thread goes back to the caller: a failure here must refuse input, never end the host.
+        // Mutex-open and queued-step failures are returned to the caller as input refusals.
         private void Run(Func<Mutex> open)
         {
             try

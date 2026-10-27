@@ -20,7 +20,9 @@ Run `pwsh scripts/setup.ps1` once after cloning. It installs CSharpier and turns
 
 ## Coverage and mutation testing
 
-Both default workflows select the no-focus tests in `tests/FlaUI.Mcp.Tests`, and build into `local/build-background` (gitignored).
+The local pre-push gate and hosted PR/manual gate select the no-focus tests in
+`tests/FlaUI.Mcp.Tests` and build into `local/build-background` (gitignored).
+The hosted push workflow runs only a Release build, as described above.
 
 | Command | What it does |
 |---|---|
