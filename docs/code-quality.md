@@ -29,9 +29,9 @@ Both use only the no-focus tests in `tests/FlaUI.Mcp.Tests`, and build into `loc
 
 Mutation testing never runs the desktop tests. Stryker runs every test once per mutant, and the integration tests launch apps and take the desktop from whoever is using the machine. Started from the repository root, Stryker finds `FlaUI.Mcp.slnx` and runs every test project in it, whatever `test-projects` says. So `mutation.ps1` runs Stryker inside `tests/FlaUI.Mcp.Tests` with that project named explicitly, and it stops Stryker if the options it logs before building show a solution context or another test project, or if discovery finds more tests than the offline project has. The offline tests also set `FLAUI_OFFLINE_TESTS=1`, which makes the real desktop refuse all input, so every test that runs an input tool installs the fake desktop. `MutationConfigTests` checks all of this.
 
-`pwsh scripts/mutation.ps1 -Part pointer-integration` is the one run that uses the desktop: it mutates the pointer files against the integration tests (see [mutation.md](mutation.md#the-one-deliberate-exception)). It is never part of `-Mutation` or `-Part all`.
+`pwsh scripts/mutation.ps1 -Part pointer-integration` is the one run that uses the desktop: it mutates the pointer files against the integration tests (see [mutation.md](mutation.md)). It is never part of `-Mutation` or `-Part all`.
 
-`check.ps1` runs mutation testing only with `-Mutation`; it is off by default. Each surviving mutant gets a test that kills it, or a line in [mutation.md](mutation.md) saying why it is equivalent.
+`check.ps1` runs mutation testing only with `-Mutation`; it is off by default. Investigate survivors, add focused tests for actionable gaps, and keep run-specific judgments with the ignored local reports. See [mutation.md](mutation.md) for the current procedure.
 
 ## Limits
 
