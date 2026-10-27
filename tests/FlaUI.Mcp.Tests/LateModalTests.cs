@@ -248,7 +248,7 @@ public sealed class LateModalTests
     }
 
     [Fact]
-    public void AVerifiedStateWithNoLateDialogStaysVerified()
+    public void AStateReadBackByTheSameProviderRemainsUnverified()
     {
         var reply = ClickTool.CheckedPatternResult(
             Completed(null),
@@ -258,9 +258,9 @@ public sealed class LateModalTests
         );
         var result = ToolRegistry.WithDispatch(reply, 1);
 
-        Assert.Equal("verified", result.Outcome!.Proof!.Verdict);
-        Assert.Equal("ok", result.Outcome.Status);
-        Assert.Equal("Toggled Pane to On", result.Content[0].Text);
+        Assert.Equal("self-reported", result.Outcome!.Proof!.Verdict);
+        Assert.Equal("unverified", result.Outcome.Status);
+        Assert.Contains("not independently verified", result.Content[0].Text);
     }
 
     [Fact]
