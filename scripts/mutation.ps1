@@ -4,11 +4,12 @@
 # first; reports and logs go to local/build-background/StrykerOutput/<part>. -Part runs one part.
 # -Concurrency overrides the config's 2, e.g. 1 when other suites share the machine.
 #
-# Mutation testing must never run the integration tests: they launch apps and take the desktop. From the
+# The default offline parts must not select integration tests: they launch apps and take the desktop. From the
 # repository root Stryker finds FlaUI.Mcp.slnx and runs every test project in it, whatever test-projects
 # says. So Stryker runs inside tests/FlaUI.Mcp.Tests with that project named explicitly, and the run is
 # stopped before its first test when its log shows a solution context, another test project, or more
-# tests than the offline project has.
+# tests than the offline project has. This checks project selection, not whether every test body avoids the
+# desktop or whether code bypasses the InputDesktop offline seam.
 #
 # The one deliberate exception is the pointer-integration work, in two parts: -Part clicks and -Part input
 # (-Part pointer-integration runs both, one after the other). The pointer code's mutants need real UI

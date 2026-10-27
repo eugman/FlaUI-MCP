@@ -20,14 +20,14 @@ Run `pwsh scripts/setup.ps1` once after cloning. It installs CSharpier and turns
 
 ## Coverage and mutation testing
 
-Both use only the no-focus tests in `tests/FlaUI.Mcp.Tests`, and build into `local/build-background` (gitignored).
+Both default workflows select the no-focus tests in `tests/FlaUI.Mcp.Tests`, and build into `local/build-background` (gitignored).
 
 | Command | What it does |
 |---|---|
 | `pwsh scripts/coverage.ps1` | Runs the tests with coverlet and renders line and branch coverage to `local/build-background/coverage/index.html`. Needs the `reportgenerator` global tool. |
 | `pwsh scripts/mutation.ps1` or `pwsh scripts/check.ps1 -Mutation` | Runs Stryker (local tool in `.config/dotnet-tools.json`) on the guard and protocol files listed in `stryker-config.json`, with concurrency 2. Stryker writes no report for a run it does not finish, so the script tests the files in five parts (guards, state, protocol, pointer, keyboard), each on a fresh worktree of `HEAD` (commit first) and each stopped after 45 minutes (`-Minutes`). `-Part <name>` runs one part, and `-Concurrency 1` lowers the load. Reports and logs go to `local/build-background/StrykerOutput/<part>`. |
 
-Mutation testing never runs the desktop tests. Stryker runs every test once per mutant, and the integration tests launch apps and take the desktop from whoever is using the machine. Started from the repository root, Stryker finds `FlaUI.Mcp.slnx` and runs every test project in it, whatever `test-projects` says. So `mutation.ps1` runs Stryker inside `tests/FlaUI.Mcp.Tests` with that project named explicitly, and it stops Stryker if the options it logs before building show a solution context or another test project, or if discovery finds more tests than the offline project has. The offline tests also set `FLAUI_OFFLINE_TESTS=1`, which makes the real desktop refuse all input, so every test that runs an input tool installs the fake desktop. `MutationConfigTests` checks all of this.
+The default mutation parts select the no-focus `tests/FlaUI.Mcp.Tests` project. Integration tests launch apps and take the desktop, so `mutation.ps1` runs Stryker inside the no-focus project, names that project explicitly, and stops if Stryker's startup log shows a solution context, another test project, or more discovered tests than the project lists. The offline parts set `FLAUI_OFFLINE_TESTS=1`, so Core's real `InputDesktop` seam refuses input when a test has not installed a fake. Project selection and test counts do not prove that every test body avoids the desktop or protect code that bypasses the seam; see [mutation.md](mutation.md) for that boundary. `MutationConfigTests` checks the configured safeguards.
 
 `pwsh scripts/mutation.ps1 -Part pointer-integration` is the one run that uses the desktop: it mutates the pointer files against the integration tests (see [mutation.md](mutation.md)). It is never part of `-Mutation` or `-Part all`.
 
