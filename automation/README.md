@@ -10,7 +10,7 @@ Everything here builds on the generic FlaUI MCP server and adds what is specific
 | [UI-MAP.md](UI-MAP.md) | Locators and behaviour observed in TE3 3.26 and 3.27. |
 | [KNOWN-ISSUES.md](KNOWN-ISSUES.md) | TE3 behaviour that trips up automation. |
 
-Tested against TE3 3.26.3 and 3.27.0 at 125% display scaling. Other versions and scaling levels may need locator updates.
+Tested against TE3 3.26.3 and 3.27.0 at 125% display scaling; the UI map also records live 3.27.1 observations at 125%. A later 175% left-display pass mapped selected dialogs but did not reverify every locator or pane resize. Other versions and scaling levels may need locator updates.
 
 ## Build
 
@@ -65,7 +65,7 @@ Destinations: `native-mcp-server` (opens and verifies the native MCP Server dial
 ```
 
 Rules:
-- The tools attach to the running TE3. Pass `processId` only when more than one TE3 is open. They never launch or close TE3, change preferences, touch databases or run scripts.
+- The TE3 MCP tools attach to the running TE3; pass `processId` only when more than one TE3 is open. Navigation does not launch or close TE3, touch databases or run scripts. `te3_layout snapshot` and `restore` handle TE3 layout files and `restore` can change the saved UI preferences with TE3 closed; the generic `windows_*` tools can launch or close windows under a grant.
 - They take a `processId`, not a window handle or element ref. The `windows_*` tools on the same server share refs and handles with each other.
 - Capture with `windows_screenshot`, and look at the image: arrival is not visual proof.
 - Only one agent should drive the desktop at a time.
@@ -214,4 +214,4 @@ locator was verified by hand on 3.27.1 (see UI-MAP), and `te3_layout reopen-pane
 Analyzer shares TOM Explorer's tab container (UI-MAP), so reopening either one can change which of
 the two tabs shows; check `te3_layout_read list` afterwards. The View popup's Expression Editor entry
 opens a document, not a pane, so `reopen-pane` does not accept it. The
-`assistant-model-review` preset targets AI Assistant width 680, TOM Explorer width 480, and Properties height 320 physical pixels. At the 1800-pixel minimum, it budgets 40 pixels for borders and splitters and reserves at least 600 pixels for the editor. `plan-preset` is offline and accepts optional `windowWidth`/`windowHeight` (defaults 1920x1080); `apply-preset` failed live on 3.27.1 (2026-10-21): its first drag missed the splitter between touching panes and changed nothing. A fix for touching panes is committed but not live-verified. `list` bounds are relative to the UIA window rectangle, not to a capture; use `windows_screenshot` `locate` for pixel positions.
+`assistant-model-review` preset targets AI Assistant width 680, TOM Explorer width 480, and Properties height 320 physical pixels. At the 1800-pixel minimum, it budgets 40 pixels for borders and splitters and reserves at least 600 pixels for the editor. `plan-preset` is offline and accepts optional `windowWidth`/`windowHeight` (defaults 1920x1080). The first 3.27.1 live attempt on 2026-10-21 missed a touching-pane splitter; later 125% runs on 2026-10-22 verified `resize` and `apply-preset` with the guarded drag. The DPI-scaled splitter offsets still need a live 175% pass. `list` bounds are relative to the UIA window rectangle, not to a capture; use `windows_screenshot` `locate` for pixel positions.

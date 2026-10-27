@@ -4,8 +4,8 @@ using System.Text.Json;
 /// The settings files that carry TE3's layout across launches (observed 3.27.1): TE3 rewrites Layouts.json
 /// and UiPreferences.json when it closes, so a preset or a crash in one run carries into the next.
 /// Preferences.json also contains connection and provider credentials and must never enter a layout snapshot.
-/// A snapshot copies them with their hashes; a restore checks the snapshot is unchanged, copies it back and reads it
-/// back.
+/// A snapshot copies only Layouts.json and UiPreferences.json with their hashes; a restore checks those files are
+/// unchanged, copies them back and reads them back. Preferences.json is excluded from both operations.
 /// </summary>
 internal static class LayoutFiles
 {
