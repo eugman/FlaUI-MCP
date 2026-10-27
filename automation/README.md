@@ -192,7 +192,9 @@ dotnet test tests/FlaUI.Mcp.Tests
 dotnet test tests/FlaUI.Mcp.Te3.Tests
 ```
 
-Neither suite touches the desktop. `tests/FlaUI.Mcp.IntegrationTests` launches test apps and takes focus.
+Both suites use the offline desktop seam and fakes and are intended to run
+without taking focus. A test that bypasses that seam would not be covered by
+the guard. `tests/FlaUI.Mcp.IntegrationTests` launches test apps and takes focus.
 
 ## Native MCP read-only preflight
 
