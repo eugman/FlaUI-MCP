@@ -8,7 +8,7 @@ You need Windows 10 or 11, the .NET 9 SDK (9.0.300 or later; see `global.json`),
 pwsh scripts/setup.ps1
 ```
 
-This installs CSharpier and turns on the git hooks. The pre-commit hook checks formatting; the pre-push hook runs `pwsh scripts/check.ps1`, the same gate CI runs. The rules are described in [docs/code-quality.md](docs/code-quality.md).
+This installs CSharpier and turns on the git hooks. The pre-commit hook checks formatting; the pre-push hook runs `pwsh scripts/check.ps1`. Hosted CI runs that full offline gate for pull requests and manual Build runs; a push to `main` runs a production Release build. The rules are described in [docs/code-quality.md](docs/code-quality.md).
 
 ## Tests
 

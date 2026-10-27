@@ -1,4 +1,4 @@
-# The full local gate, also run by the pre-push hook and CI: formatting, analyzers, no-focus tests.
+# The full local gate, also run by the pre-push hook and by PR/manual CI: formatting, analyzers, no-focus tests.
 # Integration tests are excluded because they launch apps and take desktop focus.
 # -Mutation also runs mutation testing (scripts/mutation.ps1), which can take up to 45 minutes.
 # -IncludeLocalRecipes opts into compiling personal, gitignored recipes and tests.
