@@ -51,6 +51,19 @@ public sealed class ToolsListSnapshotTests
     }
 
     [Fact]
+    public void MouseParkHelpDoesNotPromiseATooltipFreeCapture()
+    {
+        var tools = JsonNode.Parse(ToolsList())!.AsArray();
+        var mouse = tools.Single(tool => tool!["name"]!.GetValue<string>() == "windows_mouse")!;
+        var description = mouse["description"]!.GetValue<string>();
+
+        Assert.Contains("park: try to move", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("can be refused", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("inspect the capture", description, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("so no tooltip", description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ToolsListDiffersFromTheBaselineOnlyByDescriptionsAndDocumentedAdditions()
     {
         var baseline = JsonNode.Parse(Read("tools-list.baseline.json"))!;
