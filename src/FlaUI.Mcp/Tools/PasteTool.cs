@@ -187,9 +187,9 @@ public sealed class PasteTool(
     }
 
     /// <summary>
-    /// The reply with its verdict. A read-back that shows the paste did not apply (unchanged without the text,
-    /// or changed without it) is a failure; Ctrl+V went out, so the dispatch stays completed. An unchanged value
-    /// that already holds the text (identical text re-pasted) is not.
+    /// The reply with its verdict. An unchanged value without the text is unverified because the app may
+    /// process Ctrl+V later. A changed value without the text is a read-back mismatch. Dispatch stays
+    /// completed after Ctrl+V even when verification is unavailable or mismatched.
     /// </summary>
     internal static McpToolResult PasteReply(
         string text,
@@ -256,12 +256,12 @@ public sealed class PasteTool(
 
         if (!supported)
         {
-            // Scintilla and similar editors expose no text at all; windows_get_clipboard plus a
-            // select-and-copy is the only way to see what they now contain.
+            // Scintilla and similar editors may expose no text to UIA; select-and-copy plus
+            // windows_get_clipboard is one way to inspect their contents.
             return new("unavailable", " Not verified: this control exposes no value to read back.");
         }
-        // Ctrl+V is posted, not processed, so an immediate read almost always still sees the old
-        // value. Poll for the change rather than reporting the race as a failed paste.
+        // Ctrl+V is dispatched before the app processes it. Poll for a bounded interval;
+        // an unchanged value at the deadline is not proof that the paste will never apply.
         var observed = SettledValue(
             () => ReadValue(element),
             before,
@@ -368,8 +368,8 @@ public sealed class PasteTool(
                     " Not verified: the control's value did not change, but it already contains the pasted text (re-pasting identical text changes nothing)."
                 )
                 : new(
-                    "not-applied",
-                    " Warning: the control's value did not change and does not contain the pasted text, so the paste did not apply."
+                    "not-established",
+                    " Not verified: the control's value did not change at read-back; the paste may still be processed later. Inspect state before retrying."
                 );
         }
 

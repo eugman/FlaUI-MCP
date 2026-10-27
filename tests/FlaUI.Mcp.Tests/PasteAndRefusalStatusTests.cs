@@ -7,7 +7,7 @@ using Xunit;
 namespace FlaUI.Mcp.Tests;
 
 /// <summary>
-/// A paste whose read-back shows it did not apply is a failure, not ok with a warning; and a refusal recorded
+/// A paste reply maps an explicit failure verdict to an error; a refusal recorded
 /// as coming after input keeps actionDispatched: true even when this call counted no input itself.
 /// </summary>
 public sealed class PasteAndRefusalStatusTests
@@ -18,7 +18,7 @@ public sealed class PasteAndRefusalStatusTests
     [InlineData("mismatch", true)]
     [InlineData("verified", false)]
     [InlineData("not-established", false)]
-    public void APasteThatDidNotApplyIsAFailure(string verification, bool failed)
+    public void PasteReplyMapsVerificationToError(string verification, bool failed)
     {
         var reply = PasteTool.PasteReply("Sent Ctrl+V for 3 characters to w1e1.", new(verification, " sentence"));
 

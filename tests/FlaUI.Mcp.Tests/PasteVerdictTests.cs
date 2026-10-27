@@ -11,7 +11,7 @@ public sealed class PasteVerdictTests
     [Theory]
     [InlineData("", "Total Sales", "Total Sales", "verified")]
     [InlineData("Total Sales", "Total Sales", "Sales", "unchanged")]
-    [InlineData("Total Sales", "Total Sales", "Margin", "not-applied")]
+    [InlineData("Total Sales", "Total Sales", "Margin", "not-established")]
     [InlineData("", "something else", "Total Sales", "mismatch")]
     [InlineData(null, "Total Sales", "Total Sales", "not-established")]
     [InlineData("existing", "existing", "", "not-established")]
@@ -30,6 +30,18 @@ public sealed class PasteVerdictTests
         // The clipboard holds CRLF; an edit control may report LF (or the reverse).
         Assert.Equal("verified", PasteTool.Judge("", "line1\nline2", "line1\r\nline2").Verification);
         Assert.Equal("unchanged", PasteTool.Judge("a\r\nb", "a\nb", "a\r\nb").Verification);
+    }
+
+    [Fact]
+    public void UnchangedReadBackDoesNotProveThePasteWillNeverApply()
+    {
+        var verdict = PasteTool.Judge("old", "old", "new");
+        var reply = PasteTool.PasteReply("Sent Ctrl+V", verdict);
+
+        Assert.Equal("not-established", verdict.Verification);
+        Assert.Contains("may still be processed", verdict.Sentence);
+        Assert.NotEqual(true, reply.IsError);
+        Assert.Equal("not-established", reply.Outcome!.Verification);
     }
 
     [Fact]
