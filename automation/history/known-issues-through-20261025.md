@@ -1,5 +1,7 @@
 # Known issues
 
+> **Historical record; superseded snapshot guidance.** The entries below preserve what the host did during these runs, including an old instruction to snapshot `Preferences.json`. Do not follow that instruction now: current `te3_layout snapshot` and `restore` handle only `Layouts.json` and `UiPreferences.json`. `Preferences.json` can contain connection and provider credentials; old three-file snapshots are private and cannot be restored by the current tool. See [current layout guidance](../README.md#te3-mcp-tools) and [the current file list](../../src/FlaUI.Mcp.Te3/LayoutFiles.cs).
+
 ## Clearing the Preferences search blanks the settings pane
 
 Seen in TE3 3.26.3.12966. Clearing the Preferences search box, with its × button or by deleting the text, blanks the settings pane. It does this even when you chose the category from the tree and the search box was already empty. The category stays highlighted.
