@@ -157,6 +157,26 @@ public sealed class CaptureVerdictTests
         }
     }
 
+    [Fact]
+    public void RestrictedCaptureNamesAllowedOccluderBesideHiddenUnknownOne()
+    {
+        var covered = new Win32Desktop.OcclusionCheck(
+            true,
+            [
+                new Win32WindowInfo(73, "Allowed window", Environment.ProcessId, true, false, false),
+                new Win32WindowInfo(74, "Private unknown window", 0, true, false, false),
+            ]
+        );
+        var policy = new ProcessPolicy([System.Diagnostics.Process.GetCurrentProcess().ProcessName]);
+
+        var finding = ScreenshotChecks.DescribeOcclusion(covered, policy)!;
+
+        Assert.Contains("Allowed window", finding);
+        Assert.Contains("HWND 73", finding);
+        Assert.DoesNotContain("Private unknown", finding);
+        Assert.DoesNotContain("HWND 74", finding);
+    }
+
     [Theory]
     [InlineData("screen-uia-bounds", true)]
     [InlineData("screen-fallback", true)]
