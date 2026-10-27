@@ -18,7 +18,7 @@ You need:
 - Windows 10 or 11 and PowerShell 7.
 - The .NET 9 SDK (9.0.300 or later; pinned in `global.json`) and the .NET 8 Desktop Runtime.
 - [Tabular Editor 3](https://tabulareditor.com), installed and licensed.
-- For the screenshot runner: the Tabular Editor command-line tool `te.exe` (the runner looks for it at `%LOCALAPPDATA%Programs	e	e.exe` by default), and a local SQL Server Analysis Services instance for recipes that need a database engine.
+- For the screenshot runner: the Tabular Editor command-line tool `te.exe` (set its path in the runner config; the example uses `%LOCALAPPDATA%/Programs/te/te.exe`), and a local SQL Server Analysis Services instance for recipes that need a database engine.
 
 ```powershell
 git clone https://github.com/eugman/FlaUI-MCP.git
