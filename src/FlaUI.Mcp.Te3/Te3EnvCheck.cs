@@ -3,7 +3,7 @@ using FlaUI.Mcp;
 using FlaUI.Mcp.Core;
 
 /// <summary>
-/// te3_env_check: which TE3 policies and preferences are set, read from the registry and %LocalAppData%\TabularEditor3
+/// te3_env_check: TE3's six policy locations and preferences, read from the registry and %LocalAppData%\TabularEditor3
 /// without touching TE3 or the desktop. Values that change a run (MCP port and auto-start, remembered window state,
 /// layouts) are reported; a licence is reported only as present or absent.
 /// </summary>
@@ -17,7 +17,22 @@ public sealed class Te3EnvCheck(
     public const string ToolName = "te3_env_check";
     public const string UserPolicies = @"HKCU\Software\Policies\Tabular Editor ApS\TE3";
     public const string MachinePolicies = @"HKLM\Software\Policies\Tabular Editor ApS\TE3";
+    public const string UserSharedPolicies = @"HKCU\Software\Policies\Tabular Editor ApS";
+    public const string MachineSharedPolicies = @"HKLM\Software\Policies\Tabular Editor ApS";
+    public const string UserLegacyPolicies = @"HKCU\Software\Policies\Kapacity\Tabular Editor";
+    public const string MachineLegacyPolicies = @"HKLM\Software\Policies\Kapacity\Tabular Editor";
     public const string Licence = @"HKCU\Software\Kapacity\Tabular Editor 3";
+
+    // TE3's documented precedence is per value: all machine locations outrank all user locations.
+    private static readonly (string Name, string Path)[] PolicyKeys =
+    [
+        ("machineTe3", MachinePolicies),
+        ("machineShared", MachineSharedPolicies),
+        ("machineLegacy", MachineLegacyPolicies),
+        ("userTe3", UserPolicies),
+        ("userShared", UserSharedPolicies),
+        ("userLegacy", UserLegacyPolicies),
+    ];
 
     private static readonly string[] WindowKeys =
     [
@@ -40,8 +55,9 @@ public sealed class Te3EnvCheck(
     protected override bool Recovery => true;
 
     public override string Description =>
-        "Read which TE3 policies (HKCU/HKLM Software\\Policies\\Tabular Editor ApS\\TE3) and preferences are set: MCP "
-        + "server (enabled, port, auto-start), remembered window state, layouts and keyboard customizations. A licence "
+        "Read TE3 policies from all six HKLM/HKCU TE3, shared and legacy keys, with each precedence-winning raw "
+        + "value and its source; also read preferences: MCP server (enabled, port, auto-start), "
+        + "remembered window state, layouts and keyboard customizations. A licence "
         + "is reported as present or absent only. Reads files and the registry; no TE3 window or input.";
 
     public override object InputSchema =>
@@ -59,13 +75,39 @@ public sealed class Te3EnvCheck(
         var preferences = ReadJson(Path.Combine(folder, "Preferences.json"));
         var ui = ReadJson(Path.Combine(folder, "UiPreferences.json"));
         var layouts = ReadJson(Path.Combine(folder, "Layouts.json"));
+        var policyEntries = PolicyKeys.Select(key => (key.Name, key.Path, Values: read(key.Path))).ToArray();
+        var policyLocations = policyEntries.ToDictionary(
+            entry => entry.Name,
+            entry => (object?)Masked(entry.Values) ?? NotSet
+        );
+        var effective = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in policyEntries)
+        {
+            if (entry.Values == null)
+            {
+                continue;
+            }
+
+            foreach (var value in entry.Values)
+            {
+                effective.TryAdd(
+                    value.Key,
+                    new { value = Secret(value.Key) ? "(masked)" : value.Value, source = entry.Path }
+                );
+            }
+        }
+
         var report = new
         {
             settings = folder,
             policies = new
             {
-                user = (object?)Masked(read(UserPolicies)) ?? NotSet,
-                machine = (object?)Masked(read(MachinePolicies)) ?? NotSet,
+                // Keep the original two fields for clients that read only the product-specific keys.
+                user = policyLocations["userTe3"],
+                machine = policyLocations["machineTe3"],
+                sources = PolicyKeys.ToDictionary(key => key.Name, key => key.Path),
+                locations = policyLocations,
+                effective,
             },
             licence = read(Licence)?.ToDictionary(v => v.Key, _ => true),
             mcp = Named(Property(preferences, "Mcp"), McpKeys),
@@ -84,7 +126,8 @@ public sealed class Te3EnvCheck(
     private static readonly string[] SecretWords = ["key", "token", "licence", "license", "secret", "password"];
 
     private static bool Secret(string name) =>
-        SecretWords.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
+        !name.Equals("RequireMcpAccessToken", StringComparison.OrdinalIgnoreCase)
+        && SecretWords.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
 
     private static Dictionary<string, object?>? Masked(IReadOnlyDictionary<string, object?>? values) =>
         values?.ToDictionary(v => v.Key, v => Secret(v.Key) ? "(masked)" : v.Value);

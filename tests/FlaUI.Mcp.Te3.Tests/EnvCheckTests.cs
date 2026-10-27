@@ -88,4 +88,69 @@ public sealed class EnvCheckTests : IDisposable
         );
         Assert.DoesNotContain("tok-", report.GetRawText());
     }
+
+    [Fact]
+    public async Task ItReadsAllSixPolicyKeysAndReportsTheFirstValueForEachName()
+    {
+        var visited = new List<string>();
+        IReadOnlyDictionary<string, object?>? Read(string path)
+        {
+            visited.Add(path);
+            return path switch
+            {
+                @"HKLM\Software\Policies\Tabular Editor ApS\TE3" => new Dictionary<string, object?>
+                {
+                    ["DisableAi"] = 0,
+                },
+                @"HKLM\Software\Policies\Tabular Editor ApS" => new Dictionary<string, object?>
+                {
+                    ["disablemcpserver"] = 1,
+                    ["McpAccessTokenValue"] = "private-token",
+                },
+                @"HKLM\Software\Policies\Kapacity\Tabular Editor" => new Dictionary<string, object?>
+                {
+                    ["DisableTelemetry"] = 1,
+                },
+                @"HKCU\Software\Policies\Tabular Editor ApS\TE3" => new Dictionary<string, object?>
+                {
+                    ["DisableAi"] = 1,
+                    ["DisableMcpServer"] = 0,
+                },
+                @"HKCU\Software\Policies\Tabular Editor ApS" => new Dictionary<string, object?>
+                {
+                    ["DisableTelemetry"] = 0,
+                },
+                @"HKCU\Software\Policies\Kapacity\Tabular Editor" => new Dictionary<string, object?>
+                {
+                    ["RequireMcpAccessToken"] = 1,
+                },
+                _ => null,
+            };
+        }
+
+        var result = await new Te3EnvCheck(settings, Read).ExecuteAsync(JsonSerializer.SerializeToElement(new { }));
+        var report = JsonDocument.Parse(result.Content.Single().Text!).RootElement;
+        var policies = report.GetProperty("policies");
+        var effective = policies.GetProperty("effective");
+
+        Assert.Equal(6, visited.Count(path => path.Contains(@"\Policies\")));
+        Assert.Equal(0, effective.GetProperty("DisableAi").GetProperty("value").GetInt32());
+        Assert.Equal(
+            @"HKLM\Software\Policies\Tabular Editor ApS\TE3",
+            effective.GetProperty("DisableAi").GetProperty("source").GetString()
+        );
+        Assert.Equal(1, effective.GetProperty("disablemcpserver").GetProperty("value").GetInt32());
+        Assert.Equal(
+            @"HKLM\Software\Policies\Tabular Editor ApS",
+            effective.GetProperty("disablemcpserver").GetProperty("source").GetString()
+        );
+        Assert.Equal(1, effective.GetProperty("DisableTelemetry").GetProperty("value").GetInt32());
+        Assert.Equal(1, effective.GetProperty("RequireMcpAccessToken").GetProperty("value").GetInt32());
+        Assert.Equal("(masked)", effective.GetProperty("McpAccessTokenValue").GetProperty("value").GetString());
+        Assert.DoesNotContain("private-token", report.GetRawText());
+        Assert.Equal(
+            1,
+            policies.GetProperty("locations").GetProperty("machineShared").GetProperty("disablemcpserver").GetInt32()
+        );
+    }
 }
