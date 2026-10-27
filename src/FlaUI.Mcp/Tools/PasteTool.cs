@@ -111,7 +111,7 @@ public sealed class PasteTool(
         }
     }
 
-    /// <summary>Put the text on the clipboard, send Ctrl+V through guarded input, and report what arrived.</summary>
+    /// <summary>Put the text on the clipboard, send Ctrl+V through guarded input, and report the observed read-back.</summary>
     internal McpToolResult Paste(
         GuardedInput input,
         FlaUI.Core.AutomationElements.AutomationElement? element,
@@ -119,7 +119,7 @@ public sealed class PasteTool(
         string target
     )
     {
-        // Clipboard text uses CRLF; edit controls don't break lines on a bare LF.
+        // Clipboard text uses CRLF for controls that do not treat a bare LF as a line break.
         var clipboardText = text.ReplaceLineEndings("\r\n");
         // Replacing the user's clipboard is a change of its own, made before Ctrl+V can be refused, so it is
         // checked again (permission, foreground) right before the write and counted once written.
@@ -145,7 +145,7 @@ public sealed class PasteTool(
         }
     }
 
-    /// <summary>Send Ctrl+V through guarded input and report what arrived.</summary>
+    /// <summary>Send Ctrl+V through guarded input and report the observed read-back.</summary>
     private McpToolResult SendPaste(
         GuardedInput input,
         FlaUI.Core.AutomationElements.AutomationElement? element,
@@ -160,8 +160,8 @@ public sealed class PasteTool(
         var preSendFocus = InputDesktop.Current.FocusedControl();
         input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
 
-        // Ctrl+V is already dispatched. Nothing below may report a failure to paste: a
-        // read-back problem is missing evidence, not an unsent keystroke.
+        // Ctrl+V is already dispatched. A later read-back problem cannot claim the keystroke
+        // was unsent; it may report missing evidence or an observed mismatch.
         string note;
         PasteVerdict verdict;
         try
@@ -225,9 +225,9 @@ public sealed class PasteTool(
     }
 
     /// <summary>
-    /// Read the target back where it exposes a value, so the reply reports what arrived rather than
-    /// only that Ctrl+V was sent. A read-only editor, or an app that binds Ctrl+V to something else,
-    /// otherwise produces an identical success message.
+    /// Read the target back where it exposes a value, so the reply reports the observed value rather
+    /// than only that Ctrl+V was sent. A read-only editor or an app that binds Ctrl+V to something
+    /// else otherwise produces an identical dispatch message.
     /// </summary>
     /// <param name="element">The pasted-into element, or null for a ref-less paste.</param>
     /// <param name="expected">The text placed on the clipboard.</param>
