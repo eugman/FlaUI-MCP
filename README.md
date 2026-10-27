@@ -58,7 +58,7 @@ Then add the server to your MCP client:
 | `windows_click` | Click or invoke an element. `action` picks invoke, select, expand, collapse, toggle or a mouse click; toggle reports the state it reached. |
 | `windows_fill` | Replace a field's value. |
 | `windows_type` | Type text into an element or the focused control. |
-| `windows_paste` | Paste text through the clipboard, which autocomplete can't rewrite. The pasted text stays on the clipboard. |
+| `windows_paste` | Paste text through the clipboard instead of typing it character by character. The app may reformat what it receives; the pasted text stays on the clipboard. |
 | `windows_send_keys` | Send keys or chords such as `Ctrl+A`. |
 | `windows_get_clipboard` | Read the clipboard, for editors that hide their text from UI Automation. |
 | `windows_screenshot` | Capture a window, element or screen region as PNG. `parkPointer` moves the mouse off the window first. |
@@ -108,7 +108,7 @@ Product hosts embed the core and may expose only some of these. `launch`, `list_
 **Modal dialogs.** A click that opens a modal dialog blocks the app's UI Automation provider until the dialog closes. `windows_click` notices this and returns with the dialog's title. While the click is pending, tools that need that app's provider fail fast with guidance; keyboard input by handle, window listing, focus and close still work. Don't replay the pending click: check it with `windows_operation_status`. An Invoke, Toggle, Select or Expand that returned is watched for 300 ms more: a dialog that opens a moment later is reported in the reply (`then dialog "Title" opened`, `modalTitle`), and a toggle, expand or collapse state read back before it is `unsettled` (unverified), not verified.
 
 **Screenshots.**
-- A normal capture copies screen pixels, so it is refused when another application covers the target. Native capture (`strictNative: true`) renders the window's own surface and isn't affected by what's in front of it.
+- A normal capture copies screen pixels, so it is refused when another application covers the target. Native capture (`strictNative: true`) requests the window's own surface without using the foreground pixels; some windows cannot provide a usable native image.
 - `background: true` captures by handle without bringing the window forward; it leaves out owned dialogs and open menus.
 - `savePath` must be an absolute `.png` path. Existing files are kept unless you pass `overwrite: true`.
 - `locate: ["w1e5"]` returns each element's rectangle when the capture has a known origin and one-to-one pixel geometry; it refuses the location request if a DPI mismatch or changed capture size makes the coordinates unreliable.
