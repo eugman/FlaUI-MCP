@@ -40,7 +40,7 @@ With a grant active (see "Before any input"):
 
 1. Click `MenuItem "Tools"` in `MenuBar "Main menu"` with `physical: true`, then `Button "Preferences..."` with `physical: true`. Don't Invoke it: UIA blocks until the dialog closes. Get the Preferences handle from `windows_list_windows`; if it isn't listed yet, list again.
 2. Fill `Edit automationId="searchPreferences"` with `Auto Formatting`. Click `TreeItem value="Auto Formatting"` in `automationId="treePreferences"` with `physical: true`.
-3. Clear the search. A TE3 bug blanks the settings pane whenever the search text changes: page down the tree until the row is visible, click it again with `physical: true`, and check `CheckBox "Auto format code as you type"` shows in `automationId="DAX Editor.Auto Formatting"`.
+3. Clear the search and check for `CheckBox "Auto format code as you type"` in `automationId="DAX Editor.Auto Formatting"`. In TE3 3.26.3, clearing search blanked the settings pane even while the category stayed selected. If the pane is blank, page down the tree until the row is visible, click it again with `physical: true`, and check the control again. Recheck this behavior on other builds.
 4. Size the dialog to 1155 × 714 with `windows_place_window`.
 
 Don't change settings. Don't click a pane's center to focus it; it can toggle a checkbox.
@@ -51,7 +51,7 @@ With a grant active (see "Before any input"):
 
 1. Click `MenuItem "Tools"` in `MenuBar "Main menu"` with `physical: true`, then `Button "Preferences..."` with `physical: true`. Don't Invoke it: UIA blocks until the dialog closes. Get the Preferences handle from `windows_list_windows`; if it isn't listed yet, list again.
 2. Fill `Edit automationId="searchPreferences"` with `Code Actions`. Click `TreeItem value="Code Actions"` in `automationId="treePreferences"` with `physical: true`, not the Pane with the same label.
-3. Clear the search. A TE3 bug blanks the settings pane whenever the search text changes: page down the tree until the row is visible, click it again with `physical: true`, and check `CheckBox "Show code actions"` shows in `automationId="DAX Editor.Code Actions"`.
+3. Clear the search and check for `CheckBox "Show code actions"` in `automationId="DAX Editor.Code Actions"`. In TE3 3.26.3, clearing search blanked the settings pane even while the category stayed selected. If the pane is blank, page down the tree until the row is visible, click it again with `physical: true`, and check the control again. Recheck this behavior on other builds.
 
 Don't change settings.
 
