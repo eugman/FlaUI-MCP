@@ -6,10 +6,10 @@
 #
 # The default offline parts must not select integration tests: they launch apps and take the desktop. From the
 # repository root Stryker finds FlaUI.Mcp.slnx and runs every test project in it, whatever test-projects
-# says. So Stryker runs inside tests/FlaUI.Mcp.Tests with that project named explicitly, and the run is
-# stopped before its first test when its log shows a solution context, another test project, or more
-# tests than the offline project has. This checks project selection, not whether every test body avoids the
-# desktop or whether code bypasses the InputDesktop offline seam.
+# says. So Stryker runs inside tests/FlaUI.Mcp.Tests with that project named explicitly, and the script
+# polls its log for a solution context, another test project, or more tests than the offline project has.
+# Log polling can detect and stop a bad run, but cannot guarantee detection before its first test. Project
+# selection does not prove every test body avoids the desktop or cover an InputDesktop seam bypass.
 #
 # The one deliberate exception is the pointer-integration work, in two parts: -Part clicks and -Part input
 # (-Part pointer-integration runs both, one after the other). The pointer code's mutants need real UI
@@ -66,8 +66,8 @@ function UnsafeRun($logs, $expected, $allowed = $offlineProject) {
     $text = $text -join "`n"
     if ($text -match 'IsSolutionContext: True') { return 'Stryker is in solution mode and would run every test project.' }
     if ($allowed -eq $offlineProject -and $text -match 'IntegrationTests') { return 'The integration test project appears in the run.' }
-    # Stryker logs its options before it builds anything. Until they are seen and name only the expected
-    # project, nothing else may happen: a build or a test run first means the check came too late.
+    # The log is polled after Stryker starts. If these markers appear first in the text read, reject the run;
+    # polling cannot guarantee that the process has not advanced to a build or test before this check.
     if ($text -match 'TestProjects: \[([^\]]*)\]') {
         $projects = @($Matches[1] -split ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })
         $others = @($projects | Where-Object { (Split-Path $_ -Leaf) -ne $allowed })
@@ -137,7 +137,7 @@ function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $
                 if ($reason) {
                     $stryker.Kill($true)
                     $stryker.WaitForExit()
-                    throw "Mutation testing ($name) aborted before running tests: $reason"
+                    throw "Mutation testing ($name) stopped after an unsafe startup log was observed; tests may already have started: $reason"
                 }
 
                 $logText = Get-ChildItem (Join-Path $output 'logs') -Filter '*.txt' -ErrorAction SilentlyContinue |
