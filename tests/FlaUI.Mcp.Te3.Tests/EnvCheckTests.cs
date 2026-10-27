@@ -153,4 +153,32 @@ public sealed class EnvCheckTests : IDisposable
             policies.GetProperty("locations").GetProperty("machineShared").GetProperty("disablemcpserver").GetInt32()
         );
     }
+
+    [Fact]
+    public async Task MalformedStringAccessTokenPolicyIsMaskedInLocationsAndEffectiveValues()
+    {
+        const string malformedSecret = "sensitive-token-stored-in-wrong-registry-type";
+        IReadOnlyDictionary<string, object?>? Read(string path) =>
+            path == Te3EnvCheck.MachineSharedPolicies
+                ? new Dictionary<string, object?> { ["RequireMcpAccessToken"] = malformedSecret }
+                : null;
+
+        var result = await new Te3EnvCheck(settings, Read).ExecuteAsync(JsonSerializer.SerializeToElement(new { }));
+        var report = JsonDocument.Parse(result.Content.Single().Text!).RootElement;
+        var policies = report.GetProperty("policies");
+
+        Assert.Equal(
+            "(masked)",
+            policies
+                .GetProperty("locations")
+                .GetProperty("machineShared")
+                .GetProperty("RequireMcpAccessToken")
+                .GetString()
+        );
+        Assert.Equal(
+            "(masked)",
+            policies.GetProperty("effective").GetProperty("RequireMcpAccessToken").GetProperty("value").GetString()
+        );
+        Assert.DoesNotContain(malformedSecret, report.GetRawText());
+    }
 }

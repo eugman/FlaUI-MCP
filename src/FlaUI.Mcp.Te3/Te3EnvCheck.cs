@@ -55,8 +55,8 @@ public sealed class Te3EnvCheck(
     protected override bool Recovery => true;
 
     public override string Description =>
-        "Read TE3 policies from all six HKLM/HKCU TE3, shared and legacy keys, with each precedence-winning raw "
-        + "value and its source; also read preferences: MCP server (enabled, port, auto-start), "
+        "Read TE3 policies from all six HKLM/HKCU TE3, shared and legacy keys, with each precedence-winning "
+        + "value and its source (secret-like values are masked); also read preferences: MCP server (enabled, port, auto-start), "
         + "remembered window state, layouts and keyboard customizations. A licence "
         + "is reported as present or absent only. Reads files and the registry; no TE3 window or input.";
 
@@ -90,10 +90,7 @@ public sealed class Te3EnvCheck(
 
             foreach (var value in entry.Values)
             {
-                effective.TryAdd(
-                    value.Key,
-                    new { value = Secret(value.Key) ? "(masked)" : value.Value, source = entry.Path }
-                );
+                effective.TryAdd(value.Key, new { value = SafeValue(value.Key, value.Value), source = entry.Path });
             }
         }
 
@@ -126,11 +123,21 @@ public sealed class Te3EnvCheck(
     private static readonly string[] SecretWords = ["key", "token", "licence", "license", "secret", "password"];
 
     private static bool Secret(string name) =>
-        !name.Equals("RequireMcpAccessToken", StringComparison.OrdinalIgnoreCase)
-        && SecretWords.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
+        SecretWords.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
+
+    // This policy is normally a DWORD flag. Malformed string values may contain an actual token and must stay hidden.
+    private static object? SafeValue(string name, object? value)
+    {
+        if (name.Equals("RequireMcpAccessToken", StringComparison.OrdinalIgnoreCase) && value is bool or int or long)
+        {
+            return value;
+        }
+
+        return Secret(name) ? "(masked)" : value;
+    }
 
     private static Dictionary<string, object?>? Masked(IReadOnlyDictionary<string, object?>? values) =>
-        values?.ToDictionary(v => v.Key, v => Secret(v.Key) ? "(masked)" : v.Value);
+        values?.ToDictionary(v => v.Key, v => SafeValue(v.Key, v.Value));
 
     // Only the properties this check names, each masked when its name may hold a secret.
     private static Dictionary<string, object?>? Named(JsonElement? element, string[] keys) =>
