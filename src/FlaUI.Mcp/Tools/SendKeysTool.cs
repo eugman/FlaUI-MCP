@@ -336,16 +336,15 @@ public class SendKeysTool : ToolBase
     }
 
     /// <summary>
-    /// The Windows key opens UI (Start menu, Win+R, Win+E, ...) that always
-    /// belongs to processes outside any allowlist, so it is rejected while an
-    /// allowlist is active.
+    /// The Windows key can open system UI (Start menu, Win+R, Win+E, ...)
+    /// outside the allowed apps, so it is rejected while an allowlist is active.
     /// </summary>
     private string? CheckKeysAllowed(List<VirtualKeyShort> keys)
     {
         if (_processPolicy.IsRestricted && keys.Any(k => k is VirtualKeyShort.LWIN or VirtualKeyShort.RWIN))
         {
             return "The Windows key is disabled while the app allowlist is active, "
-                + "because it opens system UI outside the allowed apps.";
+                + "because it can open system UI outside the allowed apps.";
         }
 
         return null;

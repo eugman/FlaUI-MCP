@@ -263,7 +263,7 @@ public sealed class KeyboardMutationTests
         var result = tool.ExecuteAsync(Args(new { chord = "Win+R" })).GetAwaiter().GetResult();
 
         Assert.Contains(
-            "The Windows key is disabled while the app allowlist is active, because it opens system UI outside the allowed apps.",
+            "The Windows key is disabled while the app allowlist is active, because it can open system UI outside the allowed apps.",
             result.Content[0].Text
         );
     }
