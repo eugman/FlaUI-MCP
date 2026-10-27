@@ -92,6 +92,14 @@ public sealed class ToolsListSnapshotTests
             ]![field]!["description"]!.DeepClone();
         }
 
+        // The old help promised every reply identified focus and suggested sending once to discover it.
+        // Pin the corrected wording in tools-list.json while preserving the historical baseline.
+        var oldKeys = baseline.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_send_keys")!;
+        var newKeys = live.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_send_keys")!;
+        oldKeys["inputSchema"]!["properties"]!["expectFocusClass"]!["description"] = newKeys["inputSchema"]![
+            "properties"
+        ]!["expectFocusClass"]!["description"]!.DeepClone();
+
         Assert.Equal(Strip(baseline, "", kept).ToJsonString(), Strip(live, "", []).ToJsonString());
         // Every other description the baseline had is still there, word for word.
         var liveDescriptions = new List<string>();

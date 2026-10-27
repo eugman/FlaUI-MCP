@@ -80,7 +80,7 @@ public class SendKeysTool : ToolBase
         public object? VerifyFocus { get; init; }
 
         [ToolDoc(
-            "Abort without sending unless the focused control's window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. Every reply names the focused class, so run once to discover it."
+            "Abort without sending unless the observed focused control's window class matches this exactly, rechecked before every chord. Use it for ref-less or handle-only input, which is otherwise unverified: the keys go wherever focus happens to be. A mismatch refusal reports the observed class when available."
         )]
         public string? ExpectFocusClass { get; init; }
 
@@ -157,7 +157,7 @@ public class SendKeysTool : ToolBase
             {
                 _elementRegistry.ResolveRef(refId, handle);
 
-                // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
+                // Fail fast if this app's UIA provider is blocked (element.Focus() may hang).
                 // Tip: calling windows_send_keys without a ref sends pure keyboard input to the
                 // focused element, which works even while the provider is blocked.
                 if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
