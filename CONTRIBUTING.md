@@ -33,4 +33,4 @@ Files owned by the core are listed in `scripts/core-paths.txt`; the hooks and CI
 
 ## Releases
 
-The **Release** workflow builds x64 and ARM64 ZIPs containing `FlaUI.Mcp.exe` and `FlaUI.Mcp.Te3.exe`. Push a version tag such as `v0.2.0`, or run the workflow by hand with a tag name; manual runs create a draft release.
+The **Release** workflow builds x64 ZIPs containing `FlaUI.Mcp.exe` and `FlaUI.Mcp.Te3.exe`. Push a version tag such as `v0.2.0`, or run the workflow by hand with an existing tag name; manual runs create a draft release by default.
