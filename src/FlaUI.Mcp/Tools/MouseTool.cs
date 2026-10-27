@@ -23,8 +23,8 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
 
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
     public override string Description =>
-        "Move the pointer or click a captured window point. park: move it off the window so no tooltip or hover state "
-        + "lands in a screenshot. move/hover: to a point or ref. scroll: wheel ticks over a point or ref "
+        "Move the pointer or click a captured window point. park: try to move it off the window; this can be refused "
+        + "or leave hover state behind, so inspect the capture. move/hover: to a point or ref. scroll: wheel ticks over a point or ref "
         + "(positive scrolls up). click: left- or right-click at a point or ref (`button` defaults to left). drag: press at `from` (or ref, or ref's fromEdge), move in steps, release at `to`, toRef/toEdge, "
         + "or wherever resizeTo makes ref that size (a column header: ref + fromEdge right + resizeTo 250). Use it for "
         + "splitters and other targets UI Automation does not expose. Points are pixels in a windows_screenshot "

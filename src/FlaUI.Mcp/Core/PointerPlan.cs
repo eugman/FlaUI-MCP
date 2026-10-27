@@ -132,7 +132,7 @@ public static class PointerPlan
     public static Point ToScreen(Rectangle origin, Point relative) => new(origin.X + relative.X, origin.Y + relative.Y);
 }
 
-/// <summary>Moves the pointer off a window so no hover state or tooltip of it reaches a capture.</summary>
+/// <summary>Attempts to move the pointer off a window before capture; refusal or delayed hover repaint needs review.</summary>
 public static class PointerParking
 {
     // Long enough for a tooltip to fade and a hot-tracked control to repaint.
