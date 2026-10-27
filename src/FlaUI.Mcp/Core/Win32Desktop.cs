@@ -10,7 +10,7 @@ namespace FlaUI.Mcp.Core;
 /// <param name="Hwnd">Native window handle.</param>
 /// <param name="Title">Window title (may be empty).</param>
 /// <param name="ProcessId">Owning process id.</param>
-/// <param name="IsEnabled">Whether the window accepts input (modal dialogs disable their owner).</param>
+/// <param name="IsEnabled">Whether Win32 reports the window enabled (a modal dialog can disable its owner).</param>
 /// <param name="IsToolWindow">Whether the window has WS_EX_TOOLWINDOW (excluded from window lists).</param>
 /// <param name="IsCloaked">Whether the window is DWM-cloaked (e.g., suspended UWP apps).</param>
 public sealed record Win32WindowInfo(
@@ -30,10 +30,10 @@ public sealed record Win32WindowInfo(
 }
 
 /// <summary>
-/// Win32-based desktop window enumeration and manipulation.
-/// All APIs used here read cached window metadata and never block on the target
-/// process's message loop, so they remain usable while a UI Automation provider
-/// is blocked (e.g., by a modal dialog opened from a pending Invoke call).
+/// Win32-based desktop window enumeration and manipulation. Window enumeration
+/// reads native metadata without walking the target's UI Automation tree, so it
+/// remains available when a pending UI Automation call blocks that provider.
+/// Other methods here can change window or clipboard state.
 /// </summary>
 public static partial class Win32Desktop
 {
