@@ -133,7 +133,7 @@ public static partial class Win32Desktop
     }
 
     /// <summary>
-    /// Read the clipboard's Unicode text, or null when it holds none or cannot be opened.
+    /// Read clipboard Unicode text into a result whose Text is null when absent or unreadable.
     /// Needed because some editors expose no text to UI Automation at all — a Scintilla-based one
     /// has no Value or Text pattern, so selecting and copying is the only way to read it.
     /// </summary>
@@ -205,9 +205,9 @@ public static partial class Win32Desktop
     }
 
     /// <summary>
-    /// Replace the clipboard with Unicode text, excluded from clipboard history.
+    /// Replace the clipboard with Unicode text, requesting exclusion from clipboard history.
     /// A message-only window owns it, since an ownerless EmptyClipboard makes SetClipboardData fail.
-    /// Returns false when another process keeps the clipboard open.
+    /// Returns false when the clipboard cannot be opened after retries; allocation or write failures throw.
     /// </summary>
     internal static bool SetClipboardText(string text)
     {
@@ -544,8 +544,8 @@ public static partial class Win32Desktop
 
     /// <summary>
     /// Find the windows covering part of <paramref name="rect"/> at the moment
-    /// <paramref name="zOrder"/> was taken. Screen-pixel capture grabs whatever is on the glass, so
-    /// anything listed here lands in the image. Pure so it can be tested without a
+    /// <paramref name="zOrder"/> was taken. Screen-pixel capture can include front-window pixels,
+    /// so a listed obstruction makes the capture unverified. Pure so it can be tested without a
     /// desktop; callers supply the observation.
     /// </summary>
     /// <param name="zOrder">Visible top-level windows in z-order, front to back.</param>
