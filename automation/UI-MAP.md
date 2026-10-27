@@ -39,11 +39,7 @@ Locators and behaviour observed in TE3 3.26.3, 3.27.0 and 3.27.1. Treat every la
 | AI Features > MCP Server | Pane `AI Features.MCP Server` | Observed 3.27.1: CheckBoxes `Enable MCP Server`, `Start MCP server automatically`, `Require access token`; Spinner `Port`. |
 | AI Features > Permissions | Pane `AI Features.Permissions` | Observed 3.27.1: ComboBoxes `Model metadata:`, `Model data:`, `Best Practice Analyzer:`, `Documents:`, `Macros:`. |
 
-On 2026-10-25, the database dialog's Server dropdown exposed a recent server as a `ListItem`. Selecting it sent `SelectionItem.Select`, but the subsequent fallback click was refused because the reported point overlapped the Local instance ComboBox. The host paused further input. Observe `te3_layout_read list`, reconcile the broker's partial operation without replay, and inspect the dialog before continuing. The pin/unpin context menu remains unmapped; this observation does not prove a pin operation. On the 175% left display, this TE3 process reported window DPI 120 and monitor DPI 168. A `screen-uia-bounds` screenshot showed the dialog correctly; native captures and UIA-to-image geometry require separate verification at that scaling.
-
-**Fresh database-dialog pass (3.27.1, 2026-10-25):** The toolbar `Model from DB...` Button's `Invoke` opened the owned `Load Semantic Model from Database` window. `Server:` (`cmbServer`) held the Innovation/SpaceParts connection string as a Value; its `Open` child Button expanded a separate same-process popup with one visible recent-server ListItem. Authentication was `Microsoft Entra MFA`, and Mode was selected `Read/Write` (other listed modes: `Read/Refresh only`, `Read only`). A physical right-click on the visible recent row was refused before input with `click-point-covered`: the dialog's popup was treated as an obscuring modal window. Do not use a coordinate bypass; the pin/unpin menu remains unverified. `Cancel` via Invoke closed the dialog, confirmed by a fresh window list. Opening and canceling made no connection. The dialog screenshot used `screen-uia-bounds`; its window DPI was 120 and monitor DPI 168.
-
-The source-detail dropdown is a separate same-process popup. A physical `windows_click` on its `Name only` ListItem was refused with `point-not-on-target` and sent no input, even though the item was visible. With the dropdown's `Full path` item holding keyboard focus, `windows_send_keys Down` selected `Name only`; its ComboBox Value confirmed the selection. `Enter`, then Preferences `OK`, applied it. Reverse with `Up` to restore `Full path`, checking the ComboBox Value and the window title after `OK`. This was verified on a disposable local folder model with `(No connection)` throughout.
+The recent-server pin/unpin context menu is not mapped. A dated 3.27.1 inspection and the 175% scaling evidence are in [the 2026-10-25 observation record](history/ui-map-live-20261025.md); recheck the dropdown before automating it.
 
 ## Menus
 
@@ -64,7 +60,7 @@ The source-detail dropdown is a separate same-process popup. A physical `windows
 - **Help:** About shows the licence holder, installations and session ID. Redact them before publishing.
 - **3.27 adds:** Tools > MCP Server, Help > Get Started, File > Reload from disk.
 
-**Recent-model inspection (3.27.1, 2026-10-25):** File > Recent Tabular Models opens a submenu of local model paths as Buttons. It is a file list, not the recent-server pin control. `windows_find` with `includeOwned: true` exposed the submenu while a main-window snapshot did not. The open File menu covers the toolbar's `Model from DB...` button: a guarded click correctly refused with `click-point-covered`, after sending only the window activation input. The screenshot showed the menu still open, the existing local model loaded, and `(No connection)`; the operation was reconciled without replay. Two focus-verified `Escape` chords closed the submenu then the File menu. A subsequent toolbar click was refused before input when Windows could not confirm the foreground, and the host revoked desktop access. Resume server-pin discovery from a fresh grant and observation; no database dialog or pin state was reached in this pass.
+File > Recent Tabular Models is a local-model list, not the recent-server pin control. See [the 2026-10-25 observation record](history/ui-map-live-20261025.md) for that menu's dated inspection.
 
 ## Preferences
 
@@ -72,7 +68,7 @@ The source-detail dropdown is a separate same-process popup. A physical `windows
 2. Wait for the `Preferences` window and use its own handle.
 3. Search with `searchPreferences`. Typing filters; setting the value doesn't.
 4. Select the TreeItem by Value inside `treePreferences`. Names like `Node0` and indexes change after filtering.
-5. Clearing the search blanks the settings pane and can move the selected row out of view (see [KNOWN-ISSUES](KNOWN-ISSUES.md)). Page down the tree until the row shows, click it again physically, and check the pane's controls.
+5. In a 3.26.3 observation, clearing the search blanked the settings pane even though its category stayed selected (see [KNOWN-ISSUES](KNOWN-ISSUES.md)). After clearing the search on any build, confirm the page's controls before editing; if it is blank, reselect the category. The row may need scrolling back into view.
 6. Scope controls to the pane's automation ID, e.g. `DAX Editor.Auto Formatting`, `DAX Editor.Code Actions`, `File Formats.General`, `File Formats.Save-to-folder`, `Tabular Editor.User Interface`.
 7. Close with Cancel. Never press OK to make a screenshot match.
 
