@@ -11,10 +11,16 @@ public static class SplitterPlan
     public const int MaxGap = 24;
 
     /// <summary>The one size a resize asks for; refused before anything else when it names neither or both.</summary>
-    public static int RequireOne(int? width, int? height) =>
-        width is null == height is null
-            ? throw new ArgumentException("Pass exactly one of width or height; no input sent.")
-            : (width ?? height)!.Value;
+    public static int RequireOne(int? width, int? height)
+    {
+        if (width is null == height is null)
+        {
+            throw new ArgumentException("Pass exactly one of width or height; no input sent.");
+        }
+
+        var size = (width ?? height)!.Value;
+        return size > 0 ? size : throw new ArgumentException("width or height must be positive; no input sent.");
+    }
 
     /// <summary>Drag start and end, in screen pixels, that make <paramref name="pane"/> the requested size.</summary>
     /// <param name="documents">The neighbours that are document areas: a dock pane touching one keeps the splitter.</param>

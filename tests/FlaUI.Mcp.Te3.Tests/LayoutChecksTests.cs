@@ -201,4 +201,12 @@ public sealed class LayoutChecksTests
             );
         }
     }
+
+    [Theory]
+    [InlineData(0, null)]
+    [InlineData(-100, null)]
+    [InlineData(null, 0)]
+    [InlineData(null, -100)]
+    public void AResizeRejectsNonpositiveTargetBeforePlanningInput(int? width, int? height) =>
+        Assert.Throws<ArgumentException>(() => SplitterPlan.RequireOne(width, height));
 }
