@@ -8,7 +8,7 @@ namespace FlaUI.Mcp.Tests;
 /// <summary>
 /// The core's tools/list output, pinned. tools-list.json is the exact output; tools-list.baseline.json is the output
 /// from before the schemas were generated from argument records, and the live output may differ from it only by
-/// argument descriptions it adds. Set FLAUI_WRITE_TOOLS_SNAPSHOT=1 to rewrite tools-list.json after a deliberate
+/// documented argument descriptions it adds or corrects. Set FLAUI_WRITE_TOOLS_SNAPSHOT=1 to rewrite tools-list.json after a deliberate
 /// change, then review its diff.
 /// </summary>
 [Collection("Native host construction")]
@@ -79,8 +79,21 @@ public sealed class ToolsListSnapshotTests
         Assert.Equal("integer", launchProperties["waitSeconds"]!["type"]!.GetValue<string>());
         Assert.True(launchProperties.Remove("waitSeconds"));
 
+        // The old screenshot descriptions claimed an atomic locate read and a guaranteed clean park/native image.
+        // Keep this exception scoped to the three corrected help fields; the exact text is pinned in tools-list.json.
+        var oldScreenshot = baseline
+            .AsArray()
+            .Single(tool => tool!["name"]!.GetValue<string>() == "windows_screenshot")!;
+        var newScreenshot = live.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_screenshot")!;
+        foreach (var field in new[] { "locate", "parkPointer", "allowOccludedPixels" })
+        {
+            oldScreenshot["inputSchema"]!["properties"]![field]!["description"] = newScreenshot["inputSchema"]![
+                "properties"
+            ]![field]!["description"]!.DeepClone();
+        }
+
         Assert.Equal(Strip(baseline, "", kept).ToJsonString(), Strip(live, "", []).ToJsonString());
-        // Every description the baseline had is still there, word for word.
+        // Every other description the baseline had is still there, word for word.
         var liveDescriptions = new List<string>();
         Strip(JsonNode.Parse(ToolsList())!, "", liveDescriptions);
         Assert.Empty(kept.Except(liveDescriptions));
