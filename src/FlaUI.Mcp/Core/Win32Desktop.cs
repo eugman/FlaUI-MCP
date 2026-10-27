@@ -11,7 +11,7 @@ namespace FlaUI.Mcp.Core;
 /// <param name="Title">Window title (may be empty).</param>
 /// <param name="ProcessId">Owning process id.</param>
 /// <param name="IsEnabled">Whether Win32 reports the window enabled (a modal dialog can disable its owner).</param>
-/// <param name="IsToolWindow">Whether the window has WS_EX_TOOLWINDOW (excluded from window lists).</param>
+/// <param name="IsToolWindow">Whether the window has WS_EX_TOOLWINDOW (callers may exclude it from user-facing lists).</param>
 /// <param name="IsCloaked">Whether the window is DWM-cloaked (e.g., suspended UWP apps).</param>
 public sealed record Win32WindowInfo(
     nint Hwnd,
@@ -609,8 +609,8 @@ public static partial class Win32Desktop
     /// <see cref="FindObstructions"/>. A window that disappears between enumeration and measurement
     /// is dropped rather than recorded with unknown bounds: transient shell windows come and go
     /// constantly, and treating a window that no longer exists as opaque refuses good captures.
-    /// The same holds for a window whose owner cannot be read: <see cref="GetTopLevelWindows"/> leaves it
-    /// out because it was destroyed between enumeration and the read, so it is treated as gone.
+    /// A window whose process cannot be read is also omitted by <see cref="GetTopLevelWindows"/>.
+    /// That omission does not prove it disappeared; it limits what this observation can establish.
     /// </summary>
     /// <returns>Visible top-level windows, front to back, each with its visible bounds.</returns>
     public static IReadOnlyList<WindowBounds> ObserveZOrder() =>
@@ -711,8 +711,6 @@ public static partial class Win32Desktop
     /// A window paired with its bounds, as one observation. Bounds are read separately from
     /// enumeration, so null means the read failed and the window must be treated as opaque.
     /// </summary>
-    /// <param name="Window">The window.</param>
-    /// <param name="Bounds">Its screen rectangle, or null when it could not be read.</param>
     /// <param name="Window">The enumerated window.</param>
     /// <param name="Bounds">Its visible rectangle, or null when it could not be measured.</param>
     /// <param name="CanCover">Whether it can actually put pixels over what is beneath it.</param>
