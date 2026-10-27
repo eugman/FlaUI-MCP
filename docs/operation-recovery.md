@@ -80,6 +80,12 @@ A pattern call run through `ModalAwareInvoker.Execute` must count itself with `M
 
 ## Adapting a product repo
 
+The sections below preserve the migration checklist written for hosts moving
+from the previous Core contract. They describe work at that transition, not
+the current outstanding tasks in each product fork. Use the outcome and
+refusal contracts above for current behavior, and inspect a product fork's
+source before treating a listed call site as unmigrated.
+
 A product repo that merges this core must check the following.
 
 - **Outcome values.** Handle `dispatch: partial` wherever `completed`, `not-dispatched` or `timed_out_pending` is matched. Read `inputsSent` and `failure.actionDispatched` before treating a failed call as safe to retry.
