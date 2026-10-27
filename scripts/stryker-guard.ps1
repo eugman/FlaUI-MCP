@@ -1,7 +1,7 @@
 # Stops a TE3 mutation run when Stryker's startup output reports more than the selected offline test project.
-# coverage-te3.ps1 checks each line before the initial test run and stops on another project, an
-# *IntegrationTests* project, or more discovered tests than the offline project lists. This checks reported
-# selection, not whether every selected test body avoids the desktop. Run directly, it checks one line:
+# coverage-te3.ps1 polls the output and stops on another project, an *IntegrationTests* project, or more
+# discovered tests than the offline project lists. Polling cannot guarantee detection before the first test;
+# this checks reported selection, not whether every selected test body avoids the desktop. Run directly, it checks one line:
 # exit 1 with the reason, or exit 0.
 param(
     [string]$Line,

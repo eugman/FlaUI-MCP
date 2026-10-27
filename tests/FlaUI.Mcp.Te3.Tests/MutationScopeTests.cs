@@ -4,7 +4,7 @@ using Xunit;
 
 namespace FlaUI.Mcp.Te3.Tests;
 
-/// <summary>Mutation testing runs only the offline TE3 tests, never a desktop test project. Reads files; runs pwsh.</summary>
+/// <summary>Checks offline project selection and logged guard signals; it cannot prove when the child process starts tests.</summary>
 public sealed class MutationScopeTests
 {
     private const string TestProject = "FlaUI.Mcp.Te3.Tests.csproj";
@@ -84,6 +84,15 @@ public sealed class MutationScopeTests
     [InlineData(@"[20:09:20 INF] Number of tests found: 431 for project C:\src\FlaUI.Mcp.Te3\FlaUI.Mcp.Te3.csproj.", 0)]
     [InlineData(@"[20:09:20 INF] Number of tests found: 900 for project C:\src\FlaUI.Mcp.Te3\FlaUI.Mcp.Te3.csproj.", 1)]
     [InlineData("[20:10:00 WRN] An unidentified mutation resulted in a compile error", 0)]
-    public void TheMutationRunStopsBeforeTestingAnythingButTheOfflineProject(string line, int exitCode) =>
+    public void TheGuardFlagsUnexpectedProjectOrCountFromOneLogLine(string line, int exitCode) =>
         Assert.Equal(exitCode, Guard(line, expectedTests: 431));
+
+    [Fact]
+    public void TheRunnerDoesNotClaimPollingStopsBeforeTheFirstTest()
+    {
+        var runner = File.ReadAllText(RepositoryFile(Path.Combine("scripts", "coverage-te3.ps1")));
+        Assert.Contains("WaitForExit(250)", runner);
+        Assert.Contains("tests may already have started", runner);
+        Assert.DoesNotContain("Stopped Stryker before it tested anything", runner);
+    }
 }
