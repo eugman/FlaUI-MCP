@@ -11,11 +11,7 @@
 1. Prepare an unlocked interactive desktop. Finish attended setup, dismiss menus, and clear competing windows and overlays before the unattended sequence.
 2. Launch or explicitly attach, then check the returned handle and process identity. Request focus once and observe the actual foreground window before input.
 3. If focus is denied, stop the input sequence. For an attended run, the person at the machine can click the intended window's title bar; re-observe its handle and process identity before continuing. For an unattended run, record the blocker and defer until the desktop is uncontested.
-4. If focus succeeds but GetClickablePoint or the native hit check fails, inspect visible overlays and z-order. In one observed idle Recorder case, /Hide left a selection overlay; exiting Recorder removed it. Clear the overlay through its normal lifecycle, then re-observe. Do not click through it or disable the guard.
-
-## Recorder while actively recording
-
-A separate observation occurred while Camtasia Recorder (PID 11112) was actively recording and remained foreground. The ordinary UI input tools stopped with activation denial. Running `Start-Process CamtasiaRecorder.exe -ArgumentList /Hide -WindowStyle Hidden` as a Recorder command, then requesting `windows_focus w2`, brought the intended window to foreground in that run. This was a Recorder window-state change followed by a normal focus request, not an override of Windows foreground rules. Verify the foreground HWND and target identity after every such request; the same result is not guaranteed for other runs, and the idle Recorder overlay behavior above is distinct.
+4. If focus succeeds but GetClickablePoint or the native hit check fails, inspect visible overlays and z-order. Clear an overlay through its owning app's normal lifecycle, then re-observe. Do not click through it or disable the guard.
 
 Foreground authorization and pixel occlusion are separate conditions. The current activation-denied message means Windows retained another foreground window; an obscured clickable point means the intended target was not the native hit window.
 
