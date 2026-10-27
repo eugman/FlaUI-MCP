@@ -21,8 +21,8 @@ public static class PointerPlan
         {
             path.Add(
                 new Point(
-                    from.X + (int)Math.Round((to.X - from.X) * (double)i / steps),
-                    from.Y + (int)Math.Round((to.Y - from.Y) * (double)i / steps)
+                    (int)(from.X + (long)Math.Round(((long)to.X - from.X) * (double)i / steps)),
+                    (int)(from.Y + (long)Math.Round(((long)to.Y - from.Y) * (double)i / steps))
                 )
             );
         }
