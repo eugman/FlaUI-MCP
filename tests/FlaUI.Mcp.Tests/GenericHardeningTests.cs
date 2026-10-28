@@ -144,11 +144,66 @@ public sealed class GenericHardeningTests
         }
     }
 
-    private sealed class AwaitingTool(Task release, TaskCompletionSource? entered = null) : ToolBase
+    [Fact]
+    public async Task AToolSpecificTimeoutExtendsOnlyThatToolCall()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(200), time: clock);
+        registry.RegisterTool(new AwaitingTool(release.Task, entered, TimeSpan.FromMilliseconds(500)));
+        try
+        {
+            var call = registry.ExecuteToolAsync("awaiting", null);
+            await entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(200));
+            Assert.False(call.IsCompleted);
+            clock.Advance(TimeSpan.FromMilliseconds(300));
+            var result = await call.WaitAsync(Eventually.Bound);
+            Assert.Equal("timed_out_pending", result.Outcome?.Dispatch);
+            Assert.Contains("500ms", result.Content[0].Text);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task AToolSpecificTimeoutCannotShortenTheHostTimeout()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var clock = new ManualTimeProvider();
+        var registry = new ToolRegistry(TimeSpan.FromMilliseconds(700), time: clock);
+        registry.RegisterTool(new AwaitingTool(release.Task, entered, TimeSpan.FromMilliseconds(500)));
+        try
+        {
+            var call = registry.ExecuteToolAsync("awaiting", null);
+            await entered.Task.WaitAsync(Eventually.Bound);
+            clock.Advance(TimeSpan.FromMilliseconds(500));
+            Assert.False(call.IsCompleted);
+            clock.Advance(TimeSpan.FromMilliseconds(200));
+            var result = await call.WaitAsync(Eventually.Bound);
+            Assert.Contains("700ms", result.Content[0].Text);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    private sealed class AwaitingTool(
+        Task release,
+        TaskCompletionSource? entered = null,
+        TimeSpan? requestedTimeout = null
+    ) : ToolBase
     {
         public override string Name => "awaiting";
         public override string Description => "Waits until the test releases it; no desktop access";
         public override object InputSchema => new { };
+
+        public override TimeSpan? TimeoutForArguments(JsonElement? arguments) => requestedTimeout;
 
         public override async Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
         {

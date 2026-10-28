@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.CompilerServices;
@@ -231,7 +230,7 @@ public sealed class GuardMutationTests
             MutationGuard.BeforeMutation.Value = null;
         }
 
-        Assert.Throws<Win32Exception>(() =>
+        Assert.Throws<InputRefusedException>(() =>
             WindowMutation.Start(new ProcessStartInfo(missing) { UseShellExecute = false })
         );
     }

@@ -15,7 +15,8 @@ public partial class ToolRegistry
         OperationContext operation,
         Task<McpToolResult> toolTask,
         Task? settled,
-        Action<Task>? whenStranded
+        Action<Task>? whenStranded,
+        TimeSpan callTimeout
     )
     {
         operation.Stranded = true;
@@ -48,7 +49,7 @@ public partial class ToolRegistry
             {
                 Content = new List<McpContent>
                 {
-                    new() { Type = "text", Text = PendingMessage(name, settled != null) },
+                    new() { Type = "text", Text = PendingMessage(name, settled != null, callTimeout) },
                 },
                 // Failed like any error result, and carrying a refusal the call recorded before it stranded.
                 Outcome = new ToolOutcome("timed_out_pending", "unknown", OperationId: operation.Id)
@@ -88,17 +89,17 @@ public partial class ToolRegistry
     }
 
     /// <summary>Completes when the tool returns, or when its timeout would have expired had it not been cancelled.</summary>
-    private Task SettledOrTimedOut(Task toolTask, TimeSpan elapsed)
+    private Task SettledOrTimedOut(Task toolTask, TimeSpan elapsed, TimeSpan callTimeout)
     {
-        var remaining = _toolTimeout - elapsed;
+        var remaining = callTimeout - elapsed;
         return Task.WhenAny(toolTask, Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, _time));
     }
 
-    private string PendingMessage(string name, bool cancelled) =>
+    private static string PendingMessage(string name, bool cancelled, TimeSpan callTimeout) =>
         (
             cancelled
                 ? $"Tool '{name}' cancellation requested. "
-                : $"Tool '{name}' timed out after {(int)_toolTimeout.TotalMilliseconds}ms. "
+                : $"Tool '{name}' timed out after {(int)callTimeout.TotalMilliseconds}ms. "
         )
         + "A modal dialog or blocked UI Automation provider may still be running in the background. "
         + "Inspect the target and operation status before continuing. The request may have partially executed; do not blindly replay it.";

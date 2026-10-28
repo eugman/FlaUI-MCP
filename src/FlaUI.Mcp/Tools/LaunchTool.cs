@@ -20,7 +20,7 @@ public class LaunchTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false);
 
     public override string Description =>
-        "Start a Windows application and return a provisional window handle. Use windows_list_windows to identify the final app-specific window by title, process, and expected controls before input; a startup splash can be stable before the main window appears.";
+        "Start a Windows application and return a provisional window handle when one owned window is found. A pending or handed-off launch has no proven window handle: inspect windows_list_windows and attach explicitly before input. A startup splash can be stable before the main window appears.";
 
     public override object InputSchema => ToolSchema.For<Arguments>();
 
@@ -36,7 +36,7 @@ public class LaunchTool : ToolBase
         public string[]? Args { get; init; }
 
         [ToolDoc(
-            "Poll for a unique window from this process for up to this many seconds after startup (1-90; default 20). Cold starts such as TE3 can need 45 or more; allow a longer caller timeout."
+            "Poll for a unique window from this process for up to 1-90 seconds (default 20). The launch call allows 15 more seconds for startup and provider reads; set the client timeout above waitSeconds + 15. An ambiguous or slower launch returns an unresolved outcome for inspection."
         )]
         public int? WaitSeconds { get; init; }
     }
@@ -71,6 +71,24 @@ public class LaunchTool : ToolBase
         }
     }
 
+    public override TimeSpan? TimeoutForArguments(JsonElement? arguments)
+    {
+        if (
+            arguments is not { ValueKind: JsonValueKind.Object } args
+            || !args.TryGetProperty("waitSeconds", out var raw)
+        )
+        {
+            return TimeSpan.FromSeconds(SessionManager.LaunchPolls / 2 + 15);
+        }
+
+        return
+            raw.ValueKind == JsonValueKind.Number
+            && raw.TryGetInt32(out var waitSeconds)
+            && waitSeconds is >= 1 and <= 90
+            ? TimeSpan.FromSeconds(waitSeconds + 15)
+            : null;
+    }
+
     /// <summary>A stable owned window is still provisional: a splash can later be replaced.</summary>
     internal static McpToolResult ProvisionalResult(string app, string handle, int processId, string title) =>
         TextResult(
@@ -94,23 +112,33 @@ public class LaunchTool : ToolBase
             },
         };
 
-    internal static McpToolResult PendingResult(LaunchPendingException pending) =>
-        TextResult(pending.Message) with
+    internal static McpToolResult PendingResult(LaunchPendingException pending)
+    {
+        var details = new Dictionary<string, JsonElement>
+        {
+            ["observedWindows"] = JsonSerializer.SerializeToElement(
+                pending
+                    .ObservedWindows.Select(window => new { hwnd = (long)window.Hwnd, title = window.Title })
+                    .ToArray()
+            ),
+        };
+        if (pending.ProcessId > 0)
+        {
+            details["processId"] = JsonSerializer.SerializeToElement(pending.ProcessId);
+        }
+
+        return TextResult(pending.Message) with
         {
             Outcome = new ToolOutcome("partial", "not-tracked")
             {
                 Status = "unverified",
                 Verification = "not-established",
-                Failure = new InputRefusal("launch-pending", pending.Message) { ActionDispatched = true },
-                Details = new Dictionary<string, JsonElement>
+                Failure = new InputRefusal(pending.Handoff ? "launch-handoff" : "launch-pending", pending.Message)
                 {
-                    ["processId"] = JsonSerializer.SerializeToElement(pending.ProcessId),
-                    ["observedWindows"] = JsonSerializer.SerializeToElement(
-                        pending
-                            .ObservedWindows.Select(window => new { hwnd = (long)window.Hwnd, title = window.Title })
-                            .ToArray()
-                    ),
+                    ActionDispatched = true,
                 },
+                Details = details,
             },
         };
+    }
 }

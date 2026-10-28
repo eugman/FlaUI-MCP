@@ -286,7 +286,7 @@ internal sealed class FakeDesktop : InputDesktop
 
     public int StartRequests { get; private set; }
 
-    /// <summary>When true, the start returns null, as Process.Start does when no new process was started.</summary>
+    /// <summary>When true, the start returns null, as a shell handoff to an existing app can.</summary>
     public bool StartsNothing { get; set; }
 
     public int PatternCalls { get; private set; }
@@ -299,7 +299,7 @@ internal sealed class FakeDesktop : InputDesktop
             throw new System.ComponentModel.Win32Exception(2);
         }
 
-        // An unstarted Process object stands in for a started one; null is Windows starting nothing.
+        // An unstarted Process object stands in for a started one; null has uncertain shell effects.
         return StartsNothing ? null : new System.Diagnostics.Process();
     }
 

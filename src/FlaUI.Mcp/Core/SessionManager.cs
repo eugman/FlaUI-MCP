@@ -138,7 +138,7 @@ public class SessionManager : IDisposable
         using var process = WindowMutation.Start(psi);
         if (process == null)
         {
-            throw ProcessPolicy.LaunchFailed($"Failed to start process: {appPath}", started: false);
+            throw new LaunchPendingException(appPath, 0, [], false, handoff: true);
         }
 
         // Wait for the process to be ready
@@ -164,10 +164,7 @@ public class SessionManager : IDisposable
                 throw new LaunchPendingException(appPath, process.Id, observed, timeouts > 0);
             }
 
-            throw ProcessPolicy.LaunchFailed(
-                LaunchFailure(appPath, process.Id, exited, [], timeouts > 0),
-                started: true
-            );
+            throw new LaunchPendingException(appPath, process.Id, [], timeouts > 0, handoff: true);
         }
 
         var windowHandle = RegisterWindow(window);
@@ -176,10 +173,20 @@ public class SessionManager : IDisposable
 
     internal const int LaunchPolls = 40;
 
-    internal static int LaunchPollCount(int? waitSeconds) =>
-        waitSeconds is null ? LaunchPolls
-        : waitSeconds is >= 1 and <= 90 ? waitSeconds.Value * 2
-        : throw new ArgumentException("waitSeconds must be between 1 and 90", nameof(waitSeconds));
+    internal static int LaunchPollCount(int? waitSeconds)
+    {
+        if (waitSeconds is null)
+        {
+            return LaunchPolls;
+        }
+
+        if (waitSeconds is < 1 or > 90)
+        {
+            throw new ArgumentException("waitSeconds must be between 1 and 90", nameof(waitSeconds));
+        }
+
+        return waitSeconds.Value * 2;
+    }
 
     internal static int LaunchSettlePolls(int maxPolls) => maxPolls < 4 ? maxPolls : 4;
 
@@ -259,17 +266,21 @@ public class SessionManager : IDisposable
         bool exited,
         IReadOnlyList<string> titles,
         bool timedOut = false
-    ) =>
-        exited
-            ? $"Launch was requested for {appPath} (PID {processId}), but that process has exited; another instance may own the window. Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window."
-            : $"Launch was requested for {appPath} (PID {processId}), but "
-                + (
-                    timedOut
-                        ? "its window did not respond to UI Automation in time"
-                        : "no unique owned window was found"
-                )
-                + (titles.Count > 0 ? $"; its windows are {string.Join(", ", titles.Select(t => $"\"{t}\""))}" : "")
-                + ". Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window.";
+    )
+    {
+        if (exited)
+        {
+            return processId == 0
+                ? $"Launch request for {appPath} returned no process handle; the shell may have handed it to an existing instance or no app may have opened. Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window."
+                : $"Launch was requested for {appPath} (PID {processId}), but that process has exited; another instance may own the window. Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window.";
+        }
+
+        var reason = timedOut
+            ? "its window did not respond to UI Automation in time"
+            : "no unique owned window was found";
+        var observed = titles.Count > 0 ? $"; its windows are {string.Join(", ", titles.Select(t => $"\"{t}\""))}" : "";
+        return $"Launch was requested for {appPath} (PID {processId}), but {reason}{observed}. Do not blindly relaunch. Use windows_list_windows and explicitly attach to the intended window.";
+    }
 
     internal static System.Diagnostics.ProcessStartInfo LaunchStartInfo(string appPath, string[]? args)
     {

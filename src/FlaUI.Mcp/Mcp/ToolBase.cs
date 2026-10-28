@@ -11,6 +11,7 @@ public interface ITool
     string Name { get; }
     McpTool GetDefinition();
     Task<McpToolResult> ExecuteAsync(JsonElement? arguments);
+    TimeSpan? TimeoutForArguments(JsonElement? arguments) => null;
 }
 
 /// <summary>
@@ -21,6 +22,9 @@ public abstract class ToolBase : ITool
     public abstract string Name { get; }
     public abstract string Description { get; }
     public abstract object InputSchema { get; }
+
+    /// <summary>Optional call timeout for a tool with a documented longer operation.</summary>
+    public virtual TimeSpan? TimeoutForArguments(JsonElement? arguments) => null;
 
     /// <summary>MCP annotations for tools/list; null leaves a client to assume the tool may mutate.</summary>
     public virtual McpToolAnnotations? Annotations => null;

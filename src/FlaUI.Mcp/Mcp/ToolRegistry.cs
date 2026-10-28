@@ -109,6 +109,13 @@ public partial class ToolRegistry
 
         try
         {
+            var requestedTimeout = tool.TimeoutForArguments(arguments);
+            var callTimeout = requestedTimeout is { } requested && requested > _toolTimeout ? requested : _toolTimeout;
+            if (callTimeout <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(callTimeout));
+            }
+
             _onToolActivity?.Invoke();
             if (OperationContext.Current.Value is { } parent)
             {
@@ -120,7 +127,7 @@ public partial class ToolRegistry
             var toolTask = Task.Run(() => RunOperation(tool, arguments, operation));
             var started = _time.GetTimestamp();
             using var timer = new CancellationTokenSource();
-            var timeoutTask = Task.Delay(_toolTimeout, _time, timer.Token);
+            var timeoutTask = Task.Delay(callTimeout, _time, timer.Token);
             var cancelledTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             var finished = await Task.WhenAny(toolTask, timeoutTask, cancelledTask);
             // Stop the timer once the tool returns, so a fast call doesn't leave it running for the full timeout.
@@ -128,8 +135,10 @@ public partial class ToolRegistry
             if (finished != toolTask)
             {
                 var settled =
-                    finished == cancelledTask ? SettledOrTimedOut(toolTask, _time.GetElapsedTime(started)) : null;
-                return Strand(name, operation, toolTask, settled, whenStranded);
+                    finished == cancelledTask
+                        ? SettledOrTimedOut(toolTask, _time.GetElapsedTime(started), callTimeout)
+                        : null;
+                return Strand(name, operation, toolTask, settled, whenStranded, callTimeout);
             }
 
             return CompleteAndObserve(name, arguments, operation, await toolTask);
