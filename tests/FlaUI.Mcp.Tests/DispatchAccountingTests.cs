@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.CompilerServices;
@@ -274,9 +273,20 @@ public sealed class DispatchAccountingTests
         var missing = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}", "missing.exe");
         var info = new ProcessStartInfo(missing) { UseShellExecute = false };
 
-        var counted = Counted(() => Assert.Throws<Win32Exception>(() => WindowMutation.Start(info)));
+        var counted = Counted(() => Assert.Throws<InputRefusedException>(() => WindowMutation.Start(info)));
 
         Assert.Equal(0, counted);
+    }
+
+    [Fact]
+    public void AStartReturningNullCountsPossibleShellHandoff()
+    {
+        using var offlineDesktop = new FakeDesktop { StartsNothing = true }.Install();
+        var info = new ProcessStartInfo("demo.exe") { UseShellExecute = true };
+
+        var counted = Counted(() => Assert.Null(WindowMutation.Start(info)));
+
+        Assert.Equal(1, counted);
     }
 
     // K6: a refusal belongs to the step that raised it.

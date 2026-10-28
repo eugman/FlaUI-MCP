@@ -8,15 +8,16 @@ This is the shared core. Product-specific automation builds on it in separate re
 
 ```
 (abbreviated output)
-windows_launch   {"app": "calc.exe"}                      → handle w1
+windows_launch   {"app": "C:/path/to/WpfTestApp.exe"}     → provisional handle w1
+windows_list_windows {}                                   → w1: "FlaUI-MCP WPF Test App"
 windows_snapshot {"handle": "w1"}
-  - window "Calculator" [ref=w1]
-    - button "Three" [ref=w1e43]
-    - button "Multiply by" [ref=w1e35]
-    - button "Equals" [ref=w1e38]
-    - text "Display is 0" [ref=w1e15]
-windows_batch    {"actions": [{"action": "click", "ref": "w1e43"}, {"action": "click", "ref": "w1e35"},
-                              {"action": "click", "ref": "w1e43"}, {"action": "click", "ref": "w1e38"}]}
+  - window "FlaUI-MCP WPF Test App" [ref=w1e1]
+    - button "Click Me" [ref=w1e11]
+    - text "Click count: 0" [ref=w1e13]
+windows_focus    {"handle": "w1"}                         → foreground verified
+windows_click    {"ref": "w1e11"}
+windows_snapshot {"handle": "w1"}
+    - text "Click count: 1" [ref=w1e13]
 ```
 
 ## Install
@@ -45,7 +46,7 @@ Then add the server to your MCP client:
 
 | Tool | Does |
 |---|---|
-| `windows_launch` | Start an application and attach to its window. |
+| `windows_launch` | Start an application and return a provisional handle when one owned window is found. |
 | `windows_list_windows` | List top-level windows and their handles. |
 | `windows_focus` | Bring a window to the foreground. |
 | `windows_close` | Ask a window to close. |
@@ -120,7 +121,7 @@ Product hosts embed the core and may expose only some of these. `launch`, `list_
 
 **Batches.** `windows_batch` stops at a step whose action is still pending, even with `stopOnError: false`. Inspect the application before sending dependent input.
 
-**Timeouts.** Every tool call times out after 30 seconds, so a hung provider returns an error instead of hanging the server. The action may still complete afterwards: observe before retrying.
+**Timeouts.** Most tool calls time out after 30 seconds. `windows_launch` allows the requested `waitSeconds` (20 by default) plus 15 seconds for startup and provider reads, up to 105 seconds; set the caller timeout above that. A hung provider may still time out, and the action may complete afterwards: observe before retrying.
 
 **Snapshots** are bounded by `maxNodes` (default 3000) and `maxCharacters` (default 20000). A partial snapshot says so; a control missing from it is not proven absent.
 

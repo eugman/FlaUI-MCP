@@ -49,7 +49,7 @@ public sealed class GuardedDesktopTests
     }
 
     [Fact]
-    public async Task AStartThatStartsNothingCountsNothing()
+    public async Task ANullProcessHandleCountsPossibleShellHandoff()
     {
         using var offlineDesktop = new FakeDesktop { StartsNothing = true }.Install();
         var registry = new ToolRegistry();
@@ -57,8 +57,8 @@ public sealed class GuardedDesktopTests
 
         var result = await registry.ExecuteToolAsync("starts", null);
 
-        Assert.Equal(0, result.Outcome!.InputsSent);
-        Assert.Equal("not-dispatched", result.Outcome.Dispatch);
+        Assert.Equal(1, result.Outcome!.InputsSent);
+        Assert.Equal("partial", result.Outcome.Dispatch);
     }
 
     [Fact]

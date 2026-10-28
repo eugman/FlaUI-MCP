@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -59,19 +60,24 @@ internal static class WindowMutation
 
     /// <summary>
     /// Starting a process changes the desktop like input does: same lease and permission check. Counted
-    /// only when a process was returned; a start that throws or returns null started nothing.
+    /// after the shell returns without throwing. A null process may mean a handoff to an existing instance.
     /// </summary>
     public static Process? Start(ProcessStartInfo info)
     {
         using var lease = GuardedInput.AcquireLease();
         OperationContext.Check();
         MutationGuard.CheckPermission();
-        var started = InputDesktop.Current.StartProcess(info);
-        // Null means Windows started no new process (for example a shell start handed to a running one).
-        if (started != null)
+        Process? started;
+        try
         {
-            MutationGuard.RecordDispatch();
+            started = InputDesktop.Current.StartProcess(info);
         }
+        catch (Win32Exception ex)
+        {
+            throw ProcessPolicy.LaunchFailed($"Failed to start process: {info.FileName}: {ex.Message}", started: false);
+        }
+        // A null process handle does not prove that a shell handoff changed nothing.
+        MutationGuard.RecordDispatch();
 
         return started;
     }
