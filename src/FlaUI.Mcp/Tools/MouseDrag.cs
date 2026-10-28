@@ -31,7 +31,8 @@ internal sealed record DragPlan(
     Func<Point, string?> DropMoved,
     Func<Point, string?> DroppedOn,
     Func<Proof>? Resized = null,
-    Action? BeforeDown = null
+    Action? BeforeDown = null,
+    Action? BeforeMove = null
 )
 {
     /// <summary>What the drag found after its release: the element under the pointer and a resize's proof.</summary>
@@ -48,7 +49,8 @@ internal sealed record DragPlan(
             },
             steps,
             DropMoved,
-            BeforeDown
+            BeforeDown,
+            BeforeMove
         );
         report = new DragReport(from, DroppedOn(landed), Resized?.Invoke());
         return landed;

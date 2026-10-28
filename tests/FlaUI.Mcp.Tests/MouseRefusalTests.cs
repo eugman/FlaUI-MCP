@@ -138,6 +138,42 @@ public sealed class MouseRefusalTests
     }
 
     [Fact]
+    public async Task ARawDragRefusesWhenTheSameWindowMovesBeforeThePress()
+    {
+        var desktop = new FakeDesktop();
+        var original = desktop.Bounds;
+        var hitTests = 0;
+        desktop.WindowUnder = _ =>
+        {
+            if (++hitTests == 1)
+            {
+                desktop.Bounds = new Rectangle(original.X + 8, original.Y, original.Width, original.Height);
+            }
+
+            return FakeDesktop.TargetHwnd;
+        };
+        using var installed = desktop.Install();
+        var (refs, sessions, handle) = Window();
+        using var _ = sessions;
+
+        var result = await Run(
+            new MouseTool(refs, new PendingInvokeTracker(), sessions),
+            new
+            {
+                action = "drag",
+                handle,
+                from = new { x = From.X, y = From.Y },
+                to = new { x = To.X, y = To.Y },
+            }
+        );
+
+        Assert.True(result.IsError);
+        Assert.Equal(RefusalCodes.TargetChanged, result.Outcome!.Failure?.Code);
+        Assert.Equal("not-dispatched", result.Outcome.Dispatch);
+        Assert.Equal(0, desktop.Dispatched);
+    }
+
+    [Fact]
     public async Task AnArgumentErrorStillThrowsForTheRegistryToType()
     {
         // Not a refusal: the registry reports it as "Error: ...", as for every tool.
