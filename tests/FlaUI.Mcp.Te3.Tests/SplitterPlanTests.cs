@@ -61,12 +61,11 @@ public sealed class SplitterPlanTests
     }
 
     [Fact]
-    public void ARightPaneTouchingADocumentIsDraggedInsideItselfNotTheDocument()
+    public void ARightPaneTouchingADocumentUsesTheSharedEdge()
     {
         // Seen live on 3.27.1 at 125%, window restored at 0,0,1920,1080 (UIA origin 1,39), in screen coordinates: the
         // Expression Editor document ends at x 1159 and TOM Explorer starts there. A drag 3 px inside the document
-        // (x 1156) left TOM Explorer at 760; the AI Assistant drag 3 px inside that dock pane worked. The splitter is
-        // the dock pane's own border, on the side that faces the document.
+        // (x 1156) left TOM Explorer at 760. A later live probe at 3 px inside TOM also missed; the shared edge worked.
         var editor = new Rectangle(681, 100, 478, 947);
         var tom = new Rectangle(1159, 100, 760, 549);
         var properties = new Rectangle(1159, 649, 760, 398);
@@ -78,9 +77,33 @@ public sealed class SplitterPlanTests
             documents: [editor],
             dpi: 120
         );
-        Assert.Equal(1159 + SplitterPlan.TouchingInset(120), from.X);
+        Assert.Equal(1159, from.X);
         Assert.Equal(from.X + 280, to.X);
         Assert.Equal("left", SplitterPlan.Edge(tom, from, width: true));
+    }
+
+    [Fact]
+    public void ARightPaneTouchingADocumentUsesItsSharedEdgeOnAMixedDpiDisplay()
+    {
+        // Live TE3 3.27.1: monitor DPI 96, window DPI 120. The inset at x=-463 sent a drag but changed no width;
+        // the shared edge at x=-466 resized TOM Explorer from 466 to 480 without floating it.
+        var window = new Rectangle(-1920, 24, 1920, 1008);
+        var editor = new Rectangle(-1240, 73, 774, 933);
+        var tom = new Rectangle(-466, 73, 466, 619);
+        var properties = new Rectangle(-466, 692, 466, 314);
+
+        var (from, to) = SplitterPlan.Resize(
+            tom,
+            [editor, properties],
+            width: 480,
+            height: null,
+            window: window,
+            documents: [editor],
+            dpi: 120
+        );
+
+        Assert.Equal(new Point(tom.Left, 382), from);
+        Assert.Equal(new Point(tom.Left - 14, 382), to);
     }
 
     [Fact]

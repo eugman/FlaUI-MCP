@@ -72,7 +72,12 @@ public static class SplitterPlan
             others.FirstOrDefault(o => Near(o.Right, pane.Left) && Spans(o.Top, o.Bottom, y)) is { IsEmpty: false } left
         )
         {
-            var x = Between(left.Right, pane.Left, documents.Contains(left), inset);
+            // A document touching the left edge can expose the splitter at the shared edge itself.
+            // TE3 3.27.1 left TOM Explorer unchanged when pressed inside its border on this layout.
+            var x =
+                documents.Contains(left) && left.Right == pane.Left
+                    ? pane.Left
+                    : Between(left.Right, pane.Left, documents.Contains(left), inset);
             return (new Point(x, y), new Point(x + pane.Width - width, y));
         }
 
