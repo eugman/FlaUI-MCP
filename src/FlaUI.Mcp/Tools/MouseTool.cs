@@ -172,6 +172,11 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
             ToMustHit = GetStringArgument(arguments, "toMustHit"),
         };
         var plan = new DragPlanner(points).Plan(request, handle, ref scrolled);
+        if (request.From != null || request.To != null)
+        {
+            plan = plan with { BeforeMove = () => RequireSameOrigin(handle, target.Hwnd, origin) };
+        }
+
         try
         {
             return plan.Execute(target, request.Steps, out drag);
@@ -200,6 +205,14 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
 
         return InputDesktop.Current.WindowBounds(hwnd)
             ?? throw new InvalidOperationException("Window bounds unavailable");
+    }
+
+    private void RequireSameOrigin(string handle, nint hwnd, Rectangle origin)
+    {
+        if (WindowOrigin(handle, hwnd) != origin)
+        {
+            PointerActions.RefuseChangedBounds();
+        }
     }
 
     /// <summary>A window-relative point argument as a screen point, or null when it is not given.</summary>

@@ -71,7 +71,8 @@ internal static class PointerActions
         Func<(Point From, Point To)> resolve,
         int steps,
         Func<Point, string?>? dropMoved = null,
-        Action? beforeDown = null
+        Action? beforeDown = null,
+        Action? beforeMove = null
     )
     {
         // Validate the step count before any focus change.
@@ -83,6 +84,11 @@ internal static class PointerActions
         input.Check(() => RequireHit(target, from));
         // The release lands at `to`; refuse a drag that would drop onto another window or the desktop.
         input.Check(() => RequireHit(target, to));
+        if (beforeMove != null)
+        {
+            input.Check(beforeMove);
+        }
+
         input.MoveTo(from);
         if (beforeDown != null)
         {
@@ -238,4 +244,12 @@ internal static class PointerActions
             );
         }
     }
+
+    internal static void RefuseChangedBounds() =>
+        throw InputRefusedException.Record(
+            new InputRefusal(
+                RefusalCodes.TargetChanged,
+                "Window bounds changed after raw points were resolved; no input sent. Take a new screenshot and retry."
+            )
+        );
 }
