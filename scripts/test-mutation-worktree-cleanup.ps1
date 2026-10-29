@@ -1,6 +1,7 @@
 # Run RunPart's actual function body with a fake worktree command. A missing
 # project makes setup fail after registration, before Stryker can start.
 $ErrorActionPreference = 'Stop'
+$startLocation = (Get-Location).Path
 $source = Join-Path $PSScriptRoot 'mutation.ps1'
 $tokens = $null
 $parseErrors = $null
@@ -19,6 +20,8 @@ $script:registered = $null
 $script:removeCount = 0
 $script:projectPresent = $false
 $script:failPush = $false
+$script:allowPush = $false
+$script:failPop = $false
 $script:failGitAdd = $false
 $script:registeredPaths = [Collections.Generic.List[string]]::new()
 $script:outputPaths = [Collections.Generic.List[string]]::new()
@@ -58,6 +61,9 @@ function RemoveWorktree($path) {
     if (-not [IO.Path]::GetFullPath($path).StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to remove a path outside the test root: $path"
     }
+    if ((Get-Location).Path.StartsWith([IO.Path]::GetFullPath($path), [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Cannot remove a worktree while the shell is inside it.'
+    }
     if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
 }
 function git {
@@ -75,9 +81,16 @@ function git {
     $global:LASTEXITCODE = if ($script:failGitAdd) { 1 } else { 0 }
 }
 function Push-Location {
+    param([string]$Path)
+    if ($script:allowPush) { Microsoft.PowerShell.Management\Push-Location -Path $Path; return }
     if ($script:failPush) { throw 'Synthetic Push-Location failure.' }
     throw 'Push-Location unexpectedly reached in the missing-project case.'
 }
+function Pop-Location {
+    if ($script:failPop) { throw 'Synthetic Pop-Location failure.' }
+    Microsoft.PowerShell.Management\Pop-Location
+}
+function dotnet { throw 'Stop after Push-Location.' }
 
 try {
     try {
@@ -153,9 +166,27 @@ try {
     if ($script:registeredPaths.Count -ne $addsBefore -or $script:removeCount -ne $removesBefore) {
         throw "RunPart attempted setup or cleanup of another run's preexisting worktree."
     }
+
+    $script:forcedWorkPath = $null
+    $script:projectPresent = $true
+    $script:allowPush = $true
+    $script:failPop = $true
+    $script:registered = $null
+    $script:removeCount = 0
+    try {
+        RunPart 'pop-failure' @('GuardedInput') 1 | Out-Null
+        throw 'RunPart unexpectedly continued after the synthetic dotnet failure.'
+    }
+    catch {
+        if ($_.Exception.Message -ne 'Synthetic Pop-Location failure.') { throw }
+    }
+    if ((Get-Location).Path -ne $root) { throw 'RunPart left the shell inside its worktree after Pop-Location failed.' }
+    if (Test-Path -LiteralPath $script:registered) { throw 'RunPart left a worktree after Pop-Location failed.' }
+    if ($script:removeCount -ne 1) { throw 'RunPart skipped worktree cleanup after Pop-Location failed.' }
     Write-Host 'Mutation setup failures cleaned their worktrees.'
 }
 finally {
+    Set-Location $startLocation
     if (-not $root.StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), [StringComparison]::OrdinalIgnoreCase)) {
         throw "Unexpected temporary root: $root"
     }

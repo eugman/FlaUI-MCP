@@ -185,8 +185,18 @@ function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $
     }
     finally {
         try {
-            if ($pushed) { Pop-Location }
-            if ($project -ne $offlineProject) { CloseTestApps }
+            try {
+                if ($pushed) { Pop-Location }
+            }
+            catch {
+                # A failed pop can leave the shell inside the worktree, where
+                # Windows will refuse even targeted removal of its directory.
+                Set-Location $root
+                throw
+            }
+            finally {
+                if ($project -ne $offlineProject) { CloseTestApps }
+            }
         }
         finally { if ($created) { RemoveWorktree $work } }
     }
