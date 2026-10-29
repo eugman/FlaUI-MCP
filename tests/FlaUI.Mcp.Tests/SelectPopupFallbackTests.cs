@@ -8,6 +8,17 @@ namespace FlaUI.Mcp.Tests;
 public sealed class SelectPopupFallbackTests
 {
     [Fact]
+    public void ClickDescriptionExplainsUnconfirmedSelectionPolicy()
+    {
+        using var offlineDesktop = new FakeDesktop().Install();
+        var description = new ClickTool(new ElementRegistry()).Description;
+
+        Assert.Contains("list and tab items", description);
+        Assert.Contains("fresh readback", description);
+        Assert.Contains("Tree items", description);
+    }
+
+    [Fact]
     public void UnconfirmedListSelectionDoesNotSendASecondPointerAction()
     {
         var clicks = 0;

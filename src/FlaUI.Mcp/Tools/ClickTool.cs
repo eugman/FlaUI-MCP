@@ -25,11 +25,13 @@ public partial class ClickTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
 
     public override string Description =>
-        "Click an element by its ref (from windows_snapshot). Prefers Invoke pattern for reliability (tree and list rows: select), "
-        + "falls back to mouse click if needed. Menu items and controls whose name ends in \"...\" get a physical click "
+        "Click an element by its ref (from windows_snapshot). Prefers Invoke; tree, list and tab items use Select when available. "
+        + "After unconfirmed Select, list and tab items get no pointer click; use a fresh readback. "
+        + "Tree items retain a guarded mouse fallback. Other controls fall back to mouse click if needed. "
+        + "Menu items and controls whose name ends in \"...\" get a physical click "
         + "by default, because an Invoke that opens a menu or dialog blocks UI Automation until it closes; pass physical=false to force Invoke. "
         + "If the click opens a modal dialog, returns immediately with the dialog title instead of waiting for the dialog to close. "
-        + "A select fallback click reports whether SelectionItem confirms selection; an unconfirmed click must be inspected before continuing. "
+        + "A tree-item select fallback click reports whether SelectionItem confirms selection; an unconfirmed click must be inspected before continuing. "
         + "A right-click after selecting a tree or list row can start inline rename; open context menus with windows_send_keys Shift+F10 or Apps.";
 
     public override object InputSchema => ToolSchema.For<Arguments>();

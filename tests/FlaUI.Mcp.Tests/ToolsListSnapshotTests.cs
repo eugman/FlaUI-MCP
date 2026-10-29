@@ -77,6 +77,11 @@ public sealed class ToolsListSnapshotTests
         mouse["description"] = baseline.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_mouse")![
             "description"
         ]!.DeepClone();
+        // Tab and list Select no longer fall back to a stale pointer click; keep the old baseline for shape comparison.
+        var click = live.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_click")!;
+        click["description"] = baseline.AsArray().Single(tool => tool!["name"]!.GetValue<string>() == "windows_click")![
+            "description"
+        ]!.DeepClone();
         foreach (var guard in new[] { "fromMustHit", "toMustHit" })
         {
             Assert.Equal("string", properties[guard]!["type"]!.GetValue<string>());
