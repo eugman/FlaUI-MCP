@@ -109,6 +109,12 @@ public sealed class KeepAwake : IDisposable
                 catch (Exception ex)
                 {
                     StopIfResourceDisposed();
+                    if (_ownedResource is PowerAvailabilityRequest { HasPending: true })
+                    {
+                        _active = true;
+                        _timer.Change(_holdDuration, Timeout.InfiniteTimeSpan);
+                    }
+
                     if (!_acquireFailureLogged)
                     {
                         Console.Error.WriteLine($"Power request acquisition failed: {ex.Message}");
@@ -215,20 +221,21 @@ public sealed class PowerAvailabilityRequest : IDisposable
     private readonly Func<bool> _setSystem;
     private readonly Func<bool> _clearDisplay;
     private readonly Func<bool> _clearSystem;
-    private readonly Action _close;
+    private readonly Func<bool> _close;
     private bool _displaySet;
     private bool _systemSet;
     private bool _disposed;
 
     internal bool IsFullySet => !_disposed && _displaySet && _systemSet;
     internal bool IsDisposed => _disposed;
+    internal bool HasPending => !_disposed && (_displaySet || _systemSet);
 
     internal PowerAvailabilityRequest(
         Func<bool> setDisplay,
         Func<bool> setSystem,
         Func<bool> clearDisplay,
         Func<bool> clearSystem,
-        Action close
+        Func<bool> close
     )
     {
         _setDisplay = setDisplay;
@@ -292,21 +299,26 @@ public sealed class PowerAvailabilityRequest : IDisposable
             if (!_setSystem())
             {
                 var error = Marshal.GetLastPInvokeError();
-                if (_clearDisplay())
-                {
-                    _displaySet = false;
-                }
-                else
-                {
-                    _disposed = true;
-                    _close();
-                    _displaySet = false;
-                }
-
+                RollbackDisplayAfterSystemFailure();
                 throw new Win32Exception(error);
             }
 
             _systemSet = true;
+        }
+    }
+
+    private void RollbackDisplayAfterSystemFailure()
+    {
+        if (_clearDisplay())
+        {
+            _displaySet = false;
+            return;
+        }
+
+        if (_close())
+        {
+            _disposed = true;
+            _displaySet = false;
         }
     }
 
@@ -358,8 +370,12 @@ public sealed class PowerAvailabilityRequest : IDisposable
         }
         catch { }
 
+        if (!_close())
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
+        }
+
         _disposed = true;
-        _close();
     }
 
     private const uint POWER_REQUEST_CONTEXT_VERSION = 0;
