@@ -84,6 +84,27 @@ public sealed class Te3DialogsTests
         Assert.Contains("MCP Server", navigate.Message);
     }
 
+    [Theory]
+    [InlineData("MCP Server")]
+    [InlineData("Preferences")]
+    public void NavigationRefusesTwoDialogsWithTheAllowedTitle(string title)
+    {
+        var windows = new[]
+        {
+            Main,
+            new Win32WindowInfo(0x20, title, 7, true, false, false),
+            new Win32WindowInfo(0x21, title, 7, true, false, false),
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Te3Dialogs.RequireNoOtherWindow(windows, Main.Hwnd, title, Shape)
+        );
+
+        Assert.Contains(title, error.Message);
+        Assert.Contains("two", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("precondition-failed", CoreFailure.BeforeInput(error, 0)?.Code);
+    }
+
     [Fact]
     public void AnOwnedDialogWithToolWindowStyleStillBlocksLayoutBeforeInput()
     {

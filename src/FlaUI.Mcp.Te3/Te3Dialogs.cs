@@ -75,6 +75,14 @@ internal static class Te3Dialogs
     )
     {
         shapeOf ??= WindowShape.Read;
+        if (windows.Count(w => w.Hwnd != main && w.Title == allowedDialog) > 1)
+        {
+            throw new InvalidOperationException(
+                $"Two or more TE3 windows titled '{allowedDialog}' are open; the intended dialog is ambiguous. "
+                    + "Inspect them; no input sent."
+            );
+        }
+
         var unexpected = windows
             .Where(w => w.Hwnd != main && w.Title.Length > 0 && w.Title != allowedDialog)
             .Where(w => !LayoutChecks.IsFloatingPane(w, shapeOf) || Advice(w.Title) != null)
