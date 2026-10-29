@@ -143,6 +143,13 @@ permission settings.
 
 Observed on TE3 3.27.1. Pane bounds are physical pixels and vary with window size and DPI; query them at runtime.
 
+On startup, TE3 may show the owned `New version available` dialog alongside
+its main window. The merged generic `windows_launch` route returned the main
+window as a provisional handle with both windows present. Check
+`windows_list_windows`, dismiss the notice, then confirm the intended TE3
+scene before input. The notice's `OK` and title-bar `Close` buttons dismiss it;
+neither downloads an update.
+
 | Area | Selector | Notes |
 |---|---|---|
 | Main window | Window titled `<database> (Import) - <server> - Tabular Editor 3.27.1 - Enterprise Edition` | Confirm the exact local or disposable model identity before input. |
