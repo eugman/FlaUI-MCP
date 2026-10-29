@@ -41,12 +41,28 @@ $integrationParts = [ordered]@{
 }
 
 function RemoveWorktree($path) {
-    if (Test-Path $path) {
-        git worktree remove --force $path 2>$null
-        if (Test-Path $path) { Remove-Item -Recurse -Force $path -ErrorAction SilentlyContinue }
+    $target = [IO.Path]::GetFullPath($path)
+    $buildRoot = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath((Join-Path $root 'local/build-background'))) + [IO.Path]::DirectorySeparatorChar
+    if (-not $target.StartsWith($buildRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a worktree outside $buildRoot`: $path"
     }
+    # `remove` also clears registration when the directory has already gone.
+    # A global `prune` would remove other worktrees that happen to be offline.
+    git worktree remove --force $path 2>$null
+    if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue }
+    # A lock needs a second force flag; retry only this script-owned path after
+    # deleting its directory so Git can clear this one registration.
+    git worktree remove --force --force $path 2>$null
 
-    git worktree prune
+    $listing = git worktree list --porcelain
+    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect Git worktree registrations after cleanup.' }
+    $registered = @($listing | Where-Object {
+        $_.StartsWith('worktree ') -and
+        [IO.Path]::GetFullPath($_.Substring(9)) -ieq $target
+    }).Count -gt 0
+    if ((Test-Path -LiteralPath $path) -or $registered) {
+        throw "Could not fully remove the worktree at $path."
+    }
 }
 
 # The number of tests in a project, as vstest discovers them (theory rows included).
