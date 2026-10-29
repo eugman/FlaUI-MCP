@@ -154,7 +154,11 @@ View popup (3.27.1): Button `Properties` shows shortcut F4. Its ancestry is a na
 
 `te3_layout_read list` gives pane-container bounds relative to the UIA window rectangle, including title bars; content bounds start below them. Use `windows_screenshot` with `locate` for image pixels instead of hardcoded offsets. TE3 remembers its window state, so confirm or set that state before comparing layout geometry. Touching TOM Explorer and Properties panes share an edge; use guarded `te3_layout resize`, not a raw drag.
 
+At 175% scaling in one 3.27.1 live session, `plan-preset` requested 680/480/320 px for AI Assistant/TOM Explorer/Properties. `apply-preset` skipped the first two within 1 px and resized Properties; `te3_layout_read` then reported 679/479/321 px. The window reported DPI 120 while its monitor reported DPI 168; native screenshots showed black padding, so use `locate` or UIA bounds for proof rather than treating native image pixels as UIA coordinates.
+
 For TOM Explorer object navigation, `folder` constrains the requested object to that display folder; it does not speed up the walk. Rows can match role permissions or same-named objects, and the status-bar selection can lag or retain a previous label for folders. The host reads row depth at runtime, corroborates selection with Properties, and reports a bounded miss in its `walk` result. Inspect that result instead of retrying blindly.
+
+A live `Products[Type]` request in `1. Product Hierarchy` missed after a complete `Type` search showed other tables but not that collapsed child; the selection was left at `Customers[Customer Hierarchy]`. The row strategy now tries a table-name search after a complete name-search miss with no candidate. This path has an offline regression and still needs a live retest.
 
 | Dialog (3.27.1) | Selector | Notes |
 |---|---|---|
