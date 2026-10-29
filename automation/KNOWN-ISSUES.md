@@ -1,10 +1,8 @@
 # TE3 automation: current cautions
 
-This is the short operational index. The detailed 2026-10-21–25 runs, including
-closed defects and superseded workarounds, are preserved in the
-[dated issue record](history/known-issues-through-20261025.md). A previous live
-observation is not proof that another TE3 build or display scale behaves the
-same way.
+This is the operational index. A live observation on one TE3 build or display
+scale does not prove the same behavior on another. Dated run notes remain in Git
+history rather than a fresh clone.
 
 ## Preferences search
 
@@ -24,15 +22,13 @@ pane. The current DPI-scaled splitter offsets still need a live 175% pass.
 `te3_navigate object` can stop before reaching a deep object under its tool
 deadline. Inspect its structured `walk` result and read `te3_model_state` after
 a miss; do not repeat input blindly. Some same-name and root-offscreen cases
-were fixed offline after the dated live runs and still need a granted live pass.
-The detailed timing and failure evidence is in the dated issue record.
+were fixed offline and still need a granted live pass.
 
 ## Raw TOM Explorer drags
 
 A raw `windows_mouse drag` on a TOM Explorer row moved a measure to another
 table in a 2026-10-22 run. Do not use that gesture as a harmless demonstration:
-the tree can scroll during the drag and TE3 reparents on drop. See the dated
-record for the observed move and its undo.
+the tree can scroll during the drag and TE3 reparents on drop.
 
 ## Activation click and dialogs
 
@@ -44,7 +40,9 @@ live check. Observe the open windows before mutation if a new dialog appears.
 ## Not built yet
 
 - A typed menu tool for TE3's Alt mnemonics: popup destinations need mapping.
-- Selection and error assertions through TE3's own MCP server: tool names and
-  response behavior need a granted live check.
+- Selection and error assertions through TE3's own MCP server: the observed
+  3.27.1 server advertised 24 tools, but this host has verified only the
+  read-only `get_workspace_info` identity call. Selection and error behavior
+  still need a granted live check.
 - TOM Explorer Ctrl+1..7 type filters in the object walk: no verified state
   readback is available yet.

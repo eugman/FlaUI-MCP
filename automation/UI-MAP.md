@@ -39,7 +39,7 @@ Locators and behaviour observed in TE3 3.26.3, 3.27.0 and 3.27.1. Treat every la
 | AI Features > MCP Server | Pane `AI Features.MCP Server` | Observed 3.27.1: CheckBoxes `Enable MCP Server`, `Start MCP server automatically`, `Require access token`; Spinner `Port`. |
 | AI Features > Permissions | Pane `AI Features.Permissions` | Observed 3.27.1: ComboBoxes `Model metadata:`, `Model data:`, `Best Practice Analyzer:`, `Documents:`, `Macros:`. |
 
-The recent-server pin/unpin context menu is not mapped. A dated 3.27.1 inspection and the 175% scaling evidence are in [the 2026-10-25 observation record](history/ui-map-live-20261025.md); recheck the dropdown before automating it.
+The recent-server pin/unpin context menu is not mapped. On a 175% display, a 3.27.1 process reported window DPI 120 and monitor DPI 168; a `screen-uia-bounds` screenshot showed the database dialog correctly, but native capture and UIA-to-image geometry still require separate verification. Recheck the dropdown before automating it.
 
 ## Menus
 
@@ -60,7 +60,7 @@ The recent-server pin/unpin context menu is not mapped. A dated 3.27.1 inspectio
 - **Help:** About shows the licence holder, installations and session ID. Redact them before publishing.
 - **3.27 adds:** Tools > MCP Server, Help > Get Started, File > Reload from disk.
 
-File > Recent Tabular Models is a local-model list, not the recent-server pin control. See [the 2026-10-25 observation record](history/ui-map-live-20261025.md) for that menu's dated inspection.
+File > Recent Tabular Models is a local-model list, not the recent-server pin control. Opening the database dialog with toolbar `Model from DB...`, inspecting it, and canceling without connecting has been verified on 3.27.1.
 
 ## Preferences
 
@@ -122,7 +122,7 @@ A dialog can disappear between window enumeration and a UIA read. Treat `Element
 | Preferences > AI Features > Permissions | Live UIA tree and pane controls | `preferences/permissions` |
 | Preferences > AI Features > AI Assistant > AI Provider | Live UIA tree and pane controls | `preferences/ai-provider` |
 | Preferences > AI Features > AI Assistant > Preferences | Live UIA tree and pane controls | `preferences/ai-assistant` |
-| View > AI Assistant | Live View popup Button `AI Assistant` and Pane `AI Assistant` (2026-10-21) | `te3_layout reopen-pane` (reopen verified by hand; the action itself is verified live for Properties only) |
+| View > AI Assistant | Live View popup Button `AI Assistant` and Pane `AI Assistant` | `te3_layout reopen-pane` verified live on 3.27.1; check the pane after reopening. |
 | View > Properties | Live View popup Button `Properties` (shortcut F4) and Pane `Properties` (2026-10-21) | `te3_layout reopen-pane`, verified live: see Docked panes |
 | TOM Explorer > Show changes | Live UIA CheckBox with Toggle pattern; [official behavior](https://docs.tabulareditor.com/en/features/unsaved-changes.html) | `tom-explorer/changes` |
 | Properties > Show changes | Live CheckBox `Show changes` in ToolBar `Tools` > Group `Dock Top` > Pane `PropertyGridView`, Toggle and Invoke patterns (2026-10-21) | Observed only |
@@ -131,51 +131,33 @@ The MCP Server and Permissions routes inspect settings only. They do not change 
 
 ## Docked panes and View menu (3.27.1)
 
-Observed 3.27.1 (2026-10-21) on `localhost/sp-demo-mcp`, main window maximized on a 1920x1200 monitor at 125% (window and monitor DPI 120, not 150%). Bounds are physical pixels.
+Observed on TE3 3.27.1. Pane bounds are physical pixels and vary with window size and DPI; query them at runtime.
 
 | Area | Selector | Notes |
 |---|---|---|
-| Main window | Window titled `<database> (Import) - <server> - Tabular Editor 3.27.1 - Enterprise Edition` | UIA BoundingRectangle (0,30,1920,1110); native window bounds (-9,-9,1938,1158). |
+| Main window | Window titled `<database> (Import) - <server> - Tabular Editor 3.27.1 - Enterprise Edition` | Confirm the exact local or disposable model identity before input. |
 | Main menu | MenuBar `Main menu` | MenuItems File, Edit, View, Expression Editor (only while that document has focus), Model, Tools, Window, Help. |
-| AI Assistant | Pane `AI Assistant` > `AiChatView` | TitleBar `AI Assistant` with Buttons `Close`, `Auto Hide` (no `Maximize`). ToolBar `Tools`: `New conversation`, `Delete conversation`, ComboBox `barConversations`, `Open Custom Instructions Folder`, `AI Assistant Settings`; Button `Send` (`send-button`). Chat is WebView2 (`myapp.local/index.html`). |
+| AI Assistant | Pane `AI Assistant` > `AiChatView` | TitleBar `AI Assistant` with Buttons `Close`, `Auto Hide` (no `Maximize`). ToolBar `Tools`: `New conversation`, `Delete conversation`, ComboBox `barConversations`, `Open Custom Instructions Folder`, `AI Assistant Settings`. Chat is WebView2 (`myapp.local/index.html`); message Edit `message-input` and Button `Send` (`send-button`) were found on 3.27.1. |
 | TOM Explorer | Pane `TOM Explorer` inside Tab `Tabular Editor 3` | Tabs `TOM Explorer` and `Best Practice Analyzer` share the container. TitleBar Buttons `Close`, `Auto Hide`, `Maximize`. Title reads `TOM Explorer (Changed)` while Show changes is on. Search Edit `searchControl1`. |
 | Properties | Pane `Properties` > `PropertyGridView` > Table `propertyGrid` | ToolBar `Tools`: CheckBoxes `Categorized`, `Alphabetical`, `Show changes`, `Property descriptions`. This is the Properties Show changes control. |
 | Expression Editor | Document Pane `Expression Editor` > `QuickEditorView` | ToolBar `DAX Script Tools` with ComboBox `Property`. Listed by `te3_layout_read` as kind `document`. |
 | Status bar | StatusBar `Status bar` | Buttons `<n> BP issues` and `MCP Stopped`. |
 | View menu entries | Buttons in the untitled popup (find with `includeOwned: true`) | `TOM Explorer`, `AI Assistant`, `DAX Package Manager`, `Best Practice Analyzer`, `Messages`, `Data Refresh`, `Expression Editor`, `Macros`, `VertiPaq Analyzer`, `Dependencies`, `DAX Optimizer`, `Calendar Editor`, `Perspective Editor`, `Metadata Translation Editor`, `Properties`; submenu MenuItems `Debug`, `Toolbars`. The popup is not listed by `windows_list_windows`. |
 
-Not open in this layout, so not observed: DAX query, Messages, Macros, Data preview panes.
-
 `te3_navigate tom-explorer` now checks whether the tree is visible, selects its existing `TOM Explorer` or `TOM Explorer (Changed)` tab when another tab is active, or reopens a closed pane through the mapped View menu, then reads back the tree. This route is offline-tested but awaits live verification on 3.27.1.
 
 `te3_layout keep` preserves unmapped panes (including debugger panes) and returns them in `preservedUnmapped`; closing an unmapped pane could persist across restarts. Explicit `close` remains available.
 
-Reopening a pane: hide it, click MenuItem `View` with `physical: true`, find Button `<pane title>` with `includeOwned: true`, click it with `physical: true`. This manual route was observed for Properties, AI Assistant and TOM Explorer; `te3_layout reopen-pane` itself was verified live for Properties on 2026-10-22. Reverify the tool route for the other panes before calling it live verified.
-
-`te3_layout reopen-pane` verified live on 3.27.1 for Properties (2026-10-21): `hide-pane` took 1 input, `reopen-pane` 3, and Properties came back at its previous bounds (TOM Explorer shrank back to its old height). A second `reopen-pane` on the visible pane sent no input and returned `changed: false`. A document title (`Expression Editor`) is refused before input as a document, not a dockable pane in the View menu map.
+Reopening a pane: `te3_layout reopen-pane` was verified live for Properties and AI Assistant on 3.27.1. It opens View, finds the Button named after the pane in the owned popup, and verifies the pane is showing. A visible pane is a no-op. A document title (`Expression Editor`) is refused before input because it is not a dockable pane in the View menu map.
 
 View popup (3.27.1): Button `Properties` shows shortcut F4. Its ancestry is a nameless `Menu` with its own hwnd inside a nameless owned `Window`, so find it with `includeOwned: true`. Escape closes the popup. A `windows_screenshot` of the main window handle includes the open popup; a `fullScreen` capture is refused under the app allowlist.
 
-Pane bounds from `te3_layout_read list` (UIA-window-relative): AI Assistant (0,61,1000,1017), Expression Editor document (1000,61,160,1017), TOM Explorer (1160,61,760,590), Properties (1160,651,760,427). `maximize-pane Properties` gave TOM Explorer height 36 and Properties (1160,97,760,981); `restore-pane` returned the original sizes.
+`te3_layout_read list` gives pane-container bounds relative to the UIA window rectangle, including title bars; content bounds start below them. Use `windows_screenshot` with `locate` for image pixels instead of hardcoded offsets. TE3 remembers its window state, so confirm or set that state before comparing layout geometry. Touching TOM Explorer and Properties panes share an edge; use guarded `te3_layout resize`, not a raw drag.
 
-Coordinate spaces (Verified, 3.27.1, 2026-10-21, host te3-d276329): with the window placed restored at (0,0,1920,1080), `te3_layout_read list` bounds equal window and PNG pixels: AI Assistant lists at (1,100,...) and its title bar is at PNG y about 103, and the located BPA content (1444,132) sits inside the listed TOM/BPA container (1439,100,480,627). The earlier "+1, +39 restored" offset is stale; maximized offsets were (+9, +39) on an earlier build. TE3 remembers its window state (UiPreferences.json `RememberWindowState`), so it can start restored: call `windows_set_window_state` before relying on maximized offsets. Use `windows_screenshot` with `locate` rather than converting.
-
-Touching panes: the TOM Explorer and Properties containers share an edge (y 651) with no gap. The splitter sits in TOM Explorer's last rows; y 651 is the top of the Properties title bar.
-
-Restored at (0,0,1920,1080) the panes listed as AI Assistant (0,61,638,947), Expression Editor document (638,61,520,947), TOM Explorer (1158,61,760,549) and Properties (1158,610,760,398). TOM Explorer's left edge touches the document with no gap. `apply-preset assistant-model-review` there moved AI Assistant to 680 with a drag 3 px inside AI Assistant. The TOM Explorer drag, 3 px inside the document, left it at 760, and nothing undocked. The host now starts that drag 3 px inside TOM Explorer; see [KNOWN-ISSUES](KNOWN-ISSUES.md).
-
-Pane bounds versus content bounds: `te3_layout_read list` gives the pane container including its title bar, TOM Explorer (1159,100,760,549) in screen pixels with the window at (0,0). The content Pane `TabularExplorer` located in a `strictNative` capture starts below the title bar at (1164,132,751,478), and Edit `searchControl1` at (1164,162,751,26). Pick the rectangle you mean when you crop.
-
-TOM Explorer object walk (SpaceParts, 2026-10-21): column `Brands[Brand]` is in display folder `1. Brand Hierarchy`. One `te3_navigate object` call with `folder: "1. Brand Hierarchy"` reached it in 16.7 s and 13 inputs; one without `folder` stopped on the 18 s clock after 8 rows. The host ignored `folder` at the time, so both calls ran the same walk and the difference was walk speed, not the argument. Since then `folder` is honoured: the object must be inside that folder, and the walk stops once it leaves the table. It does not make the walk faster.
-
-TOM Explorer row depth (Verified, 3.27.1, 2026-10-21): every TreeItem `NodeN` spans the row at the same x; its DataItem `Name row N` (same N, y, height 22 and Value) starts at TreeItem.x + 48 + 24 x depth, model root depth 0 (Tables 1, a table 2, a display folder or a table's column 3, a column in a folder 4, hierarchy levels 5; under Roles a role is 2 and its table permission 3). The status-bar selection slot does not follow a selected display folder (it kept `Column "Type"`); Properties showed ObjectType `Folder`. The 48 and 24 px are the 125% values: the host measures both at runtime from the model root (row 0) and its first child (row 1), and reports depth unknown when they are not in view. The object walk takes each row's depth from its DataItem, its type from the status bar when the slot names that row and otherwise from Properties' ObjectType, collapses top-level groups other than Tables (Left, checked by the selection staying put), and counts a table only under Tables. Not yet re-run live.
+For TOM Explorer object navigation, `folder` constrains the requested object to that display folder; it does not speed up the walk. Rows can match role permissions or same-named objects, and the status-bar selection can lag or retain a previous label for folders. The host reads row depth at runtime, corroborates selection with Properties, and reports a bounded miss in its `walk` result. Inspect that result instead of retrying blindly.
 
 | Dialog (3.27.1) | Selector | Notes |
 |---|---|---|
 | Open File | owned Window `Open File` from toolbar Button `Open...` | Observed 3.27.1 (2026-10-21): ID `1148` is shared by a Pane, ComboBox `File name:` and Edit `File name:`; keep the Edit constraint. ComboBox `Files of type:` is `1136`. Cancel is Button `Cancel`, ID `2`. |
 | Preferences | Window `Preferences` | Observed 3.27.1: Cancel is Button `Cancel` (numeric ID, unstable). All six `preferences/*` destinations arrived with the Preferences window left open between calls. |
-| MCP Server | Window `MCP Server`, Pane `McpServerDialog` > `layoutControl` | Observed 3.27.1: Buttons `OK`, `Start server`, `Copy`; SplitButton `Export configuration`; read-only Edit `Server URL:`; permission ComboBoxes `Model metadata:` (Deny/Read/Read-Write), `Model data:` (Deny/Read), `Best Practice Analyzer:`, `Documents:`, `Macros:`. Observed only; no permission changed. |
-
-## Dated evidence
-
-The complete 2026-10-21–22 locator and host-action observations are in [the dated live evidence](history/ui-map-live-20261021-22.md). They record what happened on those builds and are not a fresh verification of the current host.
+| MCP Server | Window `MCP Server`, Pane `McpServerDialog` > `layoutControl` | Observed 3.27.1: Buttons `OK`, `Start server`, `Copy`; SplitButton `Export configuration`; read-only Edit `Server URL:`; permission ComboBoxes `Model metadata:` (Deny/Read/Read-Write), `Model data:` (Deny/Read), `Best Practice Analyzer:`, `Documents:`, `Macros:`. The live server identified itself as `tabular-editor/27.1.0.4`, advertised 24 tools, and returned `modelTitle` in `get_workspace_info`. These are version-specific observations; verify identity before use. |
