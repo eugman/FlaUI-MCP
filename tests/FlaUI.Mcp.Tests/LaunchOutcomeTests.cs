@@ -8,6 +8,87 @@ namespace FlaUI.Mcp.Tests;
 public sealed class LaunchOutcomeTests
 {
     [Fact]
+    public void ExplicitWindowTitleSelectsMainWindowDespiteStartupModal()
+    {
+        Win32WindowInfo[] windows =
+        [
+            new(101, "New version available", 7321, true, false, false),
+            new(102, "Tabular Editor 3.27.1 - Enterprise Edition", 7321, true, false, false),
+        ];
+
+        var candidates = SessionManager.LaunchCandidates(windows, "Tabular Editor 3.27.1 - Enterprise Edition");
+
+        Assert.Single(candidates);
+        Assert.Equal((nint)102, candidates[0].Hwnd);
+    }
+
+    [Fact]
+    public void WrongExplicitWindowTitleDoesNotGuessFromStartupModal()
+    {
+        Win32WindowInfo[] windows = [new(101, "New version available", 7321, true, false, false)];
+
+        Assert.Empty(SessionManager.LaunchCandidates(windows, "Tabular Editor 3.27.1 - Enterprise Edition"));
+    }
+
+    [Fact]
+    public void ExplicitWindowTitleStillRefusesTwoIdenticallyTitledWindows()
+    {
+        Win32WindowInfo[] windows =
+        [
+            new(101, "Main", 7321, true, false, false),
+            new(102, "Main", 7321, true, false, false),
+        ];
+
+        var candidates = SessionManager.LaunchCandidates(windows, "Main");
+
+        Assert.Equal(2, candidates.Count);
+        nint previous = 0;
+        var consecutive = 0;
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, candidates));
+    }
+
+    [Fact]
+    public void OwnedStartupDialogDoesNotHideTheSoleMainWindow()
+    {
+        Win32WindowInfo[] windows =
+        [
+            new(101, "New version available", 7321, true, false, false) { Owner = 102 },
+            new(102, "Main", 7321, false, false, false),
+        ];
+        nint previous = 0;
+        var consecutive = 0;
+
+        Assert.Null(SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, windows, 2));
+        Assert.Equal((nint)102, SessionManager.ObserveLaunchWindow(ref previous, ref consecutive, windows, 2));
+    }
+
+    [Fact]
+    public void NestedOwnedDialogsStillSelectTheSoleMainWindow()
+    {
+        Win32WindowInfo[] windows =
+        [
+            new(101, "Confirmation", 7321, true, false, false) { Owner = 103 },
+            new(102, "Main", 7321, false, false, false),
+            new(103, "Update", 7321, false, false, false) { Owner = 102 },
+        ];
+
+        Assert.Equal((nint)102, SessionManager.SoleMainWindowWithOwnedDialogs(windows)?.Hwnd);
+    }
+
+    [Fact]
+    public void IndependentWindowAlongsideOwnedDialogRemainsAmbiguous()
+    {
+        Win32WindowInfo[] windows =
+        [
+            new(101, "Update", 7321, true, false, false) { Owner = 102 },
+            new(102, "Main", 7321, false, false, false),
+            new(103, "Other main", 7321, true, false, false),
+        ];
+
+        Assert.Null(SessionManager.SoleMainWindowWithOwnedDialogs(windows));
+    }
+
+    [Fact]
     public void StableSplashHandleIsProvisionalNotACompletedLaunch()
     {
         var observed = new Win32WindowInfo(101, "Splash", 7321, true, false, false);

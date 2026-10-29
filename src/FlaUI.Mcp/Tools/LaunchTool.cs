@@ -20,7 +20,7 @@ public class LaunchTool : ToolBase
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: false);
 
     public override string Description =>
-        "Start a Windows application and return a provisional window handle when one owned window is found. A pending or handed-off launch has no proven window handle: inspect windows_list_windows and attach explicitly before input. A startup splash can be stable before the main window appears.";
+        "Start a Windows application and return a provisional handle when one eligible window is found, or one titled unowned window has only its owned dialogs alongside it. windowTitle can select an exact title when needed. A pending or handed-off launch has no proven window handle: inspect windows_list_windows and attach explicitly before input. A startup splash can be stable before the main window appears.";
 
     public override object InputSchema => ToolSchema.For<Arguments>();
 
@@ -36,9 +36,14 @@ public class LaunchTool : ToolBase
         public string[]? Args { get; init; }
 
         [ToolDoc(
-            "Poll for a unique window from this process for up to 1-90 seconds (default 20). The launch call allows 15 more seconds for startup and provider reads; set the client timeout above waitSeconds + 15. An ambiguous or slower launch returns an unresolved outcome for inspection."
+            "Poll for an eligible provisional window from this process for up to 1-90 seconds (default 20). The launch call allows 15 more seconds for startup and provider reads; set the client timeout above waitSeconds + 15. An ambiguous or slower launch returns an unresolved outcome for inspection."
         )]
         public int? WaitSeconds { get; init; }
+
+        [ToolDoc(
+            "Optional exact target-window title to select when a startup modal or splash also belongs to the process. The returned handle remains provisional; inspect before input."
+        )]
+        public string? WindowTitle { get; init; }
     }
 
     public override Task<McpToolResult> ExecuteAsync(JsonElement? arguments)
@@ -51,14 +56,20 @@ public class LaunchTool : ToolBase
 
         var args = GetArgument<string[]>(arguments, "args");
         var waitSeconds = GetArgument<int?>(arguments, "waitSeconds");
+        var windowTitle = GetStringArgument(arguments, "windowTitle");
         if (waitSeconds is < 1 or > 90)
         {
             return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "waitSeconds must be between 1 and 90"));
         }
 
+        if (windowTitle != null && string.IsNullOrWhiteSpace(windowTitle))
+        {
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "windowTitle must not be blank"));
+        }
+
         try
         {
-            var (handle, window) = _sessionManager.LaunchApp(app, args, waitSeconds);
+            var (handle, window) = _sessionManager.LaunchApp(app, args, waitSeconds, windowTitle);
             return Task.FromResult(ProvisionalResult(app, handle, window.Properties.ProcessId.Value, window.Title));
         }
         catch (LaunchPendingException pending)

@@ -42,7 +42,7 @@ Add the server to your MCP client:
 
 The TE3-specific tools still target TE3. Shared `windows_*` tools prefer TE3 and warn in the result when a call targets another app, such as Windows Terminal. Mutating tools require `te3_interaction_begin`, and physical user input revokes the grant. Set `FLAUI_MCP_ALLOWED_APPS` to enforce a strict allowlist when needed.
 
-For a TE3 launch, begin an interaction first. `windows_launch` returns a provisional handle only when it finds one window owned by the new process. A still-running process with ambiguous windows returns `launch-pending`; a launcher that exits or returns no process handle returns `launch-handoff`. Both are unresolved, so inspect `windows_list_windows` and the intended TE3 window before input or another launch. The server allows the requested `waitSeconds` (20 by default) plus 15 seconds for startup and provider reads; set the MCP caller timeout above that deadline.
+For a TE3 launch, begin an interaction first. `windows_launch` returns a provisional handle for one eligible window, including a titled unowned main window with only its owned startup dialogs alongside it. Pass exact `windowTitle` when ownership is unclear. A still-running process with ambiguous windows returns `launch-pending`; a launcher that exits or returns no process handle returns `launch-handoff`. Both are unresolved, so inspect `windows_list_windows` and the intended TE3 window before input or another launch. The server allows the requested `waitSeconds` (20 by default) plus 15 seconds for startup and provider reads; set the MCP caller timeout above that deadline.
 
 ## Documentation
 
