@@ -13,6 +13,8 @@ public sealed class SelectPopupFallbackTests
         using var offlineDesktop = new FakeDesktop().Install();
         var description = new ClickTool(new ElementRegistry()).Description;
 
+        Assert.Contains("tree and list rows prefer Select", description);
+        Assert.Contains("Tabs can use Select", description);
         Assert.Contains("list and tab items", description);
         Assert.Contains("fresh readback", description);
         Assert.Contains("Tree items", description);
