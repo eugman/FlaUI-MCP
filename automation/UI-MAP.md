@@ -129,6 +129,16 @@ A dialog can disappear between window enumeration and a UIA read. Treat `Element
 
 The MCP Server and Permissions routes inspect settings only. They do not change grants or start the MCP server.
 
+At the left display's 175% scaling, `preferences/mcp-server` again verified
+arrival without a model loaded. The `Preferences` window contained Pane
+`AI Features.MCP Server`, checked `Enable MCP Server`, unchecked `Start MCP
+server automatically` and `Require access token`, and a `Port` Spinner. Its
+`Cancel` button dismissed the window without saving. The native `MCP Server`
+route also verified arrival; its dialog included Button `Open audit folder`
+after the five permission ComboBoxes. Closing it left the status at `MCP
+Stopped`. These are control identities and observed states, not recommended
+permission settings.
+
 ## Docked panes and View menu (3.27.1)
 
 Observed on TE3 3.27.1. Pane bounds are physical pixels and vary with window size and DPI; query them at runtime.
@@ -164,4 +174,4 @@ A live `Products[Type]` request in `1. Product Hierarchy` missed after a complet
 |---|---|---|
 | Open File | owned Window `Open File` from toolbar Button `Open...` | Observed 3.27.1 (2026-10-21): ID `1148` is shared by a Pane, ComboBox `File name:` and Edit `File name:`; keep the Edit constraint. ComboBox `Files of type:` is `1136`. Cancel is Button `Cancel`, ID `2`. |
 | Preferences | Window `Preferences` | Observed 3.27.1: Cancel is Button `Cancel` (numeric ID, unstable). All six `preferences/*` destinations arrived with the Preferences window left open between calls. |
-| MCP Server | Window `MCP Server`, Pane `McpServerDialog` > `layoutControl` | Observed 3.27.1: Buttons `OK`, `Start server`, `Copy`; SplitButton `Export configuration`; read-only Edit `Server URL:`; permission ComboBoxes `Model metadata:` (Deny/Read/Read-Write), `Model data:` (Deny/Read), `Best Practice Analyzer:`, `Documents:`, `Macros:`. The live server identified itself as `tabular-editor/27.1.0.4`, advertised 24 tools, and returned `modelTitle` in `get_workspace_info`. These are version-specific observations; verify identity before use. |
+| MCP Server | Window `MCP Server`, Pane `McpServerDialog` > `layoutControl` | Observed 3.27.1: Buttons `OK`, `Start server`, `Copy`, `Open audit folder`; SplitButton `Export configuration`; read-only Edit `Server URL:`; permission ComboBoxes `Model metadata:` (Deny/Read/Read-Write), `Model data:` (Deny/Read), `Best Practice Analyzer:`, `Documents:`, `Macros:`. The live server identified itself as `tabular-editor/27.1.0.4`, advertised 24 tools, and returned `modelTitle` in `get_workspace_info`. These are version-specific observations; verify identity before use. |
