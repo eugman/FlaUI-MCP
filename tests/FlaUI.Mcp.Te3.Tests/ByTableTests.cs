@@ -383,6 +383,70 @@ public sealed class ByTableTests
     }
 
     [Fact]
+    public async Task CompleteNameSearchMayHideAColumnInsideACollapsedFolder()
+    {
+        // Live 3.27.1: searching Type showed 14 measured rows, including other tables, but not
+        // Products[Type] in 1. Product Hierarchy. The table filter can reveal its table row,
+        // then clearing it reveals the folder that must be opened.
+        static IReadOnlyList<(string, int?, string)> Rows(string search, IReadOnlySet<string> open)
+        {
+            if (search == "Type")
+            {
+                return
+                [
+                    SpaceParts,
+                    Tables,
+                    ("Brands", 2, "Table"),
+                    ("2. Brand Attributes", 3, "Folder"),
+                    ("Type", 4, "Column"),
+                    ("Customers", 2, "Table"),
+                    ("Customer Hierarchy", 3, "Hierarchy"),
+                    ("Products", 2, "Table"),
+                ];
+            }
+
+            if (search == "Products")
+            {
+                return [SpaceParts, Tables, ("Products", 2, "Table")];
+            }
+
+            List<(string, int?, string)> rows =
+            [
+                SpaceParts,
+                Tables,
+                ("Brands", 2, "Table"),
+                ("Customers", 2, "Table"),
+                ("Products", 2, "Table"),
+            ];
+            if (open.Contains("Products"))
+            {
+                rows.Add(("1. Product Hierarchy", 3, "Folder"));
+                if (open.Contains("1. Product Hierarchy"))
+                {
+                    rows.Add(("Type", 4, "Column"));
+                }
+            }
+
+            return rows;
+        }
+
+        var tree = new SearchedTree(Rows, "Type");
+
+        var result = await ObjectSelect.RowsThenTable(
+            tree,
+            new WalkRequest("Products", "Type", "Column", "1. Product Hierarchy"),
+            () => false,
+            null,
+            null
+        );
+
+        Assert.True(result.Found, result.Reason);
+        Assert.True(result.ByTable);
+        Assert.Equal(["Products"], tree.Searches);
+        Assert.Equal(["Products", "1. Product Hierarchy"], tree.Opened);
+    }
+
+    [Fact]
     public async Task AnObjectNamedLikeItsTableIsStillTriedUnderTheTableWhenTheNameReadPlacedNoRow()
     {
         // Review (L3): with name == table the second try was skipped, and a name read that placed no row (0 rows)

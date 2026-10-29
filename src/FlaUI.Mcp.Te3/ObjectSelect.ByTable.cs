@@ -38,7 +38,9 @@ internal static partial class ObjectSelect
     )
     {
         var first = await Run(tree, request, outOfTime, lastArrived);
-        if (!first.FallBack)
+        // A complete filtered view can still omit children of collapsed folders. When no row
+        // was placed, try the table anchor even though paging found the end of that view.
+        if (first.Found || (!first.FallBack && first.Tried > 0))
         {
             return first;
         }
