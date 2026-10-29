@@ -35,6 +35,33 @@ public sealed class SelectPopupFallbackTests
     }
 
     [Fact]
+    public void UnconfirmedTabSelectionDoesNotClickAStaleTabRectangle()
+    {
+        var clicks = 0;
+        var selected = ClickTool.PatternResult(
+            new PatternCallResult(PatternCallOutcome.Completed),
+            "Selected Model view"
+        );
+
+        var result = ClickTool.AfterUnconfirmedSelect(
+            ControlType.TabItem,
+            "Model view",
+            selected,
+            () =>
+            {
+                clicks++;
+                return selected;
+            }
+        );
+
+        Assert.Equal(0, clicks);
+        Assert.Contains("Select was sent", result.Content[0].Text);
+        Assert.Contains("fresh snapshot", result.Content[0].Text);
+        Assert.Equal("completed", result.Outcome!.Dispatch);
+        Assert.Equal(Proof.Unavailable, result.Outcome.Proof!.Verdict);
+    }
+
+    [Fact]
     public void UnconfirmedTreeSelectionRetainsItsGuardedFallback()
     {
         var clicks = 0;

@@ -37,7 +37,7 @@ public partial class ClickTool
         }
     }
 
-    /// <summary>Do not use a cached popup row rectangle after Select; tree rows keep their guarded fallback.</summary>
+    /// <summary>Do not click a stale list or tab rectangle after Select; tree rows keep their guarded fallback.</summary>
     internal static McpToolResult AfterUnconfirmedSelect(
         ControlType type,
         string name,
@@ -45,7 +45,7 @@ public partial class ClickTool
         Func<McpToolResult> treeFallback
     )
     {
-        if (type != ControlType.ListItem)
+        if (type is not (ControlType.ListItem or ControlType.TabItem))
         {
             return treeFallback();
         }
@@ -59,7 +59,7 @@ public partial class ClickTool
                     Type = "text",
                     Text =
                         $"Select was sent to {name}, but selection could not be confirmed. No pointer click was sent. "
-                        + "Take a fresh snapshot and re-resolve the row before another action; do not retry blindly.",
+                        + "Take a fresh snapshot and re-resolve the item before another action; do not retry blindly.",
                 },
             ],
             Outcome = patternResult.Outcome?.WithProof(
