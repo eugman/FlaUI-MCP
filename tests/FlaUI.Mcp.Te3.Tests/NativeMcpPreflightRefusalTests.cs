@@ -41,6 +41,11 @@ public sealed class NativeMcpPreflightRefusalTests
 
     private const string AllowlistedServer = "TE3/3.27.1";
 
+    private const string LiveServer = "tabular-editor/27.1.0.4";
+
+    private const string LiveInitialize =
+        """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"tabular-editor","version":"27.1.0.4"}}}""";
+
     private static NativeMcpPreflight.Request Request(
         string identityTool = "model_identity",
         string? compatibleServer = AllowlistedServer
@@ -155,6 +160,58 @@ public sealed class NativeMcpPreflightRefusalTests
         var result = await new NativeMcpPreflight(new HttpClient(handler)).Inspect(Request("get_workspace_info"));
 
         Assert.Equal("scratch-model", result.ModelIdentity);
+    }
+
+    [Fact]
+    public async Task TheObservedTabularEditorWorkspaceIdentityIsAccepted()
+    {
+        var handler = new ScriptedHandler(
+            LiveInitialize,
+            "",
+            Listing(WorkspaceTool()),
+            """{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\"applicationVersion\":\"27.1.0.4\",\"modelTitle\":\"WORK-LAPTOP.scratch-model\",\"modelLoaded\":true,\"connectedToAnalysisServices\":true}"}]}}"""
+        );
+
+        var result = await new NativeMcpPreflight(new HttpClient(handler)).Inspect(
+            new(
+                new("http://localhost:42100/"),
+                "get_workspace_info",
+                "modelTitle",
+                "WORK-LAPTOP.scratch-model",
+                CompatibleServer: LiveServer
+            )
+        );
+
+        Assert.Equal("WORK-LAPTOP.scratch-model", result.ModelIdentity);
+        Assert.Equal("tabular-editor", result.ServerName);
+        Assert.Equal("27.1.0.4", result.ServerVersion);
+        Assert.Equal(4, handler.Calls);
+    }
+
+    [Theory]
+    [InlineData("tabular-editor/27.1.0.5", LiveInitialize)]
+    [InlineData("TE3/3.27.1", LiveInitialize)]
+    [InlineData(
+        LiveServer,
+        """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"tabular-editor","version":"27.1.0.5"}}}"""
+    )]
+    [InlineData(
+        LiveServer,
+        """{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"TE3","version":"27.1.0.4"}}}"""
+    )]
+    public async Task TheObservedWorkspaceExceptionNeedsExactCallerAndServerIdentity(
+        string compatibleServer,
+        string initialize
+    )
+    {
+        var (_, calls) = await Refusal(
+            Listing(WorkspaceTool()),
+            identityTool: "get_workspace_info",
+            initialize: initialize,
+            compatibleServer: compatibleServer
+        );
+
+        Assert.Equal(3, calls);
     }
 
     [Fact]

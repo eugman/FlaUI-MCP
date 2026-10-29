@@ -14,8 +14,8 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
 
     /// <param name="CompatibleServer">
     /// "name/version" the caller observed in serverInfo. Required, as a second factor, before the unannotated
-    /// TE3 3.27.1 workspace identity tool may be called; it must equal the hard-coded allowlisted server, and the
-    /// server must report that same identity. Any other server or build is refused.
+    /// known unannotated workspace identity tool may be called; it must equal an exact allowlisted server identity,
+    /// and the server must report that same identity. Any other server or build is refused.
     /// </param>
     public sealed record Request(
         Uri Endpoint,
@@ -111,11 +111,10 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
         return new(version, server, identity, tools, serverVersion);
     }
 
-    // TE3 3.27.1 advertises no tool annotations. This exact, empty-argument workspace
+    // These observed TE3 native MCP builds advertise no tool annotations. This exact, empty-argument workspace
     // identity tool is the only compatibility exception; every other tool requires readOnlyHint=true.
-    private const string WorkspaceServerName = "TE3";
-    private const string WorkspaceServerVersion = "3.27.1";
-    private const string WorkspaceServer = WorkspaceServerName + "/" + WorkspaceServerVersion;
+    private const string LegacyWorkspaceServer = "TE3/3.27.1";
+    private const string LiveWorkspaceServer = "tabular-editor/27.1.0.4";
 
     private const string WorkspaceDescription =
         "Identifies this Tabular Editor instance and the semantic model it currently has open: model name, how the model is loaded (file/folder/connected), unsaved-changes state and compatibility level. Call this first to confirm which instance and model you are talking to.";
@@ -157,8 +156,8 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
         && hint.ValueKind == JsonValueKind.True;
 
     /// <summary>
-    /// The only unannotated tool ever called: TE3 3.27.1's exact workspace tool, only when the server reports
-    /// the allowlisted name and version (a missing version never matches) and the caller named that same server.
+    /// The only unannotated tool ever called: the exact workspace tool on one of the observed native MCP builds,
+    /// only when the server reports an allowlisted name and version and the caller named that same server.
     /// </summary>
     private static void RequireWorkspaceCompatibility(
         JsonElement tool,
@@ -174,22 +173,20 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
             );
         }
 
-        if (
-            !string.Equals(server, WorkspaceServerName, StringComparison.Ordinal)
-            || !string.Equals(serverVersion, WorkspaceServerVersion, StringComparison.Ordinal)
-        )
+        var observedServer = serverVersion is null ? null : server + "/" + serverVersion;
+        if (observedServer is not (LegacyWorkspaceServer or LiveWorkspaceServer))
         {
             throw new InvalidOperationException(
                 "Native MCP identity tool lacks readOnlyHint, and the workspace exception applies only to a server "
-                    + $"reporting \"{WorkspaceServer}\"."
+                    + $"reporting \"{LegacyWorkspaceServer}\" or \"{LiveWorkspaceServer}\"."
             );
         }
 
-        if (!string.Equals(compatibleServer, WorkspaceServer, StringComparison.Ordinal))
+        if (!string.Equals(compatibleServer, observedServer, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "Native MCP identity tool lacks readOnlyHint. The TE3 3.27.1 workspace exception also requires "
-                    + $"compatibleServer \"{WorkspaceServer}\", as observed in serverInfo."
+                "Native MCP identity tool lacks readOnlyHint. The workspace exception also requires "
+                    + $"compatibleServer \"{observedServer}\", as observed in serverInfo."
             );
         }
     }
