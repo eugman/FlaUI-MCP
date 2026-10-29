@@ -57,6 +57,7 @@ public sealed class MutationConfigTests
         "Tools/FillToolReplies.cs",
         "Tools/BatchTool.cs",
         "Core/WindowBaseline.cs",
+        "Core/Win32WindowEnumeration.cs",
         "Core/WaitOutcome.cs",
         "Core/Diagnostics.cs",
     ];
