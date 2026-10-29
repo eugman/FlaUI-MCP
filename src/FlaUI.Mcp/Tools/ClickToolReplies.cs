@@ -68,6 +68,40 @@ public partial class ClickTool
         };
     }
 
+    /// <summary>A refused fallback sent no pointer input. A late selection read can still prove the earlier Select.</summary>
+    internal static McpToolResult AfterRefusedTreeFallback(
+        McpToolResult patternResult,
+        Func<bool> isSelected,
+        Exception refusal
+    )
+    {
+        if (!isSelected())
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(refusal).Throw();
+        }
+
+        InputRefusedException.Handled(refusal);
+        return patternResult;
+    }
+
+    internal static McpToolResult FallbackAfterSelect(
+        McpToolResult patternResult,
+        Func<McpToolResult> fallback,
+        Func<bool> isSelected
+    )
+    {
+        try
+        {
+            return fallback();
+        }
+        catch (InputRefusedException refusal) when (refusal.Code == RefusalCodes.ClickPointCovered)
+        {
+            // ClickHitTest's covered-point refusal occurs before Send. A late provider update may
+            // confirm Select, but failures after a pointer action must still escape unchanged.
+            return AfterRefusedTreeFallback(patternResult, isSelected, refusal);
+        }
+    }
+
     internal static string SelectionClickOutcome(string name, bool? selected) =>
         selected switch
         {
