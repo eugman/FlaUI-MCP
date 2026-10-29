@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FlaUI.Mcp;
+using FlaUI.Mcp.Core;
 using Xunit;
 
 namespace FlaUI.Mcp.Tests;
@@ -102,6 +103,21 @@ public class ToolRegistryTimeoutTests
         await registry.ExecuteToolAsync("unknown", arguments: null);
 
         Assert.Equal(1, activity);
+    }
+
+    [Fact]
+    public async Task FailedPowerRequestDoesNotBlockToolExecution()
+    {
+        using var request = new PowerAvailabilityRequest(() => false, () => true, () => true, () => true, () => { });
+        using var keepAwake = new KeepAwake(TimeSpan.FromMinutes(5), request.Set, request.Clear);
+        var registry = new ToolRegistry(onToolActivity: keepAwake.Poke);
+        registry.RegisterTool(new SuccessfulTool());
+
+        var result = await registry.ExecuteToolAsync("successful", arguments: null);
+
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal("ok", result.Content[0].Text);
+        Assert.False(keepAwake.IsActive);
     }
 
     private sealed class BlockingTool : ITool

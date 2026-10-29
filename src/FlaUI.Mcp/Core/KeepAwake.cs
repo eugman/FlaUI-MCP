@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace FlaUI.Mcp.Core;
@@ -17,10 +18,12 @@ public sealed class KeepAwake : IDisposable
     private readonly Action _acquire;
     private readonly Action _release;
     private readonly IDisposable? _ownedResource;
+    private readonly Func<bool>? _isAcquired;
     private readonly TimeProvider _time;
     private readonly ITimer _timer;
     private long _pokedAt;
     private bool _active;
+    private bool _acquireFailureLogged;
     private bool _disposed;
 
     public KeepAwake(
@@ -29,6 +32,16 @@ public sealed class KeepAwake : IDisposable
         Action release,
         IDisposable? ownedResource = null,
         TimeProvider? time = null
+    )
+        : this(holdDuration, acquire, release, ownedResource, time, null) { }
+
+    internal KeepAwake(
+        TimeSpan holdDuration,
+        Action acquire,
+        Action release,
+        IDisposable? ownedResource,
+        TimeProvider? time,
+        Func<bool>? isAcquired
     )
     {
         if (holdDuration <= TimeSpan.Zero)
@@ -40,6 +53,7 @@ public sealed class KeepAwake : IDisposable
         _acquire = acquire;
         _release = release;
         _ownedResource = ownedResource;
+        _isAcquired = isAcquired;
         _time = time ?? TimeProvider.System;
         _timer = _time.CreateTimer(_ => OnTimerFired(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
@@ -58,7 +72,7 @@ public sealed class KeepAwake : IDisposable
             return null;
         }
 
-        return new KeepAwake(holdDuration, request.Set, request.Clear, request);
+        return new KeepAwake(holdDuration, request.Set, request.Clear, request, null, () => request.IsFullySet);
     }
 
     public bool IsActive
@@ -67,7 +81,7 @@ public sealed class KeepAwake : IDisposable
         {
             lock (_lock)
             {
-                return _active;
+                return _active && (_isAcquired?.Invoke() ?? true);
             }
         }
     }
@@ -85,9 +99,25 @@ public sealed class KeepAwake : IDisposable
                 return;
             }
 
-            if (!_active)
+            if (!_active || _isAcquired is not null && !_isAcquired())
             {
-                _acquire();
+                try
+                {
+                    _acquire();
+                    _acquireFailureLogged = false;
+                }
+                catch (Exception ex)
+                {
+                    StopIfResourceDisposed();
+                    if (!_acquireFailureLogged)
+                    {
+                        Console.Error.WriteLine($"Power request acquisition failed: {ex.Message}");
+                        _acquireFailureLogged = true;
+                    }
+
+                    return;
+                }
+
                 _active = true;
             }
 
@@ -114,9 +144,35 @@ public sealed class KeepAwake : IDisposable
                 return;
             }
 
-            _release();
-            _active = false;
+            try
+            {
+                _release();
+                _active = false;
+            }
+            catch (Exception ex)
+            {
+                var stopped = StopIfResourceDisposed();
+                Console.Error.WriteLine(
+                    $"Power request release failed; {(stopped ? "handle closed" : "retrying")}: {ex.Message}"
+                );
+                if (!stopped)
+                {
+                    _timer.Change(_holdDuration, Timeout.InfiniteTimeSpan);
+                }
+            }
         }
+    }
+
+    private bool StopIfResourceDisposed()
+    {
+        if (_ownedResource is not PowerAvailabilityRequest { IsDisposed: true })
+        {
+            return false;
+        }
+
+        _active = false;
+        _timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        return true;
     }
 
     public void Dispose()
@@ -155,12 +211,31 @@ public sealed class KeepAwake : IDisposable
 /// </summary>
 public sealed class PowerAvailabilityRequest : IDisposable
 {
-    private readonly nint _handle;
+    private readonly Func<bool> _setDisplay;
+    private readonly Func<bool> _setSystem;
+    private readonly Func<bool> _clearDisplay;
+    private readonly Func<bool> _clearSystem;
+    private readonly Action _close;
+    private bool _displaySet;
+    private bool _systemSet;
     private bool _disposed;
 
-    private PowerAvailabilityRequest(nint handle)
+    internal bool IsFullySet => !_disposed && _displaySet && _systemSet;
+    internal bool IsDisposed => _disposed;
+
+    internal PowerAvailabilityRequest(
+        Func<bool> setDisplay,
+        Func<bool> setSystem,
+        Func<bool> clearDisplay,
+        Func<bool> clearSystem,
+        Action close
+    )
     {
-        _handle = handle;
+        _setDisplay = setDisplay;
+        _setSystem = setSystem;
+        _clearDisplay = clearDisplay;
+        _clearSystem = clearSystem;
+        _close = close;
     }
 
     /// <summary>
@@ -184,7 +259,13 @@ public sealed class PowerAvailabilityRequest : IDisposable
                 return null;
             }
 
-            return new PowerAvailabilityRequest(handle);
+            return new PowerAvailabilityRequest(
+                () => PowerSetRequest(handle, POWER_REQUEST_TYPE.PowerRequestDisplayRequired),
+                () => PowerSetRequest(handle, POWER_REQUEST_TYPE.PowerRequestSystemRequired),
+                () => PowerClearRequest(handle, POWER_REQUEST_TYPE.PowerRequestDisplayRequired),
+                () => PowerClearRequest(handle, POWER_REQUEST_TYPE.PowerRequestSystemRequired),
+                () => CloseHandle(handle)
+            );
         }
         finally
         {
@@ -195,15 +276,73 @@ public sealed class PowerAvailabilityRequest : IDisposable
     /// <summary>Activate the request: display must stay on, system must stay awake.</summary>
     public void Set()
     {
-        PowerSetRequest(_handle, POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
-        PowerSetRequest(_handle, POWER_REQUEST_TYPE.PowerRequestSystemRequired);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_displaySet)
+        {
+            if (!_setDisplay())
+            {
+                throw new Win32Exception(Marshal.GetLastPInvokeError());
+            }
+
+            _displaySet = true;
+        }
+
+        if (!_systemSet)
+        {
+            if (!_setSystem())
+            {
+                var error = Marshal.GetLastPInvokeError();
+                if (_clearDisplay())
+                {
+                    _displaySet = false;
+                }
+                else
+                {
+                    _disposed = true;
+                    _close();
+                    _displaySet = false;
+                }
+
+                throw new Win32Exception(error);
+            }
+
+            _systemSet = true;
+        }
     }
 
     /// <summary>Deactivate the request, restoring normal power/lock policy.</summary>
     public void Clear()
     {
-        PowerClearRequest(_handle, POWER_REQUEST_TYPE.PowerRequestDisplayRequired);
-        PowerClearRequest(_handle, POWER_REQUEST_TYPE.PowerRequestSystemRequired);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        int? error = null;
+        if (_displaySet)
+        {
+            if (_clearDisplay())
+            {
+                _displaySet = false;
+            }
+            else
+            {
+                error = Marshal.GetLastPInvokeError();
+            }
+        }
+
+        if (_systemSet)
+        {
+            if (_clearSystem())
+            {
+                _systemSet = false;
+            }
+            else
+            {
+                error ??= Marshal.GetLastPInvokeError();
+            }
+        }
+
+        if (error is not null)
+        {
+            throw new Win32Exception(error.Value);
+        }
     }
 
     public void Dispose()
@@ -213,14 +352,14 @@ public sealed class PowerAvailabilityRequest : IDisposable
             return;
         }
 
-        _disposed = true;
         try
         {
             Clear();
         }
         catch { }
 
-        CloseHandle(_handle);
+        _disposed = true;
+        _close();
     }
 
     private const uint POWER_REQUEST_CONTEXT_VERSION = 0;
