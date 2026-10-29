@@ -184,7 +184,7 @@ public class KeepAwakeTests
     [Fact]
     public void Poke_WhenDisplayRequestFails_DoesNotReportActive()
     {
-        using var request = new PowerAvailabilityRequest(() => false, () => true, () => true, () => true, () => { });
+        using var request = new PowerAvailabilityRequest(() => false, () => true, () => true, () => true, () => true);
         using var keepAwake = new KeepAwake(TimeSpan.FromMinutes(5), request.Set, request.Clear);
 
         keepAwake.Poke();
@@ -210,7 +210,7 @@ public class KeepAwakeTests
                 return true;
             },
             () => true,
-            () => { }
+            () => true
         );
         using var keepAwake = new KeepAwake(TimeSpan.FromMinutes(5), request.Set, request.Clear);
 
@@ -230,13 +230,49 @@ public class KeepAwakeTests
             () => false,
             () => false,
             () => true,
-            () => closes++
+            () =>
+            {
+                closes++;
+                return true;
+            }
         );
 
         Assert.Throws<System.ComponentModel.Win32Exception>(() => request.Set());
 
         Assert.Equal(1, closes);
         Assert.Throws<ObjectDisposedException>(() => request.Set());
+    }
+
+    [Fact]
+    public void Poke_WhenRollbackAndHandleCloseFail_RetriesPendingRelease()
+    {
+        var clock = new ManualTimeProvider();
+        var displayClears = 0;
+        var closes = 0;
+        using var request = new PowerAvailabilityRequest(
+            () => true,
+            () => false,
+            () => ++displayClears > 1,
+            () => true,
+            () => ++closes > 1
+        );
+        using var keepAwake = new KeepAwake(
+            TimeSpan.FromMilliseconds(50),
+            request.Set,
+            request.Clear,
+            ownedResource: request,
+            time: clock,
+            isAcquired: () => request.IsFullySet
+        );
+
+        keepAwake.Poke();
+
+        Assert.False(keepAwake.IsActive);
+        Assert.Equal(1, clock.PendingTimers);
+        clock.Advance(TimeSpan.FromMilliseconds(50));
+        clock.WaitForCallbacks();
+        Assert.Equal(2, displayClears);
+        Assert.Equal(0, clock.PendingTimers);
     }
 
     [Fact]
@@ -248,7 +284,7 @@ public class KeepAwakeTests
             () => true,
             () => ++clearAttempts > 1,
             () => true,
-            () => { }
+            () => true
         );
         request.Set();
 
@@ -284,7 +320,7 @@ public class KeepAwakeTests
                 systemSet = false;
                 return true;
             },
-            () => { }
+            () => true
         );
         using var keepAwake = new KeepAwake(
             TimeSpan.FromMilliseconds(50),
@@ -311,7 +347,7 @@ public class KeepAwakeTests
     [Fact]
     public void Clear_AfterDispose_RefusesClosedHandle()
     {
-        var request = new PowerAvailabilityRequest(() => true, () => true, () => true, () => true, () => { });
+        var request = new PowerAvailabilityRequest(() => true, () => true, () => true, () => true, () => true);
         request.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => request.Clear());
@@ -329,7 +365,11 @@ public class KeepAwakeTests
             () => ++systemSets == 1,
             () => ++displayClears > 2,
             () => true,
-            () => closes++
+            () =>
+            {
+                closes++;
+                return true;
+            }
         );
         using var keepAwake = new KeepAwake(
             TimeSpan.FromMilliseconds(50),

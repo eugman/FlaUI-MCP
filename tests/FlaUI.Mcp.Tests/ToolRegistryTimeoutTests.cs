@@ -108,7 +108,7 @@ public class ToolRegistryTimeoutTests
     [Fact]
     public async Task FailedPowerRequestDoesNotBlockToolExecution()
     {
-        using var request = new PowerAvailabilityRequest(() => false, () => true, () => true, () => true, () => { });
+        using var request = new PowerAvailabilityRequest(() => false, () => true, () => true, () => true, () => true);
         using var keepAwake = new KeepAwake(TimeSpan.FromMinutes(5), request.Set, request.Clear);
         var registry = new ToolRegistry(onToolActivity: keepAwake.Poke);
         registry.RegisterTool(new SuccessfulTool());

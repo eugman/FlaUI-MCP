@@ -286,7 +286,7 @@ public static partial class Win32Desktop
         }
     }
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, nint lParam);
 
     [DllImport("user32.dll")]
@@ -447,27 +447,13 @@ public static partial class Win32Desktop
 
     private static IReadOnlyList<Win32WindowInfo> EnumerateTopLevelWindows(int? processId, bool keepUnknownOwner)
     {
-        var result = new List<Win32WindowInfo>();
-        EnumWindows(
-            (hwnd, _) =>
-            {
-                if (!IsWindowVisible(hwnd))
-                {
-                    return true;
-                }
-
-                if (
-                    ReadWindow(hwnd, processId, GetWindowThreadProcessId, GetWindowText, keepUnknownOwner) is { } window
-                )
-                {
-                    result.Add(window);
-                }
-
-                return true;
-            },
-            0
+        return Win32WindowEnumeration.Collect(
+            visit => EnumWindows((hwnd, _) => visit(hwnd), 0),
+            hwnd =>
+                IsWindowVisible(hwnd)
+                    ? ReadWindow(hwnd, processId, GetWindowThreadProcessId, GetWindowText, keepUnknownOwner)
+                    : null
         );
-        return result;
     }
 
     /// <summary>
