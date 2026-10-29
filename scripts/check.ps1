@@ -74,6 +74,7 @@ Step 'Staged blob fidelity' { & ./scripts/test-staged-blob.ps1 }
 Step 'Push tip identity' { & ./scripts/test-push-tip.ps1 }
 Step 'Formatter literal paths' { & ./scripts/test-format-literal-paths.ps1 }
 Step 'Release tag identity' { & ./scripts/test-release-tag.ps1 }
+Step 'Mutation worktree cleanup' { & ./scripts/test-mutation-worktree-cleanup.ps1 }
 Step 'Formatting (fix with: pwsh scripts/format.ps1)' { dotnet csharpier check . }
 Step 'Shared core untouched' { & ./scripts/check-core-untouched.ps1 }
 Step 'Known debt does not grow' { CheckDebt }

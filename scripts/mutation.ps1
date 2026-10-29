@@ -104,23 +104,25 @@ function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $
     $output = Join-Path $root "local/build-background/StrykerOutput/$name"
     RemoveWorktree $work
     if (Test-Path $output) { Remove-Item -Recurse -Force $output }
-    git worktree add --detach $work HEAD | Out-Null
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $work "$testDir/$project"))) {
-        throw "Could not create the worktree for part $name at $work."
-    }
-
     $code = 1
-    if ($project -eq $offlineProject) {
-        # Run from the offline test project with that project named explicitly.
-        Push-Location (Join-Path $work 'tests/FlaUI.Mcp.Tests')
-        $arguments = @('stryker', '-f', "../../$config", '--test-project', $offlineProject)
-    }
-    else {
-        Push-Location (Join-Path $work $testDir)
-        $arguments = @('stryker', '-f', "../../$config", '--test-project', $project)
-    }
-
+    $pushed = $false
     try {
+        git worktree add --detach $work HEAD | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $work "$testDir/$project"))) {
+            throw "Could not create the worktree for part $name at $work."
+        }
+
+        if ($project -eq $offlineProject) {
+            # Run from the offline test project with that project named explicitly.
+            Push-Location (Join-Path $work 'tests/FlaUI.Mcp.Tests')
+            $arguments = @('stryker', '-f', "../../$config", '--test-project', $offlineProject)
+        }
+        else {
+            Push-Location (Join-Path $work $testDir)
+            $arguments = @('stryker', '-f', "../../$config", '--test-project', $project)
+        }
+        $pushed = $true
+
         dotnet tool restore | Out-Null
         $arguments += @('--output', $output, '--log-to-file')
         foreach ($file in $files) { $arguments += @('--mutate', "**/$file.cs") }
@@ -156,9 +158,11 @@ function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $
         if ($stryker.HasExited -and (Get-Date) -le $deadline) { $code = $stryker.ExitCode }
     }
     finally {
-        Pop-Location
-        if ($project -ne $offlineProject) { CloseTestApps }
-        RemoveWorktree $work
+        try {
+            if ($pushed) { Pop-Location }
+            if ($project -ne $offlineProject) { CloseTestApps }
+        }
+        finally { RemoveWorktree $work }
     }
 
     Write-Host "Report ($name): $output/reports/mutation-report.html"
