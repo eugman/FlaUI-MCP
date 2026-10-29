@@ -148,6 +148,125 @@ public sealed class LayoutFilesTests : IDisposable
         Assert.Equal("current", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
     }
 
+    [Fact]
+    public void SnapshotRejectsLinkedSettingsFile()
+    {
+        var external = Path.Combine(root, "external-layout.json");
+        File.WriteAllText(external, "external private content");
+        File.Delete(Path.Combine(settings, "Layouts.json"));
+        if (!TryLink(Path.Combine(settings, "Layouts.json"), external))
+        {
+            return;
+        }
+
+        Assert.Throws<IOException>(() => LayoutFiles.Snapshot(settings, Snapshot));
+        Assert.False(File.Exists(Path.Combine(Snapshot, "Layouts.json")));
+        Assert.Equal("external private content", File.ReadAllText(external));
+    }
+
+    [Fact]
+    public void RestoreRejectsLinkedManifestBeforeChangingSettings()
+    {
+        LayoutFiles.Snapshot(settings, Snapshot);
+        var manifest = Path.Combine(Snapshot, LayoutFiles.Manifest);
+        var external = Path.Combine(root, "external-manifest.json");
+        File.Move(manifest, external);
+        if (!TryLink(manifest, external))
+        {
+            return;
+        }
+
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "current");
+
+        Assert.Throws<IOException>(() => LayoutFiles.Restore(Snapshot, settings, false, false));
+        Assert.Equal("current", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
+    }
+
+    [Fact]
+    public void RestoreRejectsLinkedListedFileBeforeChangingSettings()
+    {
+        LayoutFiles.Snapshot(settings, Snapshot);
+        var layout = Path.Combine(Snapshot, "Layouts.json");
+        var external = Path.Combine(root, "external-layout.json");
+        File.Move(layout, external);
+        if (!TryLink(layout, external))
+        {
+            return;
+        }
+
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "current");
+
+        Assert.Throws<IOException>(() => LayoutFiles.Restore(Snapshot, settings, false, false));
+        Assert.Equal("current", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
+    }
+
+    [Fact]
+    public void RestoreRejectsLinkedSettingsDestinationBeforeChangingOtherFiles()
+    {
+        LayoutFiles.Snapshot(settings, Snapshot);
+        var external = Path.Combine(root, "external-preferences.json");
+        File.WriteAllText(external, "external private content");
+        File.Delete(Path.Combine(settings, "UiPreferences.json"));
+        if (!TryLink(Path.Combine(settings, "UiPreferences.json"), external))
+        {
+            return;
+        }
+
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "current");
+
+        Assert.Throws<IOException>(() => LayoutFiles.Restore(Snapshot, settings, false, false));
+        Assert.Equal("current", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
+        Assert.Equal("external private content", File.ReadAllText(external));
+    }
+
+    [Fact]
+    public void RestoreRejectsJunctionSnapshotBeforeChangingSettings()
+    {
+        LayoutFiles.Snapshot(settings, Snapshot);
+        var external = Path.Combine(root, "external-snapshot");
+        Directory.Move(Snapshot, external);
+        var start = new System.Diagnostics.ProcessStartInfo("cmd.exe")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var arg in new[] { "/c", "mklink", "/J", Snapshot, external })
+        {
+            start.ArgumentList.Add(arg);
+        }
+
+        using var process = System.Diagnostics.Process.Start(start)!;
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "current");
+
+        try
+        {
+            Assert.Throws<IOException>(() => LayoutFiles.Restore(Snapshot, settings, false, false));
+            Assert.Equal("current", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
+        }
+        finally
+        {
+            Directory.Delete(Snapshot);
+        }
+    }
+
+    private static bool TryLink(string path, string target)
+    {
+        try
+        {
+            File.CreateSymbolicLink(path, target);
+            return true;
+        }
+        catch (IOException error) when (error.HResult == unchecked((int)0x80070522))
+        {
+            // Some Windows test hosts lack symlink privilege. The junction test above still
+            // exercises the reparse guard there; these four cases run where links are enabled.
+            return false;
+        }
+    }
+
     private Te3Layout Tool(Te3Interaction interaction, Func<int[]>? running = null) =>
         new(null!, interaction, settings: settings, running: running ?? (() => []), snapshots: root);
 

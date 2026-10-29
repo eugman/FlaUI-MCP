@@ -65,20 +65,26 @@ internal static class LayoutFiles
             throw new IOException($"Snapshot folder {target} already exists; pick a new one. Nothing was copied.");
         }
 
+        // Validate every source before creating or filling the snapshot. A linked layout file must
+        // not make a copy of arbitrary settings or another file outside TE3's settings folder.
+        var sources = Names
+            .Where(n => File.Exists(Path.Combine(settings, n)))
+            .ToDictionary(n => n, n => LayoutPath(settings, n));
         Directory.CreateDirectory(target);
         var hashes = new Dictionary<string, string>();
-        foreach (var name in Names.Where(n => File.Exists(Path.Combine(settings, n))))
+        foreach (var (name, source) in sources)
         {
-            File.Copy(Path.Combine(settings, name), Path.Combine(target, name));
-            hashes[name] = ArtifactFiles.Sha256(Path.Combine(target, name));
-            if (hashes[name] != ArtifactFiles.Sha256(Path.Combine(settings, name)))
+            var destination = LayoutPath(target, name);
+            File.Copy(source, destination);
+            hashes[name] = ArtifactFiles.Sha256(destination);
+            if (hashes[name] != ArtifactFiles.Sha256(source))
             {
                 throw new IOException($"{name} changed while it was copied; take the snapshot again with TE3 closed.");
             }
         }
 
         var list = new SnapshotList(hashes, [.. Names.Except(hashes.Keys)]);
-        File.WriteAllText(Path.Combine(target, Manifest), JsonSerializer.Serialize(list));
+        File.WriteAllText(LayoutPath(target, Manifest), JsonSerializer.Serialize(list));
         return new
         {
             snapshot = target,
@@ -104,7 +110,11 @@ internal static class LayoutFiles
         }
 
         var list = ReadList(snapshot);
-        var changed = list.Files.Where(h => ArtifactFiles.Sha256(Path.Combine(snapshot, h.Key)) != h.Value).ToList();
+        // Check all source and destination paths before the first copy or delete. Hash validation
+        // alone is insufficient: a listed file with the right bytes may still link outside here.
+        var sources = list.Files.Keys.ToDictionary(n => n, n => LayoutPath(snapshot, n));
+        var destinations = Names.ToDictionary(n => n, n => LayoutPath(settings, n));
+        var changed = list.Files.Where(h => ArtifactFiles.Sha256(sources[h.Key]) != h.Value).ToList();
         if (changed.Count > 0)
         {
             throw new InvalidOperationException(
@@ -115,20 +125,20 @@ internal static class LayoutFiles
         foreach (var name in list.Files.Keys)
         {
             var temporary = Path.Combine(settings, name + "." + Guid.NewGuid().ToString("N") + ".tmp");
-            File.Copy(Path.Combine(snapshot, name), temporary);
-            File.Move(temporary, Path.Combine(settings, name), overwrite: true);
+            File.Copy(sources[name], temporary);
+            File.Move(temporary, destinations[name], overwrite: true);
         }
 
-        var removed = list.Missing.Where(n => File.Exists(Path.Combine(settings, n))).ToArray();
+        var removed = list.Missing.Where(n => File.Exists(destinations[n])).ToArray();
         foreach (var name in removed)
         {
-            File.Delete(Path.Combine(settings, name));
+            File.Delete(destinations[name]);
         }
 
         var unverified = list
-            .Files.Where(h => ArtifactFiles.Sha256(Path.Combine(settings, h.Key)) != h.Value)
+            .Files.Where(h => ArtifactFiles.Sha256(destinations[h.Key]) != h.Value)
             .Select(h => h.Key)
-            .Concat(list.Missing.Where(n => File.Exists(Path.Combine(settings, n))))
+            .Concat(list.Missing.Where(n => File.Exists(destinations[n])))
             .ToList();
         if (unverified.Count > 0)
         {
@@ -148,11 +158,13 @@ internal static class LayoutFiles
 
     // The SHA-256 of each file as it reads now, for the reply's proof.
     private static Dictionary<string, string> Hashes(string folder, IEnumerable<string> names) =>
-        names.ToDictionary(n => n, n => ArtifactFiles.Sha256(Path.Combine(folder, n)));
+        names.ToDictionary(n => n, n => ArtifactFiles.Sha256(LayoutPath(folder, n)));
+
+    private static string LayoutPath(string folder, string name) => ArtifactFiles.ContainedPath(name, folder);
 
     private static SnapshotList ReadList(string snapshot)
     {
-        var list = JsonSerializer.Deserialize<SnapshotList>(File.ReadAllText(Path.Combine(snapshot, Manifest)));
+        var list = JsonSerializer.Deserialize<SnapshotList>(File.ReadAllText(LayoutPath(snapshot, Manifest)));
         if (
             list?.Files == null
             || list.Missing == null
