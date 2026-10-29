@@ -54,4 +54,54 @@ public sealed class SelectPopupFallbackTests
         Assert.Equal(1, clicks);
         Assert.Same(selected, result);
     }
+
+    [Fact]
+    public void CoveredFallbackReturnsTheSelectionWhenItSettledAfterTheFirstRead()
+    {
+        var selection = ClickTool.PatternResult(new PatternCallResult(PatternCallOutcome.Completed), "Selected Node");
+        var refusal = new InputRefusedException(new InputRefusal(RefusalCodes.ClickPointCovered, "covered"));
+
+        var result = ClickTool.FallbackAfterSelect(selection, () => throw refusal, () => true);
+
+        Assert.Same(selection, result);
+    }
+
+    [Fact]
+    public void CoveredFallbackStillRefusesWhenSelectionCannotBeConfirmed()
+    {
+        var selection = ClickTool.PatternResult(new PatternCallResult(PatternCallOutcome.Completed), "Selected Node");
+        var refusal = new InputRefusedException(new InputRefusal(RefusalCodes.ClickPointCovered, "covered"));
+
+        var observed = Assert.Throws<InputRefusedException>(() =>
+            ClickTool.FallbackAfterSelect(selection, () => throw refusal, () => false)
+        );
+
+        Assert.Same(refusal, observed);
+    }
+
+    [Fact]
+    public void FailureAfterPointerDispatchIsNeverHiddenByLateSelection()
+    {
+        var selection = ClickTool.PatternResult(new PatternCallResult(PatternCallOutcome.Completed), "Selected Node");
+        var failure = new InvalidOperationException("pointer was sent; provider failed afterwards");
+
+        var observed = Assert.Throws<InvalidOperationException>(() =>
+            ClickTool.FallbackAfterSelect(selection, () => throw failure, () => true)
+        );
+
+        Assert.Same(failure, observed);
+    }
+
+    [Fact]
+    public void OtherInputRefusalIsNeverHiddenByLateSelection()
+    {
+        var selection = ClickTool.PatternResult(new PatternCallResult(PatternCallOutcome.Completed), "Selected Node");
+        var refusal = new InputRefusedException(new InputRefusal(RefusalCodes.FocusRevoked, "focus changed"));
+
+        var observed = Assert.Throws<InputRefusedException>(() =>
+            ClickTool.FallbackAfterSelect(selection, () => throw refusal, () => true)
+        );
+
+        Assert.Same(refusal, observed);
+    }
 }

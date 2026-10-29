@@ -180,7 +180,7 @@ public partial class ClickTool : ToolBase
             var selected =
                 element.Properties.ControlType.ValueOrDefault == ControlType.ListItem
                     ? ObserveSelection(() => IsSelected(element)) == true
-                    : Settled(() => IsSelected(element), 300);
+                    : Settled(() => IsSelected(element), 500);
             if (selected)
             {
                 return patternResult;
@@ -194,7 +194,11 @@ public partial class ClickTool : ToolBase
                 {
                     // Some tree providers accept Select() and change nothing; a guarded click selects.
                     request.PatternSent = true;
-                    return ScrollAndMouseClick(request, element, elementName, physical, true, Validate);
+                    return FallbackAfterSelect(
+                        patternResult,
+                        () => ScrollAndMouseClick(request, element, elementName, physical, true, Validate),
+                        () => ObserveSelection(() => IsSelected(element)) == true
+                    );
                 }
             );
         }
