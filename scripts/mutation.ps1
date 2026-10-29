@@ -1,7 +1,7 @@
 # Mutation testing of the guard and protocol files in stryker-config.json, against the no-focus tests only.
 # Stryker writes no report for a run it does not finish, so the files are tested in parts, each with its
 # own -Minutes cap. Each part runs on a fresh worktree of HEAD under local/build-background, so commit
-# first; reports and logs go to local/build-background/StrykerOutput/<part>. -Part runs one part.
+# first; reports and logs go to local/build-background/StrykerOutput/<part>/<run>. -Part runs one part.
 # -Concurrency overrides the config's 2, e.g. 1 when other suites share the machine.
 #
 # The default offline parts must not select integration tests: they launch apps and take the desktop. From the
@@ -41,12 +41,28 @@ $integrationParts = [ordered]@{
 }
 
 function RemoveWorktree($path) {
-    if (Test-Path $path) {
-        git worktree remove --force $path 2>$null
-        if (Test-Path $path) { Remove-Item -Recurse -Force $path -ErrorAction SilentlyContinue }
+    $target = [IO.Path]::GetFullPath($path)
+    $buildRoot = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath((Join-Path $root 'local/build-background'))) + [IO.Path]::DirectorySeparatorChar
+    if (-not $target.StartsWith($buildRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a worktree outside $buildRoot`: $path"
     }
+    # `remove` also clears registration when the directory has already gone.
+    # A global `prune` would remove other worktrees that happen to be offline.
+    git worktree remove --force $path 2>$null
+    if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue }
+    # A lock needs a second force flag; retry only this script-owned path after
+    # deleting its directory so Git can clear this one registration.
+    git worktree remove --force --force $path 2>$null
 
-    git worktree prune
+    $listing = git worktree list --porcelain
+    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect Git worktree registrations after cleanup.' }
+    $registered = @($listing | Where-Object {
+        $_.StartsWith('worktree ') -and
+        [IO.Path]::GetFullPath($_.Substring(9)) -ieq $target
+    }).Count -gt 0
+    if ((Test-Path -LiteralPath $path) -or $registered) {
+        throw "Could not fully remove the worktree at $path."
+    }
 }
 
 # The number of tests in a project, as vstest discovers them (theory rows included).
@@ -98,29 +114,41 @@ function CloseTestApps {
     }
 }
 
+function NewWorktreePath($name) {
+    # A GUID avoids same-second runs choosing and deleting each other's worktree.
+    return Join-Path $root "local/build-background/stryker-wt-$name-$([guid]::NewGuid().ToString('N'))"
+}
+
 function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $project = $offlineProject, $config = 'stryker-config.json', $cap = 45) {
-    # A fresh name each run: a folder left busy by an earlier run must not break this one.
-    $work = Join-Path $root "local/build-background/stryker-wt-$name-$(Get-Date -Format 'HHmmss')"
-    $output = Join-Path $root "local/build-background/StrykerOutput/$name"
-    RemoveWorktree $work
-    if (Test-Path $output) { Remove-Item -Recurse -Force $output }
-    git worktree add --detach $work HEAD | Out-Null
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $work "$testDir/$project"))) {
-        throw "Could not create the worktree for part $name at $work."
+    $work = NewWorktreePath $name
+    $output = Join-Path $root "local/build-background/StrykerOutput/$name/$([IO.Path]::GetFileName($work))"
+    if ((Test-Path -LiteralPath $work) -or (Test-Path -LiteralPath $output)) {
+        throw "Mutation run path already exists: $work or $output."
     }
-
     $code = 1
-    if ($project -eq $offlineProject) {
-        # Run from the offline test project with that project named explicitly.
-        Push-Location (Join-Path $work 'tests/FlaUI.Mcp.Tests')
-        $arguments = @('stryker', '-f', "../../$config", '--test-project', $offlineProject)
-    }
-    else {
-        Push-Location (Join-Path $work $testDir)
-        $arguments = @('stryker', '-f', "../../$config", '--test-project', $project)
-    }
-
+    $pushed = $false
+    $created = $false
     try {
+        # The unique path was absent before this point; own any partial files
+        # or registration that a failing `worktree add` leaves behind.
+        $created = $true
+        git worktree add --detach $work HEAD | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Could not create the worktree for part $name at $work." }
+        if (-not (Test-Path (Join-Path $work "$testDir/$project"))) {
+            throw "Could not create the worktree for part $name at $work."
+        }
+
+        if ($project -eq $offlineProject) {
+            # Run from the offline test project with that project named explicitly.
+            Push-Location (Join-Path $work 'tests/FlaUI.Mcp.Tests')
+            $arguments = @('stryker', '-f', "../../$config", '--test-project', $offlineProject)
+        }
+        else {
+            Push-Location (Join-Path $work $testDir)
+            $arguments = @('stryker', '-f', "../../$config", '--test-project', $project)
+        }
+        $pushed = $true
+
         dotnet tool restore | Out-Null
         $arguments += @('--output', $output, '--log-to-file')
         foreach ($file in $files) { $arguments += @('--mutate', "**/$file.cs") }
@@ -156,9 +184,11 @@ function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $
         if ($stryker.HasExited -and (Get-Date) -le $deadline) { $code = $stryker.ExitCode }
     }
     finally {
-        Pop-Location
-        if ($project -ne $offlineProject) { CloseTestApps }
-        RemoveWorktree $work
+        try {
+            if ($pushed) { Pop-Location }
+            if ($project -ne $offlineProject) { CloseTestApps }
+        }
+        finally { if ($created) { RemoveWorktree $work } }
     }
 
     Write-Host "Report ($name): $output/reports/mutation-report.html"
