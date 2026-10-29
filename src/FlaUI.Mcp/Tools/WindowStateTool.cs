@@ -47,6 +47,11 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
             return Task.FromResult(ErrorResult("Window-handle state changes require a session manager."));
         }
 
+        if (reference != null && handle != null)
+        {
+            refs.ValidateReference(reference, handle);
+        }
+
         if (reference != null && pending.TryGetPending(refs.GetProcessIdForRef(reference), out var blocked))
         {
             return Task.FromResult(BlockedResult(blocked));
