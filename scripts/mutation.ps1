@@ -1,7 +1,7 @@
 # Mutation testing of the guard and protocol files in stryker-config.json, against the no-focus tests only.
 # Stryker writes no report for a run it does not finish, so the files are tested in parts, each with its
 # own -Minutes cap. Each part runs on a fresh worktree of HEAD under local/build-background, so commit
-# first; reports and logs go to local/build-background/StrykerOutput/<part>. -Part runs one part.
+# first; reports and logs go to local/build-background/StrykerOutput/<part>/<run>. -Part runs one part.
 # -Concurrency overrides the config's 2, e.g. 1 when other suites share the machine.
 #
 # The default offline parts must not select integration tests: they launch apps and take the desktop. From the
@@ -114,17 +114,27 @@ function CloseTestApps {
     }
 }
 
+function NewWorktreePath($name) {
+    # A GUID avoids same-second runs choosing and deleting each other's worktree.
+    return Join-Path $root "local/build-background/stryker-wt-$name-$([guid]::NewGuid().ToString('N'))"
+}
+
 function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $project = $offlineProject, $config = 'stryker-config.json', $cap = 45) {
-    # A fresh name each run: a folder left busy by an earlier run must not break this one.
-    $work = Join-Path $root "local/build-background/stryker-wt-$name-$(Get-Date -Format 'HHmmss')"
-    $output = Join-Path $root "local/build-background/StrykerOutput/$name"
-    RemoveWorktree $work
-    if (Test-Path $output) { Remove-Item -Recurse -Force $output }
+    $work = NewWorktreePath $name
+    $output = Join-Path $root "local/build-background/StrykerOutput/$name/$([IO.Path]::GetFileName($work))"
+    if ((Test-Path -LiteralPath $work) -or (Test-Path -LiteralPath $output)) {
+        throw "Mutation run path already exists: $work or $output."
+    }
     $code = 1
     $pushed = $false
+    $created = $false
     try {
+        # The unique path was absent before this point; own any partial files
+        # or registration that a failing `worktree add` leaves behind.
+        $created = $true
         git worktree add --detach $work HEAD | Out-Null
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $work "$testDir/$project"))) {
+        if ($LASTEXITCODE -ne 0) { throw "Could not create the worktree for part $name at $work." }
+        if (-not (Test-Path (Join-Path $work "$testDir/$project"))) {
             throw "Could not create the worktree for part $name at $work."
         }
 
@@ -178,7 +188,7 @@ function RunPart($name, $files, $expected, $testDir = 'tests/FlaUI.Mcp.Tests', $
             if ($pushed) { Pop-Location }
             if ($project -ne $offlineProject) { CloseTestApps }
         }
-        finally { RemoveWorktree $work }
+        finally { if ($created) { RemoveWorktree $work } }
     }
 
     Write-Host "Report ($name): $output/reports/mutation-report.html"
