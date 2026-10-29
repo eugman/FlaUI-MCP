@@ -46,7 +46,7 @@ Then add the server to your MCP client:
 
 | Tool | Does |
 |---|---|
-| `windows_launch` | Start an application and return a provisional handle when one owned window is found. |
+| `windows_launch` | Start an application and return a provisional handle for one eligible window, including a titled unowned window with only its owned startup dialog alongside it. Optional `windowTitle` selects an exact target title; inspect the returned handle before input. |
 | `windows_list_windows` | List top-level windows and their handles. |
 | `windows_focus` | Bring a window to the foreground. |
 | `windows_close` | Ask a window to close. |

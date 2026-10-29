@@ -123,7 +123,12 @@ public class SessionManager : IDisposable
     public UIA3Automation Automation =>
         _automation ?? throw new InvalidOperationException("No UI Automation provider configured.");
 
-    public (string handle, Window window) LaunchApp(string appPath, string[]? args = null, int? waitSeconds = null)
+    public (string handle, Window window) LaunchApp(
+        string appPath,
+        string[]? args = null,
+        int? waitSeconds = null,
+        string? windowTitle = null
+    )
     {
         if (!_processPolicy.IsExecutableAllowed(appPath))
         {
@@ -151,8 +156,9 @@ public class SessionManager : IDisposable
         }
 
         Thread.Sleep(1000); // Extra wait for window to appear
-        IReadOnlyList<Win32WindowInfo> Candidates() =>
+        IReadOnlyList<Win32WindowInfo> AllCandidates() =>
             Win32Desktop.GetTopLevelWindows(process.Id).Where(w => !w.IsToolWindow && !w.IsCloaked).ToArray();
+        IReadOnlyList<Win32WindowInfo> Candidates() => LaunchCandidates(AllCandidates(), windowTitle);
         var (window, timeouts) = WaitForLaunchWindow(process, Candidates, maxPolls);
 
         if (window == null)
@@ -160,7 +166,7 @@ public class SessionManager : IDisposable
             var exited = process.HasExited;
             if (!exited)
             {
-                var observed = _processPolicy.IsProcessAllowed(process.Id) ? Candidates() : [];
+                var observed = _processPolicy.IsProcessAllowed(process.Id) ? AllCandidates() : [];
                 throw new LaunchPendingException(appPath, process.Id, observed, timeouts > 0);
             }
 
@@ -189,6 +195,13 @@ public class SessionManager : IDisposable
     }
 
     internal static int LaunchSettlePolls(int maxPolls) => maxPolls < 4 ? maxPolls : 4;
+
+    /// <summary>An explicit title narrows only the provisional candidate; pending diagnostics retain every
+    /// owned window so the caller can see an update prompt or other startup modal.</summary>
+    internal static IReadOnlyList<Win32WindowInfo> LaunchCandidates(
+        IReadOnlyList<Win32WindowInfo> windows,
+        string? windowTitle
+    ) => windowTitle == null ? windows : windows.Where(w => w.Title == windowTitle).ToArray();
 
     // A title or an unregistered window is not proof of launch ownership.
     // Brokered/single-instance launches must be attached explicitly by the caller.
@@ -239,7 +252,8 @@ public class SessionManager : IDisposable
         return (window, timeouts);
     }
 
-    /// <summary>Wait for one owned window across the bounded settle polls, resetting on replacement or ambiguity.</summary>
+    /// <summary>Wait for one provisional main window across bounded settle polls. An owned modal may coexist;
+    /// multiple independent windows reset the count.</summary>
     internal static nint? ObserveLaunchWindow(
         ref nint previous,
         ref int consecutive,
@@ -247,17 +261,69 @@ public class SessionManager : IDisposable
         int requiredPolls = 4
     )
     {
-        if (candidates.Count != 1)
+        var candidate = SoleMainWindowWithOwnedDialogs(candidates);
+        if (candidate == null)
         {
             previous = 0;
             consecutive = 0;
             return null;
         }
 
-        var current = candidates[0].Hwnd;
+        var current = candidate.Hwnd;
         consecutive = current == previous ? consecutive + 1 : 1;
         previous = current;
         return consecutive >= requiredPolls ? current : null;
+    }
+
+    /// <summary>Multiple same-process windows are safe to narrow only when every other window is
+    /// owned by one titled root. The result remains provisional until the caller checks app identity.</summary>
+    internal static Win32WindowInfo? SoleMainWindowWithOwnedDialogs(IReadOnlyList<Win32WindowInfo> windows)
+    {
+        if (windows.Count == 1)
+        {
+            return windows[0];
+        }
+
+        var roots = windows.Where(window => window.Owner == 0 && window.Title.Length > 0).Take(2).ToArray();
+        if (roots.Length != 1)
+        {
+            return null;
+        }
+
+        var root = roots[0];
+        foreach (var window in windows)
+        {
+            if (window.Hwnd == root.Hwnd)
+            {
+                continue;
+            }
+
+            var owner = window.Owner;
+            var linked = false;
+            for (var depth = 0; depth < windows.Count && owner != 0; depth++)
+            {
+                if (owner == root.Hwnd)
+                {
+                    linked = true;
+                    break;
+                }
+
+                var parent = windows.FirstOrDefault(candidate => candidate.Hwnd == owner);
+                if (parent == null || parent.ProcessId != root.ProcessId)
+                {
+                    break;
+                }
+
+                owner = parent.Owner;
+            }
+
+            if (!linked || window.ProcessId != root.ProcessId)
+            {
+                return null;
+            }
+        }
+
+        return root;
     }
 
     internal static string LaunchFailure(

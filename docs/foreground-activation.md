@@ -18,3 +18,10 @@ Foreground authorization and pixel occlusion are separate conditions. The curren
 This workflow excludes synthetic Alt presses, shell clicks, thread-input attachment, foreground-lock changes, and privilege elevation. They change desktop state without establishing that the intended target owns the next input.
 
 Cold launches can take longer than the default 20-second window detection period. For `windows_launch`, use `waitSeconds` (1–90) when the app is known to start slowly. The server grants that tool `waitSeconds + 15` seconds (35 seconds by default) for input-idle and provider reads; set the MCP caller timeout above that deadline. The demo broker's default 120 seconds covers the maximum 105-second launch. The longer wait does not relax same-process ownership or foreground checks. If the process remains alive without one usable window, the reply is `launch-pending` with its PID and observed window titles/HWNDs; if it exits or returns no process handle, the reply is `launch-handoff`. Inspect or attach rather than relaunching it.
+
+When one titled unowned main window and only its owned dialogs belong to the
+launched process, the poll can return that main window provisionally. If
+ownership is unclear, pass `windowTitle` with the main window's exact title;
+the poll considers only that title, while a pending receipt lists all windows
+for reconciliation. The selected handle is still provisional, and an open
+dialog may need to be dismissed before input to the main window.

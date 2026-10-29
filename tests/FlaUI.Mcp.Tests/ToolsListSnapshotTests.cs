@@ -96,6 +96,8 @@ public sealed class ToolsListSnapshotTests
         var launchProperties = launch["inputSchema"]!["properties"]!.AsObject();
         Assert.Equal("integer", launchProperties["waitSeconds"]!["type"]!.GetValue<string>());
         Assert.True(launchProperties.Remove("waitSeconds"));
+        Assert.Equal("string", launchProperties["windowTitle"]!["type"]!.GetValue<string>());
+        Assert.True(launchProperties.Remove("windowTitle"));
 
         // The old screenshot descriptions claimed an atomic locate read and a guaranteed clean park/native image.
         // Keep this exception scoped to the three corrected help fields; the exact text is pinned in tools-list.json.
