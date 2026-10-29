@@ -141,7 +141,7 @@ A passing run is not visual approval. Look at every PNG before using it.
 
 The repo ships the smoke recipes in `src/FlaUI.Mcp.Te3/RecipeCatalog.cs`: `model-open`, `measure-edit`, `dax-query`, `expression-recovery`, `qualified-navigation`, `bpa-correction`, `properties` and `csharp-preview`. Use them as templates.
 
-Add your own in `local/recipes/*.cs`. The project compiles that folder when it exists. Register all of them in one file, since a partial method can be implemented only once:
+Add your own in `local/recipes/*.cs`. Compile that folder with `pwsh scripts/check.ps1 -IncludeLocalRecipes` or `dotnet build -p:IncludeLocalRecipes=true`. Register all of them in one file, since a partial method can be implemented only once:
 
 ```csharp
 public static partial class RecipeCatalog
@@ -163,7 +163,7 @@ public static partial class RecipeCatalog
 }
 ```
 
-Tests in `local/tests/*.cs` are compiled into the runner test project in the same way.
+Tests in `local/tests/*.cs` use the same explicit opt-in.
 
 ### Safety
 

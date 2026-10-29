@@ -13,13 +13,13 @@
   </ItemGroup>
 
   <!-- Your own recipes and their inputs live in the gitignored local/ folder. See automation/README.md. -->
-  <ItemGroup Condition="'$(IncludeLocalRecipes)' != 'false' And Exists('$(LocalRoot)recipes')">
+  <ItemGroup Condition="'$(IncludeLocalRecipes)' == 'true' And Exists('$(LocalRoot)recipes')">
     <Compile
       Include="$(LocalRoot)recipes/**/*.cs"
       Link="local/recipes/%(RecursiveDir)%(Filename)%(Extension)"
     />
   </ItemGroup>
-  <ItemGroup Condition="'$(IncludeLocalRecipes)' != 'false' And Exists('$(LocalRoot)replica-inputs')">
+  <ItemGroup Condition="'$(IncludeLocalRecipes)' == 'true' And Exists('$(LocalRoot)replica-inputs')">
     <Content
       Include="$(LocalRoot)replica-inputs/**/*"
       Link="replica-inputs/%(RecursiveDir)%(Filename)%(Extension)"

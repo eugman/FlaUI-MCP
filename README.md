@@ -53,7 +53,7 @@ For a TE3 launch, begin an interaction first. `windows_launch` returns a provisi
 
 ## Your own files
 
-Put personal recipes, configs and notes in `local/` at the repo root. Git ignores it, and ordinary builds compile `local/recipes/*.cs` when it exists. The pre-push and CI gate (`pwsh scripts/check.ps1`) always excludes personal recipes so it checks the same tracked sources on every machine. Run `pwsh scripts/check.ps1 -IncludeLocalRecipes` to check your recipes too. For an individual source-only build or test, pass `-p:IncludeLocalRecipes=false` to `dotnet build` or `dotnet test`.
+Put personal recipes, configs and notes in `local/` at the repo root. Git ignores it. Ordinary builds and the pre-push and CI gate (`pwsh scripts/check.ps1`) exclude personal recipes so they check the same tracked sources on every machine. Run `pwsh scripts/check.ps1 -IncludeLocalRecipes` to check your recipes too. For an individual build or test, pass `-p:IncludeLocalRecipes=true` to opt in.
 
 ## Repository layout
 
