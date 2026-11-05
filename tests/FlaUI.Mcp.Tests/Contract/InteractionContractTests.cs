@@ -350,6 +350,63 @@ public sealed class InteractionContractTests
         Assert.Null(MutationGuard.BeforeMutation.Value);
     }
 
+    private sealed class DisplayHold : IDisposable
+    {
+        public int Held { get; private set; }
+        public int Released { get; private set; }
+
+        public IDisposable Acquire()
+        {
+            Held++;
+            return this;
+        }
+
+        public void Dispose() => Released++;
+    }
+
+    [Fact]
+    public void TheDisplayIsHeldOnWhileABatchIsApprovedAndReleasedWhenItEnds()
+    {
+        long input = 0;
+        var display = new DisplayHold();
+        using (var grant = new InteractionGrant(() => (1, 2), () => input, keepDisplayOn: display.Acquire))
+        {
+            Assert.Equal(0, display.Held);
+            grant.Begin("Record the demo", userApproved: true, monitorChanges: false);
+            Assert.Equal((1, 0), (display.Held, display.Released));
+
+            grant.End();
+            Assert.Equal((1, 1), (display.Held, display.Released));
+
+            grant.Begin("Record the demo", userApproved: true, monitorChanges: false);
+            input++;
+            grant.Observe();
+            Assert.False(grant.Active);
+            Assert.Equal((2, 2), (display.Held, display.Released));
+
+            grant.Begin("Record the demo", userApproved: true, monitorChanges: false);
+            Assert.Equal((3, 2), (display.Held, display.Released));
+        }
+
+        Assert.Equal((3, 3), (display.Held, display.Released));
+    }
+
+    [Fact]
+    public void ADisplayRequestThatFailsDoesNotBlockTheGrant()
+    {
+        using var grant = new InteractionGrant(
+            () => (1, 2),
+            () => 0,
+            keepDisplayOn: () => throw new InvalidOperationException("PowerCreateRequest failed.")
+        );
+
+        grant.Begin("Record the demo", userApproved: true, monitorChanges: false);
+
+        Assert.True(grant.Active);
+        grant.Require();
+        Assert.Equal("Could not keep the display on: PowerCreateRequest failed.", grant.DisplayRequestProblem);
+    }
+
     [Fact]
     public void TheInputLeaseSerializesInput()
     {

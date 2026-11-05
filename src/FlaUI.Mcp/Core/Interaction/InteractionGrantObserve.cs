@@ -131,6 +131,7 @@ public sealed partial class InteractionGrant
 
         (Batch, Reason, code) = (null, reason, revokeCode);
         Record(cause, fault);
+        ReleaseDisplay();
         if (safetyEvent)
         {
             watching = false;

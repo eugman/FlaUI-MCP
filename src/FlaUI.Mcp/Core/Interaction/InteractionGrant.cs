@@ -36,6 +36,7 @@ public sealed partial class InteractionGrant : IDisposable
     private readonly Func<IInputObserver> createObserver;
     private readonly bool observerInjected;
     private readonly IDisposable interactiveHost;
+    private readonly Func<IDisposable?> keepDisplayOn;
     private readonly Func<long> clock;
     private readonly List<CancellationTokenSource> retired = [];
     private System.Threading.Timer? monitor;
@@ -58,17 +59,23 @@ public sealed partial class InteractionGrant : IDisposable
     /// <param name="clock">Milliseconds for the missing-foreground grace; Environment.TickCount64 by default.</param>
     /// <param name="createObserver">Starts an observer once a batch begins.</param>
     /// <param name="counts">Keys and button-downs for <see cref="Mark"/> when <paramref name="physicalInput"/> is injected.</param>
+    /// <param name="keepDisplayOn">Holds the display on while a batch is approved and returns the hold; by default
+    /// a power request, only for a grant that watches the real input (none with an injected input source or
+    /// observer, or under FLAUI_OFFLINE_TESTS).</param>
     /// <remarks>Constructing a grant declares the host interactive (<see cref="MutationGuard.RequireHook"/>).</remarks>
     public InteractionGrant(
         Func<(nint Window, int Pid)>? foreground = null,
         Func<long>? physicalInput = null,
         Func<long>? clock = null,
         Func<IInputObserver>? createObserver = null,
-        Func<InputCounts>? counts = null
+        Func<InputCounts>? counts = null,
+        Func<IDisposable?>? keepDisplayOn = null
     )
     {
         interactiveHost = MutationGuard.RequireHook();
         this.counts = counts;
+        this.keepDisplayOn =
+            keepDisplayOn ?? (physicalInput == null && createObserver == null ? DisplayRequest : () => null);
         observerInjected = createObserver != null;
         this.createObserver = createObserver ?? (() => new PhysicalInputObserver());
         this.clock = clock ?? (() => Environment.TickCount64);
@@ -205,6 +212,7 @@ public sealed partial class InteractionGrant : IDisposable
             (Batch, Reason, code, watching) = (batch, "Approved", ApprovalRequired, true);
             monitor?.Dispose();
             monitor = monitorChanges ? new System.Threading.Timer(_ => Observe(), null, 100, 100) : null;
+            HoldDisplay();
         }
     }
 
@@ -425,6 +433,7 @@ public sealed partial class InteractionGrant : IDisposable
         {
             monitor?.Dispose();
             monitor = null;
+            ReleaseDisplay();
         }
 
         inputObserver?.Dispose();
