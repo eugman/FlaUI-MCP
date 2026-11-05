@@ -29,6 +29,37 @@ public sealed class RevocationEvidenceTests
     }
 
     [Fact]
+    public void AFailedRunDoesNotNoteInputAfterANormalEndOrARevocationFromBeforeItStarted()
+    {
+        using var interaction = new Te3Interaction(() => input);
+        interaction.Begin("run", userApproved: true);
+        interaction.End();
+        input++;
+        Assert.Throws<InputRefusedException>(interaction.Require);
+        Assert.Equal(GrantRevocation.AfterEnd, interaction.LastRevocation!.Cause);
+        var afterEnd = new RunManifest();
+        RunExecutor.RecordFailure(afterEnd, new InvalidOperationException("failed"), interaction.LastRevocation);
+        Assert.Empty(afterEnd.DiagnosticNotes);
+
+        interaction.Begin("run", userApproved: true);
+        input++;
+        Assert.Throws<InputRefusedException>(interaction.Require);
+        var revocation = interaction.LastRevocation!;
+        var later = new RunManifest();
+        RunExecutor.RecordFailure(
+            later,
+            new InvalidOperationException("failed"),
+            revocation,
+            revocation.Utc.AddTicks(1)
+        );
+        Assert.Empty(later.DiagnosticNotes);
+
+        var during = new RunManifest();
+        RunExecutor.RecordFailure(during, new InvalidOperationException("failed"), revocation, revocation.Utc);
+        Assert.Single(during.DiagnosticNotes);
+    }
+
+    [Fact]
     public async Task BeginRepliesWithHowThePreviousBatchEnded()
     {
         using var interaction = new Te3Interaction(() => input);

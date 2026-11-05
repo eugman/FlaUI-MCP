@@ -93,6 +93,8 @@ public static partial class RunExecutor
         RunPaths? paths = null
     )
     {
+        // A revocation before this run started is not this run's evidence.
+        var runStarted = DateTimeOffset.UtcNow;
         using var runnerGate = heldRunnerLock == null ? AcquireRunnerLock(paths?.LockPath) : null;
         var settingsDirectory = paths?.SettingsDirectory ?? SettingsLease.DefaultDirectory;
         cancellationToken.ThrowIfCancellationRequested();
@@ -199,7 +201,7 @@ public static partial class RunExecutor
         }
         catch (Exception ex)
         {
-            RecordFailure(manifest, ex, interaction.LastRevocation);
+            RecordFailure(manifest, ex, interaction.LastRevocation, runStarted);
             manifest.Tests.Add(new(recipe.Id, "failed", timer.ElapsedMilliseconds, recipe.DocsPage));
             await CaptureFailure(
                 (tool, args) =>
@@ -311,13 +313,19 @@ public static partial class RunExecutor
         }
     }
 
-    /// <param name="revocation">How the run's grant ended; noted unless it is a normal end, which the run makes.</param>
-    internal static void RecordFailure(RunManifest manifest, Exception error, GrantRevocation? revocation = null)
+    /// <param name="revocation">How the run's grant ended; noted only when it is a revocation (not a normal end or
+    /// input after one) made at or after <paramref name="runStarted"/>.</param>
+    internal static void RecordFailure(
+        RunManifest manifest,
+        Exception error,
+        GrantRevocation? revocation = null,
+        DateTimeOffset runStarted = default
+    )
     {
         manifest.Error = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
         manifest.ErrorDetails = error.ToString();
         manifest.JournalError = RunJournal.ErrorNote(error);
-        if (revocation is { Cause: not GrantRevocation.Ended })
+        if (revocation is { EndedNormally: false } && revocation.Utc >= runStarted)
         {
             manifest.DiagnosticNotes.Add(revocation.Summary());
         }
