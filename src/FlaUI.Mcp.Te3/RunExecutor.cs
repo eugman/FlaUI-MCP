@@ -199,7 +199,7 @@ public static partial class RunExecutor
         }
         catch (Exception ex)
         {
-            RecordFailure(manifest, ex);
+            RecordFailure(manifest, ex, interaction.LastRevocation);
             manifest.Tests.Add(new(recipe.Id, "failed", timer.ElapsedMilliseconds, recipe.DocsPage));
             await CaptureFailure(
                 (tool, args) =>
@@ -311,11 +311,16 @@ public static partial class RunExecutor
         }
     }
 
-    internal static void RecordFailure(RunManifest manifest, Exception error)
+    /// <param name="revocation">How the run's grant ended; noted unless it is a normal end, which the run makes.</param>
+    internal static void RecordFailure(RunManifest manifest, Exception error, GrantRevocation? revocation = null)
     {
         manifest.Error = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
         manifest.ErrorDetails = error.ToString();
         manifest.JournalError = RunJournal.ErrorNote(error);
+        if (revocation is { Cause: not GrantRevocation.Ended })
+        {
+            manifest.DiagnosticNotes.Add(revocation.Summary());
+        }
     }
 
     // The failure capture shows only the main window; this z-ordered list shows what overlapped it.

@@ -66,7 +66,11 @@ public sealed class Te3InteractionTool(Te3Interaction interaction, string name) 
 
             return Task.FromResult(
                 LayoutProof.Attach(
-                    TextResult(JsonSerializer.Serialize(new { active = interaction.Active })),
+                    TextResult(
+                        JsonSerializer.Serialize(
+                            new { active = interaction.Active, lastRevocation = interaction.LastRevocation?.Summary() }
+                        )
+                    ),
                     NavigationProof.Grant(name == Begin, interaction.Active)
                 )
             );

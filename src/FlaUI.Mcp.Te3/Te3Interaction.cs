@@ -43,6 +43,9 @@ public sealed class Te3Interaction : IDisposable
 
     public bool Active => grant?.Active ?? false;
 
+    /// <summary>How the last batch ended (see <see cref="InteractionGrant.LastRevocation"/>); null before one did.</summary>
+    public GrantRevocation? LastRevocation => grant?.LastRevocation;
+
     public void Begin(string description, bool userApproved) =>
         (grant ?? throw new InvalidOperationException("This tool was built without a grant.")).Begin(
             description,
