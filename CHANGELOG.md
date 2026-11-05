@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `InteractionGrant.LastRevocation` (`GrantRevocation`) keeps how the last grant ended: UTC time, code, reason, cause (`user-input`, `observer-fault`, `foreground`, `activation`, `host-stopped`, `end`), approved and snapshot sequences, the coinciding input kind with a mouse subtype (`InputEventInfo.MouseKind`: move, button, wheel) and, for an observer fault, an `ObserverFault` (heartbeat-gap, thread-exited or disposed; the gap at the latch and at the next beat, the GC pause in it, and whether Windows saw input in it). `Summary()` is one line for a host's diagnostics. The live observer now throws `ObserverUnavailableException` (an `InvalidOperationException`) carrying the fault; a fault also records the event that coincided with it. Reason texts and codes are unchanged.
 - A settled tool failure with no recorded input and no specific refusal now carries `failure.code: operation-failed` and `actionDispatched: false`. Pending provider calls remain untyped; counted or otherwise known dispatched actions keep their dispatch evidence, including through batch rollups and grant observers when a provider reported dispatch without a counted input.
 
 - `windows_launch` now returns a structured `launch-pending` receipt when the started process is still alive but no unique usable window could be attached. The unverified result includes `processId` and observed title/HWND pairs, so callers can attach without relaunching.

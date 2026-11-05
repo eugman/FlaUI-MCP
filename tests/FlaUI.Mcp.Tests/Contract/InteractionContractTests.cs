@@ -13,12 +13,103 @@ public sealed class InteractionContractTests
 {
     private sealed class DiagnosticObserver : IInputObserver, IInputEventSource
     {
-        public long Sequence { get; set; } = 7;
+        private long sequence = 7;
+
+        public long Sequence
+        {
+            get => Failure == null ? sequence : throw Failure;
+            set => sequence = value;
+        }
+
+        public Exception? Failure { get; set; }
         public InputCounts Counts => new(Sequence, 0);
         public InputEventInfo? LastEvent { get; set; }
+        public ObserverFault? Fault { get; set; }
 
         public void Dispose() { }
     }
+
+    [Fact]
+    public void AnObserverFaultIsRecordedWithItsCauseGapAndTheEventThatCoincided()
+    {
+        var observer = new DiagnosticObserver();
+        using var grant = new InteractionGrant(() => (1, 2), createObserver: () => observer);
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+        var fault = new ObserverFault(ObserverFault.HeartbeatGap, 1_834, GcPauseMs: 3, InputDuringGap: true);
+        observer.Failure = new ObserverUnavailableException(fault);
+        observer.LastEvent = new InputEventInfo(8, DateTimeOffset.UnixEpoch, "mouse", "move");
+
+        Assert.Equal(InteractionGrant.FocusRevoked, Assert.Throws<InputRefusedException>(grant.Require).Refusal.Code);
+
+        var revocation = grant.LastRevocation!;
+        Assert.Equal("Focus/input observation failed", grant.Reason);
+        Assert.Equal(GrantRevocation.ObserverFailed, revocation.Cause);
+        Assert.Equal(InteractionGrant.FocusRevoked, revocation.Code);
+        Assert.Equal(fault, revocation.Fault);
+        Assert.Equal(7, revocation.ApprovedSequence);
+        Assert.Null(revocation.SnapshotSequence);
+        Assert.Equal("mouse", revocation.InputKind);
+        Assert.Equal("move", revocation.MouseKind);
+        Assert.Contains("heartbeat-gap gap 1834 ms", revocation.Summary());
+        Assert.Contains("input during gap", revocation.Summary());
+
+        observer.Fault = fault with { GapAtNextBeatMs = 1_900 };
+        Assert.Equal(1_900, grant.LastRevocation!.Fault!.GapAtNextBeatMs);
+    }
+
+    [Fact]
+    public void AnEventFromBeforeApprovalIsNotAttributedToAFault()
+    {
+        var observer = new DiagnosticObserver
+        {
+            LastEvent = new InputEventInfo(7, DateTimeOffset.UnixEpoch, "keyboard"),
+        };
+        using var grant = new InteractionGrant(() => (1, 2), createObserver: () => observer);
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+        observer.Failure = new InvalidOperationException("stopped");
+
+        grant.Observe();
+
+        Assert.Equal(ObserverFault.Other, grant.LastRevocation!.Fault!.Kind);
+        Assert.Null(grant.LastRevocation.InputKind);
+    }
+
+    [Fact]
+    public void EachEndRecordsItsCause()
+    {
+        var observer = new DiagnosticObserver();
+        using var grant = new InteractionGrant(() => (1, 2), createObserver: () => observer);
+        Assert.Null(grant.LastRevocation);
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+        grant.End();
+        Assert.Equal(GrantRevocation.Ended, grant.LastRevocation!.Cause);
+        Assert.Equal(InteractionGrant.ApprovalRequired, grant.LastRevocation.Code);
+
+        observer.Sequence = 8;
+        observer.LastEvent = new InputEventInfo(8, DateTimeOffset.UnixEpoch, "mouse", "secret");
+        grant.Observe();
+        Assert.Equal(GrantRevocation.UserInput, grant.LastRevocation!.Cause);
+        Assert.Equal(InteractionGrant.FocusRevoked, grant.LastRevocation.Code);
+        Assert.Equal(8, grant.LastRevocation.SnapshotSequence);
+        Assert.Equal("mouse", grant.LastRevocation.InputKind);
+        Assert.Null(grant.LastRevocation.MouseKind);
+
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+        grant.End("Host stopped", safetyEvent: true);
+        Assert.Equal(GrantRevocation.HostStopped, grant.LastRevocation!.Cause);
+    }
+
+    [Theory]
+    [InlineData(true, 0x0100, 1)] // a key
+    [InlineData(false, 0x0200, 3)] // WM_MOUSEMOVE
+    [InlineData(false, 0x0201, 4)] // WM_LBUTTONDOWN
+    [InlineData(false, 0x0202, 4)] // WM_LBUTTONUP
+    [InlineData(false, 0x020C, 4)] // WM_XBUTTONUP
+    [InlineData(false, 0x020A, 5)] // WM_MOUSEWHEEL
+    [InlineData(false, 0x020E, 5)] // WM_MOUSEHWHEEL
+    [InlineData(false, 0x0210, 2)]
+    public void TheHookKeepsTheMouseSubtype(bool keyboard, int message, int kind) =>
+        Assert.Equal(kind, PhysicalInputObserver.KindOf(keyboard, message));
 
     [Fact]
     public void RevocationReportsOnlyInputKindTimeAndSequence()
@@ -108,6 +199,41 @@ public sealed class InteractionContractTests
         Assert.False(heartbeat.Alive(3_000));
         heartbeat.Beat(3_100);
         Assert.False(heartbeat.Alive(3_200));
+    }
+
+    [Fact]
+    public void TheLatchKeepsTheGapTheNextBeatTheGcPauseAndWhetherInputCameDuringIt()
+    {
+        var pause = TimeSpan.FromMilliseconds(10);
+        uint? lastInput = 500;
+        var heartbeat = new Heartbeat(0, () => pause, () => lastInput);
+        heartbeat.Beat(900);
+        Assert.Null(heartbeat.Fault);
+
+        pause = TimeSpan.FromMilliseconds(250);
+        lastInput = 2_000;
+        Assert.False(heartbeat.Alive(3_000));
+        Assert.Equal(new ObserverFault(ObserverFault.HeartbeatGap, 2_100, null, 240, true), heartbeat.Fault);
+
+        heartbeat.Beat(3_400);
+        heartbeat.Beat(3_500);
+        Assert.Equal(2_500, heartbeat.Fault!.GapAtNextBeatMs);
+        Assert.Equal(2_100, heartbeat.Fault.GapMs);
+    }
+
+    [Fact]
+    public void InputBeforeTheGapOrAnUnreadableLastInputIsNotCalledInputDuringIt()
+    {
+        uint? lastInput = 100;
+        var quiet = new Heartbeat(0, lastInputSource: () => lastInput);
+        quiet.Beat(900);
+        Assert.False(quiet.Alive(2_000));
+        Assert.False(quiet.Fault!.InputDuringGap);
+
+        lastInput = null;
+        var unread = new Heartbeat(0, lastInputSource: () => lastInput);
+        Assert.False(unread.Alive(2_000));
+        Assert.Null(unread.Fault!.InputDuringGap);
     }
 
     private static InteractionGrant Grant(

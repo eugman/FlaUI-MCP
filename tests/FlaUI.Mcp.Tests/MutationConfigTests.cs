@@ -74,6 +74,7 @@ public sealed class MutationConfigTests
         "Core/DpiUtility.cs",
         "Core/ElementQuery.cs",
         "Core/InputDesktop.cs",
+        "Core/Interaction/GrantRevocation.cs",
         "Core/Interaction/IInputObserver.cs",
         "Core/Interaction/PhysicalInputObserver.cs",
         "Core/KeepAwake.cs",

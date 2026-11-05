@@ -3,7 +3,8 @@ namespace FlaUI.Mcp.Core;
 /// <summary>Counts the user's own keyboard and mouse input.</summary>
 public interface IInputObserver : IDisposable
 {
-    /// <summary>The running count; throws InvalidOperationException once the observer can no longer vouch for it.</summary>
+    /// <summary>The running count; throws InvalidOperationException (an <see cref="ObserverUnavailableException"/>
+    /// from the live observer) once the observer can no longer vouch for it.</summary>
     long Sequence { get; }
 
     /// <summary>The user's keyboard events and mouse button-downs, counted apart; throws as <see cref="Sequence"/>.</summary>
@@ -11,12 +12,16 @@ public interface IInputObserver : IDisposable
 }
 
 /// <summary>Privacy-safe metadata about one non-injected event. No key, text, or screen position is retained.</summary>
-public sealed record InputEventInfo(long Sequence, DateTimeOffset Utc, string Kind);
+/// <param name="MouseKind">move, button or wheel for a mouse event; null otherwise.</param>
+public sealed record InputEventInfo(long Sequence, DateTimeOffset Utc, string Kind, string? MouseKind = null);
 
 /// <summary>Optional diagnostics supplied by the live low-level hook; test observers need not implement it.</summary>
 public interface IInputEventSource
 {
     InputEventInfo? LastEvent { get; }
+
+    /// <summary>Why the observer stopped vouching for the input, once it has; readable after it stopped.</summary>
+    ObserverFault? Fault => null;
 }
 
 /// <summary>The input sequence at grant approval and a later revocation snapshot, which may include newer events.</summary>

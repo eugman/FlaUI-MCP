@@ -16,7 +16,7 @@ public sealed partial class InteractionGrant
             }
             else if (SafetyProblem() is { } revoke)
             {
-                cancel = RevokeLocked(revoke.Reason, revoke.Code, safetyEvent: true);
+                cancel = RevokeLocked(revoke.Reason, revoke.Code, safetyEvent: true, revoke.Cause, revoke.Fault);
                 cancelSafety = safety;
             }
         }
@@ -28,26 +28,31 @@ public sealed partial class InteractionGrant
     /// <summary>After a normal end, the user's input still stops safety consumers (a recording).</summary>
     private CancellationTokenSource? WatchAfterEnd()
     {
-        if (!watching || safety.IsCancellationRequested || !UserInputSinceApproval())
+        if (!watching || safety.IsCancellationRequested || !UserInputSinceApproval(out var fault))
         {
             return null;
         }
 
         CaptureInputEvidence();
         (Reason, code, watching) = (UserInput + InputEvidenceSuffix(), FocusRevoked, false);
+        Record(fault == null ? GrantRevocation.UserInput : GrantRevocation.ObserverFailed, fault);
         monitor?.Dispose();
         monitor = null;
         return safety;
     }
 
     /// <summary>Why the grant must end now, or null: the user's input, a lost foreground, a failed observation.</summary>
-    private (string Reason, string Code)? SafetyProblem()
+    private Revocation? SafetyProblem()
     {
         if (promptUntil is { } until)
         {
             // While the user is asked to click, their input is expected: Rebaseline judges it. Bounded.
             return clock() > until
-                ? ("the user did not click the window before the prompt ended", RefusalCodes.ActivationDenied)
+                ? new(
+                    "the user did not click the window before the prompt ended",
+                    RefusalCodes.ActivationDenied,
+                    GrantRevocation.Activation
+                )
                 : null;
         }
 
@@ -55,7 +60,7 @@ public sealed partial class InteractionGrant
         {
             if (InputSequence() != inputAtApproval)
             {
-                return (UserInput, FocusRevoked);
+                return new(UserInput, FocusRevoked, GrantRevocation.UserInput);
             }
 
             var current = foreground();
@@ -71,18 +76,28 @@ public sealed partial class InteractionGrant
 
             missingForegroundSince ??= clock();
             return clock() - missingForegroundSince.Value > MissingForegroundGraceMilliseconds
-                ? ($"Foreground unavailable for more than {MissingForegroundGraceMilliseconds} ms", FocusRevoked)
+                ? new(
+                    $"Foreground unavailable for more than {MissingForegroundGraceMilliseconds} ms",
+                    FocusRevoked,
+                    GrantRevocation.Foreground
+                )
                 : null;
         }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
             // An observer that stopped, or a failed foreground read, cannot vouch that the user is away.
-            return ("Focus/input observation failed", FocusRevoked);
+            return new("Focus/input observation failed", FocusRevoked, GrantRevocation.ObserverFailed, FaultOf(error));
         }
     }
 
-    private bool UserInputSinceApproval()
+    private readonly record struct Revocation(string Reason, string Code, string Cause, ObserverFault? Fault = null);
+
+    private static ObserverFault FaultOf(Exception error) =>
+        error is ObserverUnavailableException unavailable ? unavailable.Fault : new(ObserverFault.Other);
+
+    private bool UserInputSinceApproval(out ObserverFault? fault)
     {
+        fault = null;
         try
         {
             return InputSequence() != inputAtApproval;
@@ -90,19 +105,32 @@ public sealed partial class InteractionGrant
         catch (Exception error) when (error is not OutOfMemoryException)
         {
             // Any observer failure (not only "unavailable") revokes rather than killing the host's monitor.
+            fault = FaultOf(error);
             return true;
         }
     }
 
-    private CancellationTokenSource RevokeLocked(string reason, string revokeCode, bool safetyEvent)
+    private CancellationTokenSource RevokeLocked(
+        string reason,
+        string revokeCode,
+        bool safetyEvent,
+        string cause,
+        ObserverFault? fault = null
+    )
     {
         if (reason == UserInput)
         {
             CaptureInputEvidence();
             reason += InputEvidenceSuffix();
         }
+        else if (cause == GrantRevocation.ObserverFailed)
+        {
+            // The event that coincided with the fault, if any; the reason text stays as hosts match it.
+            CaptureInputEvidence();
+        }
 
         (Batch, Reason, code) = (null, reason, revokeCode);
+        Record(cause, fault);
         if (safetyEvent)
         {
             watching = false;
@@ -136,19 +164,80 @@ public sealed partial class InteractionGrant
 
     private long InputSequence() => physicalInput?.Invoke() ?? inputObserver?.Sequence ?? 0;
 
+    // The last event does not need a live observer, so a fault still records the event that coincided with it.
     private void CaptureInputEvidence()
     {
+        InputEventInfo? last;
+        try
+        {
+            last = (inputObserver as IInputEventSource)?.LastEvent;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            last = null;
+        }
+
         try
         {
             revokedInputSequence = InputSequence();
-            var last = (inputObserver as IInputEventSource)?.LastEvent;
-            var kind = last?.Kind is "keyboard" or "mouse" ? last.Kind : "unknown";
-            lastInputAtRevoke = last?.Sequence == revokedInputSequence ? last with { Kind = kind } : null;
         }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
             revokedInputSequence = null;
-            lastInputAtRevoke = null;
+        }
+
+        lastInputAtRevoke = Attributed(last) is { } attributed ? Sanitized(attributed) : null;
+    }
+
+    // With the sequence unreadable (a fault), any event after approval is the one that coincided with it.
+    private InputEventInfo? Attributed(InputEventInfo? last)
+    {
+        if (revokedInputSequence is { } revoked)
+        {
+            return last?.Sequence == revoked ? last : null;
+        }
+
+        return last?.Sequence > inputAtApproval ? last : null;
+    }
+
+    private static InputEventInfo Sanitized(InputEventInfo last)
+    {
+        var kind = last.Kind is "keyboard" or "mouse" ? last.Kind : "unknown";
+        var mouse = kind == "mouse" && last.MouseKind is "move" or "button" or "wheel" ? last.MouseKind : null;
+        return last with { Kind = kind, MouseKind = mouse };
+    }
+
+    private void Record(string cause, ObserverFault? fault)
+    {
+        lastRevocation = new(DateTimeOffset.UtcNow, code, Reason, cause, inputAtApproval, revokedInputSequence)
+        {
+            InputKind = lastInputAtRevoke?.Kind,
+            MouseKind = lastInputAtRevoke?.MouseKind,
+            Fault = fault,
+        };
+        revokedObserver = inputObserver;
+    }
+
+    // A fault latched before the next beat arrived: the same observer may since have measured that beat's gap.
+    private GrantRevocation? WithLaterFault(GrantRevocation? revocation)
+    {
+        if (revocation?.Fault is not { GapAtNextBeatMs: null } fault || revokedObserver is not IInputEventSource source)
+        {
+            return revocation;
+        }
+
+        try
+        {
+            return source.Fault is { GapAtNextBeatMs: not null } later && later.Kind == fault.Kind
+                ? revocation with
+                {
+                    Fault = later,
+                }
+                : revocation;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            return revocation;
         }
     }
 

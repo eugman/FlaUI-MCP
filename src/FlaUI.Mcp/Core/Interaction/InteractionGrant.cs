@@ -43,6 +43,8 @@ public sealed partial class InteractionGrant : IDisposable
     private long inputAtApproval;
     private long? revokedInputSequence;
     private InputEventInfo? lastInputAtRevoke;
+    private GrantRevocation? lastRevocation;
+    private IInputObserver? revokedObserver;
     private long? missingForegroundSince;
     private CancellationTokenSource lifetime = new();
     private CancellationTokenSource safety = new();
@@ -118,6 +120,21 @@ public sealed partial class InteractionGrant : IDisposable
             lock (sync)
             {
                 return new(inputAtApproval, revokedInputSequence, lastInputAtRevoke);
+            }
+        }
+    }
+
+    /// <summary>
+    /// How the last grant ended (cause, code, sequences, observer fault), kept until a later one ends; null before
+    /// the first end. A fault's next-beat gap is filled in once the same observer measures it.
+    /// </summary>
+    public GrantRevocation? LastRevocation
+    {
+        get
+        {
+            lock (sync)
+            {
+                return WithLaterFault(lastRevocation);
             }
         }
     }
@@ -354,7 +371,7 @@ public sealed partial class InteractionGrant : IDisposable
             stopSafety;
         lock (sync)
         {
-            stop = RevokeLocked(reason, code, safetyEvent);
+            stop = RevokeLocked(reason, code, safetyEvent, EndCause(code, safetyEvent));
             stopSafety = safety;
         }
 
@@ -363,6 +380,16 @@ public sealed partial class InteractionGrant : IDisposable
         {
             Cancel(stopSafety);
         }
+    }
+
+    private static string EndCause(string code, bool safetyEvent)
+    {
+        if (code == RefusalCodes.ActivationDenied)
+        {
+            return GrantRevocation.Activation;
+        }
+
+        return safetyEvent ? GrantRevocation.HostStopped : GrantRevocation.Ended;
     }
 
     // A refusal noted on the running operation so its outcome carries the code; the refusal itself sent nothing.
