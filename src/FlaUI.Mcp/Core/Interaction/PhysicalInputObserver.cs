@@ -27,6 +27,7 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
     private readonly Heartbeat heartbeat = new(Environment.TickCount64, lastInputSource: LastInputTick);
     private readonly Hook keyboard;
     private readonly Hook mouse;
+    private readonly MouseDriftFilter drift = new();
     private Exception? failure;
     private long sequence;
     private long lastEventSequence;
@@ -207,20 +208,32 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
         {
             // KBDLLHOOKSTRUCT: vkCode, scanCode, flags. MSLLHOOKSTRUCT: POINT, mouseData, flags.
             var flags = unchecked((uint)Marshal.ReadInt32(data, isKeyboard ? 8 : 12));
-            if (IsPhysical(isKeyboard, flags))
+            var physical = IsPhysical(isKeyboard, flags);
+            // Every mouse event, injected too, goes through the drift filter, which keeps the last move point.
+            // MSLLHOOKSTRUCT starts with the POINT (x, y) in screen coordinates; a key's position is never read.
+            var (x, y) = isKeyboard ? (0, 0) : (Marshal.ReadInt32(data, 0), Marshal.ReadInt32(data, 4));
+            if (drift.Counts(isKeyboard, message, physical, x, y, Environment.TickCount64))
             {
-                Interlocked.Increment(ref lastEventVersion); // writer active
-                var next = Interlocked.Increment(ref sequence);
-                Volatile.Write(ref lastEventUtcTicks, DateTime.UtcNow.Ticks);
-                Volatile.Write(ref lastEventKind, KindOf(isKeyboard, message));
-                Volatile.Write(ref lastEventSequence, next);
-                Interlocked.Increment(ref lastEventVersion); // stable snapshot
+                Record(isKeyboard, message);
                 Count(isKeyboard, message, data);
             }
         }
 
         return CallNextHookEx(0, code, message, data);
     }
+
+    private void Record(bool isKeyboard, nint message)
+    {
+        Interlocked.Increment(ref lastEventVersion); // writer active
+        var next = Interlocked.Increment(ref sequence);
+        Volatile.Write(ref lastEventUtcTicks, DateTime.UtcNow.Ticks);
+        Volatile.Write(ref lastEventKind, KindOf(isKeyboard, message));
+        Volatile.Write(ref lastEventSequence, next);
+        Interlocked.Increment(ref lastEventVersion); // stable snapshot
+    }
+
+    /// <summary>Physical mouse moves the drift filter tolerated (not counted) so far.</summary>
+    public long ToleratedMoves => drift.Tolerated;
 
     private void Count(bool isKeyboard, nint message, nint data)
     {

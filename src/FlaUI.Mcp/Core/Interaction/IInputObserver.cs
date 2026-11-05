@@ -22,6 +22,9 @@ public interface IInputEventSource
 
     /// <summary>Why the observer stopped vouching for the input, once it has; readable after it stopped.</summary>
     ObserverFault? Fault => null;
+
+    /// <summary>Physical mouse moves tolerated as drift (not counted) so far; a number only.</summary>
+    long ToleratedMoves => 0;
 }
 
 /// <summary>The input sequence at grant approval and a later revocation snapshot, which may include newer events.</summary>

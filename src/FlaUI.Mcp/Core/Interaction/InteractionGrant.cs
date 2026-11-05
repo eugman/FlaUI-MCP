@@ -45,6 +45,7 @@ public sealed partial class InteractionGrant : IDisposable
     private long? revokedInputSequence;
     private InputEventInfo? lastInputAtRevoke;
     private GrantRevocation? lastRevocation;
+    private long toleratedAtApproval;
     private IInputObserver? revokedObserver;
     private long? missingForegroundSince;
     private CancellationTokenSource lifetime = new();
@@ -203,6 +204,7 @@ public sealed partial class InteractionGrant : IDisposable
             }
 
             inputAtApproval = InputSequence();
+            toleratedAtApproval = ToleratedMoves();
             revokedInputSequence = null;
             lastInputAtRevoke = null;
             targets.Clear();

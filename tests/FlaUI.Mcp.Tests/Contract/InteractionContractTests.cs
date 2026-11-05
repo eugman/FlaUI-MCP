@@ -25,6 +25,7 @@ public sealed class InteractionContractTests
         public InputCounts Counts => new(Sequence, 0);
         public InputEventInfo? LastEvent { get; set; }
         public ObserverFault? Fault { get; set; }
+        public long ToleratedMoves { get; set; }
 
         public void Dispose() { }
     }
@@ -97,6 +98,21 @@ public sealed class InteractionContractTests
         grant.Begin("demo", userApproved: true, monitorChanges: false);
         grant.End("Host stopped", safetyEvent: true);
         Assert.Equal(GrantRevocation.HostStopped, grant.LastRevocation!.Cause);
+    }
+
+    [Fact]
+    public void TheRevocationCountsOnlyTheDriftToleratedDuringTheBatch()
+    {
+        var observer = new DiagnosticObserver { ToleratedMoves = 3 };
+        using var grant = new InteractionGrant(() => (1, 2), createObserver: () => observer);
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+        observer.ToleratedMoves = 5;
+        observer.Sequence = 8;
+
+        grant.Observe();
+
+        Assert.Equal(2, grant.LastRevocation!.ToleratedMoves);
+        Assert.Contains("tolerated mouse drift 2 moves", grant.LastRevocation.Summary());
     }
 
     [Theory]

@@ -84,6 +84,9 @@ public sealed record GrantRevocation(
 
     public ObserverFault? Fault { get; init; }
 
+    /// <summary>Physical mouse moves tolerated as drift during the batch.</summary>
+    public long ToleratedMoves { get; init; }
+
     /// <summary>One line for a host's diagnostics.</summary>
     public string Summary()
     {
@@ -102,6 +105,11 @@ public sealed record GrantRevocation(
         if (InputKind != null)
         {
             text += $"; last input {InputKind}" + (MouseKind is { } mouse ? "/" + mouse : string.Empty);
+        }
+
+        if (ToleratedMoves > 0)
+        {
+            text += $"; tolerated mouse drift {ToleratedMoves} moves";
         }
 
         return text;

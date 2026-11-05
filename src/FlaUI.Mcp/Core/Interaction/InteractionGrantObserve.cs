@@ -215,8 +215,21 @@ public sealed partial class InteractionGrant
             InputKind = lastInputAtRevoke?.Kind,
             MouseKind = lastInputAtRevoke?.MouseKind,
             Fault = fault,
+            ToleratedMoves = ToleratedMoves() - toleratedAtApproval,
         };
         revokedObserver = inputObserver;
+    }
+
+    private long ToleratedMoves()
+    {
+        try
+        {
+            return (inputObserver as IInputEventSource)?.ToleratedMoves ?? 0;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            return toleratedAtApproval;
+        }
     }
 
     // A fault latched before the next beat arrived: the same observer may since have measured that beat's gap.
