@@ -35,7 +35,8 @@ public sealed partial class InteractionGrant
 
         CaptureInputEvidence();
         (Reason, code, watching) = (UserInput + InputEvidenceSuffix(), FocusRevoked, false);
-        Record(fault == null ? GrantRevocation.UserInput : GrantRevocation.ObserverFailed, fault);
+        // The batch had already ended normally: this stopped only safety consumers, so it is not a revocation.
+        Record(code, Reason, GrantRevocation.AfterEnd, fault);
         monitor?.Dispose();
         monitor = null;
         return safety;
@@ -129,8 +130,13 @@ public sealed partial class InteractionGrant
             CaptureInputEvidence();
         }
 
+        // An end with no batch active (the grant was already revoked) keeps the evidence of how it really ended.
+        if (Batch != null)
+        {
+            Record(revokeCode, reason, cause, fault);
+        }
+
         (Batch, Reason, code) = (null, reason, revokeCode);
-        Record(cause, fault);
         ReleaseDisplay();
         if (safetyEvent)
         {
@@ -208,9 +214,9 @@ public sealed partial class InteractionGrant
         return last with { Kind = kind, MouseKind = mouse };
     }
 
-    private void Record(string cause, ObserverFault? fault)
+    private void Record(string recordCode, string reason, string cause, ObserverFault? fault)
     {
-        lastRevocation = new(DateTimeOffset.UtcNow, code, Reason, cause, inputAtApproval, revokedInputSequence)
+        lastRevocation = new(DateTimeOffset.UtcNow, recordCode, reason, cause, inputAtApproval, revokedInputSequence)
         {
             InputKind = lastInputAtRevoke?.Kind,
             MouseKind = lastInputAtRevoke?.MouseKind,
