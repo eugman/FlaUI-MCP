@@ -36,6 +36,7 @@ public sealed partial class InteractionGrant : IDisposable
     private readonly Func<IInputObserver> createObserver;
     private readonly bool observerInjected;
     private readonly IDisposable interactiveHost;
+    private readonly Func<IDisposable?> keepDisplayOn;
     private readonly Func<long> clock;
     private readonly List<CancellationTokenSource> retired = [];
     private System.Threading.Timer? monitor;
@@ -43,6 +44,9 @@ public sealed partial class InteractionGrant : IDisposable
     private long inputAtApproval;
     private long? revokedInputSequence;
     private InputEventInfo? lastInputAtRevoke;
+    private GrantRevocation? lastRevocation;
+    private long toleratedAtApproval;
+    private IInputObserver? revokedObserver;
     private long? missingForegroundSince;
     private CancellationTokenSource lifetime = new();
     private CancellationTokenSource safety = new();
@@ -56,17 +60,23 @@ public sealed partial class InteractionGrant : IDisposable
     /// <param name="clock">Milliseconds for the missing-foreground grace; Environment.TickCount64 by default.</param>
     /// <param name="createObserver">Starts an observer once a batch begins.</param>
     /// <param name="counts">Keys and button-downs for <see cref="Mark"/> when <paramref name="physicalInput"/> is injected.</param>
+    /// <param name="keepDisplayOn">Holds the display on while a batch is approved and returns the hold; by default
+    /// a power request, only for a grant that watches the real input (none with an injected input source or
+    /// observer, or under FLAUI_OFFLINE_TESTS).</param>
     /// <remarks>Constructing a grant declares the host interactive (<see cref="MutationGuard.RequireHook"/>).</remarks>
     public InteractionGrant(
         Func<(nint Window, int Pid)>? foreground = null,
         Func<long>? physicalInput = null,
         Func<long>? clock = null,
         Func<IInputObserver>? createObserver = null,
-        Func<InputCounts>? counts = null
+        Func<InputCounts>? counts = null,
+        Func<IDisposable?>? keepDisplayOn = null
     )
     {
         interactiveHost = MutationGuard.RequireHook();
         this.counts = counts;
+        this.keepDisplayOn =
+            keepDisplayOn ?? (physicalInput == null && createObserver == null ? DisplayRequest : () => null);
         observerInjected = createObserver != null;
         this.createObserver = createObserver ?? (() => new PhysicalInputObserver());
         this.clock = clock ?? (() => Environment.TickCount64);
@@ -118,6 +128,21 @@ public sealed partial class InteractionGrant : IDisposable
             lock (sync)
             {
                 return new(inputAtApproval, revokedInputSequence, lastInputAtRevoke);
+            }
+        }
+    }
+
+    /// <summary>
+    /// How the last grant ended (cause, code, sequences, observer fault), kept until a later one ends; null before
+    /// the first end. A fault's next-beat gap is filled in once the same observer measures it.
+    /// </summary>
+    public GrantRevocation? LastRevocation
+    {
+        get
+        {
+            lock (sync)
+            {
+                return WithLaterFault(lastRevocation);
             }
         }
     }
@@ -179,6 +204,7 @@ public sealed partial class InteractionGrant : IDisposable
             }
 
             inputAtApproval = InputSequence();
+            toleratedAtApproval = ToleratedMoves();
             revokedInputSequence = null;
             lastInputAtRevoke = null;
             targets.Clear();
@@ -188,6 +214,7 @@ public sealed partial class InteractionGrant : IDisposable
             (Batch, Reason, code, watching) = (batch, "Approved", ApprovalRequired, true);
             monitor?.Dispose();
             monitor = monitorChanges ? new System.Threading.Timer(_ => Observe(), null, 100, 100) : null;
+            HoldDisplay();
         }
     }
 
@@ -354,7 +381,7 @@ public sealed partial class InteractionGrant : IDisposable
             stopSafety;
         lock (sync)
         {
-            stop = RevokeLocked(reason, code, safetyEvent);
+            stop = RevokeLocked(reason, code, safetyEvent, EndCause(code, safetyEvent));
             stopSafety = safety;
         }
 
@@ -363,6 +390,16 @@ public sealed partial class InteractionGrant : IDisposable
         {
             Cancel(stopSafety);
         }
+    }
+
+    private static string EndCause(string code, bool safetyEvent)
+    {
+        if (code == RefusalCodes.ActivationDenied)
+        {
+            return GrantRevocation.Activation;
+        }
+
+        return safetyEvent ? GrantRevocation.HostStopped : GrantRevocation.Ended;
     }
 
     // A refusal noted on the running operation so its outcome carries the code; the refusal itself sent nothing.
@@ -398,6 +435,7 @@ public sealed partial class InteractionGrant : IDisposable
         {
             monitor?.Dispose();
             monitor = null;
+            ReleaseDisplay();
         }
 
         inputObserver?.Dispose();

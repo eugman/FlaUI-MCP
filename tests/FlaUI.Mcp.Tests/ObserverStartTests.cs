@@ -26,4 +26,29 @@ public sealed class ObserverStartTests
         Assert.Null(PhysicalInputObserver.StartFailure(ready, null, TimeSpan.Zero));
         Assert.Same(hookError, PhysicalInputObserver.StartFailure(ready, hookError, TimeSpan.Zero));
     }
+
+    [Fact]
+    public void ASlowThreadStartDoesNotPoisonTheHeartbeatBeforeTheHooksExist()
+    {
+        var heartbeat = new Heartbeat(0);
+
+        heartbeat.Restart(5_000);
+        heartbeat.Beat(5_400);
+
+        Assert.True(heartbeat.Alive(5_500));
+        Assert.Null(heartbeat.Fault);
+    }
+
+    [Fact]
+    public void SlowHookInstallationStillPoisonsAndARestartDoesNotClearALatch()
+    {
+        var heartbeat = new Heartbeat(0);
+        heartbeat.Restart(5_000);
+        heartbeat.Beat(6_500);
+        Assert.False(heartbeat.Alive(6_500));
+
+        heartbeat.Restart(7_000);
+
+        Assert.False(heartbeat.Alive(7_100));
+    }
 }

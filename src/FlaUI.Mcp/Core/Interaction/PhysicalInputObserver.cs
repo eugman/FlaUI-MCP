@@ -24,9 +24,10 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
     private readonly Thread pulse;
     private readonly ManualResetEventSlim ready = new();
     private readonly ManualResetEventSlim stopping = new();
-    private readonly Heartbeat heartbeat = new(Environment.TickCount64);
+    private readonly Heartbeat heartbeat = new(Environment.TickCount64, lastInputSource: LastInputTick);
     private readonly Hook keyboard;
     private readonly Hook mouse;
+    private readonly MouseDriftFilter drift = new();
     private Exception? failure;
     private long sequence;
     private long lastEventSequence;
@@ -114,10 +115,54 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
             return new InputEventInfo(
                 eventSequence,
                 new DateTimeOffset(new DateTime(ticks, DateTimeKind.Utc)),
-                kind == 1 ? "keyboard" : "mouse"
+                kind == KeyboardKind ? "keyboard" : "mouse",
+                MouseKindOf(kind)
             );
         }
     }
+
+    /// <summary>Why the observer stopped vouching for the input; null while it still does.</summary>
+    public ObserverFault? Fault
+    {
+        get
+        {
+            if (Volatile.Read(ref disposed) != 0)
+            {
+                return new(ObserverFault.Disposed);
+            }
+
+            return !thread.IsAlive ? new(ObserverFault.ThreadExited) : heartbeat.Fault;
+        }
+    }
+
+    // The last event's kind as the hook stores it: a primitive, so the diagnostic snapshot stays lock-free.
+    private const int KeyboardKind = 1;
+    private const int MouseOtherKind = 2;
+    private const int MouseMoveKind = 3;
+    private const int MouseButtonKind = 4;
+    private const int MouseWheelKind = 5;
+
+    private static string? MouseKindOf(int kind) =>
+        kind switch
+        {
+            MouseMoveKind => "move",
+            MouseButtonKind => "button",
+            MouseWheelKind => "wheel",
+            _ => null,
+        };
+
+    // WM_MOUSEMOVE; WM_MOUSEWHEEL, WM_MOUSEHWHEEL; the button downs, ups and double-clicks in between.
+    internal static int KindOf(bool keyboard, nint message) =>
+        (keyboard, message) switch
+        {
+            (true, _) => KeyboardKind,
+            (_, MouseMove) => MouseMoveKind,
+            (_, 0x020A or 0x020E) => MouseWheelKind,
+            (_, >= 0x0201 and <= 0x020D) => MouseButtonKind,
+            _ => MouseOtherKind,
+        };
+
+    internal const int MouseMove = 0x0200;
 
     public InputCounts Counts
     {
@@ -135,9 +180,19 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
 
     private void RequireAlive()
     {
-        if (!thread.IsAlive || Volatile.Read(ref disposed) != 0 || !heartbeat.Alive(Environment.TickCount64))
+        if (Volatile.Read(ref disposed) != 0)
         {
-            throw new InvalidOperationException("Physical input observer is unavailable");
+            throw new ObserverUnavailableException(new(ObserverFault.Disposed));
+        }
+
+        if (!thread.IsAlive)
+        {
+            throw new ObserverUnavailableException(new(ObserverFault.ThreadExited));
+        }
+
+        if (!heartbeat.Alive(Environment.TickCount64))
+        {
+            throw new ObserverUnavailableException(heartbeat.Fault ?? new(ObserverFault.HeartbeatGap));
         }
     }
 
@@ -153,20 +208,32 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
         {
             // KBDLLHOOKSTRUCT: vkCode, scanCode, flags. MSLLHOOKSTRUCT: POINT, mouseData, flags.
             var flags = unchecked((uint)Marshal.ReadInt32(data, isKeyboard ? 8 : 12));
-            if (IsPhysical(isKeyboard, flags))
+            var physical = IsPhysical(isKeyboard, flags);
+            // Every mouse event, injected too, goes through the drift filter, which keeps the last move point.
+            // MSLLHOOKSTRUCT starts with the POINT (x, y) in screen coordinates; a key's position is never read.
+            var (x, y) = isKeyboard ? (0, 0) : (Marshal.ReadInt32(data, 0), Marshal.ReadInt32(data, 4));
+            if (drift.Counts(isKeyboard, message, physical, x, y, Environment.TickCount64))
             {
-                Interlocked.Increment(ref lastEventVersion); // writer active
-                var next = Interlocked.Increment(ref sequence);
-                Volatile.Write(ref lastEventUtcTicks, DateTime.UtcNow.Ticks);
-                Volatile.Write(ref lastEventKind, isKeyboard ? 1 : 2);
-                Volatile.Write(ref lastEventSequence, next);
-                Interlocked.Increment(ref lastEventVersion); // stable snapshot
+                Record(isKeyboard, message);
                 Count(isKeyboard, message, data);
             }
         }
 
         return CallNextHookEx(0, code, message, data);
     }
+
+    private void Record(bool isKeyboard, nint message)
+    {
+        Interlocked.Increment(ref lastEventVersion); // writer active
+        var next = Interlocked.Increment(ref sequence);
+        Volatile.Write(ref lastEventUtcTicks, DateTime.UtcNow.Ticks);
+        Volatile.Write(ref lastEventKind, KindOf(isKeyboard, message));
+        Volatile.Write(ref lastEventSequence, next);
+        Interlocked.Increment(ref lastEventVersion); // stable snapshot
+    }
+
+    /// <summary>Physical mouse moves the drift filter tolerated (not counted) so far.</summary>
+    public long ToleratedMoves => drift.Tolerated;
 
     private void Count(bool isKeyboard, nint message, nint data)
     {
@@ -200,6 +267,10 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
                 return;
             }
 
+            // The clock started at construction, but no hook exists until the next line, so nothing Windows could
+            // drop has been missed yet: a slow thread start must not poison the observer at birth. Installing the
+            // hooks is still measured (the beat before ready), since a hook is live while the second one installs.
+            heartbeat.Restart(Environment.TickCount64);
             keyHook = SetWindowsHookEx(13, keyboard, GetModuleHandle(null), 0);
             if (keyHook == 0)
             {
@@ -300,6 +371,23 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
         public int Y;
         public uint Private;
     }
+
+    // Diagnostics only (the heartbeat's latch): whether Windows saw any input, injected or not, during a gap.
+    private static uint? LastInputTick()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        return GetLastInputInfo(ref info) ? info.Time : null;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo
+    {
+        public uint Size;
+        public uint Time;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LastInputInfo info);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint SetWindowsHookEx(int id, Hook hook, nint module, uint threadId);

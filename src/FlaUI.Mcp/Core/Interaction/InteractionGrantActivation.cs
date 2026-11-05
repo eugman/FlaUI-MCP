@@ -81,7 +81,12 @@ public sealed partial class InteractionGrant
                 return;
             }
 
-            cancel = RevokeLocked(problem, RefusalCodes.ActivationDenied, safetyEvent: true);
+            cancel = RevokeLocked(
+                problem,
+                RefusalCodes.ActivationDenied,
+                safetyEvent: true,
+                GrantRevocation.Activation
+            );
             cancelSafety = safety;
         }
 
