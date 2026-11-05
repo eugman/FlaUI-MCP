@@ -1,27 +1,31 @@
 namespace FlaUI.Mcp.Core;
 
 /// <summary>
-/// Tolerates a physical mouse drifting a few pixels (a desk knock, an optical sensor's jitter) without counting it as
-/// the user taking the machine back. Deliberately narrow: only a physical WM_MOUSEMOVE may be tolerated, and only
-/// while, within a sliding second, there are at most <see cref="MaxMoves"/> physical moves that together travel at
-/// most <see cref="MaxDistance"/> px. Keys, button downs and ups, and wheels always count, and so does any move
-/// beyond those limits, at once.
+/// Tolerates a physical mouse drifting a few pixels (a nudge, a desk knock, an optical sensor's jitter) without
+/// counting it as the user taking the machine back. Deliberately narrow: only a physical WM_MOUSEMOVE may be
+/// tolerated, and only while the pointer stays within <see cref="MaxRadius"/> px of the drift's anchor, however many
+/// events the motion is reported as. Keys, button downs and ups, and wheels always count, and so does any move past
+/// the radius, at once.
 /// </summary>
 /// <remarks>
-/// Distance is measured from the last move point seen from either source: the hook sees the agent's injected moves
-/// too, so they move the reference point (without counting) and cannot mask a real move. Nothing is tolerated within
-/// <see cref="InjectedQuietMs"/> of an injected mouse event, or before any reference point exists. Runs on the hook
-/// thread only; it keeps no coordinates beyond the last move point.
+/// The anchor is the point a drift starts from: the last move point seen from either source when a physical move
+/// follows <see cref="WindowMs"/> of physical quiet. Tolerated moves never move the anchor, so slow creep cannot add
+/// up past the radius within one drift; stop-and-go creep gains at most the radius per quiet second. A hand resting on
+/// the mouse and jittering within the radius is tolerated for as long as it stays there. The hook sees the agent's
+/// injected events too: injected moves move the reference point, and any injected mouse event drops the anchor
+/// (without counting), so they cannot mask a real move. Nothing is tolerated within <see cref="InjectedQuietMs"/> of
+/// an injected mouse event, or before any reference point exists. Runs on the hook thread only; it keeps no
+/// coordinates beyond the last move point and the anchor.
 /// </remarks>
 internal sealed class MouseDriftFilter
 {
     internal const long WindowMs = 1_000;
-    internal const int MaxMoves = 4;
-    internal const double MaxDistance = 8;
+    internal const double MaxRadius = 10;
     internal const long InjectedQuietMs = 500;
 
-    private readonly Queue<(long Time, double Distance)> moves = new();
     private (int X, int Y)? reference;
+    private (int X, int Y)? anchor;
+    private long? lastPhysicalMove;
     private long? lastInjected;
     private long tolerated;
 
@@ -49,6 +53,7 @@ internal sealed class MouseDriftFilter
         if (!physical)
         {
             lastInjected = now;
+            anchor = null;
             return false;
         }
 
@@ -57,15 +62,19 @@ internal sealed class MouseDriftFilter
 
     private bool Tolerates((int X, int Y)? previous, int x, int y, long now)
     {
-        while (moves.Count > 0 && now - moves.Peek().Time >= WindowMs)
+        var quiet = lastPhysicalMove is not { } last || now - last >= WindowMs;
+        lastPhysicalMove = now;
+        if (anchor is null || quiet)
         {
-            moves.Dequeue();
+            anchor = previous;
         }
 
         // Without a reference point the move's size is unknown, so it is too large to tolerate.
-        var step = previous is { } from ? Math.Sqrt(Square(x - from.X) + Square(y - from.Y)) : MaxDistance + 1;
-        moves.Enqueue((now, step));
-        if (AfterInjected(now) || moves.Count > MaxMoves || moves.Sum(m => m.Distance) > MaxDistance)
+        if (
+            AfterInjected(now)
+            || anchor is not { } from
+            || Square(x - from.X) + Square(y - from.Y) > MaxRadius * MaxRadius
+        )
         {
             return false;
         }
