@@ -89,7 +89,10 @@ public sealed class InteractionContractTests
         observer.Sequence = 8;
         observer.LastEvent = new InputEventInfo(8, DateTimeOffset.UnixEpoch, "mouse", "secret");
         grant.Observe();
-        Assert.Equal(GrantRevocation.UserInput, grant.LastRevocation!.Cause);
+        // Input after a normal end still stops safety consumers, but it is not a revocation of the batch.
+        Assert.True(grant.SafetyToken.IsCancellationRequested);
+        Assert.Equal(GrantRevocation.AfterEnd, grant.LastRevocation!.Cause);
+        Assert.True(grant.LastRevocation.EndedNormally);
         Assert.Equal(InteractionGrant.FocusRevoked, grant.LastRevocation.Code);
         Assert.Equal(8, grant.LastRevocation.SnapshotSequence);
         Assert.Equal("mouse", grant.LastRevocation.InputKind);
@@ -113,6 +116,25 @@ public sealed class InteractionContractTests
 
         Assert.Equal(2, grant.LastRevocation!.ToleratedMoves);
         Assert.Contains("tolerated mouse drift 2 moves", grant.LastRevocation.Summary());
+    }
+
+    [Fact]
+    public void AnEndAfterARevocationKeepsTheRevocationsEvidence()
+    {
+        var observer = new DiagnosticObserver();
+        using var grant = new InteractionGrant(() => (1, 2), createObserver: () => observer);
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+        observer.Sequence = 8;
+        grant.Observe();
+        var revoked = grant.LastRevocation!;
+
+        grant.End();
+        grant.End("Operation cancelled");
+
+        Assert.Same(revoked, grant.LastRevocation);
+        Assert.Equal(GrantRevocation.UserInput, grant.LastRevocation!.Cause);
+        Assert.False(grant.LastRevocation.EndedNormally);
+        Assert.Equal(InteractionGrant.ApprovalRequired, grant.Code);
     }
 
     [Theory]

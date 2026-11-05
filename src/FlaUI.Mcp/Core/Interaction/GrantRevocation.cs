@@ -59,7 +59,8 @@ public sealed class ObserverUnavailableException(ObserverFault fault)
 /// How the last grant ended, kept after the grant so a host can write it down. Privacy-safe: an input kind and
 /// mouse subtype, sequences and timings only; never keys, text, or coordinates.
 /// </summary>
-/// <param name="Cause">user-input, observer-fault, foreground, activation, host-stopped, or end (a normal end).</param>
+/// <param name="Cause">user-input, observer-fault, foreground, activation, host-stopped, end (a normal end), or
+/// after-end (input after a normal end, which stopped only safety consumers).</param>
 public sealed record GrantRevocation(
     DateTimeOffset Utc,
     string Code,
@@ -75,6 +76,13 @@ public sealed record GrantRevocation(
     public const string Activation = "activation";
     public const string HostStopped = "host-stopped";
     public const string Ended = "end";
+
+    /// <summary>The user's input (or a failed observation) after a normal end, which stopped only safety consumers
+    /// such as a recording; not a revocation of a batch.</summary>
+    public const string AfterEnd = "after-end";
+
+    /// <summary>The batch ended normally (<see cref="Ended"/> or <see cref="AfterEnd"/>), not by a revocation.</summary>
+    public bool EndedNormally => Cause is Ended or AfterEnd;
 
     /// <summary>keyboard, mouse or unknown, for the event that coincided with the revocation; null without one.</summary>
     public string? InputKind { get; init; }
