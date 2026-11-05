@@ -254,6 +254,10 @@ public sealed class PhysicalInputObserver : IInputObserver, IInputEventSource
                 return;
             }
 
+            // The clock started at construction, but no hook exists until the next line, so nothing Windows could
+            // drop has been missed yet: a slow thread start must not poison the observer at birth. Installing the
+            // hooks is still measured (the beat before ready), since a hook is live while the second one installs.
+            heartbeat.Restart(Environment.TickCount64);
             keyHook = SetWindowsHookEx(13, keyboard, GetModuleHandle(null), 0);
             if (keyHook == 0)
             {

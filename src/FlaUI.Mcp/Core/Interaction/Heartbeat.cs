@@ -36,6 +36,14 @@ internal sealed class Heartbeat(long start, Func<TimeSpan>? gcPauseSource = null
         Interlocked.Exchange(ref gcAtLast, gcPause().Ticks);
     }
 
+    /// <summary>Starts the clock again without judging the time since the last beat. Only for the moment before the
+    /// hooks are installed: nothing could have been missed yet. A latched gap stays latched.</summary>
+    public void Restart(long now)
+    {
+        Interlocked.Exchange(ref last, now);
+        Interlocked.Exchange(ref gcAtLast, gcPause().Ticks);
+    }
+
     public bool Alive(long now)
     {
         Check(now);
