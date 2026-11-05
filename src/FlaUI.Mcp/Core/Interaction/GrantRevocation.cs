@@ -95,10 +95,19 @@ public sealed record GrantRevocation(
     /// <summary>Physical mouse moves tolerated as drift during the batch.</summary>
     public long ToleratedMoves { get; init; }
 
+    // Only a revocation reads as one: a normal end, and input after it, say what they were.
+    private string Headline() =>
+        Cause switch
+        {
+            Ended => "grant ended",
+            AfterEnd => "input after a normal end",
+            _ => "grant revoked",
+        };
+
     /// <summary>One line for a host's diagnostics.</summary>
     public string Summary()
     {
-        var text = $"{Utc:O} grant revoked ({Code}, {Cause}";
+        var text = $"{Utc:O} {Headline()} ({Code}, {Cause}";
         if (Fault != null)
         {
             text += ": " + Fault;
