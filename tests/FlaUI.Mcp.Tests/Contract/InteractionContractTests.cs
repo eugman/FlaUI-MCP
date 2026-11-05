@@ -85,6 +85,7 @@ public sealed class InteractionContractTests
         grant.End();
         Assert.Equal(GrantRevocation.Ended, grant.LastRevocation!.Cause);
         Assert.Equal(InteractionGrant.ApprovalRequired, grant.LastRevocation.Code);
+        Assert.Contains(" grant ended (approval-required, end)", grant.LastRevocation.Summary());
 
         observer.Sequence = 8;
         observer.LastEvent = new InputEventInfo(8, DateTimeOffset.UnixEpoch, "mouse", "secret");
@@ -93,6 +94,8 @@ public sealed class InteractionContractTests
         Assert.True(grant.SafetyToken.IsCancellationRequested);
         Assert.Equal(GrantRevocation.AfterEnd, grant.LastRevocation!.Cause);
         Assert.True(grant.LastRevocation.EndedNormally);
+        Assert.Contains(" input after a normal end (focus-revoked, after-end)", grant.LastRevocation.Summary());
+        Assert.DoesNotContain("grant revoked", grant.LastRevocation.Summary());
         Assert.Equal(InteractionGrant.FocusRevoked, grant.LastRevocation.Code);
         Assert.Equal(8, grant.LastRevocation.SnapshotSequence);
         Assert.Equal("mouse", grant.LastRevocation.InputKind);
@@ -101,6 +104,7 @@ public sealed class InteractionContractTests
         grant.Begin("demo", userApproved: true, monitorChanges: false);
         grant.End("Host stopped", safetyEvent: true);
         Assert.Equal(GrantRevocation.HostStopped, grant.LastRevocation!.Cause);
+        Assert.Contains(" grant revoked (approval-required, host-stopped)", grant.LastRevocation.Summary());
     }
 
     [Fact]
