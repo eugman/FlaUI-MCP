@@ -20,7 +20,7 @@ namespace FlaUI.Mcp.Core;
 internal sealed class MouseDriftFilter
 {
     internal const long WindowMs = 1_000;
-    internal const double MaxRadius = 10;
+    internal const double MaxRadius = 20;
     internal const long InjectedQuietMs = 500;
 
     private (int X, int Y)? reference;
