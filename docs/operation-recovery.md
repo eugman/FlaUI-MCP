@@ -81,6 +81,10 @@ A `tools/call` that reuses the id of an in-flight request returns the tool error
 
 A pattern call run through `ModalAwareInvoker.Execute` must count itself with `MutationGuard.Execute` (or `MutationGuard.RecordDispatch`) when it is sent. A call that is still pending when the grace period ends, and has not counted itself, is reported as `timed_out_pending`: its validation may still be waiting on a hung provider. A call made through `GuardedDesktop.CallPattern` (or `WindowMutation.Uia`) that is still in validation when its tool returns is then never sent: the input lease is released at that point, so it would otherwise go out unleased. A pattern call that fails after its tool reported it pending records the failure in the operation's `lateError`, and operation status then reports `status: failed`. A failed window read while waiting no longer ends the wait. A detected modal dialog proves that the call reached the app, so it always counts as dispatched. A modal is detected only when a window of the process that was enabled becomes disabled, as a modal disables its owner; a new tooltip, menu or tool window alone is not a modal. Its title comes from the new owned, non-tooltip window. `Win32WindowInfo` gains `Owner` and `ClassName`, and `InputDesktop` gains `TopLevelWindows`.
 
+### Launches under a grant
+
+`InteractionGrant.Launch` returns what its delegate started even when the grant was revoked, or ended and begun again, while the process was starting: the batch that asked no longer notes it as a target, and the host that called `Launch` owns closing it (the next `Require` refuses, so check the grant before using the process).
+
 ### What the offline switch covers
 
 With `FLAUI_OFFLINE_TESTS=1` and no fake installed, the real `InputDesktop` refuses, before doing anything, every change made through it:

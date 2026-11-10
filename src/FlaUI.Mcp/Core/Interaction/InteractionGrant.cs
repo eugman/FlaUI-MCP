@@ -281,6 +281,7 @@ public sealed partial class InteractionGrant : IDisposable
     public T Launch<T>(Func<T> launch, Func<T, int> processId)
     {
         Require();
+        CancellationTokenSource generation;
         lock (sync)
         {
             if (Batch == null)
@@ -288,6 +289,7 @@ public sealed partial class InteractionGrant : IDisposable
                 throw Refused(ApprovalRequired, "Approval revoked.");
             }
 
+            generation = lifetime;
             // Checked under the lock: a prompt that opened after Require must still stop the launch.
             if (promptUntil != null)
             {
@@ -303,7 +305,8 @@ public sealed partial class InteractionGrant : IDisposable
         var result = launch();
         lock (sync)
         {
-            if (Batch != null)
+            // Only the batch that launched it owns the process: one that began meanwhile does not inherit it.
+            if (Batch != null && ReferenceEquals(lifetime, generation))
             {
                 targets.Add(processId(result));
             }

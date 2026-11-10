@@ -66,6 +66,46 @@ public sealed class GrantLockTests
     }
 
     [Fact]
+    public void ABatchBegunDuringALaunchDoesNotInheritTheOldLaunchsTarget()
+    {
+        using var grant = new InteractionGrant(() => (1, 2), () => 0);
+        grant.Begin("first", userApproved: true, monitorChanges: false);
+
+        grant.Launch(
+            () =>
+            {
+                // The first batch ends and another begins while its launch is still starting.
+                Assert.True(
+                    Task.Run(() =>
+                        {
+                            grant.End();
+                            grant.Begin("second", userApproved: true, monitorChanges: false);
+                        })
+                        .Wait(Prompt)
+                );
+                return "process";
+            },
+            _ => 42
+        );
+
+        // PID 42 belongs to the batch that ended: the new one owns no target, so nothing asks for its activation.
+        grant.Observe();
+        Assert.Equal("second", grant.Batch);
+        Assert.Equal("Approved", grant.Reason);
+    }
+
+    [Fact]
+    public void ALaunchInTheSameBatchNotesItsTarget()
+    {
+        using var grant = new InteractionGrant(() => (1, 2), () => 0);
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+
+        grant.Launch(() => "process", _ => 42);
+
+        Assert.Equal("Approved; owned target activation required before input", grant.Reason);
+    }
+
+    [Fact]
     public void StartingTheObserverDoesNotHoldTheGrantsLock()
     {
         InteractionGrant? grant = null;
