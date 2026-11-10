@@ -8,6 +8,11 @@ namespace FlaUI.Mcp.Tests;
 /// observer (up to 10 s), ran under the lock, so the monitor, Token and Require all waited, and a revocation by the
 /// user's own input waited with them.
 /// </summary>
+/// <remarks>
+/// A live grant declares the whole process interactive (MutationGuard.RequireHook), so these run in the collection
+/// the other grant tests and the tests that send input share, never beside them.
+/// </remarks>
+[Collection(InputLeaseCollection.Name)]
 public sealed class GrantLockTests
 {
     private static readonly TimeSpan Prompt = TimeSpan.FromSeconds(2);

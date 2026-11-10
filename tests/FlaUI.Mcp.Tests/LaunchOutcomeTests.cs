@@ -5,6 +5,7 @@ using Xunit;
 
 namespace FlaUI.Mcp.Tests;
 
+[Collection(InputLeaseCollection.Name)]
 public sealed class LaunchOutcomeTests
 {
     [Fact]
