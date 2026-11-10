@@ -39,7 +39,6 @@ public sealed partial class RefusalCodeListTests
     [Theory]
     [InlineData("lease-unavailable")]
     [InlineData("window-baseline-unreadable")]
-    [InlineData("launch-provisional")]
     [InlineData("launch-handoff")]
     [InlineData("launch-pending")]
     [InlineData("activation-pending")]

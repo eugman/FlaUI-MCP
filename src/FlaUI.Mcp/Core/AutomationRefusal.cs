@@ -55,9 +55,6 @@ public static class RefusalCodes
     /// <summary>The app's windows could not be read before a pattern call, so a dialog it opens could not be told apart.</summary>
     public const string WindowBaselineUnreadable = "window-baseline-unreadable";
 
-    /// <summary>A launch attached a window whose identity is not yet confirmed.</summary>
-    public const string LaunchProvisional = "launch-provisional";
-
     /// <summary>The launcher exited, or returned no process, before a window could be attributed to it.</summary>
     public const string LaunchHandoff = "launch-handoff";
 

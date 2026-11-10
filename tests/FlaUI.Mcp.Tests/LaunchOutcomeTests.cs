@@ -97,7 +97,10 @@ public sealed class LaunchOutcomeTests
 
         Assert.NotEqual(true, result.IsError);
         Assert.Equal("unverified", result.Outcome?.Status);
-        Assert.Equal("launch-provisional", result.Outcome?.Failure?.Code);
+        // A launch that worked carries no failure: a client that reads `failure` as failed would misread it.
+        Assert.Null(result.Outcome?.Failure);
+        Assert.Equal("provisional-window", result.Outcome?.Verification);
+        Assert.True(result.Outcome?.Details?["provisional"].GetBoolean());
         Assert.Contains("provisional", result.Content[0].Text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("expected controls", result.Content[0].Text, StringComparison.OrdinalIgnoreCase);
     }
