@@ -281,7 +281,7 @@ public sealed partial class GuardedInput : IDisposable
             return;
         }
 
-        var name = InputDesktop.Current.ProcessNameOf(processId);
+        var name = desktop.ProcessNameOf(processId);
         throw InputRefusedException.Record(ProcessIntegrity.DescribeBlocked(self, target, processId, name)!);
     }
 
@@ -299,7 +299,7 @@ public sealed partial class GuardedInput : IDisposable
                 target.ProcessId,
                 foreground,
                 foregroundPid,
-                foregroundPid == 0 ? null : InputDesktop.Current.ProcessNameOf(foregroundPid)
+                foregroundPid == 0 ? null : desktop.ProcessNameOf(foregroundPid)
             )
         );
     }

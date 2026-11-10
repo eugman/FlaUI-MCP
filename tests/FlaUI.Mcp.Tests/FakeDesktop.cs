@@ -131,7 +131,14 @@ internal sealed class FakeDesktop : InputDesktop
     public Dictionary<int, string> ProcessNames { get; } =
         new() { [TargetPid] = System.Diagnostics.Process.GetCurrentProcess().ProcessName };
 
-    public override string? ProcessNameOf(int processId) => ProcessNames.GetValueOrDefault(processId);
+    /// <summary>The PIDs whose names were asked for, in order.</summary>
+    public List<int> NameReads { get; } = [];
+
+    public override string? ProcessNameOf(int processId)
+    {
+        NameReads.Add(processId);
+        return ProcessNames.GetValueOrDefault(processId);
+    }
 
     /// <summary>The desktop's clock; set a manual clock to move pattern-call deadlines by hand.</summary>
     public TimeProvider Clock { get; set; } = TimeProvider.System;

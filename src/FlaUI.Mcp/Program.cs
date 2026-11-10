@@ -34,7 +34,7 @@ using var host = new AutomationHost(
     includeDesktopTools: true,
     onToolActivity: keepAwake != null ? keepAwake.Poke : null
 );
-var sessionManager = host.Sessions;
+
 var toolRegistry = host.Tools;
 
 // Create and run MCP server

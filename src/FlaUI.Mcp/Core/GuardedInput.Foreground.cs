@@ -53,7 +53,7 @@ public sealed partial class GuardedInput
 
         var pid = foreground == 0 ? 0 : desktop.ProcessOf(foreground);
         throw InputRefusedException.Record(
-            DescribeActivationFailure(target.ProcessId, foreground, pid, desktop.ProcessNameOf(pid))
+            DescribeActivationFailure(target.ProcessId, foreground, pid, pid == 0 ? null : desktop.ProcessNameOf(pid))
         );
     }
 
