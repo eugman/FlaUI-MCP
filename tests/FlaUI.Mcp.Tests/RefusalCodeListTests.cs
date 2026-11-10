@@ -18,8 +18,38 @@ public sealed partial class RefusalCodeListTests
         .Select(field => (string)field.GetRawConstantValue()!)
         .ToArray();
 
-    [GeneratedRegex("""new InputRefusal\(\s*"([^"]*)"|ErrorResult\(\s*"([a-z]+(?:-[a-z]+)+)"\s*,""")]
+    // A refusal built from a literal: the record itself, or a helper that takes the code first (Refused("x-y", ...),
+    // Refusal("x-y", ...), ErrorResult("x-y", ...)).
+    [GeneratedRegex("""new InputRefusal\(\s*"([^"]*)"|\b(?:Refus\w*|ErrorResult)\(\s*"([a-z]+(?:[-_][a-z]+)+)"\s*,""")]
     private static partial Regex LiteralCode();
+
+    // The same sites written the right way, for the positive control.
+    [GeneratedRegex("""(?:new InputRefusal|\bRefus\w*|ErrorResult)\(\s*RefusalCodes\.\w+""")]
+    private static partial Regex ListedCode();
+
+    [Theory]
+    [InlineData("""new InputRefusal("x-y", message)""")]
+    [InlineData("new InputRefusal(\n    \"x-y\",\n    message)")]
+    [InlineData("""throw Refused("x-y", "why");""")]
+    [InlineData("""Refusal("x_y", message, false)""")]
+    [InlineData("""ErrorResult("x-y", "Missing argument")""")]
+    public void TheScanSeesALiteralCodeWhereverARefusalIsBuilt(string source) => Assert.Matches(LiteralCode(), source);
+
+    [Theory]
+    [InlineData("""ErrorResult("Provide either chord or keys.")""")]
+    [InlineData("""ErrorResult($"Failed to {action}: {error.Message}")""")]
+    [InlineData("""new InputRefusal(RefusalCodes.TargetStale, "Stale")""")]
+    [InlineData("""throw Refused(ActivationPending, "why");""")]
+    public void TheScanLeavesMessagesAndNamedCodesAlone(string source) => Assert.DoesNotMatch(LiteralCode(), source);
+
+    [Fact]
+    public void TheScanReadsTheSourceWhereRefusalsAreBuilt()
+    {
+        // A scan that reads nothing finds nothing: it must see the sites that name a listed code (59 when written).
+        var sites = Sources().Sum(file => ListedCode().Matches(File.ReadAllText(file)).Count);
+
+        Assert.True(sites >= 50, $"only {sites} refusal sites found");
+    }
 
     [GeneratedRegex(
         """
