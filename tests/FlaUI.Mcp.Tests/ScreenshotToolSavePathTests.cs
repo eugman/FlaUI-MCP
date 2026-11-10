@@ -1,3 +1,4 @@
+using FlaUI.Mcp.Core;
 using FlaUI.Mcp.Tools;
 using Xunit;
 
@@ -27,6 +28,36 @@ public class ScreenshotToolSavePathTests
         Assert.False(ok);
         Assert.Null(normalized);
         Assert.StartsWith("savePath must", error);
+    }
+
+    [Theory]
+    [InlineData(@"C:\captures\cost$\capture.png")]
+    [InlineData(@"C:\captures\a$b.png")]
+    [InlineData(@"C:\captures\%FLAUI_NO_SUCH_VARIABLE%\capture.png")]
+    public void TryNormalizeSavePath_KeepsADollarOrAnUndefinedPercentNameAsLiteralText(string path)
+    {
+        // A tool argument is a file name someone chose, not a config value: these are ordinary characters in it.
+        Assert.True(
+            ScreenshotChecks.TryNormalizeSavePath(path, overwrite: false, out var normalized, out var error),
+            error
+        );
+        Assert.Equal(path, normalized);
+    }
+
+    [Theory]
+    [InlineData(@"C:\captures\$HOME\capture.png")]
+    [InlineData(@"C:\captures\${HOME}\capture.png")]
+    public void TryNormalizeSavePath_RefusesAShellVariableAtTheStartOfASegment(string path)
+    {
+        Assert.False(ScreenshotChecks.TryNormalizeSavePath(path, overwrite: false, out _, out var error));
+        Assert.Contains("$ environment variable", error);
+    }
+
+    [Fact]
+    public void AConfiguredPathStillRefusesAnyDollarAndAnUndefinedVariable()
+    {
+        Assert.Throws<ArgumentException>(() => HostPath.Validate(@"C:\captures\cost$\capture.png"));
+        Assert.Throws<ArgumentException>(() => HostPath.Validate(@"C:\captures\%FLAUI_NO_SUCH_VARIABLE%\capture.png"));
     }
 
     [Fact]

@@ -238,12 +238,13 @@ internal static class ScreenshotChecks
             return true;
         }
 
-        // The same rules as a host's configured paths: a local, fully qualified drive path, with no UNC or
-        // device form in either slash spelling, so a screen capture is never written to a network share.
+        // The rules of a host's configured paths: a local, fully qualified drive path, with no UNC or device form
+        // in either slash spelling and no . or .. segments, so a screen capture is never written to a network
+        // share. A $ or an undefined %NAME% in a file name is kept as written.
         string fullPath;
         try
         {
-            fullPath = HostPath.Validate(savePath, "savePath");
+            fullPath = HostPath.Validate(savePath, "savePath", literalNames: true);
         }
         catch (Exception ex)
         {
