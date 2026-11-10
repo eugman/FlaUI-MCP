@@ -72,7 +72,8 @@ A refusal says "no input sent" only when the guard recorded no earlier input or 
 |---|---|---|
 | -32700 | `Parse error; no action dispatched.` | The line was not valid JSON-RPC. `data.notDispatched` is true, and the recovered id is recorded as not dispatched unless a request with that id is in flight or already ran (while its operation is retained). |
 | -32000 | `Request capacity reached; no action dispatched.` | 32 requests were already in flight. The same recording rule applies. |
-| -32603 | The exception message, such as `Unknown method: x` | The request failed in the server. |
+| -32601 | `Unknown method: x` | The method is not one this server handles (it was -32603 before 2026-11-10). |
+| -32603 | The exception message | The request failed in the server. |
 
 A `tools/call` that reuses the id of an in-flight request returns the tool error `Duplicate in-flight request ID; no action dispatched.`
 

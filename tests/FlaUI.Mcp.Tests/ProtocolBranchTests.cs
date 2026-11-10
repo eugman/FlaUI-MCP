@@ -33,9 +33,22 @@ public sealed class ProtocolBranchTests
 
         var response = await server.HandleRequestAsync(Request("{\"id\":3,\"method\":\"tools/destroy\"}"));
 
+        // JSON-RPC's own code for it (Method not found); -32603 stays for a request that failed in the server.
         Assert.Null(response!.Result);
-        Assert.Equal(-32603, response.Error!.Code);
+        Assert.Equal(-32601, response.Error!.Code);
         Assert.Equal("Unknown method: tools/destroy", response.Error.Message);
+    }
+
+    [Fact]
+    public async Task ARequestThatFailsInTheServerIsStillAnInternalError()
+    {
+        var server = new McpServer(new ToolRegistry());
+
+        var response = await server.HandleRequestAsync(
+            Request("{\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":7}}")
+        );
+
+        Assert.Equal(-32603, response!.Error!.Code);
     }
 
     [Fact]
