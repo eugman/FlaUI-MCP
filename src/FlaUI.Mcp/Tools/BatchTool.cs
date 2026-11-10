@@ -63,7 +63,7 @@ public sealed class BatchTool : ToolBase
         var rows = actions.EnumerateArray().ToArray();
         if (rows.Length > 100)
         {
-            return ErrorResult("At most 100 steps per batch");
+            return ErrorResult(RefusalCodes.InvalidArguments, "At most 100 steps per batch");
         }
 
         return await ExecuteRows(

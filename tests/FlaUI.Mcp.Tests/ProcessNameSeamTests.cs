@@ -50,6 +50,33 @@ public sealed class ProcessNameSeamTests
     }
 
     [Fact]
+    public void AnIntegrityRefusalNamesTheProcessFromTheDesktopItWasGiven()
+    {
+        // Not installed: the guard must ask the desktop it was handed, not whichever is current.
+        var desktop = Named();
+        desktop.TargetIntegrity = new(ProcessIntegrity.High, false);
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            GuardedInput.RequireDrivable(FakeDesktop.OtherPid, desktop)
+        );
+
+        Assert.Contains($"'{FakedName}'", error.Message);
+    }
+
+    [Fact]
+    public void AMissingForegroundIsNotAskedForAProcessName()
+    {
+        var desktop = Named();
+        desktop.ForegroundWindow = 0;
+        using var installed = desktop.Install();
+
+        var error = Assert.Throws<InputRefusedException>(() => GuardedInput.RequireForeground(FakeDesktop.Target));
+
+        Assert.Equal("desktop-unavailable", error.Refusal.Code);
+        Assert.DoesNotContain(0, desktop.NameReads);
+    }
+
+    [Fact]
     public void ARefusedForegroundCaptureNamesTheProcessFromTheSeam()
     {
         using var installed = Named().Install();

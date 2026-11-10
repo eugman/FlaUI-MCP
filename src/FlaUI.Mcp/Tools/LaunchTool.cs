@@ -111,12 +111,10 @@ public class LaunchTool : ToolBase
             {
                 Status = "unverified",
                 Verification = "provisional-window",
-                Failure = new InputRefusal("launch-provisional", "Window identity is not yet confirmed")
-                {
-                    ActionDispatched = true,
-                },
+                // Not a failure: the launch worked, and only the window's identity is still to be confirmed.
                 Details = new Dictionary<string, JsonElement>
                 {
+                    ["provisional"] = JsonSerializer.SerializeToElement(true),
                     ["processId"] = JsonSerializer.SerializeToElement(processId),
                     ["windowHandle"] = JsonSerializer.SerializeToElement(handle),
                 },
@@ -144,7 +142,10 @@ public class LaunchTool : ToolBase
             {
                 Status = "unverified",
                 Verification = "not-established",
-                Failure = new InputRefusal(pending.Handoff ? "launch-handoff" : "launch-pending", pending.Message)
+                Failure = new InputRefusal(
+                    pending.Handoff ? RefusalCodes.LaunchHandoff : RefusalCodes.LaunchPending,
+                    pending.Message
+                )
                 {
                     ActionDispatched = true,
                 },

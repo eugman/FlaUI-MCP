@@ -19,11 +19,7 @@ internal static class ToolComposition
             throw new ArgumentException("Registry already has a secondary pending tracker.", nameof(registry));
         }
 
-        var productResolver = registry.ResolveTarget;
         var productToolResolver = registry.ResolveTargetForTool;
-        ProcessIdentity? CoreTarget(System.Text.Json.JsonElement? arguments) =>
-            sessions.ResolveTarget(arguments, elements);
-        registry.ResolveTarget = arguments => productResolver?.Invoke(arguments) ?? CoreTarget(arguments);
         registry.ResolveTargetForTool = (name, arguments) =>
         {
             if (name.StartsWith("windows_", StringComparison.Ordinal))
@@ -31,9 +27,7 @@ internal static class ToolComposition
                 return CoreTargetForTool(name, arguments, sessions, elements);
             }
 
-            return productToolResolver?.Invoke(name, arguments)
-                ?? productResolver?.Invoke(arguments)
-                ?? CoreTarget(arguments);
+            return productToolResolver?.Invoke(name, arguments) ?? sessions.ResolveTarget(arguments, elements);
         };
         if (registry.Pending == null)
         {

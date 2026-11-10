@@ -66,7 +66,7 @@ public sealed class BatchTargetTests
         var clock = new ManualTimeProvider();
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
         {
-            ResolveTarget = arguments => sessions.ResolveTarget(arguments, elements),
+            ResolveTargetForTool = (_, arguments) => sessions.ResolveTarget(arguments, elements),
             Pending = pending,
         };
         var gate = new TaskCompletionSource<McpToolResult>();
@@ -118,7 +118,7 @@ public sealed class BatchTargetTests
         var clock = new ManualTimeProvider();
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
         {
-            ResolveTarget = arguments => sessions.ResolveTarget(arguments, elements),
+            ResolveTargetForTool = (_, arguments) => sessions.ResolveTarget(arguments, elements),
             Pending = pending,
         };
         var gate = new TaskCompletionSource<McpToolResult>(TaskCreationOptions.RunContinuationsAsynchronously);

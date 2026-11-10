@@ -1,0 +1,227 @@
+using System.Drawing;
+using FlaUI.Mcp.Core;
+using FlaUI.Mcp.Tools;
+using Xunit;
+
+namespace FlaUI.Mcp.Tests;
+
+/// <summary>
+/// The press and the release of a drag go out wherever the pointer is. A small physical nudge is tolerated without
+/// revoking the grant, so one that arrives during the slow re-check before either button event would shift the
+/// press or the drop by a row. The pointer is read again right before each and put back on the proved point.
+/// </summary>
+[Collection(InputLeaseCollection.Name)]
+public sealed class DragPointerNudgeTests
+{
+    private static readonly Point From = new(10, 10);
+    private static readonly Point To = new(50, 10);
+    private static readonly Point Nudged = new(22, 25);
+
+    /// <summary>Where the pointer was as each input went out.</summary>
+    private static List<Point> Record(FakeDesktop desktop)
+    {
+        var sent = new List<Point>();
+        desktop.OnDispatch = _ => sent.Add(desktop.Pointer);
+        return sent;
+    }
+
+    [Fact]
+    public void ANudgeDuringTheStartRecheckIsPutBackBeforeThePress()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var sent = Record(desktop);
+
+        var landed = PointerActions.Drag(
+            FakeDesktop.Target,
+            () => (From, To),
+            4,
+            beforeDown: () => desktop.Pointer = Nudged
+        );
+
+        // Move to the start, the move back, then the press: on the proved point, not the nudged one.
+        Assert.Equal([From, From, From], sent.Take(3));
+        Assert.Equal(1 + 1 + 1 + 4 + 1, desktop.Dispatched);
+        Assert.Equal(To, landed);
+    }
+
+    [Fact]
+    public void ANudgeDuringTheDropRecheckIsPutBackBeforeTheRelease()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var sent = Record(desktop);
+
+        var landed = PointerActions.Drag(
+            FakeDesktop.Target,
+            () => (From, To),
+            4,
+            _ =>
+            {
+                desktop.Pointer = Nudged;
+                return null;
+            }
+        );
+
+        // The move back and the release both go out on the drop point, with no Escape.
+        Assert.Equal([To, To], sent.TakeLast(2));
+        Assert.Equal(2 + 4 + 1 + 1, desktop.Dispatched);
+        Assert.Equal(To, landed);
+    }
+
+    [Fact]
+    public void APointerThatStayedPutCostsNoExtraMove()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+
+        PointerActions.Drag(FakeDesktop.Target, () => (From, To), 4, _ => null, beforeDown: () => { });
+
+        Assert.Equal(2 + 4 + 1, desktop.Dispatched);
+    }
+
+    [Fact]
+    public void AStartThatCannotBeRestoredIsRefusedBeforeThePress()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var nudged = false;
+        desktop.PointerLandsOn = point => nudged ? Nudged : point;
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            PointerActions.Drag(
+                FakeDesktop.Target,
+                () => (From, To),
+                4,
+                beforeDown: () =>
+                {
+                    nudged = true;
+                    desktop.Pointer = Nudged;
+                }
+            )
+        );
+
+        // The move to the start and three tries to put it back went out; the button never went down.
+        Assert.Equal("pointer-moved", error.Refusal.Code);
+        Assert.True(error.Refusal.ActionDispatched);
+        Assert.Equal(1 + 3, desktop.Dispatched);
+        Assert.Equal(
+            "The pointer was moved off the start point (10,10) and could not be put back (it is at (22,25)); "
+                + "the button was not pressed.",
+            error.Message
+        );
+    }
+
+    [Fact]
+    public void ADropThatCannotBeRestoredCancelsTheDrag()
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var nudged = false;
+        desktop.PointerLandsOn = point => nudged ? Nudged : point;
+
+        var error = Assert.Throws<InputRefusedException>(() =>
+            PointerActions.Drag(
+                FakeDesktop.Target,
+                () => (From, To),
+                4,
+                _ =>
+                {
+                    nudged = true;
+                    desktop.Pointer = Nudged;
+                    return null;
+                }
+            )
+        );
+
+        // Three failed moves back, then Escape and the release: the same way out as any failure with the button down.
+        Assert.Equal("drag-interrupted", error.Refusal.Code);
+        Assert.Contains("(pointer-moved)", error.Message);
+        Assert.Contains("Escape was sent and the button was released", error.Message);
+        Assert.Equal(2 + 4 + 3 + 2, desktop.Dispatched);
+    }
+
+    [Theory]
+    [InlineData(2, 0, 0)]
+    [InlineData(0, -2, 0)]
+    [InlineData(3, 0, 1)]
+    [InlineData(0, -3, 1)]
+    public void APointerWithinTwoPixelsIsOnThePointAndOneThreeOffIsPutBack(int dx, int dy, int movesBack)
+    {
+        // Two pixels (rounding between monitors of different scale) is the proved point for a row-sized target.
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+
+        PointerActions.Drag(
+            FakeDesktop.Target,
+            () => (From, To),
+            4,
+            beforeDown: () => desktop.Pointer = new Point(From.X + dx, From.Y + dy)
+        );
+
+        Assert.Equal(1 + movesBack + 1 + 4 + 1, desktop.Dispatched);
+    }
+
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    public void AMoveBackThatLandsWithinTwoPixelsCountsAndOneThatLandsThreeOffDoesNot(int off, bool accepted)
+    {
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var nudged = false;
+        desktop.PointerLandsOn = point => nudged ? new Point(point.X + off, point.Y) : point;
+
+        void Drag() =>
+            PointerActions.Drag(
+                FakeDesktop.Target,
+                () => (From, To),
+                4,
+                beforeDown: () =>
+                {
+                    nudged = true;
+                    desktop.Pointer = Nudged;
+                }
+            );
+
+        if (accepted)
+        {
+            Drag();
+            Assert.True(desktop.Dispatched > 1 + 1);
+        }
+        else
+        {
+            Assert.Equal("pointer-moved", Assert.Throws<InputRefusedException>(Drag).Refusal.Code);
+            Assert.Equal(1 + 3, desktop.Dispatched);
+        }
+    }
+
+    [Fact]
+    public void APutBackThatLandsOnTheSecondTryCarriesOn()
+    {
+        // A hand still on the mouse: the first move back is nudged again, the next one holds. No refusal.
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var pauses = new List<TimeSpan>();
+        desktop.OnPause = pauses.Add;
+        var movesBack = 0;
+        var nudged = false;
+        desktop.PointerLandsOn = point => nudged && ++movesBack == 1 ? Nudged : point;
+
+        var landed = PointerActions.Drag(
+            FakeDesktop.Target,
+            () => (From, To),
+            4,
+            beforeDown: () =>
+            {
+                nudged = true;
+                desktop.Pointer = Nudged;
+            }
+        );
+
+        Assert.Equal(To, landed);
+        Assert.Equal(1 + 2 + 1 + 4 + 1, desktop.Dispatched);
+        // One short wait between the two tries, through the seam, before the drag's own step pauses.
+        Assert.Equal(TimeSpan.FromMilliseconds(20), pauses[0]);
+    }
+}

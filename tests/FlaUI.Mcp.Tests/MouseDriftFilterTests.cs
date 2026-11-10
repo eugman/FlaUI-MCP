@@ -34,40 +34,40 @@ public sealed class MouseDriftFilterTests
     }
 
     [Fact]
-    public void AMoveMoreThanTenPixelsFromTheAnchorCounts()
+    public void AMoveMoreThanTwentyPixelsFromTheAnchorCounts()
     {
-        Assert.False(Physical(Placed(), Move, 110, 100, 600));
-        Assert.True(Physical(Placed(), Move, 111, 100, 600));
-        Assert.True(Physical(Placed(), Move, 108, 108, 600));
+        Assert.False(Physical(Placed(), Move, 120, 100, 600));
+        Assert.True(Physical(Placed(), Move, 121, 100, 600));
+        Assert.True(Physical(Placed(), Move, 115, 115, 600));
     }
 
     [Fact]
     public void SmallStepsCreepingPastTheRadiusCount()
     {
         var filter = Placed();
-        Assert.False(Physical(filter, Move, 103, 100, 600));
-        Assert.False(Physical(filter, Move, 106, 100, 650));
-        Assert.False(Physical(filter, Move, 109, 100, 700));
-        Assert.True(Physical(filter, Move, 112, 100, 750));
+        Assert.False(Physical(filter, Move, 106, 100, 600));
+        Assert.False(Physical(filter, Move, 112, 100, 650));
+        Assert.False(Physical(filter, Move, 118, 100, 700));
+        Assert.True(Physical(filter, Move, 124, 100, 750));
         Assert.Equal(3, filter.Tolerated);
     }
 
     [Fact]
     public void TheAnchorDoesNotFollowToleratedMoves()
     {
-        // 116,100 is only 8 px from the last tolerated point but 16 px from the anchor.
+        // 132,100 is only 16 px from the last tolerated point but 32 px from the anchor.
         var filter = Placed();
-        Assert.False(Physical(filter, Move, 108, 100, 600));
-        Assert.True(Physical(filter, Move, 116, 100, 900));
+        Assert.False(Physical(filter, Move, 116, 100, 600));
+        Assert.True(Physical(filter, Move, 132, 100, 900));
     }
 
     [Fact]
     public void BackAndForthWithinTheRadiusStaysTolerated()
     {
         var filter = Placed();
-        Assert.False(Physical(filter, Move, 108, 100, 600));
-        Assert.False(Physical(filter, Move, 92, 100, 900));
-        Assert.False(Physical(filter, Move, 106, 108, 1_200)); // exactly 10 px, diagonal
+        Assert.False(Physical(filter, Move, 116, 100, 600));
+        Assert.False(Physical(filter, Move, 84, 100, 900));
+        Assert.False(Physical(filter, Move, 112, 116, 1_200)); // exactly 20 px, diagonal
         Assert.Equal(3, filter.Tolerated);
     }
 
@@ -75,8 +75,8 @@ public sealed class MouseDriftFilterTests
     public void A999MsPauseDoesNotReanchor()
     {
         var filter = Placed();
-        Assert.False(Physical(filter, Move, 108, 100, 600));
-        Assert.True(Physical(filter, Move, 116, 100, 1_599));
+        Assert.False(Physical(filter, Move, 116, 100, 600));
+        Assert.True(Physical(filter, Move, 132, 100, 1_599));
     }
 
     [Fact]
@@ -85,22 +85,22 @@ public sealed class MouseDriftFilterTests
         var filter = Placed();
         for (var cycle = 0; cycle < 5; cycle++)
         {
-            Assert.False(Physical(filter, Move, 110 + (cycle * 10), 100, 600 + (cycle * 1_000)));
+            Assert.False(Physical(filter, Move, 120 + (cycle * 20), 100, 600 + (cycle * 1_000)));
         }
 
-        // One quiet second later, more than 10 px past the last rest point counts.
-        Assert.True(Physical(filter, Move, 161, 100, 5_600));
+        // One quiet second later, more than 20 px past the last rest point counts.
+        Assert.True(Physical(filter, Move, 221, 100, 5_600));
     }
 
     [Fact]
     public void AnInjectedClickDropsTheAnchor()
     {
         var filter = Placed();
-        Assert.False(Physical(filter, Move, 108, 100, 600));
-        Assert.False(filter.Counts(false, 0x0201, physical: false, 108, 100, 700));
+        Assert.False(Physical(filter, Move, 116, 100, 600));
+        Assert.False(filter.Counts(false, 0x0201, physical: false, 116, 100, 700));
 
-        // Re-anchored at 108,100 after the click, so 116,100 is 8 px away and tolerated.
-        Assert.False(Physical(filter, Move, 116, 100, 1_300));
+        // Re-anchored at 116,100 after the click, so 132,100 is 16 px away and tolerated.
+        Assert.False(Physical(filter, Move, 132, 100, 1_300));
     }
 
     [Fact]
@@ -115,11 +115,11 @@ public sealed class MouseDriftFilterTests
     public void AfterAQuietSecondANewNudgeAnchorsWhereThePointerRests()
     {
         var filter = Placed();
-        Assert.False(Physical(filter, Move, 108, 100, 600));
+        Assert.False(Physical(filter, Move, 116, 100, 600));
 
-        // Quiet for a second: the next drift is measured from 108,100, not from 100,100.
-        Assert.False(Physical(filter, Move, 116, 100, 1_600));
-        Assert.True(Physical(filter, Move, 119, 100, 1_700));
+        // Quiet for a second: the next drift is measured from 116,100, not from 100,100.
+        Assert.False(Physical(filter, Move, 132, 100, 1_600));
+        Assert.True(Physical(filter, Move, 137, 100, 1_700));
     }
 
     [Theory]

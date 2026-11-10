@@ -220,7 +220,7 @@ public static class ModalAwareInvoker
         {
             throw InputRefusedException.Record(
                 new InputRefusal(
-                    "window-baseline-unreadable",
+                    RefusalCodes.WindowBaselineUnreadable,
                     $"The app's windows could not be read before {description} ({error.Message}), so a modal dialog it opens could not be detected; no input sent."
                 )
                 {

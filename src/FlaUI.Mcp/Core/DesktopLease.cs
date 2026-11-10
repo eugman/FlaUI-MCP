@@ -36,7 +36,11 @@ internal static class DesktopLease
     /// <summary>Whether this process holds the lease now.</summary>
     public static bool Held => Volatile.Read(ref held) != 0;
 
-    public static IDisposable Acquire(TimeSpan timeout, CancellationToken token = default)
+    public static IDisposable Acquire(TimeSpan timeout, CancellationToken token = default) =>
+        Acquire(timeout, token, Owner.Value);
+
+    /// <param name="owner">The thread that holds the mutex; tests pass one whose mutex fails.</param>
+    internal static IDisposable Acquire(TimeSpan timeout, CancellationToken token, MutexOwner owner)
     {
         var clock = Stopwatch.StartNew();
         if (!InProcess.Wait(timeout, token))
@@ -47,7 +51,7 @@ internal static class DesktopLease
         try
         {
             var remaining = timeout - clock.Elapsed;
-            if (!Owner.Value.Acquire(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, token))
+            if (!owner.Acquire(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, token))
             {
                 token.ThrowIfCancellationRequested();
                 throw new TimeoutException(
@@ -62,10 +66,10 @@ internal static class DesktopLease
         }
 
         Volatile.Write(ref held, 1);
-        return new Lease();
+        return new Lease(owner);
     }
 
-    private sealed class Lease : IDisposable
+    private sealed class Lease(MutexOwner owner) : IDisposable
     {
         private int released;
 
@@ -77,8 +81,15 @@ internal static class DesktopLease
             }
 
             Volatile.Write(ref held, 0);
-            Owner.Value.Release();
-            InProcess.Release();
+            try
+            {
+                owner.Release();
+            }
+            finally
+            {
+                // A mutex release that failed must not leave every later input waiting on this process's own gate.
+                InProcess.Release();
+            }
         }
     }
 
@@ -177,7 +188,7 @@ internal static class DesktopLease
         private static InputRefusedException Unavailable(Exception error) =>
             InputRefusedException.Record(
                 new InputRefusal(
-                    "lease-unavailable",
+                    RefusalCodes.LeaseUnavailable,
                     $"The machine-wide desktop lease could not be used ({error.Message}); no input sent."
                 )
                 {

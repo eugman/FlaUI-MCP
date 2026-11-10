@@ -19,9 +19,16 @@ public static partial class HostPath
     /// The full path for a configured <paramref name="path"/>, or an <see cref="ArgumentException"/> that names
     /// <paramref name="field"/> and what is wrong with it.
     /// </summary>
-    public static string Validate(string? path, string field = "path")
+    public static string Validate(string? path, string field = "path") => Validate(path, field, literalNames: false);
+
+    /// <summary>
+    /// <see cref="Validate(string?, string)"/> for a path a caller typed as a tool argument rather than configured,
+    /// when <paramref name="literalNames"/>: a $ is refused only as a $NAME or ${NAME} that starts a segment, and
+    /// a %NAME% that is not defined stays as written. The UNC, device, relative and . / .. refusals are the same.
+    /// </summary>
+    internal static string Validate(string? path, string field, bool literalNames)
     {
-        var trimmed = Expand(path?.Trim() ?? "", field);
+        var trimmed = literalNames ? ExpandDefined(path?.Trim() ?? "", field) : Expand(path?.Trim() ?? "", field);
         if (Problem(trimmed) is { } problem)
         {
             throw new ArgumentException($"{field} {problem}");
@@ -60,6 +67,22 @@ public static partial class HostPath
                     $"{field} uses the environment variable {variable.Value}, which is not defined."
                 );
             }
+        }
+
+        return Environment.ExpandEnvironmentVariables(path);
+    }
+
+    [GeneratedRegex(@"(^|[\\/])\$\{?[A-Za-z_]")]
+    private static partial Regex ShellVariable();
+
+    /// <summary>%NAME% expanded when NAME is defined and left as written when not; a segment that starts with $NAME is refused.</summary>
+    private static string ExpandDefined(string path, string field)
+    {
+        if (ShellVariable().IsMatch(path))
+        {
+            throw new ArgumentException(
+                $"{field} uses a $ environment variable, which is not expanded; write the path out, or use %NAME%."
+            );
         }
 
         return Environment.ExpandEnvironmentVariables(path);

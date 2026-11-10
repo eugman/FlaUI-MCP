@@ -28,11 +28,11 @@ $offlineProject = 'FlaUI.Mcp.Tests.csproj'
 $integrationProject = 'FlaUI.Mcp.IntegrationTests.csproj'
 $testApps = 'WinFormsTestApp', 'WpfTestApp'
 $parts = [ordered]@{
-    guards = 'GuardedInput', 'GuardedInput.Foreground', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'ClickHitTest', 'FocusRule', 'InteractionGrant', 'InteractionGrantObserve', 'InteractionGrantActivation', 'Heartbeat', 'MouseDriftFilter', 'InteractionGrantDisplay', 'MutationGuard', 'ProcessPolicy', 'WindowsToolAdapter', 'HostPath', 'DesktopLease', 'AutomationRefusal', 'InputRefusal', 'WindowBaseline', 'Win32WindowEnumeration', 'Diagnostics'
+    guards = 'GuardedInput', 'GuardedInput.Foreground', 'GuardedDesktop', 'ProcessIntegrity', 'WindowMutation', 'ClickPoint', 'ClickHitTest', 'FocusRule', 'InteractionGrant', 'InteractionGrantObserve', 'InteractionGrantActivation', 'Heartbeat', 'MouseDriftFilter', 'InputTally', 'InteractionGrantDisplay', 'MutationGuard', 'ProcessPolicy', 'WindowsToolAdapter', 'HostPath', 'DesktopLease', 'AutomationRefusal', 'InputRefusal', 'WindowBaseline', 'Win32WindowEnumeration', 'Diagnostics'
     state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext', 'WaitOutcome'
     protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolRegistryOutcomeFailure', 'ToolRegistrySchemas', 'ToolRegistryStrand', 'ToolRegistryObservers', 'ToolBase', 'ToolFacts', 'Proof'
     pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'MouseToolReplies', 'MouseDrag', 'RefPoints', 'PointerActions'
-    keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
+    keyboard = 'KeyboardTargets', 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
 }
 # The pointer files against the integration tests, split so each part finishes inside its own cap.
 $integrationParts = [ordered]@{

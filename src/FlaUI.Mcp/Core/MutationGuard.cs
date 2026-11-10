@@ -46,7 +46,7 @@ public static class MutationGuard
         {
             throw InputRefusedException.Record(
                 new InputRefusal(
-                    "approval-required",
+                    RefusalCodes.ApprovalRequired,
                     "This host takes input only under an interaction grant, and none is installed on this path; no input sent."
                 )
                 {

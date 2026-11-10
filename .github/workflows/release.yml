@@ -26,12 +26,6 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-    
-    strategy:
-      matrix:
-        include:
-          - runtime: win-x64
-            artifact_name: FlaUI-MCP-Te3-win-x64
 
     steps:
     - uses: actions/checkout@v4
@@ -80,6 +74,8 @@ jobs:
         git fetch --quiet --no-tags core main
         pwsh -NoProfile -File scripts/check.ps1
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      env:
+        FLAUI_OFFLINE_TESTS: '1'
 
     - name: Restore dependencies
       run: dotnet restore FlaUI.Mcp.slnx
@@ -90,7 +86,7 @@ jobs:
         foreach ($project in 'src/FlaUI.Mcp/FlaUI.Mcp.csproj', 'src/FlaUI.Mcp.Te3/FlaUI.Mcp.Te3.csproj') {
           dotnet publish $project `
             --configuration Release `
-            --runtime ${{ matrix.runtime }} `
+            --runtime win-x64 `
             --self-contained true `
             --output ./publish/self-contained `
             -p:Version=${{ steps.release.outputs.version }} `
@@ -105,7 +101,7 @@ jobs:
         foreach ($project in 'src/FlaUI.Mcp/FlaUI.Mcp.csproj', 'src/FlaUI.Mcp.Te3/FlaUI.Mcp.Te3.csproj') {
           dotnet publish $project `
             --configuration Release `
-            --runtime ${{ matrix.runtime }} `
+            --runtime win-x64 `
             --self-contained false `
             --output ./publish/framework-dependent `
             -p:Version=${{ steps.release.outputs.version }}
@@ -114,14 +110,14 @@ jobs:
 
     - name: Create ZIP archives
       run: |
-        Compress-Archive -Path ./publish/self-contained/* -DestinationPath ./${{ matrix.artifact_name }}-${{ steps.release.outputs.version }}-self-contained.zip
-        Compress-Archive -Path ./publish/framework-dependent/* -DestinationPath ./${{ matrix.artifact_name }}-${{ steps.release.outputs.version }}.zip
+        Compress-Archive -Path ./publish/self-contained/* -DestinationPath ./FlaUI-MCP-Te3-win-x64-${{ steps.release.outputs.version }}-self-contained.zip
+        Compress-Archive -Path ./publish/framework-dependent/* -DestinationPath ./FlaUI-MCP-Te3-win-x64-${{ steps.release.outputs.version }}.zip
       shell: pwsh
 
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: release-${{ matrix.runtime }}
+        name: release-win-x64
         path: ./*.zip
 
   create-release:

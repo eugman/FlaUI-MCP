@@ -15,6 +15,8 @@ public sealed class PasteTool(
     SessionManager? sessions
 ) : ToolBase
 {
+    private readonly KeyboardTargets targets = new(elements, pending, policy, sessions);
+
     public override string Name => "windows_paste";
 
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
@@ -57,22 +59,9 @@ public sealed class PasteTool(
         {
             OperationContext.Check();
             var handle = GetStringArgument(arguments, "handle");
-            if (handle != null && sessions == null)
+            if (targets.Refusal(refId, handle) is { } refused)
             {
-                return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
-            }
-
-            if (!string.IsNullOrEmpty(refId))
-            {
-                elements.ResolveRef(refId, handle);
-                if (pending.TryGetPending(elements.GetProcessIdForRef(refId), out var blocked))
-                {
-                    return Task.FromResult(BlockedResult(blocked));
-                }
-            }
-            else if (handle != null && !policy.IsProcessAllowed(sessions!.GetInputTarget(handle).ProcessId))
-            {
-                return Task.FromResult(ErrorResult(policy.DescribeDenied("Target process")));
+                return Task.FromResult(refused);
             }
 
             var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
@@ -86,19 +75,9 @@ public sealed class PasteTool(
                 );
             }
 
-            var element = refId == null ? null : elements.GetElement(refId);
-            // Takes the input lease and activates the target. Focus is only *verified* when the
-            // caller asks: GuardedInput otherwise checks the foreground process, which cannot tell a
-            // tree from a code editor in the same app.
-            using var input = new GuardedInput(
-                refId != null ? elements.InputForRef(refId)
-                    : handle != null ? sessions!.GetInputTarget(handle)
-                    : GuardedInput.ForegroundTarget(policy),
-                element,
-                verifyFocus
-            );
-            var target = string.IsNullOrEmpty(refId) ? "focused element" : refId;
-            return Task.FromResult(Paste(input, element, text, target));
+            var element = targets.Element(refId);
+            using var input = targets.Guard(refId, handle, element, verifyFocus ? FocusRule.Exact : FocusRule.None);
+            return Task.FromResult(Paste(input, element, text, KeyboardTargets.Name(refId)));
         }
         catch (ProviderBlockedException blocked)
         {
@@ -159,6 +138,8 @@ public sealed class PasteTool(
         // Focus sampled before Ctrl+V; it may change before the app processes the paste.
         var preSendFocus = InputDesktop.Current.FocusedControl();
         input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
+        // Only reads follow, for up to two seconds: another host's input need not wait for them.
+        input.Dispose();
 
         // Ctrl+V is already dispatched. A later read-back problem cannot claim the keystroke
         // was unsent; it may report missing evidence or an observed mismatch.
@@ -187,8 +168,8 @@ public sealed class PasteTool(
     }
 
     /// <summary>
-    /// The reply with its verdict. An unchanged value without the text is unverified because the app may
-    /// process Ctrl+V later. A changed value without the text is a read-back mismatch. Dispatch stays
+    /// The reply with its verdict. An unchanged value, with or without the text, is unverified: the app may
+    /// process Ctrl+V later, or the keystroke may have gone to another control. A changed value without the text is a read-back mismatch. Dispatch stays
     /// completed after Ctrl+V even when verification is unavailable or mismatched.
     /// </summary>
     internal static McpToolResult PasteReply(
@@ -197,20 +178,14 @@ public sealed class PasteTool(
         string? observed = null,
         string? expected = null
     ) =>
-        (verdict.Verification is "not-applied" or "mismatch" ? ErrorResult(text) : TextResult(text)) with
+        (verdict.Verification == Proof.Mismatch ? ErrorResult(text) : TextResult(text)) with
         {
-            // The Value read back after Ctrl+V is independent of the keystroke that pasted. An identical re-paste
-            // (unchanged) is a no-op for the proof, so its status is ok.
+            // The Value read back after Ctrl+V is independent of the keystroke that pasted. An unchanged value
+            // that already held the text is not proof Ctrl+V reached this control, so its status is unverified.
             Outcome = new ToolOutcome("completed", "not-tracked")
             {
                 Verification = verdict.Verification,
-                Proof = new Proof(
-                    verdict.Verification == "unchanged" ? Proof.NoOp : verdict.Verification,
-                    observed,
-                    expected,
-                    "Value",
-                    Independent: true
-                ),
+                Proof = new Proof(verdict.Verification, observed, expected, "Value", Independent: true),
             },
         };
 
@@ -244,10 +219,11 @@ public sealed class PasteTool(
             return new("not-established", " Not verified: no ref was given, so there is nothing to read back.");
         }
 
+        var desktop = InputDesktop.Current;
         bool supported;
         try
         {
-            supported = element.Patterns.Value.IsSupported;
+            supported = desktop.HasValuePattern(element);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -262,11 +238,12 @@ public sealed class PasteTool(
         }
         // Ctrl+V is dispatched before the app processes it. Poll for a bounded interval;
         // an unchanged value at the deadline is not proof that the paste will never apply.
+        var started = desktop.Time.GetTimestamp();
         var observed = SettledValue(
             () => ReadValue(element),
             before,
-            () => Environment.TickCount64,
-            () => Thread.Sleep(25),
+            () => (long)desktop.Time.GetElapsedTime(started).TotalMilliseconds,
+            () => desktop.Pause(PollInterval),
             OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None,
             settleMilliseconds
         );
@@ -275,6 +252,8 @@ public sealed class PasteTool(
 
     /// <summary>How long the read-back waits for the value to change after Ctrl+V.</summary>
     internal const int SettleMilliseconds = 2000;
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(25);
 
     /// <summary>
     /// Read until the value differs from <paramref name="before"/>, <paramref name="settleMilliseconds"/> pass, or the
@@ -300,14 +279,13 @@ public sealed class PasteTool(
         return observed;
     }
 
-    /// <summary>The value a control reports, or null when it exposes none or cannot be read.</summary>
+    /// <summary>The value a control reports, or null when it exposes none, is a password, or cannot be read.</summary>
     private static string? ReadValue(FlaUI.Core.AutomationElements.AutomationElement? element)
     {
         try
         {
-            return element?.Patterns.Value.IsSupported == true
-                ? element.Patterns.Value.Pattern.Value.ValueOrDefault
-                : null;
+            var desktop = InputDesktop.Current;
+            return element != null && desktop.HasValuePattern(element) ? desktop.ValueOf(element) : null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

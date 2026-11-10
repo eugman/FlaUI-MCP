@@ -53,7 +53,7 @@ public sealed partial class GuardedInput
 
         var pid = foreground == 0 ? 0 : desktop.ProcessOf(foreground);
         throw InputRefusedException.Record(
-            DescribeActivationFailure(target.ProcessId, foreground, pid, desktop.ProcessNameOf(pid))
+            DescribeActivationFailure(target.ProcessId, foreground, pid, pid == 0 ? null : desktop.ProcessNameOf(pid))
         );
     }
 
@@ -70,7 +70,7 @@ public sealed partial class GuardedInput
         if (foreground == 0)
         {
             return new InputRefusal(
-                "desktop-unavailable",
+                RefusalCodes.DesktopUnavailable,
                 "desktop-unavailable: Windows reports no foreground window; the session may be locked, disconnected or non-interactive. "
                     + "No input sent. Observe again; unattended runs need an unlocked interactive session."
             )
@@ -83,7 +83,7 @@ public sealed partial class GuardedInput
         if (foregroundPid != targetPid)
         {
             return new InputRefusal(
-                "activation-denied",
+                RefusalCodes.ActivationDenied,
                 $"activation-denied: Windows kept '{foregroundName ?? "unknown"}' (PID {foregroundPid}) in the foreground instead of target PID {targetPid}. "
                     + "No input sent. Attended: ask the user to click the target window's title bar, then observe before retrying. Unattended: activation cannot be forced."
             )
@@ -94,7 +94,7 @@ public sealed partial class GuardedInput
         }
 
         return new InputRefusal(
-            "activation-denied",
+            RefusalCodes.ActivationDenied,
             $"activation-denied: Windows kept another window (hwnd={foreground}) of target PID {targetPid} in the foreground. "
                 + "No input sent. Focus the intended target window, then observe before retrying."
         )

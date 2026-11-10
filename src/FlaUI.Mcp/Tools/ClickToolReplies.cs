@@ -256,6 +256,29 @@ public partial class ClickTool
     internal static string? NewWindowTitle(IEnumerable<Win32WindowInfo> before, IEnumerable<Win32WindowInfo> after) =>
         new WindowBaseline(before).Opened(after).FirstOrDefault(w => w.Title.Length > 0)?.Title;
 
+    private const int NewWindowWaitMs = 2000;
+    private const int NewWindowPollMs = 100;
+
+    /// <summary>
+    /// The reply after a physical click that should open a dialog: the click returns before the dialog exists, so
+    /// wait for it and name it, so agents do not list windows too early. Only reads; no lease is needed for it.
+    /// </summary>
+    internal static string NewWindowNote(string elementName, IReadOnlyList<Win32WindowInfo> before, int processId)
+    {
+        var desktop = InputDesktop.Current;
+        for (var waited = 0; waited < NewWindowWaitMs; waited += NewWindowPollMs)
+        {
+            if (NewWindowTitle(before, desktop.TopLevelWindows(processId)) is { } title)
+            {
+                return $"Clicked {elementName}; window \"{title}\" opened. Get its handle from windows_list_windows.";
+            }
+
+            desktop.Pause(TimeSpan.FromMilliseconds(NewWindowPollMs));
+        }
+
+        return $"Clicked {elementName}; no new window appeared within 2 seconds.";
+    }
+
     /// <summary>
     /// Map a modal-aware pattern call result to a tool result.
     /// </summary>

@@ -45,6 +45,21 @@ public static class RefusalCodes
     public const string FocusRevoked = "focus-revoked";
     public const string FocusUnavailable = "focus-unavailable";
     public const string PausedAfterFailure = "paused-after-failure";
+
+    /// <summary>Refused while the user is asked to click the host's window before a grant begins.</summary>
+    public const string ActivationPending = "activation-pending";
+
+    /// <summary>The machine-wide input lease could not be created or taken; nothing was sent.</summary>
+    public const string LeaseUnavailable = "lease-unavailable";
+
+    /// <summary>The app's windows could not be read before a pattern call, so a dialog it opens could not be told apart.</summary>
+    public const string WindowBaselineUnreadable = "window-baseline-unreadable";
+
+    /// <summary>The launcher exited, or returned no process, before a window could be attributed to it.</summary>
+    public const string LaunchHandoff = "launch-handoff";
+
+    /// <summary>A launched process is alive but no unique usable window could be attached in time.</summary>
+    public const string LaunchPending = "launch-pending";
     public const string PermissionDenied = "permission-denied";
     public const string DesktopUnavailable = "desktop-unavailable";
     public const string ActivationDenied = "activation-denied";
@@ -64,6 +79,12 @@ public static class RefusalCodes
     /// Escape was sent where possible and the button released, and whether the app dropped is not verified.
     /// </summary>
     public const string DragInterrupted = "drag-interrupted";
+
+    /// <summary>
+    /// The pointer was moved off a drag's proved start point and could not be put back; the pointer moves went out,
+    /// the button was not pressed. (Off the drop point with the button down, it ends as drag-interrupted.)
+    /// </summary>
+    public const string PointerMoved = "pointer-moved";
 
     /// <summary>A required argument is missing or the arguments contradict each other; refused before any input.</summary>
     public const string InvalidArguments = "invalid-arguments";

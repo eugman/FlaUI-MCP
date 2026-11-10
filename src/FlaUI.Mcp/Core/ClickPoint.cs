@@ -349,7 +349,7 @@ public static class ClickPoint
     private static InputRefusedException Refuse(string reason) =>
         InputRefusedException.Record(
             new InputRefusal(
-                "click-point-unavailable",
+                RefusalCodes.ClickPointUnavailable,
                 $"{reason}; no input sent. Scroll it into view, then observe again."
             )
         );

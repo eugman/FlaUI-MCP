@@ -11,10 +11,7 @@ namespace FlaUI.Mcp.Tools;
 /// </summary>
 public class TypeTool : ToolBase
 {
-    private readonly ElementRegistry _elementRegistry;
-    private readonly PendingInvokeTracker _invokeTracker;
-    private readonly ProcessPolicy _processPolicy;
-    private readonly SessionManager? _sessions;
+    private readonly KeyboardTargets _targets;
 
     public TypeTool(
         ElementRegistry elementRegistry,
@@ -23,10 +20,12 @@ public class TypeTool : ToolBase
         SessionManager? sessions = null
     )
     {
-        _elementRegistry = elementRegistry;
-        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
-        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
-        _sessions = sessions;
+        _targets = new(
+            elementRegistry,
+            invokeTracker ?? new PendingInvokeTracker(),
+            processPolicy ?? ProcessPolicy.AllowAll,
+            sessions
+        );
     }
 
     public override string Name => "windows_type";
@@ -91,18 +90,16 @@ public class TypeTool : ToolBase
         {
             OperationContext.Check();
             var handle = GetStringArgument(arguments, "handle");
-            if (CheckTarget(refId, handle) is { } refused)
+            if (_targets.Refusal(refId, handle) is { } refused)
             {
                 return Task.FromResult(refused);
             }
 
             // Type the text
-            using var input = new GuardedInput(
-                InputTarget(refId, handle),
-                refId == null ? null : _elementRegistry.GetElement(refId),
-                verifyFocus
-            );
-            var target = string.IsNullOrEmpty(refId) ? "focused element" : refId;
+            var element = _targets.Element(refId);
+            using var input = _targets.Guard(refId, handle, element, verifyFocus ? FocusRule.Exact : FocusRule.None);
+            // Read before the keys: they go wherever focus is now, and typing may move it.
+            var focused = verifyFocus || HoldsFocus(element);
             // Keyboard.Type maps '\n' to Ctrl+Enter, so line breaks are sent as explicit Enter presses.
             foreach (var line in lines)
             {
@@ -121,8 +118,7 @@ public class TypeTool : ToolBase
                 input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.ENTER));
             }
 
-            var action = submit ? "Typed and submitted" : "Typed";
-            return Task.FromResult(TextResult($"{action} \"{text}\" into {target}"));
+            return Task.FromResult(TextResult(Typed(text, refId, submit, focused)));
         }
         catch (Exception ex)
         {
@@ -139,42 +135,37 @@ public class TypeTool : ToolBase
         }
     }
 
-    private InputTarget InputTarget(string? refId, string? handle) =>
-        refId != null ? _elementRegistry.InputForRef(refId)
-        : handle != null ? _sessions!.GetInputTarget(handle)
-        : GuardedInput.ForegroundTarget(_processPolicy);
-
-    /// <summary>The refusal for a target that cannot take the text, or null; nothing is focused or sent.</summary>
-    private McpToolResult? CheckTarget(string? refId, string? handle)
+    /// <summary>Whether the ref's control reports keyboard focus; true without a ref, which claims no control.</summary>
+    internal static bool HoldsFocus(AutomationElement? element)
     {
-        if (handle != null && _sessions == null)
+        if (element == null)
         {
-            return ErrorResult("Window-handle input requires a session manager.");
-        }
-        // Focus element if ref provided
-        if (!string.IsNullOrEmpty(refId))
-        {
-            _elementRegistry.ResolveRef(refId, handle);
-
-            // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
-            // Tip: calling windows_type without a ref types into the focused element
-            // using pure keyboard input, which works even while the provider is blocked.
-            if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
-            {
-                return BlockedResult(pending);
-            }
-        }
-        else if (handle != null)
-        {
-            // Validate the explicit target, then GuardedInput focuses and
-            // verifies that exact window before sending any input.
-            if (!_processPolicy.IsProcessAllowed(_sessions!.GetInputTarget(handle!).ProcessId))
-            {
-                return ErrorResult(_processPolicy.DescribeDenied("Target process"));
-            }
+            return true;
         }
 
-        return null;
+        try
+        {
+            return InputDesktop.Current.HasKeyboardFocus(element);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The reply for text that went out: it names the ref only when the ref held keyboard focus.</summary>
+    internal static string Typed(string text, string? refId, bool submit, bool focused)
+    {
+        var action = submit ? "Typed and submitted" : "Typed";
+        if (string.IsNullOrEmpty(refId))
+        {
+            return $"{action} \"{text}\" into focused element";
+        }
+
+        return focused
+            ? $"{action} \"{text}\" into {refId}"
+            : $"{action} \"{text}\"; focus on {refId} was not verified, so the text went wherever keyboard focus was. "
+                + "Observe before continuing.";
     }
 
     internal static string[] Lines(string text) => System.Text.RegularExpressions.Regex.Split(text, "\r\n|\r|\n");
@@ -185,6 +176,8 @@ public class TypeTool : ToolBase
 /// </summary>
 public partial class FillTool : ToolBase
 {
+    private static readonly TimeSpan ReadBackPoll = TimeSpan.FromMilliseconds(50);
+
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
 
@@ -363,7 +356,7 @@ public partial class FillTool : ToolBase
                         OperationContext.Check();
                         _elementRegistry.ValidateReference(refId, handle);
                     },
-                    () => Thread.Sleep(50)
+                    () => InputDesktop.Current.Pause(ReadBackPoll)
                 )
                 .Text;
         }
@@ -446,7 +439,7 @@ public partial class FillTool : ToolBase
                     validate();
                     input.Verify();
                 },
-                () => Thread.Sleep(50)
+                () => InputDesktop.Current.Pause(ReadBackPoll)
             );
         }
         catch (InputRefusedException moved) when (moved.Code == RefusalCodes.TargetChanged)

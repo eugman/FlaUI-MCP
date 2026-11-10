@@ -15,7 +15,7 @@ internal static class MouseReplies
     };
 
     /// <summary>
-    /// A drag whose drop target moved: Escape and the release went out, so the call is unverified with the
+    /// A drag whose drop target moved: Escape and the release both went out, so the call is unverified with the
     /// refusal as its failure, not failed; the text is the refusal's.
     /// </summary>
     public static McpToolResult Unverified(InputRefusal refusal) =>

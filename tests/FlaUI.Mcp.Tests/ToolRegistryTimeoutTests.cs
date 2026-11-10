@@ -15,7 +15,7 @@ public class ToolRegistryTimeoutTests
         var clock = new ManualTimeProvider();
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(50), time: clock)
         {
-            ResolveTarget = _ =>
+            ResolveTargetForTool = (_, _) =>
             {
                 try
                 {

@@ -13,6 +13,11 @@ internal static class PointerActions
 {
     private static readonly TimeSpan StepDelay = TimeSpan.FromMilliseconds(15);
 
+    // A pointer this close (rounding between monitors of different scale) is on the proved point.
+    private const int RestoreSlack = 2;
+    private const int PutBackAttempts = 3;
+    private static readonly TimeSpan PutBackPause = TimeSpan.FromMilliseconds(20);
+
     internal static Point Move(InputTarget target, Func<Point> resolve, int hoverMs)
     {
         using var input = new GuardedInput(target with { AllowOwnedPopup = true });
@@ -21,7 +26,7 @@ internal static class PointerActions
         input.MoveTo(point);
         if (hoverMs > 0)
         {
-            Thread.Sleep(hoverMs);
+            InputDesktop.Current.Pause(TimeSpan.FromMilliseconds(hoverMs));
         }
 
         return InputDesktop.Current.PointerPosition();
@@ -95,6 +100,7 @@ internal static class PointerActions
             input.Check(beforeDown);
         }
 
+        input.Check(() => PutBack(input, from, "start", "the button was not pressed"));
         input.Send(() => Mouse.Down(MouseButton.Left));
         var (moved, failure) = Held(input, target, path, to, dropMoved);
         if (moved == null && failure == null)
@@ -124,10 +130,16 @@ internal static class PointerActions
             foreach (var point in path)
             {
                 input.MoveTo(point);
-                Thread.Sleep(StepDelay);
+                InputDesktop.Current.Pause(StepDelay);
             }
 
-            return (DropMoved(target, to, dropMoved), null);
+            var moved = DropMoved(target, to, dropMoved);
+            if (moved == null)
+            {
+                PutBack(input, to, "drop", "the drop was cancelled");
+            }
+
+            return (moved, null);
         }
         catch (Exception error)
         {
@@ -135,6 +147,47 @@ internal static class PointerActions
             return (null, error);
         }
     }
+
+    /// <summary>
+    /// The pointer back on the proved point right before a button event, which goes out wherever the pointer is. A
+    /// physical nudge during the re-check before it (tolerated without ending the grant) is corrected by moving
+    /// back, up to three times with a short wait between (a hand may still be on the mouse); only a pointer that
+    /// is still not there after that is refused.
+    /// </summary>
+    private static void PutBack(GuardedInput input, Point point, string name, string notDone)
+    {
+        var desktop = InputDesktop.Current;
+        var now = desktop.PointerPosition();
+        for (var attempt = 0; attempt < PutBackAttempts && !Near(now, point); attempt++)
+        {
+            if (attempt > 0)
+            {
+                desktop.Pause(PutBackPause);
+            }
+
+            input.MoveTo(point);
+            now = desktop.PointerPosition();
+        }
+
+        if (Near(now, point))
+        {
+            return;
+        }
+
+        throw InputRefusedException.Record(
+            new InputRefusal(
+                RefusalCodes.PointerMoved,
+                $"The pointer was moved off the {name} point ({point.X},{point.Y}) and could not be put back "
+                    + $"(it is at ({now.X},{now.Y})); {notDone}."
+            )
+            {
+                ActionDispatched = true,
+            }
+        );
+    }
+
+    private static bool Near(Point now, Point point) =>
+        Math.Abs(now.X - point.X) <= RestoreSlack && Math.Abs(now.Y - point.Y) <= RestoreSlack;
 
     /// <summary>Why the drop point no longer lands on what it was proved on, or null.</summary>
     private static string? DropMoved(InputTarget target, Point to, Func<Point, string?>? dropMoved)
@@ -152,9 +205,9 @@ internal static class PointerActions
 
     /// <summary>
     /// Escape, through the checked send so it never reaches a window that took the foreground, then the release,
-    /// which goes out regardless; what each did, for the refusal.
+    /// which goes out regardless; what each did, for the refusal, and whether the button was released.
     /// </summary>
-    private static string LetGo(GuardedInput input)
+    private static (string Text, bool Released) LetGo(GuardedInput input)
     {
         string escape;
         try
@@ -167,32 +220,30 @@ internal static class PointerActions
             escape = $"Escape was not sent ({(error is AutomationRefusal refused ? refused.Code : error.Message)})";
         }
 
-        string release;
         try
         {
             input.Release(() => Mouse.Up(MouseButton.Left));
-            release = "the button was released";
+            return ($"{escape} and the button was released", true);
         }
         catch (Exception error)
         {
-            release = $"the release failed ({error.Message})";
+            return ($"{escape} and the release failed ({error.Message})", false);
         }
-
-        return $"{escape} and {release}";
     }
 
     /// <summary>
     /// The typed refusal for a drag that ended badly, noted on the operation with what went out: drop-target-moved
     /// when the target moved, the step's own refusal otherwise, drag-interrupted for a provider error, and for a
-    /// cancellation the cancellation itself (its refusal stays noted for the outcome's failure field).
+    /// cancellation the cancellation itself (its refusal stays noted for the outcome's failure field). A release
+    /// that failed is drag-interrupted whatever came before: the button may still be held.
     /// </summary>
-    private static Exception Ended(string? moved, Exception? failure, string letGo)
+    private static Exception Ended(string? moved, Exception? failure, (string Text, bool Released) letGo)
     {
-        var tail = $" {letGo}; whether the app dropped is not verified: observe the window, then retry.";
+        var tail = $" {letGo.Text}; whether the app dropped is not verified: observe the window, then retry.";
         var refusal = (moved, failure) switch
         {
             (not null, _) => new InputRefusal(
-                RefusalCodes.DropTargetMoved,
+                letGo.Released ? RefusalCodes.DropTargetMoved : RefusalCodes.DragInterrupted,
                 $"The drop target moved during the drag: {moved}.{tail}"
             ),
             (_, InputRefusedException refused) => new InputRefusal(
@@ -212,7 +263,13 @@ internal static class PointerActions
                 $"The drag failed while the button was down ({failure!.Message}).{tail}"
             ),
         };
-        var recorded = InputRefusedException.Record(refusal with { ActionDispatched = true });
+        var recorded = InputRefusedException.Record(
+            refusal with
+            {
+                ActionDispatched = true,
+                ButtonMayBeHeld = !letGo.Released,
+            }
+        );
         return failure is OperationCanceledException ? failure : recorded;
     }
 

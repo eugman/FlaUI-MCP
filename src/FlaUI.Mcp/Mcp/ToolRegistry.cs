@@ -13,7 +13,8 @@ public partial class ToolRegistry
     private readonly TimeSpan _toolTimeout;
     private readonly Action? _onToolActivity;
     public OperationCoordinator Operations { get; } = new();
-    public Func<JsonElement?, ProcessIdentity?>? ResolveTarget { get; set; }
+
+    /// <summary>The process a call targets, from the tool's name and arguments; a stranded call is attributed to it.</summary>
     public Func<string, JsonElement?, ProcessIdentity?>? ResolveTargetForTool { get; set; }
     public PendingInvokeTracker? Pending { get; set; }
     public PendingInvokeTracker? SecondaryPending { get; set; }
@@ -166,20 +167,8 @@ public partial class ToolRegistry
         string? warning = null;
         try
         {
-            var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
-            if (hook != null)
-            {
-                MutationGuard.BeforeMutation.Value = ComposeMutationPermission(previousHook, hook);
-            }
-
-            var target = ResolveTargetForTool is { } resolve
-                ? resolve(tool.Name, arguments)
-                : ResolveTarget?.Invoke(arguments);
             // A batch can target several processes. Attribute a stranded call to the step currently running.
-            parent.ProcessId = target?.ProcessId ?? 0;
-            parent.ProcessStartedTicks = target?.StartedTicks ?? 0;
-
-            warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
+            warning = Prepare(tool, arguments, parent, previousHook);
             OperationContext.Check();
             result = WithAdvisory(await tool.ExecuteAsync(arguments), warning);
         }
@@ -259,19 +248,8 @@ public partial class ToolRegistry
         {
             // Metadata collection is inside the timeout. Target validation
             // belongs to the tool, preserving its specific error contract.
-            var target = ResolveTargetForTool is { } resolve
-                ? resolve(tool.Name, arguments)
-                : ResolveTarget?.Invoke(arguments);
-            var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
-            if (hook != null)
-            {
-                MutationGuard.BeforeMutation.Value = ComposeMutationPermission(previousHook, hook);
-            }
-
-            warning = AdvisoryWarning?.Invoke(tool.Name, arguments, target);
+            warning = Prepare(tool, arguments, operation, previousHook);
             operation.AdvisoryWarning = warning;
-            operation.ProcessId = target?.ProcessId ?? 0;
-            operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
             OperationContext.Check();
             var returned = await tool.ExecuteAsync(arguments);
             result = WithAdvisory(
@@ -292,6 +270,24 @@ public partial class ToolRegistry
         }
 
         return FinalizeOperation(tool.Name, operation, result);
+    }
+
+    /// <summary>
+    /// What a call and a batch step set up before the tool runs: the target its arguments name, noted on the
+    /// operation, the tool's permission hook on top of the ambient one, and the advisory for a nonpreferred app.
+    /// </summary>
+    private string? Prepare(ITool tool, JsonElement? arguments, OperationContext operation, Action? previousHook)
+    {
+        var target = ResolveTargetForTool?.Invoke(tool.Name, arguments);
+        var hook = MutationPermissionForTool?.Invoke(tool.Name, tool.GetDefinition().Annotations);
+        if (hook != null)
+        {
+            MutationGuard.BeforeMutation.Value = ComposeMutationPermission(previousHook, hook);
+        }
+
+        operation.ProcessId = target?.ProcessId ?? 0;
+        operation.ProcessStartedTicks = target?.StartedTicks ?? 0;
+        return AdvisoryWarning?.Invoke(tool.Name, arguments, target);
     }
 
     private static Action ComposeMutationPermission(Action? ambient, Action tool)

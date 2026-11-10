@@ -43,8 +43,8 @@ public sealed class ToolCompositionTests
             },
             all.Keys.Except(shared.Keys).Order(StringComparer.Ordinal)
         );
-        Assert.NotNull(runner.Tools.ResolveTarget);
-        Assert.NotNull(mcp.Tools.ResolveTarget);
+        Assert.NotNull(runner.Tools.ResolveTargetForTool);
+        Assert.NotNull(mcp.Tools.ResolveTargetForTool);
     }
 
     [Theory]
@@ -117,7 +117,7 @@ public sealed class ToolCompositionTests
         Assert.Contains("windows_launch", names);
         Assert.Contains("windows_send_keys", names);
         Assert.Contains("windows_batch", names);
-        Assert.NotNull(product.ResolveTarget);
+        Assert.NotNull(product.ResolveTargetForTool);
         Assert.Same(host.Pending, product.Pending);
     }
 
@@ -128,13 +128,13 @@ public sealed class ToolCompositionTests
         var product = new ToolRegistry();
         var productPending = new PendingInvokeTracker();
         product.Pending = productPending;
-        product.ResolveTarget = _ => new ProcessIdentity(2468, 1357);
+        product.ResolveTargetForTool = (_, _) => new ProcessIdentity(2468, 1357);
 
         host.RegisterAllToolsInto(product);
 
         Assert.Same(productPending, product.Pending);
         Assert.Same(host.Pending, product.SecondaryPending);
-        Assert.Equal(2468, product.ResolveTarget!(null)!.ProcessId);
+        Assert.Equal(2468, product.ResolveTargetForTool!("product_probe", null)!.ProcessId);
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class ToolCompositionTests
     {
         using var host = new AutomationHost(new ProcessPolicy(["test-app"]));
         var product = new ToolRegistry();
-        product.ResolveTarget = _ => new ProcessIdentity(2468, 1357);
+        product.ResolveTargetForTool = (_, _) => new ProcessIdentity(2468, 1357);
         var handle = host.Sessions.PublishWindow(
             null,
             FakeDesktop.TargetHwnd,
@@ -169,7 +169,7 @@ public sealed class ToolCompositionTests
     {
         using var host = new AutomationHost(new ProcessPolicy(["test-app"]));
         var registry = new ToolRegistry();
-        registry.ResolveTarget = _ => new ProcessIdentity(2468, 1357);
+        registry.ResolveTargetForTool = (_, _) => new ProcessIdentity(2468, 1357);
         var handle = host.Sessions.PublishWindow(
             null,
             FakeDesktop.TargetHwnd,

@@ -43,7 +43,7 @@ public class ListWindowsTool : ToolBase
             // Right after a launch or a closed dialog, windows can briefly be untitled; re-check before reporting none.
             for (var waited = 0; windows.Count == 0 && waited < 1000; waited += 250)
             {
-                Thread.Sleep(250);
+                InputDesktop.Current.Pause(TimeSpan.FromMilliseconds(250));
                 windows = _sessionManager.ListWindows();
             }
 
@@ -123,7 +123,9 @@ public class FocusWindowTool : ToolBase
             }
             else
             {
-                return Task.FromResult(ErrorResult("Either 'handle' or 'title' is required"));
+                return Task.FromResult(
+                    ErrorResult(RefusalCodes.InvalidArguments, "Either 'handle' or 'title' is required")
+                );
             }
         }
         catch (ProviderBlockedException blocked)
@@ -240,7 +242,7 @@ public class CloseWindowTool : ToolBase
         var handle = GetStringArgument(arguments, "handle");
         if (string.IsNullOrEmpty(handle))
         {
-            return Task.FromResult(ErrorResult("Missing required argument: handle"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: handle"));
         }
 
         try

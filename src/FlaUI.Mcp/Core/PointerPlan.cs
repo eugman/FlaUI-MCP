@@ -164,7 +164,7 @@ public static class PointerParking
             );
         }
 
-        Thread.Sleep(Settle);
+        desktop.Pause(Settle);
         return desktop.PointerPosition();
     }
 

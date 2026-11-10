@@ -25,10 +25,11 @@ public class SendKeysTool : ToolBase
         VirtualKeyShort.RWIN,
     };
 
-    private readonly ElementRegistry _elementRegistry;
-    private readonly PendingInvokeTracker _invokeTracker;
+    private static readonly TimeSpan BetweenChords = TimeSpan.FromMilliseconds(30);
+    private static readonly TimeSpan KeyHold = TimeSpan.FromMilliseconds(10);
+
     private readonly ProcessPolicy _processPolicy;
-    private readonly SessionManager? _sessions;
+    private readonly KeyboardTargets _targets;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SendKeysTool"/> class.
@@ -43,10 +44,8 @@ public class SendKeysTool : ToolBase
         SessionManager? sessions = null
     )
     {
-        _elementRegistry = elementRegistry;
-        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
         _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
-        _sessions = sessions;
+        _targets = new(elementRegistry, invokeTracker ?? new PendingInvokeTracker(), _processPolicy, sessions);
     }
 
     /// <summary>
@@ -131,12 +130,14 @@ public class SendKeysTool : ToolBase
 
         if (!hasChord && !hasKeys)
         {
-            return Task.FromResult(ErrorResult("Provide either chord or keys."));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Provide either chord or keys."));
         }
 
         if (hasChord && hasKeys)
         {
-            return Task.FromResult(ErrorResult("Provide either chord or keys, not both."));
+            return Task.FromResult(
+                ErrorResult(RefusalCodes.InvalidArguments, "Provide either chord or keys, not both.")
+            );
         }
 
         var completed = 0;
@@ -148,41 +149,13 @@ public class SendKeysTool : ToolBase
             // later step must not allow an earlier shortcut (such as Save) to run.
             var prepared = PrepareSequence(hasChord ? new[] { chord! } : keyList!);
             var handle = GetStringArgument(arguments, "handle");
-            if (handle != null && _sessions == null)
+            if (_targets.Refusal(refId, handle) is { } refused)
             {
-                return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
+                return Task.FromResult(refused);
             }
 
-            if (!string.IsNullOrWhiteSpace(refId))
-            {
-                _elementRegistry.ResolveRef(refId, handle);
-
-                // Fail fast if this app's UIA provider is blocked (element.Focus() may hang).
-                // Tip: calling windows_send_keys without a ref sends pure keyboard input to the
-                // focused element, which works even while the provider is blocked.
-                if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
-                {
-                    return Task.FromResult(BlockedResult(pending));
-                }
-            }
-            else if (handle != null)
-            {
-                // Validate the explicit target, then GuardedInput focuses and
-                // verifies that exact window before sending any input.
-                if (!_processPolicy.IsProcessAllowed(_sessions!.GetInputTarget(handle!).ProcessId))
-                {
-                    return Task.FromResult(ErrorResult(_processPolicy.DescribeDenied("Target process")));
-                }
-            }
-
-            using var input = new GuardedInput(
-                refId != null ? _elementRegistry.InputForRef(refId)
-                    : handle != null ? _sessions!.GetInputTarget(handle)
-                    : GuardedInput.ForegroundTarget(_processPolicy),
-                refId == null ? null : _elementRegistry.GetElement(refId),
-                verifyFocus
-            );
-            var targetName = string.IsNullOrWhiteSpace(refId) ? "focused element" : refId;
+            using var input = _targets.Guard(refId, handle, _targets.Element(refId), verifyFocus);
+            var targetName = KeyboardTargets.Name(refId);
             var expectFocusClass = GetStringArgument(arguments, "expectFocusClass");
             var focus = InputDesktop.Current.FocusedControl();
             // Focus observed before the first chord. The loop overwrites `focus` as the sequence moves it.
@@ -201,7 +174,7 @@ public class SendKeysTool : ToolBase
                 completed++;
                 if (!hasChord)
                 {
-                    Thread.Sleep(30);
+                    InputDesktop.Current.Pause(BetweenChords);
                 }
 
                 focus = InputDesktop.Current.FocusedControl();
@@ -376,7 +349,7 @@ public class SendKeysTool : ToolBase
             if (keys.Count == 1)
             {
                 Keyboard.Press(keys[0]);
-                Thread.Sleep(10);
+                InputDesktop.Current.Pause(KeyHold);
                 Keyboard.Release(keys[0]);
                 return;
             }

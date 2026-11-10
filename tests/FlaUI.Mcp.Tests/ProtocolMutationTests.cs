@@ -107,7 +107,10 @@ public sealed class ProtocolMutationTests
                 .GetInt32()
         );
         Assert.Equal("test-server", result.GetProperty("serverInfo").GetProperty("name").GetString());
-        Assert.Equal("0.1.0", result.GetProperty("serverInfo").GetProperty("version").GetString());
+        // The version of the assembly that serves, not a constant that drifts from the project file.
+        var version = result.GetProperty("serverInfo").GetProperty("version").GetString();
+        Assert.Equal(typeof(McpServer).Assembly.GetName().Version!.ToString(3), version);
+        Assert.NotEqual("0.1.0", version);
     }
 
     [Fact]
@@ -219,7 +222,7 @@ public sealed class ProtocolMutationTests
         var tool = new Immediate("fast");
         var registry = new ToolRegistry
         {
-            ResolveTarget = _ =>
+            ResolveTargetForTool = (_, _) =>
             {
                 OperationContext.Current.Value!.Stop.Cancel();
                 return new ProcessIdentity(123, 456);
@@ -236,7 +239,7 @@ public sealed class ProtocolMutationTests
     [Fact]
     public async Task TheResolvedTargetIsRecordedOnTheOperation()
     {
-        var registry = new ToolRegistry { ResolveTarget = _ => new ProcessIdentity(123, 456) };
+        var registry = new ToolRegistry { ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456) };
         registry.RegisterTool(new Immediate("fast"));
 
         var result = await registry.ExecuteToolAsync("fast", null);

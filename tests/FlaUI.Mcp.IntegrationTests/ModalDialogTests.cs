@@ -60,7 +60,7 @@ public class ModalDialogTests
             Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"Click took too long: {sw.Elapsed}");
             Assert.Contains("modal dialog", clickResult, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Test Modal Dialog", clickResult);
-            // Kills ClickTool:427 String (the modal reply's guidance emptied).
+            // Kills ClickTool String (the modal reply's guidance emptied).
             Assert.Contains(
                 "Find it with windows_list_windows, then use windows_screenshot or windows_send_keys (no ref) with its handle.",
                 clickResult

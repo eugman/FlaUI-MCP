@@ -14,6 +14,7 @@ Run `pwsh scripts/setup.ps1` once after cloning. It installs CSharpier and turns
 | `git commit` | The staged copy of each C# file must already be formatted, and a product repo must not change files owned by the core. |
 | `git push` | The local pre-push hook runs `pwsh scripts/check.ps1`: formatting, core ownership, known debt not growing, the build with analyzers, and the no-focus unit tests. It also requires a clean worktree and a pushed ref resolving to checked-out `HEAD`, so its gate checks the bytes being pushed. Product repos may add a no-focus `scripts/pre-push-extra.ps1`. |
 | Hosted Build on a pull request or manual dispatch | Runs the full `pwsh scripts/check.ps1` offline gate. |
+| Hosted Release (a version tag, or a manual run) | Runs the full `pwsh scripts/check.ps1` offline gate before it publishes anything. |
 | Hosted Build on a push to `main` | Builds the production project in Release configuration; it does not run the full check or unit tests. Documentation-only changes do not trigger this workflow. |
 
 `pwsh scripts/format.ps1` fixes everything a tool can fix: braces, blank lines and layout.
@@ -26,7 +27,7 @@ The hosted push workflow runs only a Release build, as described above.
 
 | Command | What it does |
 |---|---|
-| `pwsh scripts/coverage.ps1` | Runs the tests with coverlet and renders line and branch coverage to `local/build-background/coverage/index.html`. Needs the `reportgenerator` global tool. |
+| `pwsh scripts/coverage.ps1` | Runs the tests with coverlet and renders line and branch coverage to `local/build-background/coverage/index.html` with the `reportgenerator` local tool (`.config/dotnet-tools.json`). |
 | `pwsh scripts/mutation.ps1` or `pwsh scripts/check.ps1 -Mutation` | Runs Stryker (local tool in `.config/dotnet-tools.json`) on the guard and protocol files listed in `stryker-config.json`, with concurrency 2. Stryker writes no report for a run it does not finish, so the script tests the files in five parts (guards, state, protocol, pointer, keyboard), each on a fresh worktree of `HEAD` (commit first) and each stopped after 45 minutes (`-Minutes`). `-Part <name>` runs one part, and `-Concurrency 1` lowers the load. Reports and logs go to `local/build-background/StrykerOutput/<part>/<run>`. |
 
 The default mutation parts select the no-focus `tests/FlaUI.Mcp.Tests` project. Integration tests launch apps and take the desktop, so `mutation.ps1` runs Stryker inside the no-focus project, names that project explicitly, and stops if Stryker's startup log shows a solution context, another test project, or more discovered tests than the project lists. The offline parts set `FLAUI_OFFLINE_TESTS=1`, so Core's real `InputDesktop` seam refuses input when a test has not installed a fake. Project selection and test counts do not prove that every test body avoids the desktop or protect code that bypasses the seam; see [mutation.md](mutation.md) for that boundary. `MutationConfigTests` checks the configured safeguards.
