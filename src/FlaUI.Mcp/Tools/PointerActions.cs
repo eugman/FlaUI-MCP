@@ -13,6 +13,9 @@ internal static class PointerActions
 {
     private static readonly TimeSpan StepDelay = TimeSpan.FromMilliseconds(15);
 
+    // A move back that lands this close (rounding between monitors of different scale) is on the proved point.
+    private const int RestoreSlack = 2;
+
     internal static Point Move(InputTarget target, Func<Point> resolve, int hoverMs)
     {
         using var input = new GuardedInput(target with { AllowOwnedPopup = true });
@@ -95,6 +98,7 @@ internal static class PointerActions
             input.Check(beforeDown);
         }
 
+        input.Check(() => PutBack(input, from, "start", "the button was not pressed"));
         input.Send(() => Mouse.Down(MouseButton.Left));
         var (moved, failure) = Held(input, target, path, to, dropMoved);
         if (moved == null && failure == null)
@@ -127,13 +131,51 @@ internal static class PointerActions
                 Thread.Sleep(StepDelay);
             }
 
-            return (DropMoved(target, to, dropMoved), null);
+            var moved = DropMoved(target, to, dropMoved);
+            if (moved == null)
+            {
+                PutBack(input, to, "drop", "the drop was cancelled");
+            }
+
+            return (moved, null);
         }
         catch (Exception error)
         {
             // Every failure with the button down, a cancellation included, must still let go of it.
             return (null, error);
         }
+    }
+
+    /// <summary>
+    /// The pointer back on the proved point right before a button event, which goes out wherever the pointer is. A
+    /// physical nudge during the re-check before it (tolerated without ending the grant) is corrected with one more
+    /// move; only a pointer that still is not there is refused.
+    /// </summary>
+    private static void PutBack(GuardedInput input, Point point, string name, string notDone)
+    {
+        var desktop = InputDesktop.Current;
+        if (desktop.PointerPosition() == point)
+        {
+            return;
+        }
+
+        input.MoveTo(point);
+        var now = desktop.PointerPosition();
+        if (Math.Abs(now.X - point.X) <= RestoreSlack && Math.Abs(now.Y - point.Y) <= RestoreSlack)
+        {
+            return;
+        }
+
+        throw InputRefusedException.Record(
+            new InputRefusal(
+                RefusalCodes.PointerMoved,
+                $"The pointer was moved off the {name} point ({point.X},{point.Y}) and could not be put back "
+                    + $"(it is at ({now.X},{now.Y})); {notDone}."
+            )
+            {
+                ActionDispatched = true,
+            }
+        );
     }
 
     /// <summary>Why the drop point no longer lands on what it was proved on, or null.</summary>

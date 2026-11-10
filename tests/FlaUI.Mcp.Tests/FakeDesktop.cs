@@ -338,10 +338,13 @@ internal sealed class FakeDesktop : InputDesktop
 
     public override Point PointerPosition() => Pointer;
 
+    /// <summary>Where a pointer move really lands; on its point unless a test holds the pointer elsewhere.</summary>
+    public Func<Point, Point> PointerLandsOn { get; set; } = point => point;
+
     public override void MovePointer(Point point)
     {
         var count = Interlocked.Increment(ref dispatched);
-        Pointer = point;
+        Pointer = PointerLandsOn(point);
         OnDispatch?.Invoke(count);
     }
 

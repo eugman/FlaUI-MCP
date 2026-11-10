@@ -65,6 +65,12 @@ public static class RefusalCodes
     /// </summary>
     public const string DragInterrupted = "drag-interrupted";
 
+    /// <summary>
+    /// The pointer was moved off a drag's proved start point and could not be put back; the pointer moves went out,
+    /// the button was not pressed. (Off the drop point with the button down, it ends as drag-interrupted.)
+    /// </summary>
+    public const string PointerMoved = "pointer-moved";
+
     /// <summary>A required argument is missing or the arguments contradict each other; refused before any input.</summary>
     public const string InvalidArguments = "invalid-arguments";
 
