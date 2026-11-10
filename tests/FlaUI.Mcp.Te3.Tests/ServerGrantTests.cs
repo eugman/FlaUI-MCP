@@ -179,7 +179,16 @@ public sealed class ServerGrantTests : IDisposable
     [Fact]
     public async Task ReadingNeedsNoGrant()
     {
-        var result = await host.Tools.ExecuteToolAsync(
+        // An allowlist that no running process matches: the list is read for real, but a live TE3 (the user's may
+        // be open while the tests run) is never listed or registered by a test.
+        using var noApp = new AutomationHost(
+            new ProcessPolicy(["FlaUiMcpTe3TestsNoSuchApp"]),
+            includeDesktopTools: true
+        );
+        using var owner = new Te3Interaction(() => 0);
+        Te3McpServer.Install(noApp, owner);
+
+        var result = await noApp.Tools.ExecuteToolAsync(
             "windows_list_windows",
             JsonSerializer.SerializeToElement(new { })
         );
