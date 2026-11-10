@@ -25,6 +25,10 @@ public sealed record InputRefusal(
     /// </summary>
     [JsonPropertyName("actionDispatched"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ActionDispatched { get; init; }
+
+    /// <summary>A drag's release did not go out, so the mouse button may still be held; not part of the reply.</summary>
+    [JsonIgnore]
+    internal bool ButtonMayBeHeld { get; init; }
 }
 
 public sealed record ProcessRef(

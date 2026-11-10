@@ -6,11 +6,25 @@ namespace FlaUI.Mcp.Tests;
 
 public sealed partial class DragReleaseTests
 {
-    [Fact]
-    public async Task ForegroundLossDuringAHeldDragFailsSoAGrantPauses()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ADragThatBrokeOffFailsOnlyWhenTheButtonMayStillBeHeld(bool releaseFails)
     {
         var row = Element();
         var desktop = new FakeDesktop { FocusLostAfter = 3 };
+        if (releaseFails)
+        {
+            // Move, press, one step; the lost foreground refuses the next step and the Escape; the fourth is the release.
+            desktop.OnDispatch = count =>
+            {
+                if (count == 4)
+                {
+                    throw new InvalidOperationException("input blocked");
+                }
+            };
+        }
+
         desktop.ElementBounds[row] = Row;
         desktop.Descriptions[row] = "TreeItem 'Source'";
         using var installed = desktop.Install();
@@ -35,15 +49,20 @@ public sealed partial class DragReleaseTests
             )
         );
 
-        // The button was down when the drag broke off: failed, not unverified, so a host's grant pauses on it.
-        Assert.True(result.IsError);
-        Assert.Equal("failed", result.Outcome!.Status);
-        Assert.Equal("partial", result.Outcome.Dispatch);
+        // A drag that let go of the button is unverified and a grant carries on; only a release that did not go
+        // out, so the button may still be held, is failed, and a host's grant pauses on it.
+        Assert.Equal(releaseFails, result.IsError == true);
+        Assert.Equal(releaseFails ? "failed" : "unverified", result.Outcome!.Status);
+        Assert.Equal(releaseFails ? "partial" : "completed", result.Outcome.Dispatch);
         Assert.Equal("drag-interrupted", result.Outcome.Failure!.Code);
         Assert.True(result.Outcome.Failure.ActionDispatched);
-        Assert.Equal(["drag-interrupted"], paused);
+        Assert.Equal(releaseFails ? ["drag-interrupted"] : [], paused);
         Assert.Contains("target-changed", result.Content[0].Text);
         Assert.Contains("Escape was not sent", result.Content[0].Text);
+        Assert.Contains(
+            releaseFails ? "the release failed (input blocked)" : "the button was released",
+            result.Content[0].Text
+        );
         Assert.Contains("whether the app dropped is not verified", result.Content[0].Text);
     }
 }

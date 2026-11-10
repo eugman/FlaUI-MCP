@@ -252,7 +252,13 @@ internal static class PointerActions
                 $"The drag failed while the button was down ({failure!.Message}).{tail}"
             ),
         };
-        var recorded = InputRefusedException.Record(refusal with { ActionDispatched = true });
+        var recorded = InputRefusedException.Record(
+            refusal with
+            {
+                ActionDispatched = true,
+                ButtonMayBeHeld = !letGo.Released,
+            }
+        );
         return failure is OperationCanceledException ? failure : recorded;
     }
 
