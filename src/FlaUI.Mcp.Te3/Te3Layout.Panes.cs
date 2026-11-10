@@ -185,26 +185,39 @@ public sealed partial class Te3Layout
 
         // A floating pane is a window of its own: closed through that window's Close, then read back.
         var floatingClosed = await CloseFloating(surface, titles, keep);
+        // Read back: a press is not a close. Only a pane that is gone counts as closed.
+        var parts = surface.Parts();
+        closed.RemoveAll(c => c is string title && parts.Any(p => p.Title == title));
         closed.AddRange(floatingClosed);
-        var remaining = surface.Parts().Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
+        var remaining = parts.Where(p => p.Kind == "pane").Select(p => p.Title).ToList();
         var preservedUnmapped = keep
             ? remaining.Where(t => !titles.Any(wanted => TitleMatches(t, wanted)) && !PaneReopen.IsMapped(t)).ToList()
             : [];
         var floating = FloatingTitles(surface);
-        var unresolved = titles
-            .Where(t =>
-                remaining.Any(r => TitleMatches(r, t)) != keep || (!keep && floating.Any(f => TitleMatches(f, t)))
-            )
-            .ToList();
         return new
         {
             closed,
             remaining,
-            unresolved,
+            unresolved = keep ? KeepUnresolved(parts, floating, titles) : CloseUnresolved(remaining, floating, titles),
             preservedUnmapped,
             floating,
             floatingClosedWith = floatingClosed.Count > 0 ? "windows_close on the floating window's own handle" : null,
         };
+    }
+
+    // close: each asked title that still names a docked or floating pane.
+    private static List<string> CloseUnresolved(List<string> remaining, List<string> floating, string[] titles) =>
+        titles.Where(t => remaining.Concat(floating).Any(left => TitleMatches(left, t))).ToList();
+
+    // keep: a kept title that is gone (a document tab or a floating pane counts as present), and every docked or
+    // floating pane that should have closed and is still there.
+    private static List<string> KeepUnresolved(IReadOnlyList<LayoutPart> parts, List<string> floating, string[] titles)
+    {
+        var present = parts.Select(p => p.Title).Concat(floating).ToList();
+        var missing = titles.Where(t => !present.Any(p => TitleMatches(p, t)));
+        var stuck = parts.Where(p => ShouldClose(p, titles, keep: true)).Select(p => p.Title);
+        var stuckFloating = floating.Where(f => !titles.Any(t => TitleMatches(f, t)));
+        return [.. missing, .. stuck, .. stuckFloating];
     }
 
     // keep preserves a pane with no verified View reopen entry; closing such a pane may persist across TE3 restarts.

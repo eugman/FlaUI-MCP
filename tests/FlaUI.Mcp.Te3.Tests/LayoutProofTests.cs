@@ -41,6 +41,74 @@ public sealed class LayoutProofTests : IDisposable
         Assert.Contains("read-back", proof.Source);
     }
 
+    private static List<string?> Listed(McpToolResult result, string property) =>
+        JsonDocument
+            .Parse(result.Content.Single().Text!)
+            .RootElement.GetProperty(property)
+            .EnumerateArray()
+            .Select(e => e.GetString())
+            .ToList();
+
+    [Fact]
+    public async Task KeepWithAPaneThatStaysOpenIsNotVerified()
+    {
+        var result = await Run(
+            new { action = "keep", titles = new[] { "TOM Explorer" } },
+            inputs =>
+            {
+                var layout = new FakeSurface(inputs, "AI Assistant", "TOM Explorer", "Properties");
+                layout.Stuck.Add("Properties");
+                return layout;
+            }
+        );
+
+        Assert.Equal(["Properties"], Listed(result, "unresolved"));
+        Assert.Equal(["AI Assistant"], Listed(result, "closed"));
+        Assert.Equal(Proof.Mismatch, result.Outcome?.Proof?.Verdict);
+        Assert.Contains("Properties", result.Outcome?.Proof?.Observed);
+    }
+
+    [Fact]
+    public async Task KeepWithAFloatingPaneThatStaysOpenIsNotVerified()
+    {
+        var result = await Run(
+            new { action = "keep", titles = new[] { "TOM Explorer" } },
+            inputs =>
+            {
+                var layout = new FakeSurface(inputs, "TOM Explorer");
+                layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
+                layout.Shapes[0x30] = new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0);
+                layout.StuckWindows.Add(0x30);
+                return layout;
+            }
+        );
+
+        Assert.Equal(["Dependencies"], Listed(result, "unresolved"));
+        Assert.Equal(Proof.Mismatch, result.Outcome?.Proof?.Verdict);
+    }
+
+    [Theory]
+    [InlineData("DAX Query 1")]
+    [InlineData("Dependencies")]
+    public async Task KeepingADocumentOrAFloatingPaneIsVerifiedWhenEveryOtherPaneClosed(string kept)
+    {
+        var result = await Run(
+            new { action = "keep", titles = new[] { kept } },
+            inputs =>
+            {
+                var layout = new FakeSurface(inputs, "AI Assistant", "Properties");
+                layout.Documents.Add("DAX Query 1");
+                layout.Extra.Add(new(0x30, "Dependencies", 7, true, false, false));
+                layout.Shapes[0x30] = new WindowShape("WindowsForms10.Window.8.app.0.1e2bef7_r3_ad1", 0);
+                return layout;
+            }
+        );
+
+        Assert.Empty(Listed(result, "unresolved"));
+        Assert.Empty(Listed(result, "remaining"));
+        Assert.Equal(Proof.Verified, ProofOf(result).Verdict);
+    }
+
     [Fact]
     public async Task AHiddenPaneIsVerifiedAndOneAlreadyHiddenIsANoOp()
     {
