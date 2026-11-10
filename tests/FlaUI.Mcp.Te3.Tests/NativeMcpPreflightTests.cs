@@ -60,6 +60,68 @@ public sealed class NativeMcpPreflightTests
         Assert.Contains("\"jsonrpc\":\"2.0\"", handler.Calls[3]);
     }
 
+    /// <summary>A server that lists its tools over pages: every page but the last carries nextCursor.</summary>
+    private sealed class PagedHandler(int pages) : HttpMessageHandler
+    {
+        private int id;
+        public List<string> Calls { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            Calls.Add(body);
+            var lists = Calls.Count(call => call.Contains("tools/list", StringComparison.Ordinal));
+            var reply = body switch
+            {
+                _ when body.Contains("\"initialize\"", StringComparison.Ordinal) =>
+                    """{"protocolVersion":"2025-11-25","serverInfo":{"name":"TE3"}}""",
+                _ when body.Contains("notifications/", StringComparison.Ordinal) => null,
+                _ when body.Contains("tools/list", StringComparison.Ordinal) && lists < pages =>
+                    $$"""{"tools":[{"name":"other_{{lists}}"}],"nextCursor":"page-{{lists + 1}}"}""",
+                _ when body.Contains("tools/list", StringComparison.Ordinal) =>
+                    """{"tools":[{"name":"model_identity","annotations":{"readOnlyHint":true}}]}""",
+                _ => """{"model":{"name":"scratch-model"}}""",
+            };
+            var content = reply == null ? "" : $$"""{"jsonrpc":"2.0","id":{{++id}},"result":{{reply}}}""";
+            return new(HttpStatusCode.OK) { Content = new StringContent(content, Encoding.UTF8, "application/json") };
+        }
+    }
+
+    [Fact]
+    public async Task AnIdentityToolOnALaterPageOfTheToolListIsFound()
+    {
+        var handler = new PagedHandler(pages: 3);
+
+        var result = await new NativeMcpPreflight(new HttpClient(handler)).Inspect(
+            new(new("http://127.0.0.1:42100/"), "model_identity", "model.name", "scratch-model")
+        );
+
+        Assert.Equal("scratch-model", result.ModelIdentity);
+        var lists = handler.Calls.Where(call => call.Contains("tools/list", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, lists.Count);
+        Assert.DoesNotContain("cursor", lists[0]);
+        Assert.Contains("\"cursor\":\"page-2\"", lists[1]);
+        Assert.Contains("\"cursor\":\"page-3\"", lists[2]);
+    }
+
+    [Fact]
+    public async Task AToolListThatNeverEndsIsRefusedBeforeAnyToolCall()
+    {
+        var handler = new PagedHandler(pages: int.MaxValue);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new NativeMcpPreflight(new HttpClient(handler)).Inspect(
+                new(new("http://127.0.0.1:42100/"), "model_identity", "model.name", "scratch-model")
+            )
+        );
+
+        Assert.Contains("tools/list", error.Message);
+        Assert.DoesNotContain(handler.Calls, call => call.Contains("tools/call", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task RefusesNonLocalEndpointBeforeAnyRequest()
     {

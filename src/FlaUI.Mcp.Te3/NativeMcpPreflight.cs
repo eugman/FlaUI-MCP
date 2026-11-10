@@ -75,7 +75,7 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
         session.SetProtocolVersion(version);
         await session.NotifyInitialized(token);
 
-        var definitions = ToolDefinitions(await session.Send("tools/list", new { }, token));
+        var definitions = await ListTools(session, token);
         var tools = definitions.Select(tool => tool.GetProperty("name").GetString()!).ToArray();
         var identityTool = definitions.SingleOrDefault(tool =>
             tool.GetProperty("name").GetString() == request.IdentityTool
@@ -126,6 +126,29 @@ public sealed class NativeMcpPreflight(HttpClient client, TimeSpan? overallTimeo
         && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    private const int MaxToolPages = 20;
+
+    /// <summary>Every page of tools/list, following nextCursor; a list that does not end is refused.</summary>
+    private static async Task<List<JsonElement>> ListTools(NativeMcpProbeSession session, CancellationToken token)
+    {
+        var definitions = new List<JsonElement>();
+        string? cursor = null;
+        for (var page = 0; page < MaxToolPages; page++)
+        {
+            var listing = await session.Send("tools/list", cursor == null ? new { } : new { cursor }, token);
+            definitions.AddRange(ToolDefinitions(listing));
+            cursor = StringProperty(listing, "nextCursor");
+            if (string.IsNullOrEmpty(cursor))
+            {
+                return definitions;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Native MCP tools/list did not end within {MaxToolPages} pages; no tool was called."
+        );
+    }
 
     /// <summary>The listed tools; a missing list, or a tool without a string name, is a protocol error.</summary>
     private static JsonElement[] ToolDefinitions(JsonElement listing)
