@@ -17,9 +17,9 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public void ActivatingABackgroundTargetIsReportedAndCounted()
     {
-        // Kills GuardedInput:103 Equality (activated never true), GuardedInput:104 Logical, Negate and LogicalNot
-        // (an activation reported as no change), GuardedInput:109 Statement (activation not counted),
-        // GuardedInput:110 String (empty note).
+        // Kills GuardedInput Equality (activated never true), GuardedInput Logical, Negate and LogicalNot
+        // (an activation reported as no change), GuardedInput Statement (activation not counted),
+        // GuardedInput String (empty note).
         Foreground(WinFormsHwnd);
         var context = Counting();
         try
@@ -38,7 +38,7 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public void TargetAlreadyInFrontWithoutAControlChangesNothing()
     {
-        // Kills GuardedInput:57 Negate (no element still reported as "the control was focused").
+        // Kills GuardedInput Negate (no element still reported as "the control was focused").
         Foreground(WpfHwnd);
         var context = Counting();
         try
@@ -56,9 +56,9 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public void FocusingTheControlIsReportedOnceAndNotWhenItAlreadyHasFocus()
     {
-        // Kills GuardedInput:118 Negate and LogicalNot, GuardedInput:124 Boolean (a gained focus reported as
-        // none), GuardedInput:123 Statement (focus change not counted), GuardedInput:59 String (empty note),
-        // and, on the second guard, GuardedInput:118 Logical (hadFocus && ...) and GuardedInput:120 Boolean
+        // Kills GuardedInput Negate and LogicalNot, GuardedInput Boolean (a gained focus reported as
+        // none), GuardedInput Statement (focus change not counted), GuardedInput String (empty note),
+        // and, on the second guard, GuardedInput Logical (hadFocus && ...) and GuardedInput Boolean
         // (an unchanged focus reported as a change).
         SelectTab(fixture, fixture.WinFormsHandle, "FormsTab");
         var name = Resolve(fixture, fixture.WinFormsHandle, new(AutomationId: "NameTextBox"));
@@ -92,7 +92,7 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public void ActivationIsTheFirstChangeEvenWhenTheControlIsFocusedAfterIt()
     {
-        // Kills GuardedInput:59 CoalesceAssignment (the control focus overwrites the activation note).
+        // Kills GuardedInput CoalesceAssignment (the control focus overwrites the activation note).
         SelectTab(fixture, fixture.WinFormsHandle, "FormsTab");
         var name = Resolve(fixture, fixture.WinFormsHandle, new(AutomationId: "NameTextBox"));
         var password = Resolve(fixture, fixture.WinFormsHandle, new(AutomationId: "PasswordTextBox"));
@@ -108,8 +108,8 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public void TypingSendsOneChunkPerSixtyFourCharacters()
     {
-        // Kills GuardedInput:397 Equality (> 64, <= 64), Negate, GuardedInput:399 Statement (one send per
-        // character) and GuardedInput:406 Equality (>= 0 sends an empty trailing chunk).
+        // Kills GuardedInput Equality (> 64, <= 64), Negate, GuardedInput Statement (one send per
+        // character) and GuardedInput Equality (>= 0 sends an empty trailing chunk).
         SelectTab(fixture, fixture.WinFormsHandle, "FormsTab");
         var name = Resolve(fixture, fixture.WinFormsHandle, new(AutomationId: "NameTextBox"));
         var value = name.Patterns.Value.Pattern;
@@ -140,7 +140,7 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public void StaleTargetIdentityIsRefusedBeforeAnyChange()
     {
-        // Kills GuardedInput:14 Logical (start time and window owner must both match) and GuardedInput:53
+        // Kills GuardedInput Logical (start time and window owner must both match) and GuardedInput
         // Statement (EnsureAlive skipped).
         var live = fixture.Session.GetInputTarget(fixture.WpfHandle);
         var stale = live with { StartedTicks = live.StartedTicks + 1 };
@@ -162,7 +162,7 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public void CaptureRefusesAWindowOfAnotherProcess()
     {
-        // Kills GuardedInput:22 Logical (hwnd == 0 || pid == 0 && owner check: a nonzero pair skips the check).
+        // Kills GuardedInput Logical (hwnd == 0 || pid == 0 && owner check: a nonzero pair skips the check).
         var error = Assert.Throws<InputRefusedException>(() =>
             InputTarget.Capture(WinFormsHwnd, fixture.Session.GetWindowProcessId(fixture.WpfHandle))
         );
@@ -172,7 +172,7 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public void SecondLeaseTimeoutSaysDesktopInputIsBusy()
     {
-        // Kills GuardedInput:182 String (the timeout message emptied).
+        // Kills GuardedInput String (the timeout message emptied).
         using var first = GuardedInput.AcquireLease();
         var error = Assert.Throws<TimeoutException>(GuardedInput.AcquireLease);
         Assert.Equal("Desktop input is busy; no input sent.", error.Message);
@@ -181,9 +181,9 @@ public class GuardedInputChangeTests(TestAppFixture fixture)
     [Fact]
     public async Task ModelessOwnedWindowIsNotTheTarget()
     {
-        // Kills GuardedInput:346 Logical (!enabled || owned: the modeless window counts as the target, so the
-        // guard skips activation and then fails), GuardedInput:341 Logical (an enabled target's owned window
-        // passes Verify), GuardedInput:318 String (Verify's message emptied).
+        // Kills GuardedInput Logical (!enabled || owned: the modeless window counts as the target, so the
+        // guard skips activation and then fails), GuardedInput Logical (an enabled target's owned window
+        // passes Verify), GuardedInput String (Verify's message emptied).
         var processId = WinFormsProcessId(fixture);
         SelectTab(fixture, fixture.WinFormsHandle, "DialogsTab");
         var (_, open) = Ref(fixture, fixture.WinFormsHandle, new(AutomationId: "OpenModelessButton"));
