@@ -235,6 +235,8 @@ public partial class ClickTool : ToolBase
         var opensDialog = physical && EndsWithEllipsis(elementName) && processId != 0;
         var before = opensDialog ? InputDesktop.Current.TopLevelWindows(processId) : [];
         input.Click(element, mouseButton);
+        // Only reads follow, for up to two seconds: another host's input need not wait for them.
+        input.Dispose();
         if (!opensDialog)
         {
             if (selectionFallback)
@@ -245,20 +247,8 @@ public partial class ClickTool : ToolBase
 
             return TextResult($"Clicked {elementName}");
         }
-        // A physical click returns before its dialog exists; report the window so agents don't list too early.
-        for (var waited = 0; waited < 2000; waited += 100)
-        {
-            if (NewWindowTitle(before, InputDesktop.Current.TopLevelWindows(processId)) is { } title)
-            {
-                return TextResult(
-                    $"Clicked {elementName}; window \"{title}\" opened. Get its handle from windows_list_windows."
-                );
-            }
 
-            Thread.Sleep(100);
-        }
-
-        return TextResult($"Clicked {elementName}; no new window appeared within 2 seconds.");
+        return TextResult(NewWindowNote(elementName, before, processId));
     }
 
     internal static readonly string[] PatternActions = ["invoke", "select", "expand", "collapse", "toggle"];

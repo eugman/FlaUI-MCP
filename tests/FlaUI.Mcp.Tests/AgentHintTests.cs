@@ -36,6 +36,37 @@ public sealed class AgentHintTests
     }
 
     [Fact]
+    public void TheWaitForAClicksDialogPollsThroughTheDesktopSeam()
+    {
+        Win32WindowInfo[] before = [new(1, "Main", 7, true, false, false)];
+        var pauses = 0;
+        var desktop = new FakeDesktop { OnPause = _ => pauses++ };
+        desktop.WindowsOf = _ => pauses < 3 ? before : [.. before, new(3, "Preferences", 7, true, false, false)];
+        using var installed = desktop.Install();
+
+        Assert.Equal(
+            "Clicked Options...; window \"Preferences\" opened. Get its handle from windows_list_windows.",
+            ClickTool.NewWindowNote("Options...", before, 7)
+        );
+        Assert.Equal(3, pauses);
+    }
+
+    [Fact]
+    public void TheWaitForAClicksDialogEndsAfterTwoSecondsOfPolls()
+    {
+        Win32WindowInfo[] before = [new(1, "Main", 7, true, false, false)];
+        var waited = TimeSpan.Zero;
+        var desktop = new FakeDesktop { OnPause = delay => waited += delay, WindowsOf = _ => before };
+        using var installed = desktop.Install();
+
+        Assert.Equal(
+            "Clicked Options...; no new window appeared within 2 seconds.",
+            ClickTool.NewWindowNote("Options...", before, 7)
+        );
+        Assert.Equal(TimeSpan.FromSeconds(2), waited);
+    }
+
+    [Fact]
     public void NewWindowTitleReportsOnlyATitledWindowThatWasNotThereBefore()
     {
         Win32WindowInfo[] before = [new(1, "Main", 7, true, false, false)];
