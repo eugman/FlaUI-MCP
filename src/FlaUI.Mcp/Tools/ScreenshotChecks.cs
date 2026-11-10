@@ -238,26 +238,16 @@ internal static class ScreenshotChecks
             return true;
         }
 
-        if (!Path.IsPathFullyQualified(savePath))
-        {
-            error = $"savePath must be an absolute local path: {savePath}";
-            return false;
-        }
-
-        if (savePath.StartsWith(@"\\") || savePath.StartsWith(@"\\?\") || savePath.StartsWith(@"\\.\"))
-        {
-            error = "savePath must be a local drive path; UNC and device paths are not allowed";
-            return false;
-        }
-
+        // The same rules as a host's configured paths: a local, fully qualified drive path, with no UNC or
+        // device form in either slash spelling, so a screen capture is never written to a network share.
         string fullPath;
         try
         {
-            fullPath = Path.GetFullPath(savePath);
+            fullPath = HostPath.Validate(savePath, "savePath");
         }
         catch (Exception ex)
         {
-            error = $"savePath is invalid: {ex.Message}";
+            error = ex is ArgumentException ? ex.Message : $"savePath is invalid: {ex.Message}";
             return false;
         }
 

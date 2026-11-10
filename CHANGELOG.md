@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `windows_screenshot` validates `savePath` with `HostPath.Validate`, the rules a host's configured paths follow: the forward-slash UNC form (`//server/share/x.png`) passed the old prefix test and a capture could be written to a network share. A `savePath` with `.`/`..` segments, `~` or a `$NAME` variable is now refused, and `%NAME%` is expanded.
 - `windows_click`'s mouse click releases the machine-wide input lease right after the click, before it observes the selection or waits up to 2 s for the dialog a "…" item opens; that wait polls through the desktop seam. Fixed offline 2026-11-10, not live-verified.
 - `windows_paste` releases the machine-wide input lease right after Ctrl+V, before its read-back polls the value for up to 2 s, and reads the value and waits through the desktop seam (`InputDesktop.ValueOf`, `Time`, `Pause`). A password field's value is no longer read back into `proof.observed`; such a paste is `unavailable`. Fixed offline 2026-11-10, not live-verified.
 - `InteractionGrant.Launch` runs its launch delegate, and `Begin` starts the input observer, outside the grant's lock (check, act, check again), so the monitor, `Token`, `Require` and a revocation by the user's input no longer wait for a slow launch or hook installation. A grant revoked during a launch still returns what started (the caller owns it) and notes no target; an observer started for a `Begin` that lost to another is disposed. Fixed offline 2026-11-10, not live-verified.
