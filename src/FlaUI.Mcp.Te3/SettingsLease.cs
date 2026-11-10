@@ -110,29 +110,29 @@ public sealed class SettingsLease
     /// restore.json: never the settings folder, the backup root, a drive root or a folder with other content.
     /// Never throws; a backup that cannot be removed is simply kept.
     /// </summary>
-    internal static bool TryDeleteBackup(string backup, string settingsDirectory)
+    internal static bool TryDeleteBackup(string backup, string settingsDirectory, string? backupRoot = null)
     {
         try
         {
             var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(backup));
-            var protectedPath =
-                Path.GetPathRoot(full) == full + Path.DirectorySeparatorChar
-                || SamePath(full, settingsDirectory)
-                || SamePath(full, DefaultBackupRoot);
-            if (protectedPath || !File.Exists(Path.Combine(full, "restore.json")))
+            if (
+                IsProtected(full, settingsDirectory, backupRoot ?? DefaultBackupRoot)
+                || !File.Exists(Path.Combine(full, InfoName))
+            )
             {
                 return false;
             }
 
-            var owned = new HashSet<string>(Names.Append("restore.json"), StringComparer.OrdinalIgnoreCase);
+            var owned = new HashSet<string>(Names.Append(InfoName), StringComparer.OrdinalIgnoreCase);
             var entries = Directory.GetFileSystemEntries(full);
             if (entries.Any(entry => !IsOwnedFile(entry, owned)))
             {
                 return false;
             }
 
-            // restore.json last: while it exists the backup still reads as a recoverable one.
-            foreach (var entry in entries.OrderBy(e => Path.GetFileName(e) == "restore.json"))
+            // restore.json first: the restore is already verified, and without it a delete that stops part-way
+            // leaves a folder recover reports as gone, not a manifest naming files that are missing.
+            foreach (var entry in entries.OrderByDescending(IsInfo))
             {
                 File.Delete(entry);
             }
@@ -146,10 +146,20 @@ public sealed class SettingsLease
         }
     }
 
+    private const string InfoName = "restore.json";
+
+    private static bool IsInfo(string entry) =>
+        Path.GetFileName(entry).Equals(InfoName, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A drive root, the settings folder or the backup root: never a backup to delete.</summary>
+    internal static bool IsProtected(string full, string settingsDirectory, string backupRoot) =>
+        string.Equals(Path.GetPathRoot(full), full, StringComparison.OrdinalIgnoreCase)
+        || SamePath(full, settingsDirectory)
+        || SamePath(full, backupRoot);
+
     private static bool IsOwnedFile(string entry, HashSet<string> owned) =>
         owned.Contains(Path.GetFileName(entry))
-        && !File.GetAttributes(entry).HasFlag(FileAttributes.Directory)
-        && !File.GetAttributes(entry).HasFlag(FileAttributes.ReparsePoint);
+        && (File.GetAttributes(entry) & (FileAttributes.Directory | FileAttributes.ReparsePoint)) == 0;
 
     private static bool SamePath(string a, string b) =>
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(a))

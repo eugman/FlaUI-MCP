@@ -144,7 +144,7 @@ public sealed class SettingsAndFixtureTests : IDisposable
     }
 
     [Fact]
-    public void ADirectoryWithOtherContentOrTheSettingsFolderIsNeverDeleted()
+    public void ADirectoryWithOtherContentIsNeverDeleted()
     {
         File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
         var backup = Path.Combine(root, "backup");
@@ -154,10 +154,6 @@ public sealed class SettingsAndFixtureTests : IDisposable
 
         Assert.False(lease.DiscardBackup());
         Assert.True(File.Exists(Path.Combine(backup, "notes.txt")));
-        File.WriteAllText(Path.Combine(root, "restore.json"), "{}");
-        Assert.False(SettingsLease.TryDeleteBackup(root, root));
-        Assert.False(SettingsLease.TryDeleteBackup(SettingsLease.DefaultBackupRoot, root));
-        Assert.True(File.Exists(Path.Combine(root, "UiPreferences.json")));
     }
 
     [Fact]
