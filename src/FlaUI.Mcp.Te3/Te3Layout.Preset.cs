@@ -86,7 +86,11 @@ public sealed partial class Te3Layout
         var end = new Point(to.X - origin.X, to.Y - origin.Y);
         var sentBefore = inputs.Sent;
         await Drag(inputs, handle, title, start, end, Captions(parts));
-        var after = FindPane(window, title).Container.BoundingRectangle;
+        // The drag's fixed settle is not a read-back of the re-layout: read until the pane stops moving.
+        var after = await LayoutChecks.StableBounds(
+            () => FindPane(window, title).Container.BoundingRectangle,
+            ms => Task.Delay(ms)
+        );
         var reached = width is null ? after.Height : after.Width;
         return LayoutChecks.Measured(
             new(

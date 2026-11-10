@@ -209,4 +209,43 @@ public sealed class LayoutChecksTests
     [InlineData(null, -100)]
     public void AResizeRejectsNonpositiveTargetBeforePlanningInput(int? width, int? height) =>
         Assert.Throws<ArgumentException>(() => SplitterPlan.RequireOne(width, height));
+
+    [Fact]
+    public async Task ThePaneIsReadAfterADragUntilTwoReadsAgree()
+    {
+        // A slow re-layout: the first reads still show the pane on its way.
+        var widths = new Queue<int>([300, 340, 400, 400, 999]);
+        var waits = 0;
+
+        var bounds = await LayoutChecks.StableBounds(
+            () => new System.Drawing.Rectangle(0, 0, widths.Dequeue(), 500),
+            _ =>
+            {
+                waits++;
+                return Task.CompletedTask;
+            }
+        );
+
+        Assert.Equal(400, bounds.Width);
+        Assert.Equal(3, waits);
+    }
+
+    [Fact]
+    public async Task APaneThatNeverSettlesIsReportedAsLastReadWhenTheWaitEnds()
+    {
+        var width = 0;
+        var waited = 0;
+
+        var bounds = await LayoutChecks.StableBounds(
+            () => new System.Drawing.Rectangle(0, 0, ++width, 500),
+            ms =>
+            {
+                waited += ms;
+                return Task.CompletedTask;
+            }
+        );
+
+        Assert.Equal(LayoutChecks.StableMs, waited);
+        Assert.Equal(width, bounds.Width);
+    }
 }

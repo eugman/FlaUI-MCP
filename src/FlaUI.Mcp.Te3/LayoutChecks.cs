@@ -104,6 +104,30 @@ internal static class LayoutChecks
         }
     }
 
+    internal const int StableMs = 1500;
+
+    /// <summary>
+    /// After a splitter drag: reads the pane until two reads in a row agree, so a re-layout still under way is not
+    /// measured as a miss. Returns the last read after <see cref="StableMs"/> either way; the caller judges it.
+    /// </summary>
+    public static async Task<Rectangle> StableBounds(Func<Rectangle> read, Func<int, Task> delay)
+    {
+        var last = read();
+        for (var waited = 0; waited < StableMs; waited += PollMs)
+        {
+            await delay(PollMs);
+            var now = read();
+            if (now == last)
+            {
+                return now;
+            }
+
+            last = now;
+        }
+
+        return last;
+    }
+
     private const int ReadBackMs = 1000;
     private const int PollMs = 100;
 
