@@ -101,10 +101,10 @@ public sealed class DragPointerNudgeTests
             )
         );
 
-        // Two pointer moves went out; the button never went down.
+        // The move to the start and three tries to put it back went out; the button never went down.
         Assert.Equal("pointer-moved", error.Refusal.Code);
         Assert.True(error.Refusal.ActionDispatched);
-        Assert.Equal(2, desktop.Dispatched);
+        Assert.Equal(1 + 3, desktop.Dispatched);
         Assert.Equal(
             "The pointer was moved off the start point (10,10) and could not be put back (it is at (22,25)); "
                 + "the button was not pressed.",
@@ -134,23 +134,81 @@ public sealed class DragPointerNudgeTests
             )
         );
 
-        // The failed move back, then Escape and the release: the same way out as any failure with the button down.
+        // Three failed moves back, then Escape and the release: the same way out as any failure with the button down.
         Assert.Equal("drag-interrupted", error.Refusal.Code);
         Assert.Contains("(pointer-moved)", error.Message);
         Assert.Contains("Escape was sent and the button was released", error.Message);
-        Assert.Equal(2 + 4 + 1 + 2, desktop.Dispatched);
+        Assert.Equal(2 + 4 + 3 + 2, desktop.Dispatched);
     }
 
-    [Fact]
-    public void ARestoreWithinTwoPixelsCounts()
+    [Theory]
+    [InlineData(2, 0, 0)]
+    [InlineData(0, -2, 0)]
+    [InlineData(3, 0, 1)]
+    [InlineData(0, -3, 1)]
+    public void APointerWithinTwoPixelsIsOnThePointAndOneThreeOffIsPutBack(int dx, int dy, int movesBack)
     {
-        // A move that lands a pixel off (mixed-DPI rounding) is the proved point for a row-sized target.
+        // Two pixels (rounding between monitors of different scale) is the proved point for a row-sized target.
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+
+        PointerActions.Drag(
+            FakeDesktop.Target,
+            () => (From, To),
+            4,
+            beforeDown: () => desktop.Pointer = new Point(From.X + dx, From.Y + dy)
+        );
+
+        Assert.Equal(1 + movesBack + 1 + 4 + 1, desktop.Dispatched);
+    }
+
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    public void AMoveBackThatLandsWithinTwoPixelsCountsAndOneThatLandsThreeOffDoesNot(int off, bool accepted)
+    {
         var desktop = new FakeDesktop();
         using var installed = desktop.Install();
         var nudged = false;
-        desktop.PointerLandsOn = point => nudged ? new Point(point.X + 2, point.Y - 2) : point;
+        desktop.PointerLandsOn = point => nudged ? new Point(point.X + off, point.Y) : point;
 
-        PointerActions.Drag(
+        void Drag() =>
+            PointerActions.Drag(
+                FakeDesktop.Target,
+                () => (From, To),
+                4,
+                beforeDown: () =>
+                {
+                    nudged = true;
+                    desktop.Pointer = Nudged;
+                }
+            );
+
+        if (accepted)
+        {
+            Drag();
+            Assert.True(desktop.Dispatched > 1 + 1);
+        }
+        else
+        {
+            Assert.Equal("pointer-moved", Assert.Throws<InputRefusedException>(Drag).Refusal.Code);
+            Assert.Equal(1 + 3, desktop.Dispatched);
+        }
+    }
+
+    [Fact]
+    public void APutBackThatLandsOnTheSecondTryCarriesOn()
+    {
+        // A hand still on the mouse: the first move back is nudged again, the next one holds. No refusal.
+        var desktop = new FakeDesktop();
+        using var installed = desktop.Install();
+        var pauses = new List<TimeSpan>();
+        desktop.OnPause = pauses.Add;
+        var movesBack = 0;
+        var nudged = false;
+        desktop.PointerLandsOn = point => nudged && ++movesBack == 1 ? Nudged : point;
+
+        var landed = PointerActions.Drag(
             FakeDesktop.Target,
             () => (From, To),
             4,
@@ -161,6 +219,9 @@ public sealed class DragPointerNudgeTests
             }
         );
 
-        Assert.True(desktop.Dispatched > 3);
+        Assert.Equal(To, landed);
+        Assert.Equal(1 + 2 + 1 + 4 + 1, desktop.Dispatched);
+        // One short wait between the two tries, through the seam, before the drag's own step pauses.
+        Assert.Equal(TimeSpan.FromMilliseconds(20), pauses[0]);
     }
 }

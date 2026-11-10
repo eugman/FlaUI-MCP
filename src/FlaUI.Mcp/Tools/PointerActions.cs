@@ -13,8 +13,10 @@ internal static class PointerActions
 {
     private static readonly TimeSpan StepDelay = TimeSpan.FromMilliseconds(15);
 
-    // A move back that lands this close (rounding between monitors of different scale) is on the proved point.
+    // A pointer this close (rounding between monitors of different scale) is on the proved point.
     private const int RestoreSlack = 2;
+    private const int PutBackAttempts = 3;
+    private static readonly TimeSpan PutBackPause = TimeSpan.FromMilliseconds(20);
 
     internal static Point Move(InputTarget target, Func<Point> resolve, int hoverMs)
     {
@@ -148,20 +150,26 @@ internal static class PointerActions
 
     /// <summary>
     /// The pointer back on the proved point right before a button event, which goes out wherever the pointer is. A
-    /// physical nudge during the re-check before it (tolerated without ending the grant) is corrected with one more
-    /// move; only a pointer that still is not there is refused.
+    /// physical nudge during the re-check before it (tolerated without ending the grant) is corrected by moving
+    /// back, up to three times with a short wait between (a hand may still be on the mouse); only a pointer that
+    /// is still not there after that is refused.
     /// </summary>
     private static void PutBack(GuardedInput input, Point point, string name, string notDone)
     {
         var desktop = InputDesktop.Current;
-        if (desktop.PointerPosition() == point)
+        var now = desktop.PointerPosition();
+        for (var attempt = 0; attempt < PutBackAttempts && !Near(now, point); attempt++)
         {
-            return;
+            if (attempt > 0)
+            {
+                desktop.Pause(PutBackPause);
+            }
+
+            input.MoveTo(point);
+            now = desktop.PointerPosition();
         }
 
-        input.MoveTo(point);
-        var now = desktop.PointerPosition();
-        if (Math.Abs(now.X - point.X) <= RestoreSlack && Math.Abs(now.Y - point.Y) <= RestoreSlack)
+        if (Near(now, point))
         {
             return;
         }
@@ -177,6 +185,9 @@ internal static class PointerActions
             }
         );
     }
+
+    private static bool Near(Point now, Point point) =>
+        Math.Abs(now.X - point.X) <= RestoreSlack && Math.Abs(now.Y - point.Y) <= RestoreSlack;
 
     /// <summary>Why the drop point no longer lands on what it was proved on, or null.</summary>
     private static string? DropMoved(InputTarget target, Point to, Func<Point, string?>? dropMoved)
