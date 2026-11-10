@@ -4,7 +4,7 @@ using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Mcp.Core;
 
-/// <summary>Typed TE3 interactions. Locators come from successful 3.26.3 runs.</summary>
+/// <summary>Typed TE3 interactions. Locators come from runs on TE3 3.26.3 through 3.27.1 (automation/UI-MAP.md).</summary>
 public sealed partial class Te3Page(
     AutomationHost host,
     string handle,
