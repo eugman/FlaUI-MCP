@@ -128,6 +128,27 @@ internal static class LayoutChecks
         return last;
     }
 
+    /// <summary>
+    /// After panes' Close buttons were pressed: reads the layout until none of <paramref name="pressed"/> is listed,
+    /// for at most <see cref="StableMs"/>, so a pane that takes a moment to leave is not judged stuck. Returns the
+    /// last read either way; the caller judges it.
+    /// </summary>
+    public static async Task<IReadOnlyList<LayoutPart>> PartsOnceGone(
+        Func<IReadOnlyList<LayoutPart>> read,
+        IReadOnlySet<string> pressed,
+        Func<int, Task> delay
+    )
+    {
+        var parts = read();
+        for (var waited = 0; waited < StableMs && parts.Any(p => pressed.Contains(p.Title)); waited += PollMs)
+        {
+            await delay(PollMs);
+            parts = read();
+        }
+
+        return parts;
+    }
+
     private const int ReadBackMs = 1000;
     private const int PollMs = 100;
 

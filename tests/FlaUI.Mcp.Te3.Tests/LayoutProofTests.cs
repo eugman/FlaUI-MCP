@@ -68,6 +68,49 @@ public sealed class LayoutProofTests : IDisposable
         Assert.Contains("Properties", result.Outcome?.Proof?.Observed);
     }
 
+    [Theory]
+    [InlineData("keep", "TOM Explorer")]
+    [InlineData("close", "Properties")]
+    public async Task APaneThatTakesAMomentToLeaveIsWaitedForNotCalledStuck(string action, string title)
+    {
+        FakeSurface? layout = null;
+        var result = await Run(
+            new { action, titles = new[] { title } },
+            inputs =>
+            {
+                layout = new FakeSurface(inputs, "TOM Explorer", "Properties");
+                // Still listed on the reads straight after its Close, gone a few reads later.
+                layout.SlowToClose["Properties"] = 3;
+                return layout;
+            }
+        );
+
+        Assert.Empty(Listed(result, "unresolved"));
+        Assert.Equal(["Properties"], Listed(result, "closed"));
+        Assert.Equal(Proof.Verified, ProofOf(result).Verdict);
+        Assert.NotEmpty(layout!.Delays);
+    }
+
+    [Fact]
+    public async Task AStuckPaneIsJudgedAfterABoundedWait()
+    {
+        var stuck = new LayoutPart("Properties", "pane", default);
+        var waited = 0;
+
+        var parts = await LayoutChecks.PartsOnceGone(
+            () => [stuck],
+            new HashSet<string> { "Properties" },
+            ms =>
+            {
+                waited += ms;
+                return Task.CompletedTask;
+            }
+        );
+
+        Assert.Equal([stuck], parts);
+        Assert.Equal(LayoutChecks.StableMs, waited);
+    }
+
     [Fact]
     public async Task KeepWithAFloatingPaneThatStaysOpenIsNotVerified()
     {

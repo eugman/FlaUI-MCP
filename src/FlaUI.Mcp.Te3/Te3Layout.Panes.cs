@@ -186,7 +186,7 @@ public sealed partial class Te3Layout
         // A floating pane is a window of its own: closed through that window's Close, then read back.
         var floatingClosed = await CloseFloating(surface, titles, keep);
         // Read back: a press is not a close. Only a pane that is gone counts as closed.
-        var parts = surface.Parts();
+        var parts = await LayoutChecks.PartsOnceGone(surface.Parts, attempted, surface.Delay);
         closed.RemoveAll(c => c is string title && parts.Any(p => p.Title == title));
         closed.AddRange(floatingClosed);
         var remaining = parts.Where(p => p.Kind == "pane").Select(p => p.Title).ToList();

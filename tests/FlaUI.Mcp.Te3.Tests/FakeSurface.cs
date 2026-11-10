@@ -45,7 +45,29 @@ internal sealed class FakeSurface : ILayoutSurface
 
     public nint MainWindow => Main;
 
-    public IReadOnlyList<LayoutPart> Parts() =>
+    /// <summary>Panes that leave only this many layout reads after their Close was pressed.</summary>
+    public Dictionary<string, int> SlowToClose { get; } = [];
+
+    private readonly Dictionary<string, int> leaving = [];
+
+    /// <summary>The waits the code under test asked for, in milliseconds.</summary>
+    public List<int> Delays { get; } = [];
+
+    public IReadOnlyList<LayoutPart> Parts()
+    {
+        foreach (var title in leaving.Keys.ToList())
+        {
+            if (--leaving[title] < 0)
+            {
+                leaving.Remove(title);
+                panes.Remove(title);
+            }
+        }
+
+        return Listed();
+    }
+
+    private IReadOnlyList<LayoutPart> Listed() =>
         [
             .. panes.Select((t, i) => new LayoutPart(t, "pane", new Rectangle(0, 61 + i * 100, 500, 100))),
             .. Documents.Select(t => new LayoutPart(t, "document", new Rectangle(680, 61, 760, 947))),
@@ -68,7 +90,11 @@ internal sealed class FakeSurface : ILayoutSurface
     {
         await inputs.Invoke(() => Task.FromResult(Sent($"pressed {button}", FailingPress == title)), "windows_click");
         Presses.Add($"{button} {title}");
-        if (button == "Close" && !Stuck.Contains(title))
+        if (button == "Close" && SlowToClose.TryGetValue(title, out var reads))
+        {
+            leaving[title] = reads;
+        }
+        else if (button == "Close" && !Stuck.Contains(title))
         {
             panes.Remove(title);
             Documents.Remove(title);
@@ -100,7 +126,11 @@ internal sealed class FakeSurface : ILayoutSurface
         return [new(Main, "Model - Tabular Editor 3", 7, true, false, false), .. Extra, .. late];
     }
 
-    public Task Delay(int ms) => Task.CompletedTask;
+    public Task Delay(int ms)
+    {
+        Delays.Add(ms);
+        return Task.CompletedTask;
+    }
 
     /// <summary>Floating windows whose own Close leaves them open.</summary>
     public HashSet<nint> StuckWindows { get; } = [];
