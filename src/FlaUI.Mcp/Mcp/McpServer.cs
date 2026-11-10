@@ -36,6 +36,9 @@ public class McpServer
     public Task RunAsync(CancellationToken cancellationToken = default) =>
         new McpLineTransport(this).RunConsoleAsync(cancellationToken);
 
+    // The core assembly's version (the project file's <Version>), as major.minor.patch.
+    private static readonly string ServerVersion = typeof(McpServer).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
     // JSON-RPC 2.0: Method not found. A request that fails in the server is -32603 (Internal error).
     private const int MethodNotFound = -32601;
     private static readonly object UnknownMethod = new();
@@ -96,7 +99,7 @@ public class McpServer
                 Tools = new ToolsCapability { ListChanged = false },
                 Experimental = new Dictionary<string, object> { ["flauiOperationStatus"] = new { version = 1 } },
             },
-            ServerInfo = new McpServerInfo { Name = _serverName, Version = "0.1.0" },
+            ServerInfo = new McpServerInfo { Name = _serverName, Version = ServerVersion },
         };
     }
 

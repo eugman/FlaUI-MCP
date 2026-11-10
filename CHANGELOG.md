@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `initialize` reports `serverInfo.version` from the core assembly's version (0.2.0 now) instead of a hard-coded 0.1.0.
 - An unknown JSON-RPC method is answered with -32601 (Method not found) instead of -32603; the message `Unknown method: x` is unchanged, and -32603 stays for a request that fails in the server.
 - `windows_screenshot` validates `savePath` with `HostPath.Validate`, the rules a host's configured paths follow: the forward-slash UNC form (`//server/share/x.png`) passed the old prefix test and a capture could be written to a network share. A `savePath` with `.`/`..` segments, `~` or a `$NAME` variable is now refused, and `%NAME%` is expanded.
 - `windows_click`'s mouse click releases the machine-wide input lease right after the click, before it observes the selection or waits up to 2 s for the dialog a "…" item opens; that wait polls through the desktop seam. Fixed offline 2026-11-10, not live-verified.

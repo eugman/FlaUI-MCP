@@ -107,7 +107,10 @@ public sealed class ProtocolMutationTests
                 .GetInt32()
         );
         Assert.Equal("test-server", result.GetProperty("serverInfo").GetProperty("name").GetString());
-        Assert.Equal("0.1.0", result.GetProperty("serverInfo").GetProperty("version").GetString());
+        // The version of the assembly that serves, not a constant that drifts from the project file.
+        var version = result.GetProperty("serverInfo").GetProperty("version").GetString();
+        Assert.Equal(typeof(McpServer).Assembly.GetName().Version!.ToString(3), version);
+        Assert.NotEqual("0.1.0", version);
     }
 
     [Fact]
