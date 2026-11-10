@@ -14,6 +14,7 @@ Run `pwsh scripts/setup.ps1` once after cloning. It installs CSharpier and turns
 | `git commit` | The staged copy of each C# file must already be formatted, and a product repo must not change files owned by the core. |
 | `git push` | The local pre-push hook runs `pwsh scripts/check.ps1`: formatting, core ownership, known debt not growing, the build with analyzers, and the no-focus unit tests. It also requires a clean worktree and a pushed ref resolving to checked-out `HEAD`, so its gate checks the bytes being pushed. Product repos may add a no-focus `scripts/pre-push-extra.ps1`. |
 | Hosted Build on a pull request or manual dispatch | Runs the full `pwsh scripts/check.ps1` offline gate. |
+| Hosted Release (a version tag, or a manual run) | Runs the full `pwsh scripts/check.ps1` offline gate before it publishes anything. |
 | Hosted Build on a push to `main` | Builds the production project in Release configuration; it does not run the full check or unit tests. Documentation-only changes do not trigger this workflow. |
 
 `pwsh scripts/format.ps1` fixes everything a tool can fix: braces, blank lines and layout.

@@ -26,12 +26,6 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-    
-    strategy:
-      matrix:
-        include:
-          - runtime: win-x64
-            artifact_name: FlaUI-MCP-win-x64
 
     steps:
     - uses: actions/checkout@v4
@@ -70,6 +64,13 @@ jobs:
         dotnet-version: 8.0.x  # test runtime
         global-json-file: global.json  # SDK
 
+    # The same offline gate as a pull request: formatting, analyzers and the no-focus unit tests. Nothing is
+    # published from a commit that fails it. Integration tests never run here.
+    - name: Check
+      run: pwsh -NoProfile -File scripts/check.ps1
+      env:
+        FLAUI_OFFLINE_TESTS: '1'
+
     - name: Restore dependencies
       run: dotnet restore src/FlaUI.Mcp/FlaUI.Mcp.csproj
 
@@ -77,7 +78,7 @@ jobs:
       run: |
         dotnet publish src/FlaUI.Mcp/FlaUI.Mcp.csproj `
           --configuration Release `
-          --runtime ${{ matrix.runtime }} `
+          --runtime win-x64 `
           --self-contained true `
           --output ./publish/self-contained `
           -p:Version=${{ steps.release.outputs.version }} `
@@ -88,21 +89,21 @@ jobs:
       run: |
         dotnet publish src/FlaUI.Mcp/FlaUI.Mcp.csproj `
           --configuration Release `
-          --runtime ${{ matrix.runtime }} `
+          --runtime win-x64 `
           --self-contained false `
           --output ./publish/framework-dependent `
           -p:Version=${{ steps.release.outputs.version }}
 
     - name: Create ZIP archives
       run: |
-        Compress-Archive -Path ./publish/self-contained/* -DestinationPath ./${{ matrix.artifact_name }}-${{ steps.release.outputs.version }}-self-contained.zip
-        Compress-Archive -Path ./publish/framework-dependent/* -DestinationPath ./${{ matrix.artifact_name }}-${{ steps.release.outputs.version }}.zip
+        Compress-Archive -Path ./publish/self-contained/* -DestinationPath ./FlaUI-MCP-win-x64-${{ steps.release.outputs.version }}-self-contained.zip
+        Compress-Archive -Path ./publish/framework-dependent/* -DestinationPath ./FlaUI-MCP-win-x64-${{ steps.release.outputs.version }}.zip
       shell: pwsh
 
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: release-${{ matrix.runtime }}
+        name: release-win-x64
         path: ./*.zip
 
   create-release:
