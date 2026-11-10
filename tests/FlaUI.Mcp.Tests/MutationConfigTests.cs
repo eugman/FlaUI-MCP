@@ -25,6 +25,7 @@ public sealed class MutationConfigTests
         "Core/Interaction/InteractionGrantActivation.cs",
         "Core/Interaction/Heartbeat.cs",
         "Core/Interaction/MouseDriftFilter.cs",
+        "Core/Interaction/InputTally.cs",
         "Core/Interaction/InteractionGrantDisplay.cs",
         "Core/MutationGuard.cs",
         "Core/ProcessPolicy.cs",
