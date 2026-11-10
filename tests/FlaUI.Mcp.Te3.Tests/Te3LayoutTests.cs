@@ -109,12 +109,16 @@ public sealed class Te3LayoutTests
                 {
                     var pane = panes.Dequeue();
                     return pane == "TOM Explorer"
-                        ? throw new InvalidOperationException(Te3Layout.DialogOpened(pane, "Save changes?"))
+                        ? throw new InvalidOperationException(LayoutSteps.DialogOpened(pane, "Save changes?"))
                         : Task.FromResult<object?>(pane);
                 }
             )
         );
-        var result = Te3Layout.Failure(Assert.IsAssignableFrom<InvalidOperationException>(error));
+        var result = LayoutSteps.Failure(
+            Te3Layout.ToolName,
+            Assert.IsAssignableFrom<InvalidOperationException>(error),
+            0
+        );
         Assert.True(result.IsError);
         var payload = System.Text.Json.JsonDocument.Parse(result.Content[0].Text!).RootElement;
         Assert.Equal("Properties", Assert.Single(payload.GetProperty("closed").EnumerateArray()).GetString());
@@ -137,7 +141,7 @@ public sealed class Te3LayoutTests
                 }
             )
         );
-        var result = Te3Layout.Failure(error);
+        var result = LayoutSteps.Failure(Te3Layout.ToolName, error, 0);
         return System.Text.Json.JsonDocument.Parse(result.Content[0].Text!).RootElement.GetProperty("closed");
     }
 
@@ -145,7 +149,7 @@ public sealed class Te3LayoutTests
     public async Task AStepWhoseInputWentOutBeforeItFailedIsRecordedAsAttempted()
     {
         var closed = await FailedProgress(
-            new InvalidOperationException(Te3Layout.DialogOpened("TOM Explorer", "Save?"))
+            new InvalidOperationException(LayoutSteps.DialogOpened("TOM Explorer", "Save?"))
         );
 
         Assert.Equal("Properties", closed[0].GetString());
@@ -245,7 +249,10 @@ public sealed class Te3LayoutTests
 
         Assert.Equal(0, inputs.Sent);
         Assert.Equal(["Properties"], sent);
-        Assert.Equal("timed_out_pending", Te3Layout.Failure(error, inputs.Sent).Outcome?.Dispatch);
+        Assert.Equal(
+            "timed_out_pending",
+            LayoutSteps.Failure(Te3Layout.ToolName, error, inputs.Sent).Outcome?.Dispatch
+        );
     }
 
     [Theory]
@@ -253,7 +260,7 @@ public sealed class Te3LayoutTests
     [InlineData(2, true)]
     public void ALayoutFailureSaysWhetherInputWasSent(int inputsSent, bool dispatched)
     {
-        var result = Te3Layout.Failure(new InvalidOperationException("Pane is gone"), inputsSent);
+        var result = LayoutSteps.Failure(Te3Layout.ToolName, new InvalidOperationException("Pane is gone"), inputsSent);
         var reply = System.Text.Json.JsonDocument.Parse(result.Content[0].Text!).RootElement;
 
         Assert.Contains("Pane is gone", reply.GetProperty("error").GetString());
@@ -266,11 +273,14 @@ public sealed class Te3LayoutTests
     [Fact]
     public async Task ACancelledLayoutCallStillSaysWhatItSent()
     {
-        var result = await Te3Layout.Respond(async inputs =>
-        {
-            await inputs.Invoke(Click("Clicked Close"), tool: "windows_click");
-            throw new OperationCanceledException("stopped");
-        });
+        var result = await LayoutSteps.Respond(
+            Te3Layout.ToolName,
+            async inputs =>
+            {
+                await inputs.Invoke(Click("Clicked Close"), tool: "windows_click");
+                throw new OperationCanceledException("stopped");
+            }
+        );
 
         Assert.True(result.IsError);
         Assert.Equal("partial", result.Outcome?.Dispatch);
@@ -281,14 +291,20 @@ public sealed class Te3LayoutTests
     public async Task EachLayoutCallCountsOnlyItsOwnInputs()
     {
         var first = new TaskCompletionSource();
-        var slow = Te3Layout.Respond(async inputs =>
-        {
-            await inputs.Invoke(Click("Clicked"), tool: "windows_click");
-            await first.Task;
-            throw new InvalidOperationException("Pane is gone");
-        });
+        var slow = LayoutSteps.Respond(
+            Te3Layout.ToolName,
+            async inputs =>
+            {
+                await inputs.Invoke(Click("Clicked"), tool: "windows_click");
+                await first.Task;
+                throw new InvalidOperationException("Pane is gone");
+            }
+        );
 
-        var quick = await Te3Layout.Respond(_ => throw new InvalidOperationException("No TE3 window"));
+        var quick = await LayoutSteps.Respond(
+            Te3Layout.ToolName,
+            _ => throw new InvalidOperationException("No TE3 window")
+        );
         first.SetResult();
 
         Assert.Equal(0, quick.Outcome?.InputsSent);
@@ -324,7 +340,9 @@ public sealed class Te3LayoutTests
         Assert.Equal(["Properties"], sent);
         Assert.Equal(
             "partial",
-            Te3Layout.Failure(new InvalidOperationException("drag refused"), inputs.Sent).Outcome?.Dispatch
+            LayoutSteps
+                .Failure(Te3Layout.ToolName, new InvalidOperationException("drag refused"), inputs.Sent)
+                .Outcome?.Dispatch
         );
     }
 }

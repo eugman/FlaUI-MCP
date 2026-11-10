@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
@@ -9,25 +8,8 @@ public sealed partial class Te3Page
     public async Task DefaultLayout()
     {
         await Click(WindowMenuTarget());
-        AutomationElement? element = null;
-        var opening = Stopwatch.StartNew();
-        while (element == null && opening.Elapsed < TimeSpan.FromSeconds(5))
-        {
-            try
-            {
-                element = await Resolve(DefaultLayoutTarget());
-            }
-            catch (InvalidOperationException)
-            {
-                await Task.Delay(100);
-            }
-        }
-
-        if (element == null)
-        {
-            throw new TimeoutException("Window menu did not expose Default layout");
-        }
-
+        // Resolve polls for the entry itself and throws when the menu never shows it.
+        var element = await Resolve(DefaultLayoutTarget());
         var popup = await MenuPopup(element);
         // TE3's non-activating menu is a same-process window without a native owner.
         // Keep the main window foreground and require hit testing against this exact popup.

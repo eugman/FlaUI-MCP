@@ -329,11 +329,9 @@ public static partial class RunExecutor
     internal static void RecordUnverified(RunManifest manifest, InputTally inputs) =>
         manifest.UnverifiedSteps = [.. inputs.Unverified];
 
-    internal static SettingsLease AcquireSettings(RunManifest manifest, Action save, Func<SettingsLease>? create = null)
+    internal static SettingsLease AcquireSettings(RunManifest manifest, Action save, Func<SettingsLease> create)
     {
-        var settings = (
-            create ?? (() => new SettingsLease(manifestPath: Path.Combine(manifest.Output, "manifest.json")))
-        )();
+        var settings = create();
         // Persist before normalization so a hard-killed run still reads as needing recovery.
         manifest.SettingsBackup = settings.BackupDirectory;
         manifest.SettingsRestored = false;

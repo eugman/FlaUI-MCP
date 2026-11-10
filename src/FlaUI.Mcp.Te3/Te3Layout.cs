@@ -54,7 +54,7 @@ public sealed partial class Te3Layout(
         {
             var result = FailurePause.After(
                 grant,
-                await Respond(inputs => Run(arguments, inputs)),
+                await LayoutSteps.Respond(ToolName, inputs => Run(arguments, inputs)),
                 observation: readOnly && Observes(arguments)
             );
             settled = true;
@@ -155,14 +155,6 @@ public sealed partial class Te3Layout(
 
     private static Window Live(Window? window) =>
         window ?? throw new InvalidOperationException("This action needs the live TE3 window.");
-
-    internal static string DialogOpened(string closing, string dialog) => LayoutSteps.DialogOpened(closing, dialog);
-
-    internal static Task<McpToolResult> Respond(Func<InputTally, Task<McpToolResult>> run) =>
-        LayoutSteps.Respond(ToolName, run);
-
-    internal static McpToolResult Failure(Exception ex, int inputsSent = 0) =>
-        LayoutSteps.Failure(ToolName, ex, inputsSent);
 
     /// <summary>Registers the TE3 window for the raw descendant refs this tool clicks.</summary>
     internal static string Bind(AutomationHost host, nint hwnd, int processId)

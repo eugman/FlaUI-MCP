@@ -79,7 +79,9 @@ public sealed class PresetReportTests
     {
         var failure = LayoutSteps.ReadBack(await FailedPreset(), () => new[] { new { title = "TOM Explorer" } });
 
-        var reply = JsonDocument.Parse(Te3Layout.Failure(failure, 30).Content[0].Text!).RootElement;
+        var reply = JsonDocument
+            .Parse(LayoutSteps.Failure(Te3Layout.ToolName, failure, 30).Content[0].Text!)
+            .RootElement;
 
         var changes = reply.GetProperty("changes");
         Assert.Equal(680, changes[0].GetProperty("reached").GetInt32());
@@ -102,12 +104,14 @@ public sealed class PresetReportTests
             () => throw new System.Runtime.InteropServices.COMException("element gone")
         );
 
-        var reply = JsonDocument.Parse(Te3Layout.Failure(failure, 30).Content[0].Text!).RootElement;
+        var reply = JsonDocument
+            .Parse(LayoutSteps.Failure(Te3Layout.ToolName, failure, 30).Content[0].Text!)
+            .RootElement;
 
         var readBack = reply.GetProperty("layoutAfterFailure");
         Assert.False(readBack.GetProperty("readBack").GetBoolean());
         Assert.Contains("element gone", readBack.GetProperty("error").GetString());
         Assert.Contains("did not reach", reply.GetProperty("error").GetString());
-        Assert.Equal("partial", Te3Layout.Failure(failure, 30).Outcome?.Dispatch);
+        Assert.Equal("partial", LayoutSteps.Failure(Te3Layout.ToolName, failure, 30).Outcome?.Dispatch);
     }
 }
