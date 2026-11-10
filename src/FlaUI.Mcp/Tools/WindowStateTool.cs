@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using FlaUI.Mcp.Core;
 
@@ -122,13 +121,14 @@ public sealed class WindowStateTool(ElementRegistry refs, PendingInvokeTracker p
 
     private static string WaitForState(nint hwnd, string requested)
     {
-        var clock = Stopwatch.StartNew();
-        var observed = InputDesktop.Current.WindowState(hwnd);
-        while (observed != requested && clock.Elapsed < SettleTimeout)
+        var desktop = InputDesktop.Current;
+        var started = desktop.Time.GetTimestamp();
+        var observed = desktop.WindowState(hwnd);
+        while (observed != requested && desktop.Time.GetElapsedTime(started) < SettleTimeout)
         {
             OperationContext.Check();
-            Thread.Sleep(SettlePoll);
-            observed = InputDesktop.Current.WindowState(hwnd);
+            desktop.Pause(SettlePoll);
+            observed = desktop.WindowState(hwnd);
         }
 
         return observed;

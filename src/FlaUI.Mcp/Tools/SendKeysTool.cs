@@ -25,6 +25,9 @@ public class SendKeysTool : ToolBase
         VirtualKeyShort.RWIN,
     };
 
+    private static readonly TimeSpan BetweenChords = TimeSpan.FromMilliseconds(30);
+    private static readonly TimeSpan KeyHold = TimeSpan.FromMilliseconds(10);
+
     private readonly ProcessPolicy _processPolicy;
     private readonly KeyboardTargets _targets;
 
@@ -171,7 +174,7 @@ public class SendKeysTool : ToolBase
                 completed++;
                 if (!hasChord)
                 {
-                    Thread.Sleep(30);
+                    InputDesktop.Current.Pause(BetweenChords);
                 }
 
                 focus = InputDesktop.Current.FocusedControl();
@@ -346,7 +349,7 @@ public class SendKeysTool : ToolBase
             if (keys.Count == 1)
             {
                 Keyboard.Press(keys[0]);
-                Thread.Sleep(10);
+                InputDesktop.Current.Pause(KeyHold);
                 Keyboard.Release(keys[0]);
                 return;
             }

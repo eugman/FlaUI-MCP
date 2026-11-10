@@ -176,6 +176,8 @@ public class TypeTool : ToolBase
 /// </summary>
 public partial class FillTool : ToolBase
 {
+    private static readonly TimeSpan ReadBackPoll = TimeSpan.FromMilliseconds(50);
+
     private readonly ElementRegistry _elementRegistry;
     private readonly PendingInvokeTracker _invokeTracker;
 
@@ -354,7 +356,7 @@ public partial class FillTool : ToolBase
                         OperationContext.Check();
                         _elementRegistry.ValidateReference(refId, handle);
                     },
-                    () => Thread.Sleep(50)
+                    () => InputDesktop.Current.Pause(ReadBackPoll)
                 )
                 .Text;
         }
@@ -437,7 +439,7 @@ public partial class FillTool : ToolBase
                     validate();
                     input.Verify();
                 },
-                () => Thread.Sleep(50)
+                () => InputDesktop.Current.Pause(ReadBackPoll)
             );
         }
         catch (InputRefusedException moved) when (moved.Code == RefusalCodes.TargetChanged)

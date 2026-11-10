@@ -24,7 +24,7 @@ internal static class PointerActions
         input.MoveTo(point);
         if (hoverMs > 0)
         {
-            Thread.Sleep(hoverMs);
+            InputDesktop.Current.Pause(TimeSpan.FromMilliseconds(hoverMs));
         }
 
         return InputDesktop.Current.PointerPosition();
@@ -128,7 +128,7 @@ internal static class PointerActions
             foreach (var point in path)
             {
                 input.MoveTo(point);
-                Thread.Sleep(StepDelay);
+                InputDesktop.Current.Pause(StepDelay);
             }
 
             var moved = DropMoved(target, to, dropMoved);
