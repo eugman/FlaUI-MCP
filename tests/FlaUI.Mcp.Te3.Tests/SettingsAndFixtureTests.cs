@@ -34,6 +34,133 @@ public sealed class SettingsAndFixtureTests : IDisposable
     }
 
     [Fact]
+    public void VerifiedRestoreRemovesTheBackupDirectory()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var lease = new SettingsLease(root, backup);
+        lease.Normalize();
+
+        lease.Restore();
+        Assert.True(Directory.Exists(backup));
+        Assert.True(lease.DiscardBackup());
+
+        Assert.False(Directory.Exists(backup));
+        Assert.Equal("{}", File.ReadAllText(Path.Combine(root, "UiPreferences.json")));
+    }
+
+    [Fact]
+    public void BackupIsKeptUntilARestoreSucceeded()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var lease = new SettingsLease(root, backup);
+
+        Assert.False(lease.DiscardBackup());
+
+        Assert.True(File.Exists(Path.Combine(backup, "restore.json")));
+    }
+
+    [Fact]
+    public void BackupIsKeptAfterAChecksumMismatch()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var lease = new SettingsLease(root, backup);
+        File.WriteAllText(Path.Combine(backup, "UiPreferences.json"), "tampered");
+
+        Assert.Throws<IOException>(lease.Restore);
+        Assert.False(lease.DiscardBackup());
+
+        Assert.True(File.Exists(Path.Combine(backup, "restore.json")));
+        Assert.Throws<IOException>(() => SettingsLease.Recover(backup, true, root));
+        Assert.True(Directory.Exists(backup));
+    }
+
+    [Fact]
+    public void BackupIsKeptAfterAPartialRestoration()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var blocked = Path.Combine(root, "Preferences.json");
+        File.WriteAllText(blocked, "{}");
+        var backup = Path.Combine(root, "backup");
+        var lease = new SettingsLease(root, backup);
+        File.Delete(blocked);
+        Directory.CreateDirectory(blocked);
+
+        Assert.Throws<AggregateException>(lease.Restore);
+        Assert.False(lease.DiscardBackup());
+        Assert.Throws<AggregateException>(() => SettingsLease.Recover(backup, true, root));
+
+        Assert.True(File.Exists(Path.Combine(backup, "restore.json")));
+    }
+
+    [Fact]
+    public void RecoverRemovesTheBackupOnlyAfterTheManifestIsMarked()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var manifestPath = Path.Combine(root, "manifest.json");
+        File.WriteAllText(
+            manifestPath,
+            JsonSerializer.Serialize(
+                new RunManifest
+                {
+                    SettingsBackup = backup,
+                    SettingsRestored = false,
+                    NeedsRecovery = true,
+                },
+                RunConfig.Json
+            )
+        );
+        new SettingsLease(root, backup, manifestPath).Normalize();
+
+        Assert.True(SettingsLease.Recover(backup, false, root));
+
+        Assert.False(Directory.Exists(backup));
+        Assert.False(ArtifactFiles.ReadManifest(manifestPath).NeedsRecovery);
+        var again = Assert.Throws<InvalidOperationException>(() => SettingsLease.Recover(backup, false, root));
+        Assert.Contains("already restored and removed", again.Message);
+    }
+
+    [Fact]
+    public void RecoverKeepsTheBackupWhenTheManifestNamesAnotherBackup()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var manifestPath = Path.Combine(root, "manifest.json");
+        File.WriteAllText(
+            manifestPath,
+            JsonSerializer.Serialize(
+                new RunManifest { SettingsBackup = Path.Combine(root, "other-backup"), NeedsRecovery = true },
+                RunConfig.Json
+            )
+        );
+        new SettingsLease(root, backup, manifestPath).Normalize();
+
+        Assert.False(SettingsLease.Recover(backup, false, root));
+
+        Assert.True(Directory.Exists(backup));
+    }
+
+    [Fact]
+    public void ADirectoryWithOtherContentOrTheSettingsFolderIsNeverDeleted()
+    {
+        File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");
+        var backup = Path.Combine(root, "backup");
+        var lease = new SettingsLease(root, backup);
+        lease.Restore();
+        File.WriteAllText(Path.Combine(backup, "notes.txt"), "keep");
+
+        Assert.False(lease.DiscardBackup());
+        Assert.True(File.Exists(Path.Combine(backup, "notes.txt")));
+        File.WriteAllText(Path.Combine(root, "restore.json"), "{}");
+        Assert.False(SettingsLease.TryDeleteBackup(root, root));
+        Assert.False(SettingsLease.TryDeleteBackup(SettingsLease.DefaultBackupRoot, root));
+        Assert.True(File.Exists(Path.Combine(root, "UiPreferences.json")));
+    }
+
+    [Fact]
     public void AcquiredSettingsPersistRecoveryNeedBeforeNormalization()
     {
         File.WriteAllText(Path.Combine(root, "UiPreferences.json"), "{}");

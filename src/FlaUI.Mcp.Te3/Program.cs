@@ -33,7 +33,7 @@ public static class RunnerCommands
         {
             restored = backup,
             verified = "sha256",
-            backupRetained = true,
+            backupRetained = Directory.Exists(backup),
             manifestMarked,
         };
     }

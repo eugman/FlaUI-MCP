@@ -290,6 +290,16 @@ public static partial class RunExecutor
             }
 
             FinalizeArtifacts(manifest, Save, () => ArtifactFiles.WriteIndex(manifest));
+            // The backup is needed only while the saved manifest still says recovery is required.
+            if (
+                settings != null
+                && manifest.SettingsRestored
+                && !manifest.NeedsRecovery
+                && string.IsNullOrEmpty(manifest.CleanupError)
+            )
+            {
+                settings.DiscardBackup();
+            }
         }
 
         return new(manifestPath, manifest);

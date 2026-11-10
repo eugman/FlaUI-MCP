@@ -23,6 +23,7 @@ public sealed class SettingsLease
     public string BackupDirectory { get; }
     private readonly string directory;
     private BackupInfo info;
+    private bool restoreVerified;
 
     public static void Validate(string? directory = null)
     {
@@ -91,7 +92,68 @@ public sealed class SettingsLease
         WriteAtomically(path, temporary => File.WriteAllBytes(temporary, bytes));
     }
 
-    public void Restore() => RestoreBackup(BackupDirectory, directory);
+    public void Restore()
+    {
+        RestoreBackup(BackupDirectory, directory);
+        restoreVerified = true;
+    }
+
+    /// <summary>
+    /// Removes this lease's backup once <see cref="Restore"/> has succeeded and been verified. Call it only after
+    /// anything that still points at the backup (the run manifest) no longer needs it. Best effort.
+    /// </summary>
+    /// <returns>True when the backup directory is gone.</returns>
+    public bool DiscardBackup() => restoreVerified && TryDeleteBackup(BackupDirectory, directory);
+
+    /// <summary>
+    /// Deletes a backup directory, but only a directory holding nothing except the leased file names and
+    /// restore.json: never the settings folder, the backup root, a drive root or a folder with other content.
+    /// Never throws; a backup that cannot be removed is simply kept.
+    /// </summary>
+    internal static bool TryDeleteBackup(string backup, string settingsDirectory)
+    {
+        try
+        {
+            var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(backup));
+            var protectedPath =
+                Path.GetPathRoot(full) == full + Path.DirectorySeparatorChar
+                || SamePath(full, settingsDirectory)
+                || SamePath(full, DefaultBackupRoot);
+            if (protectedPath || !File.Exists(Path.Combine(full, "restore.json")))
+            {
+                return false;
+            }
+
+            var owned = new HashSet<string>(Names.Append("restore.json"), StringComparer.OrdinalIgnoreCase);
+            var entries = Directory.GetFileSystemEntries(full);
+            if (entries.Any(entry => !IsOwnedFile(entry, owned)))
+            {
+                return false;
+            }
+
+            // restore.json last: while it exists the backup still reads as a recoverable one.
+            foreach (var entry in entries.OrderBy(e => Path.GetFileName(e) == "restore.json"))
+            {
+                File.Delete(entry);
+            }
+
+            Directory.Delete(full);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsOwnedFile(string entry, HashSet<string> owned) =>
+        owned.Contains(Path.GetFileName(entry))
+        && !File.GetAttributes(entry).HasFlag(FileAttributes.Directory)
+        && !File.GetAttributes(entry).HasFlag(FileAttributes.ReparsePoint);
+
+    private static bool SamePath(string a, string b) =>
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(a))
+            .Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The recover command: restores an interrupted run's backup, refusing (unless forced) when the settings
@@ -112,7 +174,14 @@ public sealed class SettingsLease
         }
 
         RestoreBackup(backup, expectedDirectory);
-        return MarkRecovered(info.Manifest, backup);
+        var marked = MarkRecovered(info.Manifest, backup);
+        // Gone only when nothing records a run still needing it: no manifest, or this run's manifest now says restored.
+        if (marked || info.Manifest == null || !File.Exists(info.Manifest))
+        {
+            TryDeleteBackup(backup, info.Directory);
+        }
+
+        return marked;
     }
 
     // Each file must still be either its pre-run original or what Normalize wrote.
@@ -164,7 +233,15 @@ public sealed class SettingsLease
 
     private static BackupInfo ReadInfo(string backup, string? expectedDirectory)
     {
-        var info = JsonSerializer.Deserialize<BackupInfo>(File.ReadAllText(Path.Combine(backup, "restore.json")))!;
+        var infoPath = Path.Combine(backup, "restore.json");
+        if (!File.Exists(infoPath))
+        {
+            throw new InvalidOperationException(
+                $"No settings backup at {backup}: it was already restored and removed, or it never existed. Nothing was restored."
+            );
+        }
+
+        var info = JsonSerializer.Deserialize<BackupInfo>(File.ReadAllText(infoPath))!;
         if (
             !Path.GetFullPath(info.Directory)
                 .Equals(Path.GetFullPath(expectedDirectory ?? DefaultDirectory), StringComparison.OrdinalIgnoreCase)
