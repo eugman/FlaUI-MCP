@@ -13,18 +13,21 @@ namespace FlaUI.Mcp.Tests;
 public sealed class PasteAndRefusalStatusTests
 {
     [Theory]
-    [InlineData("unchanged", false)]
-    [InlineData("not-applied", true)]
-    [InlineData("mismatch", true)]
-    [InlineData("verified", false)]
-    [InlineData("not-established", false)]
-    public void PasteReplyMapsVerificationToError(string verification, bool failed)
+    [InlineData("unchanged", false, "unverified")]
+    [InlineData("mismatch", true, "failed")]
+    [InlineData("verified", false, "ok")]
+    [InlineData("not-established", false, "unverified")]
+    [InlineData("unavailable", false, "unverified")]
+    public void PasteReplyMapsVerificationToErrorAndStatus(string verification, bool failed, string status)
     {
         var reply = PasteTool.PasteReply("Sent Ctrl+V for 3 characters to w1e1.", new(verification, " sentence"));
 
         Assert.Equal(failed, reply.IsError == true);
         Assert.Equal("completed", reply.Outcome!.Dispatch);
         Assert.Equal(verification, reply.Outcome.Verification);
+        // A value that did not change proves nothing about where Ctrl+V went: unverified, never ok.
+        Assert.Equal(verification, reply.Outcome.Proof!.Verdict);
+        Assert.Equal(status, Proof.StatusFor(reply.Outcome.Proof.Verdict));
     }
 
     [Fact]

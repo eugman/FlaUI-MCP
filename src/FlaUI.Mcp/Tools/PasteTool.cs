@@ -187,8 +187,8 @@ public sealed class PasteTool(
     }
 
     /// <summary>
-    /// The reply with its verdict. An unchanged value without the text is unverified because the app may
-    /// process Ctrl+V later. A changed value without the text is a read-back mismatch. Dispatch stays
+    /// The reply with its verdict. An unchanged value, with or without the text, is unverified: the app may
+    /// process Ctrl+V later, or the keystroke may have gone to another control. A changed value without the text is a read-back mismatch. Dispatch stays
     /// completed after Ctrl+V even when verification is unavailable or mismatched.
     /// </summary>
     internal static McpToolResult PasteReply(
@@ -197,20 +197,14 @@ public sealed class PasteTool(
         string? observed = null,
         string? expected = null
     ) =>
-        (verdict.Verification is "not-applied" or "mismatch" ? ErrorResult(text) : TextResult(text)) with
+        (verdict.Verification == Proof.Mismatch ? ErrorResult(text) : TextResult(text)) with
         {
-            // The Value read back after Ctrl+V is independent of the keystroke that pasted. An identical re-paste
-            // (unchanged) is a no-op for the proof, so its status is ok.
+            // The Value read back after Ctrl+V is independent of the keystroke that pasted. An unchanged value
+            // that already held the text is not proof Ctrl+V reached this control, so its status is unverified.
             Outcome = new ToolOutcome("completed", "not-tracked")
             {
                 Verification = verdict.Verification,
-                Proof = new Proof(
-                    verdict.Verification == "unchanged" ? Proof.NoOp : verdict.Verification,
-                    observed,
-                    expected,
-                    "Value",
-                    Independent: true
-                ),
+                Proof = new Proof(verdict.Verification, observed, expected, "Value", Independent: true),
             },
         };
 
