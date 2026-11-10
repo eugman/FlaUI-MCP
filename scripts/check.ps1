@@ -83,7 +83,10 @@ Step 'Known debt does not grow' { CheckDebt }
 Step 'Build with analyzers' { dotnet build FlaUI.Mcp.slnx -nologo -v q -m:2 -nodeReuse:false }
 
 # Only reviewed no-focus projects may run in the background gate.
-$approvedTests = @('FlaUI.Mcp.Tests', 'FlaUI.Mcp.Te3.Tests', 'FlaUI.Mcp.PowerBi.Tests', 'FlaUI.Mcp.Camtasia.Tests')
+# These are the core's own and, in a product repo, the one named after its host project (src/FlaUI.Mcp.<Product>).
+$approvedTests = @('FlaUI.Mcp.Tests') + @(
+    Get-ChildItem src -Directory | Where-Object Name -like 'FlaUI.Mcp.?*' | ForEach-Object { "$($_.Name).Tests" }
+)
 $unitTests = Get-ChildItem tests -Filter *.csproj -Recurse |
     Where-Object { $_.BaseName -in $approvedTests }
 $unknownTests = Get-ChildItem tests -Filter '*Tests.csproj' -Recurse |
