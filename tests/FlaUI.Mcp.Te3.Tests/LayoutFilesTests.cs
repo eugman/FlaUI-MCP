@@ -118,6 +118,25 @@ public sealed class LayoutFilesTests : IDisposable
     }
 
     [Fact]
+    public void ARestoreWhoseCopyAsideFailsRestoresNothingAndLeavesNoPartialFolder()
+    {
+        LayoutFiles.Snapshot(settings, Snapshot);
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "arranged since");
+
+        IOException error;
+        // Layouts.json is copied aside first; the second file cannot be read, so the copy stops part-way.
+        using (File.Open(Path.Combine(settings, "UiPreferences.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            error = Assert.Throws<IOException>(() => LayoutFiles.Restore(Snapshot, settings, false, false));
+        }
+
+        Assert.Contains("nothing was restored", error.Message);
+        Assert.DoesNotContain("take the snapshot again", error.Message);
+        Assert.Empty(Directory.GetDirectories(root, "snapshot.replaced-*"));
+        Assert.Equal("arranged since", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
+    }
+
+    [Fact]
     public void RestoreIsRefusedWhileTe3RunsUnlessTheUserAsked()
     {
         // TE3 rewrites these files when it closes, so a restore under a running TE3 is lost.

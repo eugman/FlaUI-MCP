@@ -79,7 +79,7 @@ internal static class LayoutFiles
             hashes[name] = ArtifactFiles.Sha256(destination);
             if (hashes[name] != ArtifactFiles.Sha256(source))
             {
-                throw new IOException($"{name} changed while it was copied; take the snapshot again with TE3 closed.");
+                throw new IOException($"{name} changed while it was copied; try again with TE3 closed.");
             }
         }
 
@@ -125,7 +125,7 @@ internal static class LayoutFiles
 
         // What the restore replaces is copied aside first, as a snapshot of its own: restoring that undoes this.
         var replaced = $"{snapshot}.replaced-{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N")[..8]}";
-        Snapshot(settings, replaced);
+        CopyAside(settings, replaced);
         string[] removed;
         try
         {
@@ -161,6 +161,32 @@ internal static class LayoutFiles
             verified = true,
             readBack = Hashes(settings, list.Files.Keys),
         };
+    }
+
+    // A copy that stops part-way is removed: a partial folder would read as a restorable snapshot of what was there.
+    private static void CopyAside(string settings, string replaced)
+    {
+        try
+        {
+            Snapshot(settings, replaced);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            try
+            {
+                Directory.Delete(replaced, recursive: true);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                // Kept beside the snapshot; the error below is the one to report.
+            }
+
+            throw new IOException(
+                $"The current layout files could not be copied aside before the restore ({error.Message}); "
+                    + "nothing was restored.",
+                error
+            );
+        }
     }
 
     // Each file through a temporary beside it, so a failed copy leaves neither a half-written file nor the temporary.
