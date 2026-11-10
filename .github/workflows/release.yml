@@ -70,6 +70,17 @@ jobs:
         dotnet-version: 8.0.x  # test runtime
         global-json-file: global.json  # SDK
 
+    # The offline gate before anything is published: a tag on a commit that never went through a pull request
+    # would otherwise ship unchecked. Formatting, analyzers and the no-focus tests; no desktop input, no TE3.
+    # The core remote lets check.ps1 confirm this repo has not edited files owned by the shared core.
+    - name: Check
+      shell: pwsh
+      run: |
+        git remote add core https://github.com/eugman/FlaUI-MCP-Core.git
+        git fetch --quiet --no-tags core main
+        pwsh -NoProfile -File scripts/check.ps1
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     - name: Restore dependencies
       run: dotnet restore FlaUI.Mcp.slnx
 
