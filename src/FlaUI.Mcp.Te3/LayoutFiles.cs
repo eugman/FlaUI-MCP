@@ -97,7 +97,8 @@ internal static class LayoutFiles
     /// <summary>
     /// Copies a snapshot back and removes the files it did not have. Refused while TE3 runs (its close would overwrite
     /// the restore) unless <paramref name="whileRunning"/>, and refused before any copy when a snapshot file no longer
-    /// has its hash. A restore whose read-back differs is a failure.
+    /// has its hash. The files it replaces are first copied to a snapshot beside this one (replaced in the reply).
+    /// A restore whose read-back differs is a failure.
     /// </summary>
     public static object Restore(string snapshot, string settings, bool te3Running, bool whileRunning)
     {
@@ -122,17 +123,21 @@ internal static class LayoutFiles
             );
         }
 
-        foreach (var name in list.Files.Keys)
+        // What the restore replaces is copied aside first, as a snapshot of its own: restoring that undoes this.
+        var replaced = $"{snapshot}.replaced-{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N")[..8]}";
+        Snapshot(settings, replaced);
+        string[] removed;
+        try
         {
-            var temporary = Path.Combine(settings, name + "." + Guid.NewGuid().ToString("N") + ".tmp");
-            File.Copy(sources[name], temporary);
-            File.Move(temporary, destinations[name], overwrite: true);
+            removed = Apply(list, sources, destinations);
         }
-
-        var removed = list.Missing.Where(n => File.Exists(destinations[n])).ToArray();
-        foreach (var name in removed)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            File.Delete(destinations[name]);
+            throw new IOException(
+                $"The restore stopped part-way ({error.Message}). The files it was replacing are in {replaced}; "
+                    + "restore that folder to put them back.",
+                error
+            );
         }
 
         var unverified = list
@@ -143,7 +148,8 @@ internal static class LayoutFiles
         if (unverified.Count > 0)
         {
             throw new IOException(
-                $"The restore did not read back for {string.Join(", ", unverified)}; inspect the settings folder."
+                $"The restore did not read back for {string.Join(", ", unverified)}; inspect the settings folder. "
+                    + $"The files it replaced are in {replaced}."
             );
         }
 
@@ -151,9 +157,31 @@ internal static class LayoutFiles
         {
             restored = list.Files,
             removed,
+            replaced,
             verified = true,
             readBack = Hashes(settings, list.Files.Keys),
         };
+    }
+
+    // Each file through a temporary beside it, so a failed copy leaves neither a half-written file nor the temporary.
+    private static string[] Apply(
+        SnapshotList list,
+        Dictionary<string, string> sources,
+        Dictionary<string, string> destinations
+    )
+    {
+        foreach (var name in list.Files.Keys)
+        {
+            SettingsLease.WriteAtomically(destinations[name], temporary => File.Copy(sources[name], temporary));
+        }
+
+        var removed = list.Missing.Where(n => File.Exists(destinations[n])).ToArray();
+        foreach (var name in removed)
+        {
+            File.Delete(destinations[name]);
+        }
+
+        return removed;
     }
 
     // The SHA-256 of each file as it reads now, for the reply's proof.

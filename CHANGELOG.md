@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- `te3_layout restore` first copies the layout files it is about to replace into a snapshot of their own beside the one restored (`<name>.replaced-<time>`, returned as `replaced`); restoring that folder undoes the restore. A restore that stops part-way no longer leaves a `.tmp` file, and its error names that folder.
 - **Breaking:** `te3_native_preflight` accepts a `tokenEnv` only when its name starts with `FLAUI_TE3_` (for example `FLAUI_TE3_MCP_TOKEN`); any other variable is refused before a request is made, so a caller cannot have another service's token sent to a loopback listener. Rename the variable that holds TE3's MCP access token.
 - The run manifest has `settingsBackupRemoved`: true once the backup `settingsBackup` names was removed after a verified restore, by the run or by `recover`.
 - A run whose TE3 did not exit on its close request and had to be killed says so in the manifest's `diagnosticNotes`.

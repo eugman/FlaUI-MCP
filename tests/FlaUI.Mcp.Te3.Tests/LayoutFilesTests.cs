@@ -82,6 +82,42 @@ public sealed class LayoutFilesTests : IDisposable
     }
 
     [Fact]
+    public void RestoreKeepsARestorableCopyOfTheFilesItReplaces()
+    {
+        LayoutFiles.Snapshot(settings, Snapshot);
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "arranged since");
+
+        var result = JsonSerializer.SerializeToElement(LayoutFiles.Restore(Snapshot, settings, false, false));
+
+        var replaced = result.GetProperty("replaced").GetString()!;
+        Assert.StartsWith(Snapshot + ".replaced-", replaced);
+        Assert.Equal("arranged since", File.ReadAllText(Path.Combine(replaced, "Layouts.json")));
+        Assert.False(File.Exists(Path.Combine(replaced, "Preferences.json")));
+        LayoutFiles.Restore(replaced, settings, false, false);
+        Assert.Equal("arranged since", File.ReadAllText(Path.Combine(settings, "Layouts.json")));
+    }
+
+    [Fact]
+    public void ARestoreThatStopsPartWayLeavesNoTemporaryFileAndNamesTheCopy()
+    {
+        LayoutFiles.Snapshot(settings, Snapshot);
+        File.WriteAllText(Path.Combine(settings, "Layouts.json"), "arranged since");
+        File.WriteAllText(Path.Combine(settings, "UiPreferences.json"), "{}");
+
+        IOException error;
+        // Readable, so it can be copied aside, but it cannot be replaced while this handle is open.
+        using (File.Open(Path.Combine(settings, "UiPreferences.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            error = Assert.Throws<IOException>(() => LayoutFiles.Restore(Snapshot, settings, false, false));
+        }
+
+        Assert.Empty(Directory.GetFiles(settings, "*.tmp"));
+        var replaced = Assert.Single(Directory.GetDirectories(root, "snapshot.replaced-*"));
+        Assert.Contains(replaced, error.Message);
+        Assert.Equal("arranged since", File.ReadAllText(Path.Combine(replaced, "Layouts.json")));
+    }
+
+    [Fact]
     public void RestoreIsRefusedWhileTe3RunsUnlessTheUserAsked()
     {
         // TE3 rewrites these files when it closes, so a restore under a running TE3 is lost.
