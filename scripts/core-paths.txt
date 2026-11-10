@@ -17,6 +17,12 @@ scripts/pre-push.ps1
 scripts/test-push-tip.ps1
 scripts/verify-release-tag.ps1
 scripts/test-release-tag.ps1
+scripts/test-entrypoint-paths.ps1
+scripts/test-pre-commit-quoting.ps1
+scripts/test-format-literal-paths.ps1
+scripts/test-mutation-worktree-cleanup.ps1
+scripts/test-mutation-worktree-registration.ps1
+scripts/quote-powershell-literal.ps1
 global.json
 docs/code-quality.md
 .githooks/
