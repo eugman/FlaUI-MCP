@@ -47,6 +47,23 @@ public sealed class MachineLeaseTests
     }
 
     [Fact]
+    public void AMutexReleaseThatFailsStillFreesTheLeaseForTheNextInput()
+    {
+        Mutex? opened = null;
+        var owner = new DesktopLease.MutexOwner(() => opened = new Mutex(false));
+        var lease = DesktopLease.Acquire(TimeSpan.FromSeconds(2), CancellationToken.None, owner);
+        // The handle is gone by the time the lease is returned, so the release on the owner thread throws.
+        opened!.Dispose();
+
+        var error = Assert.Throws<InputRefusedException>(lease.Dispose);
+
+        Assert.Equal("lease-unavailable", error.Refusal.Code);
+        Assert.False(DesktopLease.Held);
+        using var next = DesktopLease.Acquire(TimeSpan.FromMilliseconds(500));
+        Assert.True(DesktopLease.Held);
+    }
+
+    [Fact]
     public void ALeaseLeftByAProcessThatDiedIsTakenOver()
     {
         // A host that exits while holding the lease abandons the mutex; the next host takes it.
