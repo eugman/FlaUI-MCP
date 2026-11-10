@@ -21,7 +21,7 @@ $runner = "./src/FlaUI.Mcp.Te3/bin/Release/net8.0-windows/FlaUI.Mcp.Te3.exe"
 
 ## TE3 MCP tools
 
-Add a second stdio MCP server that runs `FlaUI.Mcp.Te3.exe` with the argument `mcp`:
+Register one stdio MCP server, `FlaUI.Mcp.Te3.exe` with the argument `mcp`. It serves the generic `windows_*` tools as well as the TE3 tools, all behind the `te3_interaction_begin` grant. Do not register `FlaUI.Mcp.exe` beside it: that server has no grant, so its `windows_*` input tools would act on the desktop without one.
 
 ```json
 {

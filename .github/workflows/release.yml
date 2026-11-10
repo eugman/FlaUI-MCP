@@ -177,7 +177,7 @@ jobs:
         body: |
           ## FlaUI-MCP for Tabular Editor 3 ${{ steps.release.outputs.tag }}
           
-          The generic FlaUI MCP server (`FlaUI.Mcp.exe`) and the Tabular Editor 3 tools and runner (`FlaUI.Mcp.Te3.exe`).
+          The Tabular Editor 3 MCP server and runner (`FlaUI.Mcp.Te3.exe`), which serves the generic `windows_*` tools too, and the generic server on its own (`FlaUI.Mcp.exe`) for other apps.
           
           ### Downloads
           
@@ -191,17 +191,16 @@ jobs:
           ### Installation
           
           1. Download and extract the appropriate ZIP for your platform
-          2. Add to your MCP config:
+          2. Add one server to your MCP config:
           ```json
           {
             "mcpServers": {
-              "windows": { "command": "C:/path/to/FlaUI.Mcp.exe" },
               "te3": { "command": "C:/path/to/FlaUI.Mcp.Te3.exe", "args": ["mcp"] }
             }
           }
           ```
           
-          See the [README](https://github.com/eugman/FlaUI-MCP#readme) and [automation/README.md](https://github.com/eugman/FlaUI-MCP/blob/main/automation/README.md) for the TE3 server (`FlaUI.Mcp.Te3.exe` with the argument `mcp`).
+          That one server has the `windows_*` tools and the TE3 tools, and every tool that changes the desktop waits for the `te3_interaction_begin` grant. Do not add `FlaUI.Mcp.exe` beside it: it has no grant. See the [README](https://github.com/eugman/FlaUI-MCP#readme) and [automation/README.md](https://github.com/eugman/FlaUI-MCP/blob/main/automation/README.md).
         files: artifacts/*.zip
         draft: ${{ steps.release.outputs.draft }}
         prerelease: ${{ steps.release.outputs.prerelease }}
