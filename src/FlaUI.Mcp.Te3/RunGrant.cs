@@ -5,8 +5,9 @@ using FlaUI.Mcp.Core;
 /// keyboard or mouse input revokes it, as in the MCP server, and the recipe fails at its next input. Core's mutation
 /// grant declares the host interactive (MutationGuard.HookRequired), so input on a path without the grant installed
 /// is refused, and each run path that sends input checks that first (MutationGuard.CheckPermission), before it
-/// journals anything. Closing the run's own TE3 afterwards is not refused: it is
-/// how the run restores the user's preferences.
+/// journals anything. One thing does not ask the grant: closing (or, failing that, killing) the TE3 the run launched,
+/// once it is verified as the run's own (RunSafety.CloseOwned), because that is how the run restores the user's
+/// preferences after a revocation.
 /// </summary>
 internal static class RunGrant
 {

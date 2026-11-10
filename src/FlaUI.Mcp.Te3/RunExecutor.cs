@@ -220,86 +220,19 @@ public static partial class RunExecutor
         finally
         {
             RecordUnverified(manifest, inputs);
-            var cleanupErrors = new List<string>();
-            var closed = false;
-            try
+            await new RunCleanup(manifest, settingsDirectory, Save)
             {
-                await RunSafety.CloseOwned(manifest.ProcessId, manifest.ProcessStartedTicks, manifest.Te3Path, journal);
-                RunSafety.RequireExclusiveTe3();
-                closed = true;
-            }
-            catch (Exception error)
-            {
-                cleanupErrors.Add("TE3 shutdown: " + error.Message);
-            }
-
-            if (closed && settings != null)
-            {
-                try
+                Settings = settings,
+                SettingsBefore = settingsBefore,
+                CloseOwned = () =>
+                    RunSafety.CloseOwned(manifest.ProcessId, manifest.ProcessStartedTicks, manifest.Te3Path, journal),
+                RequireNoTe3 = () => RunSafety.RequireExclusiveTe3(),
+                Release = () =>
                 {
-                    settings.Restore();
-                    manifest.SettingsRestored = true;
-                }
-                catch (Exception error)
-                {
-                    cleanupErrors.Add("Preferences: " + error.Message);
-                }
-            }
-            // Compared whether or not TE3 closed cleanly. A run that had to be killed is when
-            // settings are *most* likely to have been left changed, and skipping the comparison
-            // there recorded nothing about the case that matters most.
-            if (settingsBefore != null)
-            {
-                try
-                {
-                    manifest.SettingsChanges = SettingsChanges.Compare(
-                        settingsBefore,
-                        SettingsChanges.Snapshot(settingsDirectory)
-                    );
-                }
-                catch (Exception error)
-                {
-                    manifest.SettingsChanges = ["snapshot failed: " + error.Message];
-                }
-            }
-
-            try
-            {
-                app?.Dispose();
-                host?.Dispose();
-            }
-            catch (Exception error)
-            {
-                cleanupErrors.Add("Disposal: " + error.Message);
-            }
-            // Only a leased file left changed is a recovery condition: the restore did not take
-            // and a backup exists to put it back. Every other file in the folder is churn TE3
-            // writes on a normal launch, which nothing restores — making those block the run left
-            // it permanently "needs recovery" with no action that could clear it, and
-            // ArtifactFiles.Promote refuses every capture from such a run.
-            manifest.NeedsRecovery =
-                !closed
-                || !manifest.SettingsRestored
-                || cleanupErrors.Count > 0
-                || SettingsChanges.Unrestored(manifest.SettingsChanges).Count > 0;
-            if (manifest.NeedsRecovery)
-            {
-                manifest.Passed = false;
-                manifest.CleanupError =
-                    string.Join("; ", cleanupErrors) + $". Retained settings backup: {manifest.SettingsBackup}";
-            }
-
-            FinalizeArtifacts(manifest, Save, () => ArtifactFiles.WriteIndex(manifest));
-            // The backup is needed only while the saved manifest still says recovery is required.
-            if (
-                settings != null
-                && manifest.SettingsRestored
-                && !manifest.NeedsRecovery
-                && string.IsNullOrEmpty(manifest.CleanupError)
-            )
-            {
-                settings.DiscardBackup();
-            }
+                    app?.Dispose();
+                    host?.Dispose();
+                },
+            }.Run();
         }
 
         return new(manifestPath, manifest);

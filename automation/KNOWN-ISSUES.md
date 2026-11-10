@@ -44,6 +44,11 @@ dialog, a request to navigate to Preferences refused input while it remained
 open, and title-bar Close dismissed it with MCP still stopped. Observe the open
 windows before mutation if a new dialog appears.
 
+## Fixed offline 2026-11-10, not live-verified
+
+Each of these has offline tests only. Check it on the next granted live pass, then delete its line.
+- Run cleanup after a revocation: the run closes its own TE3 (identity-verified) and restores the preferences with the grant revoked. Verify by touching the mouse mid-recipe: TE3 closes, the manifest says `settingsRestored` and not `needsRecovery`, and no `recover` is needed.
+
 ## Not built yet
 
 - A typed menu tool for TE3's Alt mnemonics: popup destinations need mapping.

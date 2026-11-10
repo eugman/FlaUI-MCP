@@ -84,24 +84,24 @@ public sealed class InteractionTests : IDisposable
     }
 
     [Fact]
-    public void RunCleanupRefusesProcessMutationAfterPhysicalInputRevokesGrant()
+    public async Task RunCleanupClosesOnlyItsOwnTe3AfterPhysicalInputRevokesGrant()
     {
         using var interaction = Grant();
         interaction.Begin("Close owned TE3", userApproved: true);
-        var dispatched = false;
+        var owned = new FlaUI.Mcp.Te3.Tests.FakeOwnedProcess();
+        var other = new FlaUI.Mcp.Te3.Tests.FakeOwnedProcess { Mismatch = true };
         using (interaction.Guard())
         {
-            RunSafety.GuardedProcessMutation(() => dispatched = true);
-            Assert.True(dispatched);
-
-            dispatched = false;
             input++;
-            var refusal = Assert.Throws<InputRefusedException>(() =>
-                RunSafety.GuardedProcessMutation(() => dispatched = true)
-            );
-            Assert.False(dispatched);
-            Assert.False(refusal.Refusal.ActionDispatched);
+
+            Assert.False(await RunSafety.CloseOwned(owned, TimeSpan.Zero));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => RunSafety.CloseOwned(other, TimeSpan.Zero));
+            // Only the identity-verified close is let through; every other input is still refused.
+            Assert.Throws<InputRefusedException>(MutationGuard.CheckPermission);
         }
+
+        Assert.Equal(["verify", "close"], owned.Calls);
+        Assert.Equal(["verify"], other.Calls);
     }
 
     [Fact]

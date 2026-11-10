@@ -66,15 +66,16 @@ public static class RunSafety
         }
     }
 
-    // Direct process operations are desktop mutations too. The runner grant can be revoked while
-    // a recipe is active, including just before cleanup in the finally block.
-    internal static void GuardedProcessMutation(Action mutation) => MutationGuard.Execute(static () => { }, mutation);
+    /// <summary>How long the run's TE3 gets to exit after a close request, and again after a kill.</summary>
+    private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(5);
 
-    public static async Task CloseOwned(int pid, long startedTicks, string executable, string? journal = null)
+    /// <summary>Closes the TE3 this run launched, identified by PID, start time and executable.</summary>
+    /// <returns>True when it did not exit on its close request and was killed.</returns>
+    public static async Task<bool> CloseOwned(int pid, long startedTicks, string executable, string? journal = null)
     {
         if (pid == 0)
         {
-            return;
+            return false;
         }
 
         Process process;
@@ -84,38 +85,80 @@ public static class RunSafety
         }
         catch (ArgumentException)
         {
-            return;
+            return false;
         }
 
         using (process)
         {
-            if (!VerifyUnlessExited(process, () => VerifyIdentity(process, startedTicks, executable)))
+            return await CloseOwned(new LiveProcess(process, startedTicks, executable, journal), ExitGrace);
+        }
+    }
+
+    /// <summary>
+    /// The close and, failing that, the kill of the process the run launched. Neither asks the run's grant: the
+    /// user's input revokes the grant, and a run that then left its TE3 open could not restore the user's
+    /// preferences. Each is sent only straight after the process is verified to be the one the run started (PID,
+    /// start time, executable), and neither takes focus. Every other input still checks the grant.
+    /// </summary>
+    internal static async Task<bool> CloseOwned(IOwnedProcess process, TimeSpan grace)
+    {
+        if (!process.VerifyUnlessExited())
+        {
+            return false;
+        }
+
+        await process.RequestClose();
+        using var timeout = new CancellationTokenSource(grace);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            if (!process.VerifyUnlessExited())
             {
-                return;
+                return false;
             }
 
-            await RunJournal.Input(
+            process.Kill();
+            using var killed = new CancellationTokenSource(grace);
+            await process.WaitForExitAsync(killed.Token);
+            return true;
+        }
+    }
+
+    /// <summary>The process a run launched, as its cleanup needs it; tests script one.</summary>
+    internal interface IOwnedProcess
+    {
+        /// <summary>False when it has exited; throws when a live process is not the one the run launched.</summary>
+        bool VerifyUnlessExited();
+
+        /// <summary>Asks the main window to close, journaled like a tool call.</summary>
+        Task RequestClose();
+
+        void Kill();
+
+        Task WaitForExitAsync(CancellationToken cancellationToken);
+    }
+
+    private sealed class LiveProcess(Process process, long startedTicks, string executable, string? journal)
+        : IOwnedProcess
+    {
+        public bool VerifyUnlessExited() =>
+            RunSafety.VerifyUnlessExited(process, () => VerifyIdentity(process, startedTicks, executable));
+
+        public Task RequestClose() =>
+            RunJournal.Input(
                 journal,
                 "te3_close_main_window",
-                new { pid },
-                () => GuardedProcessMutation(() => process.CloseMainWindow())
+                new { pid = process.Id },
+                () => process.CloseMainWindow()
             );
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try
-            {
-                await process.WaitForExitAsync(timeout.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                if (!VerifyUnlessExited(process, () => VerifyIdentity(process, startedTicks, executable)))
-                {
-                    return;
-                }
 
-                GuardedProcessMutation(() => process.Kill());
-                using var killed = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await process.WaitForExitAsync(killed.Token);
-            }
-        }
+        public void Kill() => process.Kill();
+
+        public Task WaitForExitAsync(CancellationToken cancellationToken) =>
+            process.WaitForExitAsync(cancellationToken);
     }
 }
