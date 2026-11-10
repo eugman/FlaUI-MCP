@@ -5,8 +5,11 @@ using FlaUI.Mcp.Core;
 
 public sealed record RunExecutionResult(string ManifestPath, RunManifest Manifest);
 
-/// <summary>The machine-wide places a run uses: its lock, and TE3's settings folder. Tests pass their own.</summary>
-internal sealed record RunPaths(string LockPath, string SettingsDirectory);
+/// <summary>
+/// The machine-wide things a run uses: its lock, TE3's settings folder, and the list of running TE3 process IDs
+/// (the real process list when null). Tests pass their own, so none of them reads the machine's.
+/// </summary>
+internal sealed record RunPaths(string LockPath, string SettingsDirectory, Func<int[]>? RunningTe3 = null);
 
 public static partial class RunExecutor
 {
@@ -97,6 +100,7 @@ public static partial class RunExecutor
         var runStarted = DateTimeOffset.UtcNow;
         using var runnerGate = heldRunnerLock == null ? AcquireRunnerLock(paths?.LockPath) : null;
         var settingsDirectory = paths?.SettingsDirectory ?? SettingsLease.DefaultDirectory;
+        var running = paths?.RunningTe3;
         cancellationToken.ThrowIfCancellationRequested();
         // Every input, focus and launch below checks the grant first; the user's own input revokes it.
         using var grant = interaction.Guard();
@@ -105,7 +109,7 @@ public static partial class RunExecutor
             throw new ArgumentException("Recipe requires fixed/auto fixture mode: " + recipe.Id);
         }
 
-        RunSafety.RequireExclusiveTe3();
+        RunSafety.RequireExclusiveTe3(running: running);
         var id = "fla_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N")[..8];
         var output = Path.Combine(config.Output, id);
         Directory.CreateDirectory(output);
@@ -148,7 +152,7 @@ public static partial class RunExecutor
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            RunSafety.RequireExclusiveTe3();
+            RunSafety.RequireExclusiveTe3(running: running);
             settingsBefore = SettingsChanges.Snapshot(settingsDirectory);
             settings = AcquireSettings(
                 manifest,
@@ -233,7 +237,7 @@ public static partial class RunExecutor
                         journal,
                         askFirst: !interaction.TakenBack()
                     ),
-                RequireNoTe3 = () => RunSafety.RequireExclusiveTe3(),
+                RequireNoTe3 = () => RunSafety.RequireExclusiveTe3(running: running),
                 Release = () =>
                 {
                     app?.Dispose();
@@ -247,7 +251,7 @@ public static partial class RunExecutor
         async Task Invoke(string tool, object arguments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            RunSafety.RequireExclusiveTe3(manifest.ProcessId);
+            RunSafety.RequireExclusiveTe3(manifest.ProcessId, running);
             MutationGuard.CheckPermission();
             await inputs.Invoke(
                 () =>

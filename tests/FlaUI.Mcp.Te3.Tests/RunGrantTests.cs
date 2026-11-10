@@ -121,12 +121,34 @@ public sealed class RunGrantTests : IDisposable
                 interaction,
                 CancellationToken.None,
                 heldRunnerLock: null,
-                new RunPaths(Path.Combine(root, "runner.lock"), Path.Combine(root, "settings"))
+                new RunPaths(Path.Combine(root, "runner.lock"), Path.Combine(root, "settings"), () => [])
             )
         );
 
         Assert.Contains("approval", error.Message);
         Assert.Equal(Te3Interaction.ApprovalRequired, error.Refusal.Code);
         Assert.Empty(Directory.GetDirectories(root));
+    }
+
+    [Fact]
+    public async Task AnotherTe3StopsTheRunBeforeItWritesAnything()
+    {
+        using var grant = new Te3Interaction(() => 0);
+        grant.Begin("FlaUI.Mcp.Te3 run test", userApproved: true);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RunExecutor.Execute(
+                new RunConfig { Output = Path.Combine(root, "out") },
+                new Recipe("test", "page", false, _ => Task.CompletedTask),
+                grant,
+                CancellationToken.None,
+                heldRunnerLock: null,
+                new RunPaths(Path.Combine(root, "runner.lock"), Path.Combine(root, "settings"), () => [4242])
+            )
+        );
+
+        Assert.Contains("4242", error.Message);
+        Assert.Contains("No user window will be closed", error.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "out")));
     }
 }

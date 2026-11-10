@@ -242,6 +242,10 @@ public sealed class RunnerTests : IDisposable
 
     private string LockPath => Path.Combine(root, "runner.lock");
 
+    // The run's list of running TE3s, scripted: these tests never read the machine's process list, whatever order
+    // RunExecutor.Execute makes its checks in.
+    private static int[] NoTe3() => [];
+
     [Fact]
     public async Task CanceledRunnerEntryStopsBeforeDesktopOrSettingsWork()
     {
@@ -256,7 +260,7 @@ public sealed class RunnerTests : IDisposable
                 grant,
                 cancellation.Token,
                 heldRunnerLock: null,
-                new RunPaths(LockPath, Path.Combine(root, "settings"))
+                new RunPaths(LockPath, Path.Combine(root, "settings"), NoTe3)
             )
         );
     }
@@ -277,7 +281,7 @@ public sealed class RunnerTests : IDisposable
                 grant,
                 cancellation.Token,
                 held,
-                new RunPaths(LockPath, Path.Combine(root, "settings"))
+                new RunPaths(LockPath, Path.Combine(root, "settings"), NoTe3)
             )
         );
     }
