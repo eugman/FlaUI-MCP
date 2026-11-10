@@ -178,44 +178,76 @@ public sealed partial class InteractionGrant : IDisposable
             throw new ArgumentException("Ask the user to clear the machine for a described batch first.");
         }
 
+        bool start;
         lock (sync)
         {
-            if (Batch != null)
-            {
-                throw new InvalidOperationException("End the current batch before beginning another.");
-            }
-
-            ObjectDisposedException.ThrowIf(disposed, this);
-            if (physicalInput == null && !monitorChanges && !observerInjected)
-            {
-                // No monitor and no input source would leave the batch unwatched: never fail open.
-                throw new ArgumentException("A batch without monitoring needs an injected input source.");
-            }
-
-            if (foreground().Window == 0)
-            {
-                throw new InvalidOperationException("No interactive foreground window.");
-            }
-
-            Renew();
-            if (physicalInput == null)
-            {
-                inputObserver = Live(inputObserver) ?? createObserver();
-            }
-
-            inputAtApproval = InputSequence();
-            toleratedAtApproval = ToleratedMoves();
-            revokedInputSequence = null;
-            lastInputAtRevoke = null;
-            targets.Clear();
-            missingForegroundSince = null;
-            paused = null;
-            promptUntil = null;
-            (Batch, Reason, code, watching) = (batch, "Approved", ApprovalRequired, true);
-            monitor?.Dispose();
-            monitor = monitorChanges ? new System.Threading.Timer(_ => Observe(), null, 100, 100) : null;
-            HoldDisplay();
+            RequireCanBegin(monitorChanges);
+            start = physicalInput == null && Live(inputObserver) == null;
         }
+
+        // Installing the hooks can take seconds. It runs outside the lock, so the monitor, Token and Require do not
+        // wait for it; the checks are made again before the batch is approved.
+        var started = start ? createObserver() : null;
+        try
+        {
+            lock (sync)
+            {
+                RequireCanBegin(monitorChanges);
+                Renew();
+                if (physicalInput == null)
+                {
+                    inputObserver = Live(inputObserver) ?? started ?? createObserver();
+                }
+
+                if (ReferenceEquals(inputObserver, started))
+                {
+                    started = null;
+                }
+
+                Approve(batch, monitorChanges);
+            }
+        }
+        finally
+        {
+            // Not adopted: another batch began meanwhile, or the second check refused.
+            started?.Dispose();
+        }
+    }
+
+    private void RequireCanBegin(bool monitorChanges)
+    {
+        if (Batch != null)
+        {
+            throw new InvalidOperationException("End the current batch before beginning another.");
+        }
+
+        ObjectDisposedException.ThrowIf(disposed, this);
+        if (physicalInput == null && !monitorChanges && !observerInjected)
+        {
+            // No monitor and no input source would leave the batch unwatched: never fail open.
+            throw new ArgumentException("A batch without monitoring needs an injected input source.");
+        }
+
+        if (foreground().Window == 0)
+        {
+            throw new InvalidOperationException("No interactive foreground window.");
+        }
+    }
+
+    private void Approve(string batch, bool monitorChanges)
+    {
+        inputAtApproval = InputSequence();
+        toleratedAtApproval = ToleratedMoves();
+        revokedInputSequence = null;
+        lastInputAtRevoke = null;
+        targets.Clear();
+        missingForegroundSince = null;
+        paused = null;
+        promptUntil = null;
+        (Batch, Reason, code, watching) = (batch, "Approved", ApprovalRequired, true);
+        monitor?.Dispose();
+        monitor = monitorChanges ? new System.Threading.Timer(_ => Observe(), null, 100, 100) : null;
+        HoldDisplay();
     }
 
     // A new grant generation: the old tokens are kept until disposal, so a revocation racing it cancels the old one.
@@ -249,7 +281,6 @@ public sealed partial class InteractionGrant : IDisposable
     public T Launch<T>(Func<T> launch, Func<T, int> processId)
     {
         Require();
-        T result;
         lock (sync)
         {
             if (Batch == null)
@@ -265,9 +296,17 @@ public sealed partial class InteractionGrant : IDisposable
                     "The user is being asked to click the window; no launch until they have."
                 );
             }
+        }
 
-            result = launch();
-            targets.Add(processId(result));
+        // The launch can take seconds. It runs outside the lock, so the user's input still revokes the grant at
+        // once; what started is returned either way, because the caller owns it and must be able to close it.
+        var result = launch();
+        lock (sync)
+        {
+            if (Batch != null)
+            {
+                targets.Add(processId(result));
+            }
         }
 
         Observe();
