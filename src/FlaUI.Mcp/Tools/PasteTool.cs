@@ -138,6 +138,8 @@ public sealed class PasteTool(
         // Focus sampled before Ctrl+V; it may change before the app processes the paste.
         var preSendFocus = InputDesktop.Current.FocusedControl();
         input.Send(() => SendKeysTool.PressKeys([VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V]));
+        // Only reads follow, for up to two seconds: another host's input need not wait for them.
+        input.Dispose();
 
         // Ctrl+V is already dispatched. A later read-back problem cannot claim the keystroke
         // was unsent; it may report missing evidence or an observed mismatch.
@@ -217,10 +219,11 @@ public sealed class PasteTool(
             return new("not-established", " Not verified: no ref was given, so there is nothing to read back.");
         }
 
+        var desktop = InputDesktop.Current;
         bool supported;
         try
         {
-            supported = element.Patterns.Value.IsSupported;
+            supported = desktop.HasValuePattern(element);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -235,11 +238,12 @@ public sealed class PasteTool(
         }
         // Ctrl+V is dispatched before the app processes it. Poll for a bounded interval;
         // an unchanged value at the deadline is not proof that the paste will never apply.
+        var started = desktop.Time.GetTimestamp();
         var observed = SettledValue(
             () => ReadValue(element),
             before,
-            () => Environment.TickCount64,
-            () => Thread.Sleep(25),
+            () => (long)desktop.Time.GetElapsedTime(started).TotalMilliseconds,
+            () => desktop.Pause(PollInterval),
             OperationContext.Current.Value?.Stop.Token ?? CancellationToken.None,
             settleMilliseconds
         );
@@ -248,6 +252,8 @@ public sealed class PasteTool(
 
     /// <summary>How long the read-back waits for the value to change after Ctrl+V.</summary>
     internal const int SettleMilliseconds = 2000;
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(25);
 
     /// <summary>
     /// Read until the value differs from <paramref name="before"/>, <paramref name="settleMilliseconds"/> pass, or the
@@ -273,14 +279,13 @@ public sealed class PasteTool(
         return observed;
     }
 
-    /// <summary>The value a control reports, or null when it exposes none or cannot be read.</summary>
+    /// <summary>The value a control reports, or null when it exposes none, is a password, or cannot be read.</summary>
     private static string? ReadValue(FlaUI.Core.AutomationElements.AutomationElement? element)
     {
         try
         {
-            return element?.Patterns.Value.IsSupported == true
-                ? element.Patterns.Value.Pattern.Value.ValueOrDefault
-                : null;
+            var desktop = InputDesktop.Current;
+            return element != null && desktop.HasValuePattern(element) ? desktop.ValueOf(element) : null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
