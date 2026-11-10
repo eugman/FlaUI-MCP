@@ -268,6 +268,9 @@ public sealed class NativeMcpPreflightRefusalTests
     [InlineData("tokenEnv", "BAD-NAME", "environment variable name")]
     [InlineData("tokenEnv", "", "environment variable name")]
     [InlineData("tokenEnv", "FLAUI_TE3_TEST_TOKEN_THAT_IS_NEVER_SET", "is not set")]
+    // Set in every process, and not this host's to send anywhere.
+    [InlineData("tokenEnv", "PATH", "must start with FLAUI_TE3_")]
+    [InlineData("tokenEnv", "flaui_te3_lowercase", "must start with FLAUI_TE3_")]
     public async Task TheToolRefusesBadEndpointOrTokenArgumentsBeforeAnyRequest(
         string name,
         string value,

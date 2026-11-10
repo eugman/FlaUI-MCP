@@ -9,6 +9,9 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
 {
     public const string ToolName = "te3_native_preflight";
 
+    /// <summary>The only environment variables <c>tokenEnv</c> may name.</summary>
+    public const string TokenEnvPrefix = "FLAUI_TE3_";
+
     public static Te3NativePreflightTool Create() =>
         new(new HttpClient(CreateHandler()) { Timeout = TimeSpan.FromSeconds(10) });
 
@@ -23,7 +26,7 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
     public override string Description =>
         "Connect once to an explicit local TE3 native MCP endpoint, list tools, and call only a declared read-only identity tool. "
         + "Requires expected model identity; returns a mismatch error and never retries or modifies a model. "
-        + "tokenEnv names an environment variable containing a bearer token; token contents are never returned.";
+        + "tokenEnv names an environment variable containing a bearer token; its name must start with FLAUI_TE3_, and token contents are never returned.";
 
     public override object InputSchema =>
         new
@@ -46,7 +49,7 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
                 tokenEnv = new
                 {
                     type = "string",
-                    description = "Optional environment variable name for bearer token.",
+                    description = "Optional environment variable name for bearer token; must start with FLAUI_TE3_.",
                 },
                 compatibleServer = new
                 {
@@ -128,6 +131,15 @@ public sealed class Te3NativePreflightTool(HttpClient client) : ToolBase
         if (tokenEnv.Length == 0 || tokenEnv.Any(c => !(char.IsAsciiLetterOrDigit(c) || c == '_')))
         {
             throw new ArgumentException("tokenEnv must be an environment variable name.");
+        }
+
+        // The name comes from the caller: without this, any variable (another service's token) could be sent to
+        // whatever is listening on the loopback port.
+        if (!tokenEnv.StartsWith(TokenEnvPrefix, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"tokenEnv must start with {TokenEnvPrefix}: only a variable set for this host is sent as a token."
+            );
         }
 
         return Environment.GetEnvironmentVariable(tokenEnv) ?? throw new ArgumentException("tokenEnv is not set.");

@@ -199,7 +199,7 @@ the guard. `tests/FlaUI.Mcp.IntegrationTests` launches test apps and takes focus
 ## Native MCP read-only preflight
 
 `te3_native_preflight` exposes `NativeMcpPreflight` through the MCP server. Supply an explicit
-loopback `endpoint`, `identityTool`, `identityProperty`, and `expectedIdentity`; optional `tokenEnv` names an environment variable holding the bearer token. It performs initialize, tools/list, and exactly one configured identity
+loopback `endpoint`, `identityTool`, `identityProperty`, and `expectedIdentity`; optional `tokenEnv` names an environment variable holding the bearer token, and the name must start with `FLAUI_TE3_` (for example `FLAUI_TE3_MCP_TOKEN`), so the tool cannot be made to send another service's token. It performs initialize, tools/list, and exactly one configured identity
 tool call. The identity tool must advertise `annotations.readOnlyHint=true`, except the exact `get_workspace_info` definition (empty argument schema and saved read-only description), which lacks annotations. That exception applies only to the observed `serverInfo` tuples `TE3/3.27.1` and `tabular-editor/27.1.0.4`; it also requires `compatibleServer` to equal the tuple the server reports. Echoing an unlisted server identity does not enable it. Other unannotated tools, and that tool on any other server identity, are rejected. In the live `tabular-editor/27.1.0.4` response, use `identityProperty: "modelTitle"` and an exact expected title such as `WORK-LAPTOP.sp-demo-mcp-20261028`. Its
 configured response property must equal the expected disposable model identity.
 A missing server, denied token, missing tool, unannotated tool, or model mismatch

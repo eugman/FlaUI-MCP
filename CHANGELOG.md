@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- **Breaking:** `te3_native_preflight` accepts a `tokenEnv` only when its name starts with `FLAUI_TE3_` (for example `FLAUI_TE3_MCP_TOKEN`); any other variable is refused before a request is made, so a caller cannot have another service's token sent to a loopback listener. Rename the variable that holds TE3's MCP access token.
 - The run manifest has `settingsBackupRemoved`: true once the backup `settingsBackup` names was removed after a verified restore, by the run or by `recover`.
 - A run whose TE3 did not exit on its close request and had to be killed says so in the manifest's `diagnosticNotes`.
 - A failed run notes only a real revocation it saw: input after a normal end (`after-end`, still in the interaction reply) and a revocation from before the run started are not added to its `diagnosticNotes`.
