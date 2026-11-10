@@ -194,9 +194,9 @@ internal static class PointerActions
 
     /// <summary>
     /// Escape, through the checked send so it never reaches a window that took the foreground, then the release,
-    /// which goes out regardless; what each did, for the refusal.
+    /// which goes out regardless; what each did, for the refusal, and whether the button was released.
     /// </summary>
-    private static string LetGo(GuardedInput input)
+    private static (string Text, bool Released) LetGo(GuardedInput input)
     {
         string escape;
         try
@@ -209,32 +209,30 @@ internal static class PointerActions
             escape = $"Escape was not sent ({(error is AutomationRefusal refused ? refused.Code : error.Message)})";
         }
 
-        string release;
         try
         {
             input.Release(() => Mouse.Up(MouseButton.Left));
-            release = "the button was released";
+            return ($"{escape} and the button was released", true);
         }
         catch (Exception error)
         {
-            release = $"the release failed ({error.Message})";
+            return ($"{escape} and the release failed ({error.Message})", false);
         }
-
-        return $"{escape} and {release}";
     }
 
     /// <summary>
     /// The typed refusal for a drag that ended badly, noted on the operation with what went out: drop-target-moved
     /// when the target moved, the step's own refusal otherwise, drag-interrupted for a provider error, and for a
-    /// cancellation the cancellation itself (its refusal stays noted for the outcome's failure field).
+    /// cancellation the cancellation itself (its refusal stays noted for the outcome's failure field). A release
+    /// that failed is drag-interrupted whatever came before: the button may still be held.
     /// </summary>
-    private static Exception Ended(string? moved, Exception? failure, string letGo)
+    private static Exception Ended(string? moved, Exception? failure, (string Text, bool Released) letGo)
     {
-        var tail = $" {letGo}; whether the app dropped is not verified: observe the window, then retry.";
+        var tail = $" {letGo.Text}; whether the app dropped is not verified: observe the window, then retry.";
         var refusal = (moved, failure) switch
         {
             (not null, _) => new InputRefusal(
-                RefusalCodes.DropTargetMoved,
+                letGo.Released ? RefusalCodes.DropTargetMoved : RefusalCodes.DragInterrupted,
                 $"The drop target moved during the drag: {moved}.{tail}"
             ),
             (_, InputRefusedException refused) => new InputRefusal(

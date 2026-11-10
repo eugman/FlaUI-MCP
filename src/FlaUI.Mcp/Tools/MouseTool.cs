@@ -87,14 +87,11 @@ public sealed partial class MouseTool(ElementRegistry refs, PendingInvokeTracker
     /// A refusal as windows_click reports one: a failed result, not an exception, so a direct caller sees the
     /// reply the registry sends. The refusal itself stays noted on the operation for the outcome's failure field.
     /// A drag whose drop target moved is not failed but unverified: every input went out, and whether the app
-    /// dropped on the release is unknown.
+    /// dropped on the release is unknown. A drag that broke off with the button down (drag-interrupted) is failed,
+    /// so a host pauses its grant until someone has looked.
     /// </summary>
     private static McpToolResult Refused(string action, Exception error) =>
-        error
-            is InputRefusedException
-            {
-                Refusal.Code: RefusalCodes.DropTargetMoved or RefusalCodes.DragInterrupted,
-            } moved
+        error is InputRefusedException { Refusal.Code: RefusalCodes.DropTargetMoved } moved
             ? MouseReplies.Unverified(moved.Refusal)
             : ErrorResult($"Failed to {action}: {error.Message}");
 

@@ -167,7 +167,7 @@ public sealed partial class DragReleaseTests
     }
 
     [Fact]
-    public void AReleaseThatFailsAfterTheEscapeIsReportedUnderTheMovedRefusal()
+    public void AReleaseThatFailsAfterTheEscapeIsADragInterruptedRefusal()
     {
         var desktop = new FakeDesktop();
         desktop.OnDispatch = count =>
@@ -183,7 +183,9 @@ public sealed partial class DragReleaseTests
             PointerActions.Drag(FakeDesktop.Target, () => (From, To), 4, _ => "the row is now elsewhere")
         );
 
-        Assert.Equal("drop-target-moved", error.Refusal.Code);
+        // The button may still be held: not the unverified drop-target-moved, but the code a host pauses on.
+        Assert.Equal("drag-interrupted", error.Refusal.Code);
+        Assert.StartsWith("The drop target moved during the drag: the row is now elsewhere.", error.Message);
         Assert.Contains("Escape was sent and the release failed (input blocked);", error.Message);
         Assert.Equal(8, desktop.Dispatched);
     }
