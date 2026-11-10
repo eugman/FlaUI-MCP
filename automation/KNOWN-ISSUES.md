@@ -49,6 +49,7 @@ windows before mutation if a new dialog appears.
 Each of these has offline tests only. Check it on the next granted live pass, then delete its line.
 - Run cleanup after a revocation: the run closes its own TE3 (identity-verified) and restores the preferences with the grant revoked. Verify by touching the mouse mid-recipe: TE3 closes, the manifest says `settingsRestored` and not `needsRecovery`, and no `recover` is needed.
 - `te3_layout keep`: a pane that stays open after its Close is in `unresolved` and the proof is a mismatch; keeping a document tab or a floating pane verifies. Check both on a live TE3.
+- Recipe model checks after Save poll (`PersistedCheck`): the polling is tested on a fake clock, but its use in `RecipeContext` (TE CLI calls, the repeated `model-after` snapshot) has not run against a real model. Run the smoke recipes once.
 
 ## Not built yet
 

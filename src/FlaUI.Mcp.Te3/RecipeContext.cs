@@ -108,8 +108,12 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
             throw new InvalidOperationException("This recipe requires an engine fixture");
         }
 
-        var result = await cli.Run(config.Te, ["query", "-s", config.Server, "-d", manifest.Database, "-q", dax]);
-        QueryAssertions.VerifyScalar(result, expected);
+        // Save has no read-back, so the engine may not hold the edit at the first read (PersistedCheck).
+        await PersistedCheck.Passes(async () =>
+        {
+            var result = await cli.Run(config.Te, ["query", "-s", config.Server, "-d", manifest.Database, "-q", dax]);
+            QueryAssertions.VerifyScalar(result, expected);
+        });
     }
 
     public async Task Metadata(string table, string kind, string name, string property, string expected)
@@ -123,7 +127,9 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
         string Q(string value) => JsonSerializer.Serialize(value);
         var script =
             $"var o = Model.Tables[{Q(table)}].{(kind == "Measure" ? "Measures" : "Columns")}[{Q(name)}]; if (Convert.ToString(o.{property}, System.Globalization.CultureInfo.InvariantCulture) != {Q(expected)}) throw new Exception(\"Metadata assertion failed\");";
-        await cli.Run(config.Te, new[] { "script" }.Concat(Source).Concat(["--inline", script]));
+        await PersistedCheck.Passes(() =>
+            cli.Run(config.Te, new[] { "script" }.Concat(Source).Concat(["--inline", script]))
+        );
         manifest.ModelChecks[table + "/" + name + "/" + property] = expected;
     }
 
@@ -133,6 +139,8 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
         {
             manifest.CurrentStep = $"Read persisted model: {name}";
             var path = Path.Combine(manifest.Output, name + ".bim");
+            // A snapshot read again while it settles replaces its own earlier file.
+            File.Delete(path);
             await cli.Run(
                 config.Te,
                 new[] { "save" }
@@ -159,7 +167,9 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
         // state without saving, which needs a verified way to read TE3's unsaved marker.
         await Page.SelectDocument("Expression Editor");
         await Page.Save();
-        var after = await Snapshot("model-after");
+        // Save has no read-back: one read straight after it can precede the write and pass a changed model as
+        // unchanged, so keep reading for the settle period.
+        var after = await PersistedCheck.StaysAt(before, () => Snapshot("model-after"));
         if (before != after)
         {
             throw new InvalidOperationException(
