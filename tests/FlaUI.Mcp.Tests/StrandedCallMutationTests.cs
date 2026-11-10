@@ -16,7 +16,7 @@ public sealed class StrandedCallMutationTests
         var clock = new ManualTimeProvider();
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
         {
-            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456),
             Pending = pending,
         };
         var gated = new Gated(gate.Task);
@@ -81,7 +81,7 @@ public sealed class StrandedCallMutationTests
         var corePending = new PendingInvokeTracker(_ => 456);
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
         {
-            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456),
             Pending = productPending,
             SecondaryPending = corePending,
         };

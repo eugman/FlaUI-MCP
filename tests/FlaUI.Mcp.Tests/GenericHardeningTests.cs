@@ -70,7 +70,7 @@ public sealed class GenericHardeningTests
         var clock = new ManualTimeProvider();
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(200), time: clock)
         {
-            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456),
             Pending = tracker,
         };
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -100,7 +100,7 @@ public sealed class GenericHardeningTests
         var tracker = new PendingInvokeTracker(_ => 456);
         var registry = new ToolRegistry(TimeSpan.FromSeconds(10), time: new ManualTimeProvider())
         {
-            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456),
             Pending = tracker,
         };
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

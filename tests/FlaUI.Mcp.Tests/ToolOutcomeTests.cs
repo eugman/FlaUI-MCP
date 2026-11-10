@@ -31,7 +31,7 @@ public sealed class ToolOutcomeTests
     {
         using var release = new ManualResetEventSlim();
         var tracker = new PendingInvokeTracker(_ => 456);
-        var registry = new ToolRegistry { ResolveTarget = _ => new ProcessIdentity(123, 456) };
+        var registry = new ToolRegistry { ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456) };
         registry.RegisterTool(new PendingTool(tracker, release));
         registry.RegisterTool(new RecoveryProbe());
         try

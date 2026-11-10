@@ -80,7 +80,7 @@ public sealed class ToolRegistryObservationTests
         var events = new List<string>();
         var registry = new ToolRegistry
         {
-            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456),
             ExecutionScopeForTool = (_, _, _) =>
                 ValueTask.FromResult<IAsyncDisposable?>(new ProbeScope(() => events.Add("released"))),
             FailedAfterInputWithTarget = (_, outcome, target) =>
@@ -148,7 +148,7 @@ public sealed class ToolRegistryObservationTests
         var clock = new ManualTimeProvider();
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
         {
-            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456),
             ExecutionScopeForTool = (_, _, _) =>
                 ValueTask.FromResult<IAsyncDisposable?>(new ProbeScope(() => settled.SetResult())),
         };
@@ -211,7 +211,7 @@ public sealed class ToolRegistryObservationTests
         var events = new List<string>();
         var registry = new ToolRegistry(TimeSpan.FromMilliseconds(100), time: clock)
         {
-            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456),
             ExecutionScopeForTool = (_, _, _) =>
                 ValueTask.FromResult<IAsyncDisposable?>(
                     new ProbeScope(() =>
@@ -254,7 +254,7 @@ public sealed class ToolRegistryObservationTests
         var paused = 0;
         var registry = new ToolRegistry
         {
-            ResolveTarget = _ => new ProcessIdentity(123, 456),
+            ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456),
             FailedAfterInput = (_, _) => throw new InvalidOperationException("legacy observer failed"),
             FailedAfterInputWithTarget = (_, outcome, target) =>
             {

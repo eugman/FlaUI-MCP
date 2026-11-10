@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `ToolRegistry.ResolveTarget` (arguments only) is removed; `ResolveTargetForTool` (tool name and arguments) is the one target resolver, and `RegisterAllToolsInto` composes a host's with Core's as before. No host project set the old one. `FailedAfterInput` stays beside `FailedAfterInputWithTarget`: the Power BI and Camtasia hosts set it. A call and a batch step now share one setup of target, permission hook and advisory.
 - A `windows_launch` that attached a provisional window no longer carries `failure: {code: launch-provisional}` on its successful reply; it says `provisional: true` in its details (top level of `structuredContent`) beside `processId` and `windowHandle`. `status: unverified` and `verification: provisional-window` are unchanged. The code `launch-provisional` is no longer emitted.
 - `initialize` reports `serverInfo.version` from the core assembly's version (0.2.0 now) instead of a hard-coded 0.1.0.
 - An unknown JSON-RPC method is answered with -32601 (Method not found) instead of -32603; the message `Unknown method: x` is unchanged, and -32603 stays for a request that fails in the server.

@@ -222,7 +222,7 @@ public sealed class ProtocolMutationTests
         var tool = new Immediate("fast");
         var registry = new ToolRegistry
         {
-            ResolveTarget = _ =>
+            ResolveTargetForTool = (_, _) =>
             {
                 OperationContext.Current.Value!.Stop.Cancel();
                 return new ProcessIdentity(123, 456);
@@ -239,7 +239,7 @@ public sealed class ProtocolMutationTests
     [Fact]
     public async Task TheResolvedTargetIsRecordedOnTheOperation()
     {
-        var registry = new ToolRegistry { ResolveTarget = _ => new ProcessIdentity(123, 456) };
+        var registry = new ToolRegistry { ResolveTargetForTool = (_, _) => new ProcessIdentity(123, 456) };
         registry.RegisterTool(new Immediate("fast"));
 
         var result = await registry.ExecuteToolAsync("fast", null);
