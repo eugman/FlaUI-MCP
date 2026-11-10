@@ -84,7 +84,7 @@ public sealed class InteractionTests : IDisposable
     }
 
     [Fact]
-    public async Task RunCleanupClosesOnlyItsOwnTe3AfterPhysicalInputRevokesGrant()
+    public async Task RunCleanupEndsOnlyItsOwnTe3AfterPhysicalInputRevokesGrant()
     {
         using var interaction = Grant();
         interaction.Begin("Close owned TE3", userApproved: true);
@@ -94,13 +94,18 @@ public sealed class InteractionTests : IDisposable
         {
             input++;
 
-            Assert.False(await RunSafety.CloseOwned(owned, TimeSpan.Zero));
-            await Assert.ThrowsAsync<InvalidOperationException>(() => RunSafety.CloseOwned(other, TimeSpan.Zero));
-            // Only the identity-verified close is let through; every other input is still refused.
+            Assert.Equal(
+                RunSafety.OwnedExit.KilledUnasked,
+                await RunSafety.CloseOwned(owned, TimeSpan.Zero, askFirst: !interaction.TakenBack())
+            );
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                RunSafety.CloseOwned(other, TimeSpan.Zero, askFirst: !interaction.TakenBack())
+            );
+            // Only the identity-verified end of the run's own TE3 is let through; every other input is refused.
             Assert.Throws<InputRefusedException>(MutationGuard.CheckPermission);
         }
 
-        Assert.Equal(["verify", "close"], owned.Calls);
+        Assert.Equal(["verify", "verify", "kill"], owned.Calls);
         Assert.Equal(["verify"], other.Calls);
     }
 

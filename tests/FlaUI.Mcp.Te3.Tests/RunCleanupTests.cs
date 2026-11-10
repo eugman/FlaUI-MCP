@@ -62,7 +62,7 @@ public sealed class RunCleanupTests : IDisposable
         {
             Settings = lease,
             SettingsBefore = before,
-            CloseOwned = () => RunSafety.CloseOwned(te3, TimeSpan.Zero),
+            CloseOwned = () => RunSafety.CloseOwned(te3, TimeSpan.Zero, askFirst: !interaction.TakenBack()),
             RequireNoTe3 = () => RunSafety.RequireExclusiveTe3(running: () => te3.Exited ? [] : [4242]),
             WriteIndex = () => { },
         }.Run();
@@ -76,14 +76,17 @@ public sealed class RunCleanupTests : IDisposable
     }
 
     [Fact]
-    public async Task ARevokedGrantStillClosesTheRunsTe3AndRestoresThePreferences()
+    public async Task ARevokedGrantEndsTheRunsTe3WithoutAClosePromptAndRestoresThePreferences()
     {
         var te3 = new FakeOwnedProcess(Preferences);
 
         await Finish(te3, revoke: true);
 
-        Assert.Equal(["verify", "close"], te3.Calls);
-        Assert.Empty(manifest.DiagnosticNotes);
+        // No close request: on a model with unsaved edits it would raise TE3's save prompt on the desktop the user
+        // has just taken back.
+        Assert.Equal(["verify", "verify", "kill"], te3.Calls);
+        Assert.Contains("revoked", te3.KillReason);
+        Assert.Equal([RunCleanup.RevokedNote], manifest.DiagnosticNotes);
         Assert.Equal(Original, File.ReadAllText(Preferences));
         Assert.True(manifest.SettingsRestored);
         Assert.False(manifest.NeedsRecovery);
@@ -94,13 +97,29 @@ public sealed class RunCleanupTests : IDisposable
     }
 
     [Fact]
-    public async Task ATe3ThatIgnoresItsCloseIsKilledAfterAnotherIdentityCheck()
+    public async Task ARunThatEndsWithItsGrantAsksTe3ToCloseAndNotesNothing()
     {
-        var te3 = new FakeOwnedProcess(Preferences) { ExitsOnClose = false };
+        var te3 = new FakeOwnedProcess(Preferences);
 
-        await Finish(te3, revoke: true);
+        await Finish(te3, revoke: false);
+
+        Assert.Equal(["verify", "close"], te3.Calls);
+        Assert.Empty(manifest.DiagnosticNotes);
+        Assert.Equal(Original, File.ReadAllText(Preferences));
+        Assert.False(manifest.NeedsRecovery);
+    }
+
+    [Theory]
+    [InlineData(true, RunSafety.NotObeyed)]
+    [InlineData(false, RunSafety.NotPosted)]
+    public async Task ATe3ThatIgnoresOrNeverGetsItsCloseIsKilledAfterAnotherIdentityCheck(bool posts, string why)
+    {
+        var te3 = new FakeOwnedProcess(Preferences) { ExitsOnClose = false, Posts = posts };
+
+        await Finish(te3, revoke: false);
 
         Assert.Equal(["verify", "close", "verify", "kill"], te3.Calls);
+        Assert.Equal(why, te3.KillReason);
         Assert.Contains(RunCleanup.KilledNote, ArtifactFiles.ReadManifest(manifestPath).DiagnosticNotes);
         Assert.Equal(Original, File.ReadAllText(Preferences));
         Assert.False(manifest.NeedsRecovery);

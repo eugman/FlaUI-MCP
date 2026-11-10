@@ -41,7 +41,20 @@ internal static class RunJournal
     }
 
     /// <summary>Sends one input that no Core tool dispatches, journaled like a tool call when the run has a journal.</summary>
-    internal static async Task Input(string? journal, string action, object arguments, Action send)
+    internal static Task Input(string? journal, string action, object arguments, Action send) =>
+        Said(
+            journal,
+            action,
+            arguments,
+            () =>
+            {
+                send();
+                return action + " sent.";
+            }
+        );
+
+    /// <summary>As Input, for an input that knows what it did: the text <paramref name="send"/> returns is journaled.</summary>
+    internal static async Task Said(string? journal, string action, object arguments, Func<string> send)
     {
         if (journal == null)
         {
@@ -53,11 +66,7 @@ internal static class RunJournal
             journal,
             action,
             arguments,
-            () =>
-            {
-                send();
-                return Task.FromResult(new McpToolResult { Content = [new() { Text = action + " sent." }] });
-            }
+            () => Task.FromResult(new McpToolResult { Content = [new() { Text = send() }] })
         );
     }
 

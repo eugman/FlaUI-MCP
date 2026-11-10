@@ -90,6 +90,23 @@ public sealed class Te3Interaction : IDisposable
             ? " Observe TE3 with te3_layout_read list or te3_model_state, then retry."
             : $" Ask the user, then call {Te3InteractionTool.Begin}.";
 
+    /// <summary>
+    /// True once the user has the desktop back: their input revoked the batch, or the run's activation was denied.
+    /// A batch that is active, paused after a failure, or ended normally is not that.
+    /// </summary>
+    internal bool TakenBack()
+    {
+        try
+        {
+            Require();
+            return false;
+        }
+        catch (InputRefusedException refusal)
+        {
+            return refusal.Code is FocusRevoked or ActivationDenied;
+        }
+    }
+
     /// <summary>Requires the grant now and before every input the core tools send, until disposed.</summary>
     public IDisposable Guard()
     {

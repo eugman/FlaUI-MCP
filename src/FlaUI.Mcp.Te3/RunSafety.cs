@@ -69,13 +69,35 @@ public static class RunSafety
     /// <summary>How long the run's TE3 gets to exit after a close request, and again after a kill.</summary>
     private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(5);
 
-    /// <summary>Closes the TE3 this run launched, identified by PID, start time and executable.</summary>
-    /// <returns>True when it did not exit on its close request and was killed.</returns>
-    public static async Task<bool> CloseOwned(int pid, long startedTicks, string executable, string? journal = null)
+    /// <summary>How the run's own TE3 ended.</summary>
+    public enum OwnedExit
+    {
+        /// <summary>It had already exited, or was never started.</summary>
+        NotRunning,
+
+        /// <summary>It exited on its close request.</summary>
+        Closed,
+
+        /// <summary>Its close request was not posted or not obeyed, and it was killed.</summary>
+        KilledAfterClose,
+
+        /// <summary>It was killed without a close request (the run's grant was revoked).</summary>
+        KilledUnasked,
+    }
+
+    /// <summary>Ends the TE3 this run launched, identified by PID, start time and executable.</summary>
+    /// <param name="askFirst">False once the run's grant is revoked: see the overload below.</param>
+    public static async Task<OwnedExit> CloseOwned(
+        int pid,
+        long startedTicks,
+        string executable,
+        string? journal = null,
+        bool askFirst = true
+    )
     {
         if (pid == 0)
         {
-            return false;
+            return OwnedExit.NotRunning;
         }
 
         Process process;
@@ -85,46 +107,73 @@ public static class RunSafety
         }
         catch (ArgumentException)
         {
-            return false;
+            return OwnedExit.NotRunning;
         }
 
         using (process)
         {
-            return await CloseOwned(new LiveProcess(process, startedTicks, executable, journal), ExitGrace);
+            return await CloseOwned(new LiveProcess(process, startedTicks, executable, journal), ExitGrace, askFirst);
         }
     }
 
+    internal const string NotObeyed = "it did not exit after its close request";
+    internal const string NotPosted = "no close message could be posted to it";
+    internal const string Revoked =
+        "the run's grant was revoked, and a close request could raise a save prompt on the user's desktop";
+
     /// <summary>
-    /// The close and, failing that, the kill of the process the run launched. Neither asks the run's grant: the
-    /// user's input revokes the grant, and a run that then left its TE3 open could not restore the user's
-    /// preferences. Each is sent only straight after the process is verified to be the one the run started (PID,
-    /// start time, executable), and neither takes focus. Every other input still checks the grant.
+    /// The end of the process the run launched. With <paramref name="askFirst"/> its main window is asked to close
+    /// and it is killed only when that is not posted or not obeyed. Without it (the user's input revoked the run's
+    /// grant) there is no close request, because TE3 answers one on a model with unsaved edits with a save prompt,
+    /// on the desktop the user has just taken back: it is killed at once; the model is the run's disposable one.
+    /// Neither the close nor the kill asks the grant, or a revoked run could not restore the user's preferences;
+    /// each is sent only straight after the process is verified to be the one the run started (PID, start time,
+    /// executable), and neither takes focus. Every other input still checks the grant.
     /// </summary>
-    internal static async Task<bool> CloseOwned(IOwnedProcess process, TimeSpan grace)
+    internal static async Task<OwnedExit> CloseOwned(IOwnedProcess process, TimeSpan grace, bool askFirst)
     {
         if (!process.VerifyUnlessExited())
         {
-            return false;
+            return OwnedExit.NotRunning;
         }
 
-        await process.RequestClose();
+        var reason = Revoked;
+        if (askFirst)
+        {
+            var posted = await process.RequestClose();
+            if (posted && await Exited(process, grace))
+            {
+                return OwnedExit.Closed;
+            }
+
+            reason = posted ? NotObeyed : NotPosted;
+        }
+
+        if (!process.VerifyUnlessExited())
+        {
+            return OwnedExit.Closed;
+        }
+
+        await process.Kill(reason);
+        if (!await Exited(process, grace))
+        {
+            throw new TimeoutException("The run's TE3 did not exit after it was killed.");
+        }
+
+        return askFirst ? OwnedExit.KilledAfterClose : OwnedExit.KilledUnasked;
+    }
+
+    private static async Task<bool> Exited(IOwnedProcess process, TimeSpan grace)
+    {
         using var timeout = new CancellationTokenSource(grace);
         try
         {
             await process.WaitForExitAsync(timeout.Token);
-            return false;
+            return true;
         }
         catch (OperationCanceledException)
         {
-            if (!process.VerifyUnlessExited())
-            {
-                return false;
-            }
-
-            process.Kill();
-            using var killed = new CancellationTokenSource(grace);
-            await process.WaitForExitAsync(killed.Token);
-            return true;
+            return false;
         }
     }
 
@@ -134,10 +183,12 @@ public static class RunSafety
         /// <summary>False when it has exited; throws when a live process is not the one the run launched.</summary>
         bool VerifyUnlessExited();
 
-        /// <summary>Asks the main window to close, journaled like a tool call.</summary>
-        Task RequestClose();
+        /// <summary>Asks the main window to close, journaled with whether the message was posted.</summary>
+        /// <returns>False when no close message was posted (no main window, or it is not responding).</returns>
+        Task<bool> RequestClose();
 
-        void Kill();
+        /// <summary>Kills the process, journaled with <paramref name="reason"/>.</summary>
+        Task Kill(string reason);
 
         Task WaitForExitAsync(CancellationToken cancellationToken);
     }
@@ -148,15 +199,29 @@ public static class RunSafety
         public bool VerifyUnlessExited() =>
             RunSafety.VerifyUnlessExited(process, () => VerifyIdentity(process, startedTicks, executable));
 
-        public Task RequestClose() =>
-            RunJournal.Input(
+        public async Task<bool> RequestClose()
+        {
+            var posted = false;
+            await RunJournal.Said(
                 journal,
                 "te3_close_main_window",
                 new { pid = process.Id },
-                () => process.CloseMainWindow()
+                () => (posted = process.CloseMainWindow()) ? "Close message posted." : "No close message was posted."
             );
+            return posted;
+        }
 
-        public void Kill() => process.Kill();
+        public Task Kill(string reason) =>
+            RunJournal.Said(
+                journal,
+                "te3_kill",
+                new { pid = process.Id, reason },
+                () =>
+                {
+                    process.Kill();
+                    return "Process killed.";
+                }
+            );
 
         public Task WaitForExitAsync(CancellationToken cancellationToken) =>
             process.WaitForExitAsync(cancellationToken);

@@ -10,8 +10,8 @@ internal sealed class RunCleanup(RunManifest manifest, string settingsDirectory,
     /// <summary>The settings folder as it was before the run; null when the run stopped before reading it.</summary>
     public Dictionary<string, string>? SettingsBefore { get; init; }
 
-    /// <summary>Closes the TE3 the run launched; true when it had to be killed.</summary>
-    public required Func<Task<bool>> CloseOwned { get; init; }
+    /// <summary>Ends the TE3 the run launched and says how (see RunSafety.CloseOwned).</summary>
+    public required Func<Task<RunSafety.OwnedExit>> CloseOwned { get; init; }
 
     /// <summary>Throws while any TE3 is still running.</summary>
     public required Action RequireNoTe3 { get; init; }
@@ -64,15 +64,28 @@ internal sealed class RunCleanup(RunManifest manifest, string settingsDirectory,
     }
 
     internal const string KilledNote =
-        "TE3 did not exit after its close request and was killed (a save prompt or a busy model can hold it).";
+        "TE3 did not exit on a close request, or none could be posted, and was killed (a save prompt or a busy "
+        + "model can hold it).";
+
+    internal const string RevokedNote =
+        "The run's grant was revoked, so its TE3 was ended without a close request (one could have raised a save "
+        + "prompt on the user's desktop); unsaved edits in the run's model were discarded.";
+
+    private static string? NoteFor(RunSafety.OwnedExit exit) =>
+        exit switch
+        {
+            RunSafety.OwnedExit.KilledAfterClose => KilledNote,
+            RunSafety.OwnedExit.KilledUnasked => RevokedNote,
+            _ => null,
+        };
 
     private async Task<bool> Close(List<string> errors)
     {
         try
         {
-            if (await CloseOwned())
+            if (NoteFor(await CloseOwned()) is { } note)
             {
-                manifest.DiagnosticNotes.Add(KilledNote);
+                manifest.DiagnosticNotes.Add(note);
             }
 
             RequireNoTe3();

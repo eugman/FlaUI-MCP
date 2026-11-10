@@ -108,6 +108,16 @@ public sealed class RunJournalTests : IDisposable
     }
 
     [Fact]
+    public async Task AnInputThatKnowsWhatItDidJournalsThatNotJustSent()
+    {
+        await RunJournal.Said(journal, "te3_close_main_window", new { pid = 7 }, () => "No close message was posted.");
+
+        var after = System.Text.Json.JsonDocument.Parse(File.ReadAllLines(journal)[^1]).RootElement;
+        Assert.Equal("result", after.GetProperty("phase").GetString());
+        Assert.Equal("No close message was posted.", after.GetProperty("content")[0].GetProperty("text").GetString());
+    }
+
+    [Fact]
     public async Task AFailedDirectInputIsJournaledAsAnError()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(() =>

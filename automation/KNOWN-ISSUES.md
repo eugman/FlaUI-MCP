@@ -47,10 +47,15 @@ windows before mutation if a new dialog appears.
 ## Fixed offline 2026-11-10, not live-verified
 
 Each of these has offline tests only. Check it on the next granted live pass, then delete its line.
-- Run cleanup after a revocation: the run closes its own TE3 (identity-verified) and restores the preferences with the grant revoked. Verify by touching the mouse mid-recipe: TE3 closes, the manifest says `settingsRestored` and not `needsRecovery`, and no `recover` is needed.
+- Run cleanup after a revocation: after your input the run ends its own TE3 without a prompt and restores your preferences. It kills that TE3 (verified by PID, start time and executable) with no close request, so no save prompt appears. Verify by touching the mouse mid-recipe with an unsaved edit in the model: no dialog appears, TE3 is gone, `actions.jsonl` has a `te3_kill` entry with the reason and no `te3_close_main_window`, the manifest has the revocation note in `diagnosticNotes`, `settingsRestored` and not `needsRecovery`, and no `recover` is needed.
+- Normal run end: `actions.jsonl` records whether the close message was posted, and a `te3_kill` with its reason when TE3 did not exit; the manifest then carries the kill note. Check one run that ends on a save prompt.
+- Settings backup removal: after a clean run and after `recover`, the `fla_settings_<guid>` folder is gone and the manifest says `settingsBackupRemoved`.
 - `te3_layout keep`: a pane that stays open after its Close is in `unresolved` and the proof is a mismatch; keeping a document tab or a floating pane verifies. Check both on a live TE3.
 - Recipe model checks after Save poll (`PersistedCheck`): the polling is tested on a fake clock, but its use in `RecipeContext` (TE CLI calls, the repeated `model-after` snapshot) has not run against a real model. Run the smoke recipes once.
 - `te3_layout resize`: the size is read until it is stable. The read loop is tested on scripted bounds only; check a resize and a preset on a live TE3.
+- `te3_layout restore`: the files it replaces are copied to `<name>.replaced-<time>` first and that folder restores them. Check one restore and one undo with TE3 closed.
+- `te3_native_preflight` `tokenEnv`: only a `FLAUI_TE3_` variable is accepted. Check one preflight against TE3's server with a token in `FLAUI_TE3_MCP_TOKEN`.
+- `te3_native_preflight` paging: `tools/list` follows `nextCursor`. TE3 3.27.1 answered in one page, so this path has only a scripted server behind it.
 
 ## Not built yet
 

@@ -24,17 +24,25 @@ internal sealed class FakeOwnedProcess(string? preferences = null) : RunSafety.I
         return true;
     }
 
-    public Task RequestClose()
+    /// <summary>False for a process with no main window to post a close message to.</summary>
+    public bool Posts { get; init; } = true;
+
+    /// <summary>Why it was killed, as the journal would record it.</summary>
+    public string? KillReason { get; private set; }
+
+    public Task<bool> RequestClose()
     {
         Calls.Add("close");
-        Exit(ExitsOnClose);
-        return Task.CompletedTask;
+        Exit(Posts && ExitsOnClose);
+        return Task.FromResult(Posts);
     }
 
-    public void Kill()
+    public Task Kill(string reason)
     {
         Calls.Add("kill");
+        KillReason = reason;
         Exit(true);
+        return Task.CompletedTask;
     }
 
     private void Exit(bool exits)

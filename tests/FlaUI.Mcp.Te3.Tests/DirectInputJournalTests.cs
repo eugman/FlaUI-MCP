@@ -13,7 +13,7 @@ public sealed class DirectInputJournalTests
         // GuardedInput's constructor activates the target window, so creating one is input too.
         @"\binput\.Send\(|\.FocusWindow\(|\.CloseMainWindow\(|\bnew GuardedInput\("
     );
-    private static readonly Regex Journaled = new(@"\bRunJournal\.Input\(|\bSendInput\(");
+    private static readonly Regex Journaled = new(@"\bRunJournal\.(Input|Said)\(|\bSendInput\(");
 
     internal static string Sources()
     {

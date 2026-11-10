@@ -224,8 +224,15 @@ public static partial class RunExecutor
             {
                 Settings = settings,
                 SettingsBefore = settingsBefore,
+                // Once the user's input has revoked the grant there is no close request (RunSafety.CloseOwned).
                 CloseOwned = () =>
-                    RunSafety.CloseOwned(manifest.ProcessId, manifest.ProcessStartedTicks, manifest.Te3Path, journal),
+                    RunSafety.CloseOwned(
+                        manifest.ProcessId,
+                        manifest.ProcessStartedTicks,
+                        manifest.Te3Path,
+                        journal,
+                        askFirst: !interaction.TakenBack()
+                    ),
                 RequireNoTe3 = () => RunSafety.RequireExclusiveTe3(),
                 Release = () =>
                 {
