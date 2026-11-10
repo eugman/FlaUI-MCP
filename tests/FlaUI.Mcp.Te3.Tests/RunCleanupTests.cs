@@ -90,6 +90,7 @@ public sealed class RunCleanupTests : IDisposable
         Assert.Null(manifest.CleanupError);
         Assert.False(ArtifactFiles.ReadManifest(manifestPath).NeedsRecovery);
         Assert.False(Directory.Exists(Backup));
+        Assert.True(ArtifactFiles.ReadManifest(manifestPath).SettingsBackupRemoved);
     }
 
     [Fact]

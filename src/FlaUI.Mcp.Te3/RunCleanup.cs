@@ -44,9 +44,22 @@ internal sealed class RunCleanup(RunManifest manifest, string settingsDirectory,
         Conclude(closed, errors);
         RunExecutor.FinalizeArtifacts(manifest, save, WriteIndex ?? (() => ArtifactFiles.WriteIndex(manifest)));
         // The backup is needed only while the saved manifest still says recovery is required.
-        if (Settings != null && RunOptions.SafeToContinue(manifest))
+        if (Settings != null && RunOptions.SafeToContinue(manifest) && Settings.DiscardBackup())
         {
-            Settings.DiscardBackup();
+            NoteBackupRemoved();
+        }
+    }
+
+    private void NoteBackupRemoved()
+    {
+        manifest.SettingsBackupRemoved = true;
+        try
+        {
+            save();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // The saved manifest still names the backup; recover on it says it was already removed.
         }
     }
 

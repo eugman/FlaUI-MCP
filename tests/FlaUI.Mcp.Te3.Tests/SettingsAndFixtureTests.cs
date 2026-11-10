@@ -119,6 +119,7 @@ public sealed class SettingsAndFixtureTests : IDisposable
 
         Assert.False(Directory.Exists(backup));
         Assert.False(ArtifactFiles.ReadManifest(manifestPath).NeedsRecovery);
+        Assert.True(ArtifactFiles.ReadManifest(manifestPath).SettingsBackupRemoved);
         var again = Assert.Throws<InvalidOperationException>(() => SettingsLease.Recover(backup, false, root));
         Assert.Contains("already restored and removed", again.Message);
     }

@@ -19,6 +19,9 @@ public class RunManifest
     public long ProcessStartedTicks { get; set; }
     public string? Te3Version { get; set; }
     public string? SettingsBackup { get; set; }
+
+    /// <summary>True once the backup at <see cref="SettingsBackup"/> was removed after a verified restore.</summary>
+    public bool SettingsBackupRemoved { get; set; }
     public bool SettingsRestored { get; set; } = true;
     public bool NeedsRecovery { get; set; }
     public string? CleanupError { get; set; }

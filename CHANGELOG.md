@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- The run manifest has `settingsBackupRemoved`: true once the backup `settingsBackup` names was removed after a verified restore, by the run or by `recover`.
 - A run whose TE3 did not exit on its close request and had to be killed says so in the manifest's `diagnosticNotes`.
 - A failed run notes only a real revocation it saw: input after a normal end (`after-end`, still in the interaction reply) and a revocation from before the run started are not added to its `diagnosticNotes`.
 - How the grant ended reaches the run and the agent: a failed run adds `InteractionGrant.LastRevocation`'s one-line summary to its manifest `diagnosticNotes` (not for the run's own normal end), and `te3_interaction_begin`/`te3_interaction_end` reply with `lastRevocation` beside `active`. `Te3Interaction.LastRevocation` exposes it.

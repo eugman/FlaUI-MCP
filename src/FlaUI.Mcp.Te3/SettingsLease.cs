@@ -186,9 +186,12 @@ public sealed class SettingsLease
         RestoreBackup(backup, expectedDirectory);
         var marked = MarkRecovered(info.Manifest, backup);
         // Gone only when nothing records a run still needing it: no manifest, or this run's manifest now says restored.
-        if (marked || info.Manifest == null || !File.Exists(info.Manifest))
+        var unneeded = marked || info.Manifest == null || !File.Exists(info.Manifest);
+        if (unneeded && TryDeleteBackup(backup, info.Directory) && marked)
         {
-            TryDeleteBackup(backup, info.Directory);
+            var manifest = ArtifactFiles.ReadManifest(info.Manifest!);
+            manifest.SettingsBackupRemoved = true;
+            AtomicJournal.Write(info.Manifest!, manifest, RunConfig.Json);
         }
 
         return marked;
