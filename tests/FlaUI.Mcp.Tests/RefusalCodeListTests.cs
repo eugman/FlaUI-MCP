@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using FlaUI.Mcp.Core;
 using Xunit;
 
-namespace FlaUI.Mcp.Tests.Contract;
+namespace FlaUI.Mcp.Tests;
 
 /// <summary>
 /// Every refusal code the server emits is a constant in <see cref="RefusalCodes"/>, so a host, the broker contract
