@@ -177,7 +177,7 @@ internal static class DesktopLease
         private static InputRefusedException Unavailable(Exception error) =>
             InputRefusedException.Record(
                 new InputRefusal(
-                    "lease-unavailable",
+                    RefusalCodes.LeaseUnavailable,
                     $"The machine-wide desktop lease could not be used ({error.Message}); no input sent."
                 )
                 {

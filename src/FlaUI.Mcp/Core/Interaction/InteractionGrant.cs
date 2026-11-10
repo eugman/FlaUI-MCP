@@ -13,16 +13,16 @@ namespace FlaUI.Mcp.Core;
 /// </remarks>
 public sealed partial class InteractionGrant : IDisposable
 {
-    public const string ApprovalRequired = "approval-required";
-    public const string FocusRevoked = "focus-revoked";
-    public const string FocusUnavailable = "focus-unavailable";
-    public const string PausedAfterFailure = "paused-after-failure";
+    public const string ApprovalRequired = RefusalCodes.ApprovalRequired;
+    public const string FocusRevoked = RefusalCodes.FocusRevoked;
+    public const string FocusUnavailable = RefusalCodes.FocusUnavailable;
+    public const string PausedAfterFailure = RefusalCodes.PausedAfterFailure;
 
     /// <summary>How long the foreground may be missing (a window switch in progress) before the grant is revoked.</summary>
     public const long MissingForegroundGraceMilliseconds = 500;
 
     /// <summary>Refused while the user is asked to click the host's window (<see cref="BeginPrompt"/>).</summary>
-    public const string ActivationPending = "activation-pending";
+    public const string ActivationPending = RefusalCodes.ActivationPending;
 
     // Camtasia's reason texts, kept word for word: the broker's text fallback and the contract's safety reasons
     // match them. The typed code travels beside them.

@@ -111,7 +111,7 @@ public class LaunchTool : ToolBase
             {
                 Status = "unverified",
                 Verification = "provisional-window",
-                Failure = new InputRefusal("launch-provisional", "Window identity is not yet confirmed")
+                Failure = new InputRefusal(RefusalCodes.LaunchProvisional, "Window identity is not yet confirmed")
                 {
                     ActionDispatched = true,
                 },
@@ -144,7 +144,10 @@ public class LaunchTool : ToolBase
             {
                 Status = "unverified",
                 Verification = "not-established",
-                Failure = new InputRefusal(pending.Handoff ? "launch-handoff" : "launch-pending", pending.Message)
+                Failure = new InputRefusal(
+                    pending.Handoff ? RefusalCodes.LaunchHandoff : RefusalCodes.LaunchPending,
+                    pending.Message
+                )
                 {
                     ActionDispatched = true,
                 },

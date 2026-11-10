@@ -62,7 +62,7 @@ public sealed record ProcessIntegrity(int Level, bool UiAccess)
                 ? $"the integrity level of '{name}' (PID {targetPid}) cannot be read, so it may be above this server ({self.LevelName})"
                 : $"'{name}' (PID {targetPid}) runs at {level} integrity{uiAccess}, above this server ({server})";
         return new InputRefusal(
-            "integrity-blocked",
+            RefusalCodes.IntegrityBlocked,
             $"integrity-blocked: {reason}. Windows (UIPI) silently drops input and window messages sent to it. "
                 + "No input sent. Run the server at the target's integrity level, or drive the target another way."
         )

@@ -449,5 +449,5 @@ public static class ClickHitTest
     private const string NoInput = "; no input sent. Scroll the element into view, then observe again.";
 
     private static InputRefusedException Covered(string reason) =>
-        InputRefusedException.Record(new InputRefusal("click-point-covered", reason + NoInput));
+        InputRefusedException.Record(new InputRefusal(RefusalCodes.ClickPointCovered, reason + NoInput));
 }

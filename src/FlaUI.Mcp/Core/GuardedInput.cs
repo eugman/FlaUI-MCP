@@ -498,7 +498,7 @@ public sealed partial class GuardedInput : IDisposable
     {
         var pid = covering == 0 ? 0 : InputDesktop.Current.ProcessOf(covering);
         return InputRefusedException.Record(
-            new InputRefusal("point-not-on-target", message)
+            new InputRefusal(RefusalCodes.PointNotOnTarget, message)
             {
                 ForegroundProcess = pid == 0 ? null : new ProcessRef(InputDesktop.Current.ProcessNameOf(pid), pid),
                 Target = new ProcessRef(null, target.ProcessId),
