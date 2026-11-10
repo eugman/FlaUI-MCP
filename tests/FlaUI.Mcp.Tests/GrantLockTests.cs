@@ -114,6 +114,24 @@ public sealed class GrantLockTests
     }
 
     [Fact]
+    public void ATokenCallbackThatThrowsDoesNotEscapeTheRevocation()
+    {
+        // Observe runs on the monitor's timer thread, where an exception that escapes ends the host process.
+        long input = 0;
+        using var grant = new InteractionGrant(() => (1, 2), () => input);
+        grant.Begin("demo", userApproved: true, monitorChanges: false);
+        using var registration = grant.Token.Register(() => throw new InvalidOperationException("consumer bug"));
+        using var safety = grant.SafetyToken.Register(() => throw new InvalidOperationException("consumer bug"));
+        input = 1;
+
+        grant.Observe();
+
+        Assert.False(grant.Active);
+        Assert.True(grant.SafetyToken.IsCancellationRequested);
+        Assert.Equal(InteractionGrant.FocusRevoked, grant.Code);
+    }
+
+    [Fact]
     public void AnObserverThatFailsToStartLeavesNoBatch()
     {
         using var grant = new InteractionGrant(

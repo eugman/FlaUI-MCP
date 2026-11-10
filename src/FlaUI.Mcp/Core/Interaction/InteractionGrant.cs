@@ -455,6 +455,11 @@ public sealed partial class InteractionGrant : IDisposable
         {
             // A completed shutdown already revoked this generation.
         }
+        catch (AggregateException)
+        {
+            // A consumer's callback threw. The token is cancelled and the grant already revoked; on the monitor's
+            // timer thread an escaping exception would end the host.
+        }
     }
 
     public void Dispose()
