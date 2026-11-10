@@ -190,7 +190,7 @@ public sealed class RunnerTests : IDisposable
     [InlineData("""{"truncated":false,"rows":[{"v":"1"}]}""")]
     [InlineData("""{"truncated":false,"rows":[]}""")]
     public void QueryRequiresCompleteExactTypedResults(string response) =>
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.ThrowsAny<InvalidOperationException>(() =>
             QueryAssertions.Verify(
                 response,
                 new(

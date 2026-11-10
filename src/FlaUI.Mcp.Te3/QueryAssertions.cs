@@ -2,6 +2,9 @@ using System.Text.Json;
 
 public sealed record QueryExpectation(string[] Columns, JsonElement[][] Rows);
 
+/// <summary>The result has the expected shape, and a cell holds another value.</summary>
+public sealed class QueryValueMismatchException(string message) : InvalidOperationException(message);
+
 /// <summary>Exact ordered result assertions. A rendered cell never proves completeness.</summary>
 public static class QueryAssertions
 {
@@ -87,7 +90,7 @@ public static class QueryAssertions
             {
                 if (!row.TryGetProperty(expected.Columns[c], out var value) || !Equal(value, expected.Rows[r][c]))
                 {
-                    throw new InvalidOperationException($"Query mismatch at row {r}, column {expected.Columns[c]}");
+                    throw new QueryValueMismatchException($"Query mismatch at row {r}, column {expected.Columns[c]}");
                 }
             }
         }

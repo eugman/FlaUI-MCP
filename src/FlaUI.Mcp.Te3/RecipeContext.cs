@@ -108,12 +108,19 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
             throw new InvalidOperationException("This recipe requires an engine fixture");
         }
 
-        // Save has no read-back, so the engine may not hold the edit at the first read (PersistedCheck).
-        await PersistedCheck.Passes(async () =>
-        {
-            var result = await cli.Run(config.Te, ["query", "-s", config.Server, "-d", manifest.Database, "-q", dax]);
-            QueryAssertions.VerifyScalar(result, expected);
-        });
+        // Save has no read-back, so the engine may not hold the edit at the first read: a scalar with another value
+        // is read again (PersistedCheck). A failed CLI call or a result of another shape fails at once.
+        await PersistedCheck.Passes(
+            async () =>
+            {
+                var result = await cli.Run(
+                    config.Te,
+                    ["query", "-s", config.Server, "-d", manifest.Database, "-q", dax]
+                );
+                QueryAssertions.VerifyScalar(result, expected);
+            },
+            error => error is QueryValueMismatchException
+        );
     }
 
     public async Task Metadata(string table, string kind, string name, string property, string expected)
@@ -126,12 +133,20 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
 
         string Q(string value) => JsonSerializer.Serialize(value);
         var script =
-            $"var o = Model.Tables[{Q(table)}].{(kind == "Measure" ? "Measures" : "Columns")}[{Q(name)}]; if (Convert.ToString(o.{property}, System.Globalization.CultureInfo.InvariantCulture) != {Q(expected)}) throw new Exception(\"Metadata assertion failed\");";
-        await PersistedCheck.Passes(() =>
-            cli.Run(config.Te, new[] { "script" }.Concat(Source).Concat(["--inline", script]))
+            $"var o = Model.Tables[{Q(table)}].{(kind == "Measure" ? "Measures" : "Columns")}[{Q(name)}]; if (Convert.ToString(o.{property}, System.Globalization.CultureInfo.InvariantCulture) != {Q(expected)}) throw new Exception(\"{MetadataMismatch}\");";
+        // The script ran and found another value: the save may not have landed. Any other CLI failure fails at once.
+        await PersistedCheck.Passes(
+            () => cli.Run(config.Te, new[] { "script" }.Concat(Source).Concat(["--inline", script])),
+            IsMetadataMismatch
         );
         manifest.ModelChecks[table + "/" + name + "/" + property] = expected;
     }
+
+    internal const string MetadataMismatch = "Metadata assertion failed";
+
+    /// <summary>True for the TE CLI failure the metadata script raises itself when the property holds another value.</summary>
+    internal static bool IsMetadataMismatch(Exception error) =>
+        error is InvalidOperationException && error.Message.Contains(MetadataMismatch, StringComparison.Ordinal);
 
     public async Task Unchanged(Func<Task> action)
     {
@@ -168,8 +183,8 @@ public sealed class RecipeContext(Te3Page page, RunConfig config, RunManifest ma
         await Page.SelectDocument("Expression Editor");
         await Page.Save();
         // Save has no read-back: one read straight after it can precede the write and pass a changed model as
-        // unchanged, so keep reading for the settle period.
-        var after = await PersistedCheck.StaysAt(before, () => Snapshot("model-after"));
+        // unchanged, so an unchanged read is confirmed once, a moment later.
+        var after = await PersistedCheck.Confirmed(before, () => Snapshot("model-after"));
         if (before != after)
         {
             throw new InvalidOperationException(

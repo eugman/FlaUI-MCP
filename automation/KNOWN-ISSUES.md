@@ -51,7 +51,7 @@ Each of these has offline tests only. Check it on the next granted live pass, th
 - Normal run end: `actions.jsonl` records whether the close message was posted, and a `te3_kill` with its reason when TE3 did not exit; the manifest then carries the kill note. Check one run that ends on a save prompt.
 - Settings backup removal: after a clean run and after `recover`, the `fla_settings_<guid>` folder is gone and the manifest says `settingsBackupRemoved`.
 - `te3_layout keep`: a pane that stays open after its Close is in `unresolved` and the proof is a mismatch; keeping a document tab or a floating pane verifies. Check both on a live TE3.
-- Recipe model checks after Save poll (`PersistedCheck`): the polling is tested on a fake clock, but its use in `RecipeContext` (TE CLI calls, the repeated `model-after` snapshot) has not run against a real model. Run the smoke recipes once.
+- Recipe model checks after Save (`PersistedCheck`): tested on a fake clock, but its use in `RecipeContext` has not run against a real model. Run the smoke recipes once and check that the TE CLI's output for a metadata mismatch contains `Metadata assertion failed` (the text the retry looks for) and that `te save` overwrites the confirming `model-after.bim` read.
 - `te3_layout resize`: the size is read until it is stable. The read loop is tested on scripted bounds only; check a resize and a preset on a live TE3.
 - `te3_layout restore`: the files it replaces are copied to `<name>.replaced-<time>` first and that folder restores them. Check one restore and one undo with TE3 closed.
 - `te3_native_preflight` `tokenEnv`: only a `FLAUI_TE3_` variable is accepted. Check one preflight against TE3's server with a token in `FLAUI_TE3_MCP_TOKEN`.

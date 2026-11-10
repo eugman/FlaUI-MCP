@@ -119,7 +119,7 @@ public sealed class StabilizationTests
     [InlineData("{\"truncated\":false,\"rows\":[{\"a\":61,\"b\":61}]}")]
     public void ProductionScalarAssertionRejectsInexactResults(string response)
     {
-        Assert.Throws<InvalidOperationException>(() => QueryAssertions.VerifyScalar(response, 61));
+        Assert.ThrowsAny<InvalidOperationException>(() => QueryAssertions.VerifyScalar(response, 61));
     }
 
     [Fact]
