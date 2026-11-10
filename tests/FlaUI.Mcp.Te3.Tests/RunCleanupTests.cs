@@ -41,7 +41,7 @@ public sealed class RunCleanupTests : IDisposable
     private void Save() => AtomicJournal.Write(manifestPath, manifest, RunConfig.Json);
 
     // Stages the settings as a run does, then runs its cleanup under the run's guard.
-    private async Task Finish(FakeOwnedProcess te3, bool revoke)
+    private async Task Finish(FakeOwnedProcess te3, bool revoke, Action<Dictionary<string, string>>? stale = null)
     {
         using var guard = interaction.Guard();
         var before = SettingsChanges.Snapshot(settings);
@@ -51,6 +51,7 @@ public sealed class RunCleanupTests : IDisposable
             () => new SettingsLease(settings, Backup, manifestPath)
         );
         lease.Normalize();
+        stale?.Invoke(before);
         if (revoke)
         {
             // The user touches the machine mid-recipe: the grant is revoked before the cleanup starts.
@@ -119,5 +120,31 @@ public sealed class RunCleanupTests : IDisposable
         Assert.Contains(Backup, manifest.CleanupError);
         Assert.True(Directory.Exists(Backup));
         Assert.True(ArtifactFiles.ReadManifest(manifestPath).NeedsRecovery);
+    }
+
+    [Fact]
+    public async Task ALeasedFileLeftChangedIsNamedAsTheCleanupError()
+    {
+        // The folder no longer matches what it held before the run, though TE3 closed and the restore verified.
+        await Finish(new FakeOwnedProcess(Preferences), revoke: false, before => before["UiPreferences.json"] = "00");
+
+        Assert.True(manifest.NeedsRecovery);
+        Assert.Equal(
+            $"Leased settings left changed after the restore (changed: UiPreferences.json). Retained settings backup: {Backup}",
+            manifest.CleanupError
+        );
+    }
+
+    [Fact]
+    public async Task AFailureBeforeAnySettingsWereLeasedNamesNoBackup()
+    {
+        await new RunCleanup(manifest, settings, Save)
+        {
+            CloseOwned = () => throw new InvalidOperationException("Process identity mismatch; refusing termination."),
+            RequireNoTe3 = () => { },
+            WriteIndex = () => { },
+        }.Run();
+
+        Assert.Equal("TE3 shutdown: Process identity mismatch; refusing termination.", manifest.CleanupError);
     }
 }

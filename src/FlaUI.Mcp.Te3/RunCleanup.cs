@@ -113,16 +113,21 @@ internal sealed class RunCleanup(RunManifest manifest, string settingsDirectory,
     // ArtifactFiles.Promote refuses every capture from such a run.
     private void Conclude(bool closed, List<string> errors)
     {
-        manifest.NeedsRecovery =
-            !closed
-            || !manifest.SettingsRestored
-            || errors.Count > 0
-            || SettingsChanges.Unrestored(manifest.SettingsChanges).Count > 0;
-        if (manifest.NeedsRecovery)
+        var unrestored = SettingsChanges.Unrestored(manifest.SettingsChanges);
+        manifest.NeedsRecovery = !closed || !manifest.SettingsRestored || errors.Count > 0 || unrestored.Count > 0;
+        if (!manifest.NeedsRecovery)
         {
-            manifest.Passed = false;
-            manifest.CleanupError =
-                string.Join("; ", errors) + $". Retained settings backup: {manifest.SettingsBackup}";
+            return;
         }
+
+        manifest.Passed = false;
+        var what =
+            errors.Count > 0
+                ? string.Join("; ", errors)
+                : $"Leased settings left changed after the restore ({string.Join(", ", unrestored)})";
+        manifest.CleanupError =
+            manifest.SettingsBackup == null
+                ? what
+                : $"{what.TrimEnd('.')}. Retained settings backup: {manifest.SettingsBackup}";
     }
 }
