@@ -4,7 +4,7 @@ using FlaUI.Mcp.Core;
 namespace FlaUI.Mcp.IntegrationTests;
 
 /// <summary>
-/// Whether the desktop suite may take the desktop now. Until the machine-wide input lease lands, it refuses
+/// Whether the desktop suite may take the desktop now. Besides the machine-wide input lease, it refuses
 /// while any FlaUI.Mcp host process runs (it may be driving the desktop for a recording) or while
 /// FLAUI_DESKTOP_BUSY is set, and it treats as its own only the test apps built under this checkout.
 /// </summary>
