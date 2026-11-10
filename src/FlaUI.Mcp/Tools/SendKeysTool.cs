@@ -127,12 +127,14 @@ public class SendKeysTool : ToolBase
 
         if (!hasChord && !hasKeys)
         {
-            return Task.FromResult(ErrorResult("Provide either chord or keys."));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Provide either chord or keys."));
         }
 
         if (hasChord && hasKeys)
         {
-            return Task.FromResult(ErrorResult("Provide either chord or keys, not both."));
+            return Task.FromResult(
+                ErrorResult(RefusalCodes.InvalidArguments, "Provide either chord or keys, not both.")
+            );
         }
 
         var completed = 0;

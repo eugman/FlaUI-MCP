@@ -123,7 +123,9 @@ public class FocusWindowTool : ToolBase
             }
             else
             {
-                return Task.FromResult(ErrorResult("Either 'handle' or 'title' is required"));
+                return Task.FromResult(
+                    ErrorResult(RefusalCodes.InvalidArguments, "Either 'handle' or 'title' is required")
+                );
             }
         }
         catch (ProviderBlockedException blocked)
@@ -240,7 +242,7 @@ public class CloseWindowTool : ToolBase
         var handle = GetStringArgument(arguments, "handle");
         if (string.IsNullOrEmpty(handle))
         {
-            return Task.FromResult(ErrorResult("Missing required argument: handle"));
+            return Task.FromResult(ErrorResult(RefusalCodes.InvalidArguments, "Missing required argument: handle"));
         }
 
         try
