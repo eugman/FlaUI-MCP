@@ -82,6 +82,7 @@ public sealed class RunCleanupTests : IDisposable
         await Finish(te3, revoke: true);
 
         Assert.Equal(["verify", "close"], te3.Calls);
+        Assert.Empty(manifest.DiagnosticNotes);
         Assert.Equal(Original, File.ReadAllText(Preferences));
         Assert.True(manifest.SettingsRestored);
         Assert.False(manifest.NeedsRecovery);
@@ -98,6 +99,7 @@ public sealed class RunCleanupTests : IDisposable
         await Finish(te3, revoke: true);
 
         Assert.Equal(["verify", "close", "verify", "kill"], te3.Calls);
+        Assert.Contains(RunCleanup.KilledNote, ArtifactFiles.ReadManifest(manifestPath).DiagnosticNotes);
         Assert.Equal(Original, File.ReadAllText(Preferences));
         Assert.False(manifest.NeedsRecovery);
     }

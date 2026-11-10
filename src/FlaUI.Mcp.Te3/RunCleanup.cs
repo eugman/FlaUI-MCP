@@ -50,11 +50,18 @@ internal sealed class RunCleanup(RunManifest manifest, string settingsDirectory,
         }
     }
 
+    internal const string KilledNote =
+        "TE3 did not exit after its close request and was killed (a save prompt or a busy model can hold it).";
+
     private async Task<bool> Close(List<string> errors)
     {
         try
         {
-            await CloseOwned();
+            if (await CloseOwned())
+            {
+                manifest.DiagnosticNotes.Add(KilledNote);
+            }
+
             RequireNoTe3();
             return true;
         }
