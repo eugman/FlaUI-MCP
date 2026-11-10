@@ -54,10 +54,11 @@ public sealed class LocalContentGateTests
         start.ArgumentList.Add("-p:IncludeLocalRecipes=" + enabled.ToString().ToLowerInvariant());
         start.ArgumentList.Add("-p:LocalRoot=" + root + Path.DirectorySeparatorChar);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("dotnet msbuild did not start");
+        // Both pipes are drained at once: reading one to its end first blocks for good when the other fills.
+        var errors = process.StandardError.ReadToEndAsync();
         var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(30_000), "dotnet msbuild timed out");
-        Assert.True(process.ExitCode == 0, stderr);
+        Assert.True(process.ExitCode == 0, errors.Result);
         using var result = JsonDocument.Parse(stdout);
         return result
             .RootElement.GetProperty("Items")
