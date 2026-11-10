@@ -15,6 +15,8 @@ public sealed class PasteTool(
     SessionManager? sessions
 ) : ToolBase
 {
+    private readonly KeyboardTargets targets = new(elements, pending, policy, sessions);
+
     public override string Name => "windows_paste";
 
     public override McpToolAnnotations Annotations => McpToolAnnotations.Input(destructive: true);
@@ -57,22 +59,9 @@ public sealed class PasteTool(
         {
             OperationContext.Check();
             var handle = GetStringArgument(arguments, "handle");
-            if (handle != null && sessions == null)
+            if (targets.Refusal(refId, handle) is { } refused)
             {
-                return Task.FromResult(ErrorResult("Window-handle input requires a session manager."));
-            }
-
-            if (!string.IsNullOrEmpty(refId))
-            {
-                elements.ResolveRef(refId, handle);
-                if (pending.TryGetPending(elements.GetProcessIdForRef(refId), out var blocked))
-                {
-                    return Task.FromResult(BlockedResult(blocked));
-                }
-            }
-            else if (handle != null && !policy.IsProcessAllowed(sessions!.GetInputTarget(handle).ProcessId))
-            {
-                return Task.FromResult(ErrorResult(policy.DescribeDenied("Target process")));
+                return Task.FromResult(refused);
             }
 
             var verifyFocus = GetBoolArgument(arguments, "verifyFocus");
@@ -86,19 +75,9 @@ public sealed class PasteTool(
                 );
             }
 
-            var element = refId == null ? null : elements.GetElement(refId);
-            // Takes the input lease and activates the target. Focus is only *verified* when the
-            // caller asks: GuardedInput otherwise checks the foreground process, which cannot tell a
-            // tree from a code editor in the same app.
-            using var input = new GuardedInput(
-                refId != null ? elements.InputForRef(refId)
-                    : handle != null ? sessions!.GetInputTarget(handle)
-                    : GuardedInput.ForegroundTarget(policy),
-                element,
-                verifyFocus
-            );
-            var target = string.IsNullOrEmpty(refId) ? "focused element" : refId;
-            return Task.FromResult(Paste(input, element, text, target));
+            var element = targets.Element(refId);
+            using var input = targets.Guard(refId, handle, element, verifyFocus ? FocusRule.Exact : FocusRule.None);
+            return Task.FromResult(Paste(input, element, text, KeyboardTargets.Name(refId)));
         }
         catch (ProviderBlockedException blocked)
         {

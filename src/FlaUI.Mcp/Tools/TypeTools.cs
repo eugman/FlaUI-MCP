@@ -11,10 +11,7 @@ namespace FlaUI.Mcp.Tools;
 /// </summary>
 public class TypeTool : ToolBase
 {
-    private readonly ElementRegistry _elementRegistry;
-    private readonly PendingInvokeTracker _invokeTracker;
-    private readonly ProcessPolicy _processPolicy;
-    private readonly SessionManager? _sessions;
+    private readonly KeyboardTargets _targets;
 
     public TypeTool(
         ElementRegistry elementRegistry,
@@ -23,10 +20,12 @@ public class TypeTool : ToolBase
         SessionManager? sessions = null
     )
     {
-        _elementRegistry = elementRegistry;
-        _invokeTracker = invokeTracker ?? new PendingInvokeTracker();
-        _processPolicy = processPolicy ?? ProcessPolicy.AllowAll;
-        _sessions = sessions;
+        _targets = new(
+            elementRegistry,
+            invokeTracker ?? new PendingInvokeTracker(),
+            processPolicy ?? ProcessPolicy.AllowAll,
+            sessions
+        );
     }
 
     public override string Name => "windows_type";
@@ -91,14 +90,14 @@ public class TypeTool : ToolBase
         {
             OperationContext.Check();
             var handle = GetStringArgument(arguments, "handle");
-            if (CheckTarget(refId, handle) is { } refused)
+            if (_targets.Refusal(refId, handle) is { } refused)
             {
                 return Task.FromResult(refused);
             }
 
             // Type the text
-            var element = refId == null ? null : _elementRegistry.GetElement(refId);
-            using var input = new GuardedInput(InputTarget(refId, handle), element, verifyFocus);
+            var element = _targets.Element(refId);
+            using var input = _targets.Guard(refId, handle, element, verifyFocus ? FocusRule.Exact : FocusRule.None);
             // Read before the keys: they go wherever focus is now, and typing may move it.
             var focused = verifyFocus || HoldsFocus(element);
             // Keyboard.Type maps '\n' to Ctrl+Enter, so line breaks are sent as explicit Enter presses.
@@ -119,7 +118,7 @@ public class TypeTool : ToolBase
                 input.Send(() => Keyboard.TypeSimultaneously(VirtualKeyShort.ENTER));
             }
 
-            return Task.FromResult(TextResult(Typed(text!, refId, submit, focused)));
+            return Task.FromResult(TextResult(Typed(text, refId, submit, focused)));
         }
         catch (Exception ex)
         {
@@ -167,44 +166,6 @@ public class TypeTool : ToolBase
             ? $"{action} \"{text}\" into {refId}"
             : $"{action} \"{text}\"; focus on {refId} was not verified, so the text went wherever keyboard focus was. "
                 + "Observe before continuing.";
-    }
-
-    private InputTarget InputTarget(string? refId, string? handle) =>
-        refId != null ? _elementRegistry.InputForRef(refId)
-        : handle != null ? _sessions!.GetInputTarget(handle)
-        : GuardedInput.ForegroundTarget(_processPolicy);
-
-    /// <summary>The refusal for a target that cannot take the text, or null; nothing is focused or sent.</summary>
-    private McpToolResult? CheckTarget(string? refId, string? handle)
-    {
-        if (handle != null && _sessions == null)
-        {
-            return ErrorResult("Window-handle input requires a session manager.");
-        }
-        // Focus element if ref provided
-        if (!string.IsNullOrEmpty(refId))
-        {
-            _elementRegistry.ResolveRef(refId, handle);
-
-            // Fail fast if this app's UIA provider is blocked (element.Focus() would hang).
-            // Tip: calling windows_type without a ref types into the focused element
-            // using pure keyboard input, which works even while the provider is blocked.
-            if (_invokeTracker.TryGetPending(_elementRegistry.GetProcessIdForRef(refId), out var pending))
-            {
-                return BlockedResult(pending);
-            }
-        }
-        else if (handle != null)
-        {
-            // Validate the explicit target, then GuardedInput focuses and
-            // verifies that exact window before sending any input.
-            if (!_processPolicy.IsProcessAllowed(_sessions!.GetInputTarget(handle!).ProcessId))
-            {
-                return ErrorResult(_processPolicy.DescribeDenied("Target process"));
-            }
-        }
-
-        return null;
     }
 
     internal static string[] Lines(string text) => System.Text.RegularExpressions.Regex.Split(text, "\r\n|\r|\n");

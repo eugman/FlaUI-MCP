@@ -87,7 +87,7 @@ public abstract class ToolBase : ITool
             },
         };
 
-    protected static McpToolResult ErrorResult(string message) =>
+    protected internal static McpToolResult ErrorResult(string message) =>
         new()
         {
             Content = new List<McpContent>
@@ -101,7 +101,7 @@ public abstract class ToolBase : ITool
     /// A failure the tool found before any input, with a typed refusal (<paramref name="code"/>, such as
     /// invalid-arguments) so a client reads the code instead of the text; nothing was dispatched.
     /// </summary>
-    protected static McpToolResult ErrorResult(string code, string message) =>
+    protected internal static McpToolResult ErrorResult(string code, string message) =>
         ErrorResult(message) with
         {
             Outcome = new ToolOutcome("not-dispatched", "not-tracked")
@@ -133,7 +133,7 @@ public abstract class ToolBase : ITool
         };
     }
 
-    protected static McpToolResult BlockedResult(PendingInvokeInfo pending) =>
+    protected internal static McpToolResult BlockedResult(PendingInvokeInfo pending) =>
         ErrorResult(PendingInvokeTracker.DescribeBlocked(pending)) with
         {
             Outcome = new ToolOutcome(

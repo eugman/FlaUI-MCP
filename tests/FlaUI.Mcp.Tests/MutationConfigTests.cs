@@ -53,6 +53,7 @@ public sealed class MutationConfigTests
         "Tools/MouseDrag.cs",
         "Tools/RefPoints.cs",
         "Tools/PointerActions.cs",
+        "Tools/KeyboardTargets.cs",
         "Tools/SendKeysTool.cs",
         "Tools/TypeTools.cs",
         "Tools/PasteTool.cs",

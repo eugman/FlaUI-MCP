@@ -32,7 +32,7 @@ $parts = [ordered]@{
     state = 'ElementRegistry', 'PendingInvokeTracker', 'OperationContext', 'WaitOutcome'
     protocol = 'McpServer', 'McpLineTransport', 'ToolRegistry', 'ToolRegistryOutcomeFailure', 'ToolRegistrySchemas', 'ToolRegistryStrand', 'ToolRegistryObservers', 'ToolBase', 'ToolFacts', 'Proof'
     pointer = 'ClickTool', 'ClickToolReplies', 'MouseTool', 'MouseToolReplies', 'MouseDrag', 'RefPoints', 'PointerActions'
-    keyboard = 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
+    keyboard = 'KeyboardTargets', 'SendKeysTool', 'TypeTools', 'FillToolReplies', 'PasteTool', 'BatchTool'
 }
 # The pointer files against the integration tests, split so each part finishes inside its own cap.
 $integrationParts = [ordered]@{
